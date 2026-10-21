@@ -18,7 +18,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 13;
+export const PROTOCOL_VERSION = 14;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -153,6 +153,8 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /** What each session was last sent of the bulky, rarely changing parts of its own state. */
 const selfSent = new WeakMap<Session, Record<string, string>>();
+/** Per receiving session: the last name/look/gear signature sent for each player. */
+const lookSent = new WeakMap<Session, Map<number, string>>();
 
 /** Leaves out a part that has not changed since the last snapshot to this session. */
 function onlyChanged<T>(s: Session, key: string, value: T): T | undefined {
@@ -167,27 +169,35 @@ function onlyChanged<T>(s: Session, key: string, value: T): T | undefined {
 /** Next snapshot to this session carries everything again (e.g. a fresh client mirror). */
 export function resendAll(s: Session): void {
   selfSent.delete(s);
+  lookSent.delete(s);
 }
 
 export function buildSnapshot(game: Game, s: Session): ServerMessage {
   const me = s.player;
   const c: CreatureSnap[] = [];
+  // a player's name, look and gear only go out again when they change
+  let looks = lookSent.get(s);
+  if (!looks) lookSent.set(s, (looks = new Map()));
   for (const o of game.sessions.values()) {
     const p = o.player;
     const eq: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(o.inventory.equipment)) eq[k] = v?.id ?? null;
+    const look = JSON.stringify([p.name, p.level, p.vocation, p.outfit, eq, p.showGear, p.illusion ?? '']);
+    const full = looks.get(p.id) !== look;
+    if (full) looks.set(p.id, look);
     c.push({
       id: p.id, k: 'p', x: p.x, y: p.y, z: p.z, fx: p.fromX, fy: p.fromY, mt: r3(p.moveT), md: r3(p.moveDur), f: r3(p.facing),
-      hp: Math.ceil(p.hp), mhp: p.maxHp, d: p.dead ? 1 : 0, name: p.name, lvl: p.level, voc: p.vocation, o: p.outfit, eq, sg: p.showGear ? 1 : 0,
+      hp: Math.ceil(p.hp), mhp: p.maxHp, d: p.dead ? 1 : 0,
+      ...(full ? { name: p.name, lvl: p.level, voc: p.vocation, o: p.outfit, eq, sg: p.showGear ? 1 as const : 0 as const, ill: p.illusion ?? '' } : {}),
       buffs: {
         haste: p.buffs.haste > 0 || p.buffs.strongHaste > 0 ? 1 : 0, magicShield: p.buffs.magicShield > 0 ? 1 : 0, light: p.buffs.light > 0 ? 1 : 0,
         invisible: p.buffs.invisible > 0 ? 1 : 0,
       },
-      ill: p.illusion ?? undefined,
       sk: game.skullOf(p),
       pt: game.partyFlag(me.id, p.id) || undefined,
     });
   }
+  for (const id of [...looks.keys()]) if (!game.sessions.has(id)) looks.delete(id);
   for (const n of game.npcs) {
     if (n.z !== me.z || chebyshev(n.x, n.y, me.x, me.y) > VIEW_RADIUS) continue;
     c.push({ id: n.id, k: 'n', x: n.x, y: n.y, z: n.z, fx: n.fromX, fy: n.fromY, mt: 1, md: 1, f: r3(n.facing), hp: n.hp, mhp: n.maxHp, d: 0 });
@@ -352,10 +362,12 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
         p.buffs.light = c.buffs.light ? Math.max(p.buffs.light, 1) : 0;
         p.buffs.invisible = c.buffs.invisible ? Math.max(p.buffs.invisible, 1) : 0;
       }
-      const ill = c.ill ?? null;
-      if (ill !== p.illusion) {
-        p.illusion = ill;
-        ev.emit({ type: 'outfitChanged', id: p.id });
+      if (c.ill !== undefined) {
+        const ill = c.ill || null;
+        if (ill !== p.illusion) {
+          p.illusion = ill;
+          ev.emit({ type: 'outfitChanged', id: p.id });
+        }
       }
       if (c.eq && c.id !== game.localId) {
         const cur = JSON.stringify(Object.fromEntries(Object.entries(s.inventory.equipment).map(([k, v]) => [k, v?.id ?? null])));
