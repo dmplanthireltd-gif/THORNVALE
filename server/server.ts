@@ -25,6 +25,7 @@ import {
 import { isOutfit } from '../src/game/player/outfits';
 import { setLevel } from '../src/game/admin';
 import { Bots } from './bots';
+import { PVP_ARENA, PVP_TEAM_MAX, PvpBots } from './pvpBots';
 import { isVocation } from '../src/game/player/vocations';
 import { openStorage, type Storage } from './storage';
 import { handlePaddleEvent, paddleConfigFromEnv, paddleReady, verifyPaddleSignature } from './payments';
@@ -57,6 +58,8 @@ const START_LEVEL = Math.max(1, Math.min(1000, Math.floor(Number(process.env.STA
 /** Computer-controlled adventurers walking around (test servers). BOTS=0 turns them off. */
 const BOT_COUNT = Math.max(0, Math.min(12, Math.floor(Number(process.env.BOTS ?? (TEST_MODE ? 6 : 0))) || 0));
 const BOT_LEVEL = Math.max(1, Math.min(1000, Math.floor(Number(process.env.BOT_LEVEL ?? 500)) || 500));
+/** Arena bots: two teams fighting each other beside the Thornvale temple (server/pvpBots.ts); bots per team, 0 = off. */
+const PVP_BOTS = Math.max(0, Math.min(PVP_TEAM_MAX, Math.floor(Number(process.env.PVP_BOTS ?? (TEST_MODE ? PVP_TEAM_MAX : 0))) || 0));
 /** Email login with password recovery (Supabase Auth). Without it, players log in with name + password. */
 const SUPABASE_URL = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
 const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? '';
@@ -828,6 +831,8 @@ let snapTick = 0;
 const SNAP_EVERY = 1;
 const bots = BOT_COUNT > 0 ? new Bots(game, BOT_COUNT, BOT_LEVEL) : null;
 if (bots) console.log(`Bots: ${BOT_COUNT} at level ${BOT_LEVEL}`);
+const pvpBots = PVP && PVP_BOTS > 0 ? new PvpBots(game, PVP_BOTS) : null;
+if (pvpBots) console.log(`Arena bots: ${PVP_BOTS} vs ${PVP_BOTS} on the ${PVP_ARENA.name} (${PVP_ARENA.x0},${PVP_ARENA.y0})-(${PVP_ARENA.x1},${PVP_ARENA.y1})`);
 setInterval(() => {
   const now = performance.now();
   acc += Math.min(0.5, (now - last) / 1000);
@@ -835,6 +840,7 @@ setInterval(() => {
   while (acc >= TICK) {
     game.update(TICK);
     bots?.update(TICK);
+    pvpBots?.update(TICK);
     acc -= TICK;
   }
   // one snapshot per tick (20 a second); bulky unchanged parts are left out (see protocol.ts)

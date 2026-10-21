@@ -82,6 +82,8 @@ export class Player extends Creature {
   outfit: Outfit = { ...DEFAULT_OUTFIT };
   /** Test mode: takes no damage. Not saved. */
   god = false;
+  /** Arena bots (server/pvpBots.ts): monsters never pick them as a target. Not saved. */
+  ignoredByMonsters = false;
   /** Classic fight stance: how much you put into hitting versus covering yourself (melee and distance). */
   fightMode: FightMode = 'balanced';
   /** Chase: walk after your target. Stand: keep your position and only hit what comes into reach. */
