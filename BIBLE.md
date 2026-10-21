@@ -110,14 +110,14 @@ scripts/              ← smoke-test, net-test, storage-test, auth-test, content
 
 ## 5. Data model (Supabase)
 
-Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_data`, `characters_owned_by_auth_users`.
+Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_data`, `characters_owned_by_auth_users`, `player_market`.
 
 | Table | Columns | Notes |
 |---|---|---|
 | `accounts` | name_key PK, display_name, salt, hash, created_at, last_login | Only for name+password mode (no Supabase Auth) |
 | `characters` | name_key PK, owner_id uuid → auth.users (on delete set null), display_name, data jsonb (SaveData), save_version int, level, vocation, updated_at | One row per character; `data` is the whole save |
 | `character_backups` | id identity, name_key, data jsonb, save_version, reason, created_at | Written **before** every migration |
-| `market_offers` | id text PK, seller_key, seller_name, item_id, qty int >0, price bigint >0 (per piece), created_at, expires_at | Player market sell offers; the items are in escrow here. Migration `supabase/migrations/20261021_player_market.sql` (**not yet applied** — until it is, the server logs "Market: closed" and the market stays closed) |
+| `market_offers` | id text PK, seller_key, seller_name, item_id, qty int >0, price bigint >0 (per piece), created_at, expires_at | Player market sell offers; the items are in escrow here. Migration `supabase/migrations/20261021_player_market.sql` (applied to Supabase 2026-10-21 as migration `player_market`; server logs "Market: open") |
 | `market_deliveries` | id text PK, name_key, gold bigint, items jsonb, reason, created_at | Gold from sales / items of expired offers for characters that were offline; handed out at their next login (or depot/market visit), then deleted |
 
 - Row Level Security is **on with no policies**: only the server (service key) can read/write. Never add public policies or let the browser talk to these tables.
