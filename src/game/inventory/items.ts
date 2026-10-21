@@ -109,7 +109,7 @@ export interface ItemDef {
   heal?: number;
   mana?: number;
   rune?: RuneEffect;
-  tool?: 'rope' | 'shovel' | 'fishing' | 'mining' | 'hammer';
+  tool?: 'rope' | 'shovel' | 'fishing' | 'mining' | 'hammer' | 'knife' | 'needle' | 'chisel' | 'tinderbox';
   /** Buff potions: which timed buff drinking it grants. */
   buff?: PotionBuff;
   /** Throwing weapons: chance a throw uses one up (default 0.85). */
@@ -437,6 +437,43 @@ const defs: ItemDef[] = [
   def({ id: 'iron_legs', name: 'Iron Legs', kind: 'legs', armor: 4, level: 12, weight: 55, value: 70 }),
   def({ id: 'starsteel_legs', name: 'Starsteel Legs', kind: 'legs', armor: 7, level: 45, vocations: FIGHTERS, weight: 55, value: 1300, rarity: 'uncommon' }),
   def({ id: 'darkstone_legs', name: 'Darkstone Legs', kind: 'legs', armor: 8, level: 65, vocations: FIGHTERS, weight: 60, value: 3000, rarity: 'rare' }),
+
+  // --- fletching, crafting, cooking, firemaking (production/*.ts) ---------------------------
+  // tools (outfitters and general traders sell them)
+  def({ id: 'tinderbox', name: 'Tinderbox', kind: 'tool', tool: 'tinderbox', weight: 3, value: 4, tint: '#b0703a', note: 'Use it to light logs where you stand (firemaking).' }),
+  def({ id: 'knife', name: 'Knife', kind: 'tool', tool: 'knife', weight: 4, value: 4, tint: '#c9d0da', note: 'Use it to carve logs into shafts, bows and stocks (fletching).' }),
+  def({ id: 'needle', name: 'Needle', kind: 'tool', tool: 'needle', weight: 0.5, value: 3, tint: '#d8dde6', note: 'Use it to sew leather and fur with thread (crafting).' }),
+  def({ id: 'chisel', name: 'Chisel', kind: 'tool', tool: 'chisel', weight: 5, value: 4, tint: '#9aa0aa', note: 'Use it to cut gems (crafting).' }),
+  // materials
+  def({ id: 'thread', name: 'Thread', kind: 'material', weight: 0.2, value: 1, tint: '#e8e0c6', note: 'For sewing leather and fur.' }),
+  def({ id: 'feather', name: 'Feather', kind: 'material', weight: 0.1, value: 1, tint: '#f0f0f0', note: 'Fletches arrows.' }),
+  def({ id: 'arrow_shaft', name: 'Arrow Shaft', kind: 'material', weight: 0.2, value: 1, tint: '#c9b28a', note: 'Add feathers and arrowheads to make arrows.' }),
+  def({ id: 'wooden_stock', name: 'Crossbow Stock', kind: 'material', weight: 15, value: 12, tint: '#9a6a3a', note: 'Fix it to an iron bar for a light crossbow. Fletching 8.' }),
+  def({ id: 'teak_stock', name: 'Teak Crossbow Stock', kind: 'material', weight: 16, value: 60, tint: '#7a4a28', rarity: 'uncommon', note: 'Fix it to two steel bars for a heavy crossbow. Fletching 46.' }),
+  def({ id: 'bear_hide', name: 'Bear Hide', kind: 'material', weight: 8, value: 15, tint: '#6a4a2a', note: 'Tan it into leather.' }),
+  def({ id: 'leather', name: 'Leather', kind: 'material', weight: 6, value: 15, tint: '#a8743f', note: 'Tanned hide. Sew it with a needle and thread.' }),
+  def({ id: 'tanned_fur', name: 'Tanned Fur', kind: 'material', weight: 6, value: 30, tint: '#e4e0d4', note: 'Soft and warm. Sew it with a needle and thread. Crafting 15.' }),
+  def({ id: 'cut_sapphire', name: 'Cut Sapphire', kind: 'material', weight: 0.5, value: 350, tint: '#2a6ae8', rarity: 'uncommon', note: 'Set it in silver or gold at a furnace.' }),
+  def({ id: 'cut_emerald', name: 'Cut Emerald', kind: 'material', weight: 0.5, value: 350, tint: '#24c060', rarity: 'uncommon', note: 'Set it in silver or gold at a furnace.' }),
+  def({ id: 'cut_ruby', name: 'Cut Ruby', kind: 'material', weight: 0.5, value: 350, tint: '#e8243a', rarity: 'uncommon', note: 'Set it in silver or gold at a furnace.' }),
+  def({ id: 'cut_diamond', name: 'Cut Diamond', kind: 'material', weight: 0.5, value: 420, tint: '#e8f4ff', rarity: 'rare', note: 'Set it in gold at a furnace.' }),
+  // raw food (cook it on a campfire or stove; the cooked items are the old food items)
+  def({ id: 'raw_meat', name: 'Raw Meat', kind: 'material', weight: 13, value: 1, tint: '#c0605a', note: 'Cook it on a campfire or stove.' }),
+  def({ id: 'raw_ham', name: 'Raw Ham', kind: 'material', weight: 20, value: 2, tint: '#d88a7a', note: 'Cook it on a campfire or stove. Cooking 15.' }),
+  def({ id: 'raw_fish', name: 'Raw Fish', kind: 'material', weight: 5, value: 1, tint: '#9ab8cc', note: 'Cook it on a campfire or stove.' }),
+  def({ id: 'raw_trout', name: 'Raw Trout', kind: 'material', weight: 6, value: 3, tint: '#a8b47a', note: 'Cook it on a campfire or stove. Cooking 10.' }),
+  def({ id: 'raw_pike', name: 'Raw Pike', kind: 'material', weight: 8, value: 6, tint: '#7a9a5a', note: 'Cook it on a campfire or stove. Cooking 20.' }),
+  def({ id: 'raw_salmon', name: 'Raw Salmon', kind: 'material', weight: 9, value: 11, tint: '#f09a80', note: 'Cook it on a campfire or stove. Cooking 30.' }),
+  def({ id: 'raw_ice_fish', name: 'Raw Ice Fish', kind: 'material', weight: 8, value: 17, tint: '#cfeef8', rarity: 'uncommon', note: 'Cook it on a campfire or stove. Cooking 40.' }),
+  def({ id: 'raw_swordfish', name: 'Raw Swordfish', kind: 'material', weight: 14, value: 30, tint: '#6a8ac0', rarity: 'uncommon', note: 'Cook it on a campfire or stove. Cooking 50.' }),
+  def({ id: 'burnt_food', name: 'Burnt Food', kind: 'material', weight: 4, value: 1, tint: '#2a2018', note: 'Charred beyond saving. Someone might take it off your hands.' }),
+  // bows and arrows only fletching makes (the others are existing items)
+  W('longbow', 'Longbow', 'bow', 2, 0, 8, 90, 32, { twoHanded: true, range: 6, ammoType: 'arrow' }),
+  W('pine_shortbow', 'Pine Shortbow', 'bow', 3, 0, 15, 220, 30, { twoHanded: true, range: 5, ammoType: 'arrow' }),
+  W('palm_shortbow', 'Palm Shortbow', 'bow', 5, 0, 26, 700, 29, { twoHanded: true, range: 5, ammoType: 'arrow', vocations: PALADIN, rarity: 'uncommon' }),
+  W('teak_shortbow', 'Teak Shortbow', 'bow', 7, 0, 38, 1600, 31, { twoHanded: true, range: 6, ammoType: 'arrow', vocations: PALADIN, rarity: 'uncommon' }),
+  def({ id: 'starsteel_arrow', name: 'Starsteel Arrow', kind: 'ammo', ammoType: 'arrow', attack: 34, weight: 0.8, value: 7, level: 50, tint: '#5a8ad8', rarity: 'uncommon' }),
+  def({ id: 'darkstone_arrow', name: 'Darkstone Arrow', kind: 'ammo', ammoType: 'arrow', attack: 38, weight: 0.9, value: 12, level: 70, tint: '#6a3a7a', rarity: 'rare' }),
 ];
 
 /** Logs from woodcutting, cheapest first. */

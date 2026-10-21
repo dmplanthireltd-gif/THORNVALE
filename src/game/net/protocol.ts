@@ -20,7 +20,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 15;
+export const PROTOCOL_VERSION = 16;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -148,7 +148,11 @@ export interface SelfSnap {
 
 export type ServerMessage =
   | { t: 'welcome'; id: number; v: number; players: number }
-  | { t: 'snap'; time: number; c: CreatureSnap[]; b: Array<{ id: number; x: number; y: number; z: number; it?: string[] }>; holes: string[]; fields?: string[]; self: SelfSnap; st?: string[] }
+  | {
+    t: 'snap'; time: number; c: CreatureSnap[]; b: Array<{ id: number; x: number; y: number; z: number; it?: string[] }>; holes: string[]; fields?: string[]; self: SelfSnap; st?: string[];
+    /** Lit campfires near the player ("x,y,z"); only sent when the list changed (absent = unchanged). */
+    fi?: string[];
+  }
   | { t: 'ev'; e: GameEvent }
   | { t: 'error'; text: string };
 
@@ -241,6 +245,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
   return {
     t: 'snap', time: r3(game.time), c, b: game.bags.map((b) => ({ id: b.id, x: b.x, y: b.y, z: b.z, it: b.items.slice(-3).map((i) => i.id) })), holes, fields, self,
     st: game.stumpsNear(me.x, me.y, me.z, VIEW_RADIUS + 4),
+    fi: onlyChanged(s, 'fires', game.firesNear(me.x, me.y, me.z, VIEW_RADIUS + 4)),
   };
 }
 
@@ -432,6 +437,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   }
   game.syncHoles(snap.holes);
   game.syncFields(snap.fields ?? []);
+  if (snap.fi) game.syncFires(snap.fi);
 
   const me = snap.self;
   const s = game.session(me.id);

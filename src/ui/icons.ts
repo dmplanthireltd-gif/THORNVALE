@@ -552,6 +552,40 @@ function drawTool(x: Ctx, d: ItemDef): void {
     poly(x, [14, 5, 17, 7, 12, 14, 9, 12], shade(d.tint, 1.3), 0.8);
     return;
   }
+  if (d.tool === 'knife') {
+    // a small carving knife: wooden handle, short bright blade
+    bar(x, 6, 27, 14, 19, 3, '#7a5530');
+    poly(x, [13, 17, 27, 4, 29, 6, 17, 21], d.tint);
+    bar(x, 15, 18, 26, 6, 0.6, shade(d.tint, 1.35));
+    return;
+  }
+  if (d.tool === 'needle') {
+    // a long needle with thread curling from its eye
+    bar(x, 6, 27, 26, 5, 1.4, d.tint);
+    x.beginPath();
+    x.moveTo(25, 6);
+    x.bezierCurveTo(31, 14, 14, 18, 12, 28);
+    x.strokeStyle = '#c84a3a';
+    x.lineWidth = 1.2;
+    x.stroke();
+    return;
+  }
+  if (d.tool === 'chisel') {
+    // a stone chisel: wooden grip, flat steel head
+    bar(x, 6, 26, 16, 16, 3.4, '#7a5530');
+    poly(x, [15, 14, 25, 4, 29, 8, 19, 18], d.tint);
+    bar(x, 25, 4, 29, 8, 1, shade(d.tint, 1.4));
+    return;
+  }
+  if (d.tool === 'tinderbox') {
+    // a little box with a flint and a spark
+    rect(x, 5, 14, 18, 12, d.tint);
+    rect(x, 5, 14, 18, 3, shade(d.tint, 1.3), 1);
+    poly(x, [20, 10, 27, 8, 26, 14, 21, 14], '#8a8f9a');
+    glow(x, 25, 7, 6, 'rgba(255,190,60,0.9)');
+    poly(x, [25, 2, 26.5, 6, 30, 7, 26.5, 8, 25, 12, 23.5, 8, 20, 7, 23.5, 6], '#ffd84a', 0.8);
+    return;
+  }
   if (d.tool === 'rope') {
     for (const r of [11, 8, 5]) {
       x.beginPath();
@@ -594,6 +628,13 @@ export const MATERIAL_SHAPE: Record<string, [string, string]> = {
   starsteel_bar: ['bar', '#5a8ad8'], darkstone_bar: ['bar', '#6a3a7a'],
   bronze_arrowheads: ['tips', '#c8843a'], iron_arrowheads: ['tips', '#9aa0aa'], steel_arrowheads: ['tips', '#c9d0da'],
   starsteel_arrowheads: ['tips', '#5a8ad8'], darkstone_arrowheads: ['tips', '#6a3a7a'],
+  // fletching, crafting and cooking
+  thread: ['spiral', '#e8e0c6'], feather: ['feather', '#f0f0f0'], arrow_shaft: ['shafts', '#c9b28a'], wooden_stock: ['stock', '#9a6a3a'],
+  teak_stock: ['stock', '#7a4a28'], bear_hide: ['pelt', '#6a4a2a'], leather: ['hide', '#a8743f'], tanned_fur: ['hide', '#e4e0d4'],
+  cut_sapphire: ['cutgem', '#2a6ae8'], cut_emerald: ['cutgem', '#24c060'], cut_ruby: ['cutgem', '#e8243a'], cut_diamond: ['cutgem', '#e8f4ff'],
+  raw_meat: ['rawmeat', '#c0605a'], raw_ham: ['rawmeat', '#d88a7a'], raw_fish: ['rawfish', '#9ab8cc'], raw_trout: ['rawfish', '#a8b47a'],
+  raw_pike: ['rawfish', '#7a9a5a'], raw_salmon: ['rawfish', '#f09a80'], raw_ice_fish: ['rawfish', '#cfeef8'], raw_swordfish: ['rawfish', '#6a8ac0'],
+  burnt_food: ['burnt', '#2a2018'],
 };
 
 function drawMaterial(x: Ctx, d: ItemDef): void {
@@ -773,6 +814,60 @@ function drawMaterial(x: Ctx, d: ItemDef): void {
       bar(x, 10, 9, 17, 9, 0.8, shade(c, 0.7));
       circle(x, 20, 30, 1, '#7ab0e0', 0);
       break;
+    case 'shafts':
+      // a bundle of bare wooden shafts tied in the middle
+      for (let i = 0; i < 5; i++) bar(x, 5 + i * 2.5, 28, 22 + i * 2.5, 4, 1.1, c);
+      bar(x, 12, 19, 19, 13, 1.8, '#8a5a32');
+      break;
+    case 'stock':
+      // a crossbow stock: long body, wider butt, a groove on top
+      poly(x, [3, 22, 9, 17, 27, 6, 30, 9, 13, 22, 10, 29, 4, 28], c);
+      bar(x, 11, 18, 27, 8, 0.6, shade(c, 0.65));
+      break;
+    case 'hide':
+      // a tanned skin, stretched flat, with stitch marks round the edge
+      poly(x, [5, 8, 11, 4, 21, 4, 27, 8, 28, 20, 23, 28, 9, 28, 4, 20], c);
+      for (const [sx, sy] of [[8, 10], [24, 10], [25, 22], [8, 22], [16, 6], [16, 26]]) circle(x, sx, sy, 0.7, shade(c, 0.55), 0);
+      break;
+    case 'cutgem':
+      // a faceted brilliant: crown, table and pavilion
+      glow(x, 16, 15, 14, `${c}88`);
+      poly(x, [5, 12, 10, 6, 22, 6, 27, 12, 16, 28], c);
+      poly(x, [10, 6, 22, 6, 19, 12, 13, 12], shade(c, 1.45), 0.8);
+      bar(x, 5, 12, 27, 12, 0.6, shade(c, 0.7));
+      bar(x, 13, 12, 16, 28, 0.5, shade(c, 0.75));
+      bar(x, 19, 12, 16, 28, 0.5, shade(c, 0.75));
+      break;
+    case 'rawmeat':
+      // raw red meat with white fat marbling and a bone
+      bar(x, 22, 24, 28, 29, 3, '#f0e6c8');
+      x.beginPath();
+      x.ellipse(13, 13, 10, 8, -0.6, 0, Math.PI * 2);
+      paint(x, c);
+      bar(x, 7, 15, 17, 9, 0.8, '#f4dcd0');
+      bar(x, 10, 19, 19, 13, 0.6, '#f4dcd0');
+      break;
+    case 'rawfish':
+      // a pale, glistening raw fish
+      poly(x, [4, 16, 9, 10, 20, 9, 26, 15, 20, 22, 9, 22], c);
+      poly(x, [25, 15, 31, 9, 30, 22], shade(c, 0.8));
+      circle(x, 9, 15, 1.5, '#121212', 0);
+      bar(x, 11, 13, 21, 13, 0.7, 'rgba(255,255,255,0.75)');
+      break;
+    case 'burnt':
+      // a charred lump with a wisp of smoke
+      x.beginPath();
+      x.ellipse(16, 20, 11, 7, 0.2, 0, Math.PI * 2);
+      paint(x, c);
+      circle(x, 12, 19, 1.6, '#4a3020', 0);
+      circle(x, 20, 21, 1.4, '#4a3020', 0);
+      x.beginPath();
+      x.moveTo(16, 12);
+      x.bezierCurveTo(12, 8, 20, 6, 16, 2);
+      x.strokeStyle = 'rgba(160,160,160,0.8)';
+      x.lineWidth = 1.4;
+      x.stroke();
+      break;
     case 'logs':
       // three logs stacked, cut ends showing their rings
       for (const [lx, ly] of [[5, 20], [13, 20], [9, 12]]) {
@@ -829,7 +924,8 @@ function drawJewel(x: Ctx, d: ItemDef): void {
 
 function drawAmmo(x: Ctx, d: ItemDef): void {
   const head = d.element === 'fire' ? '#ff7a1a' : d.element === 'earth' ? '#6ad040' : d.element === 'ice' ? '#9fe6ff'
-    : d.id === 'onyx_arrow' ? '#3a3a4a' : d.id === 'hawkeye_arrow' ? '#6ad0a0' : d.id === 'piercing_bolt' ? '#a8b0c0' : '#d8dde6';
+    : d.id === 'onyx_arrow' ? '#3a3a4a' : d.id === 'hawkeye_arrow' ? '#6ad0a0' : d.id === 'piercing_bolt' ? '#a8b0c0'
+    : d.id === 'starsteel_arrow' || d.id === 'darkstone_arrow' ? d.tint : '#d8dde6';
   for (let i = 0; i < 3; i++) {
     const o = i * 6 - 6;
     bar(x, 6 + o, 28, 24 + o, 6, 1.4, d.ammoType === 'bolt' ? '#6a5040' : '#c9b28a');

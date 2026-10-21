@@ -29,6 +29,12 @@ import { BAR_ITEMS, BARS, SMITHING_HAMMER, SMITHING_RECIPES, SMELTING_RECIPES } 
 import { RECIPES, stationAt } from '../src/game/production/recipes';
 import { NONCOMBAT_SKILLS, PLANNED_SKILLS } from '../src/game/gathering/skills';
 import { MINE_SPOTS } from '../src/game/world/mines';
+import { COOKING_RECIPES, FOODS, RAW_FOOD_ITEMS } from '../src/game/production/cooking';
+import { FLETCHING_RECIPES } from '../src/game/production/fletching';
+import { CRAFTING_RECIPES, CUT_GEMS } from '../src/game/production/crafting';
+import { FIREMAKING_RECIPES } from '../src/game/production/firemaking';
+import { STATIONS, stationForItem } from '../src/game/production/recipes';
+import { RAW_FISH_ITEMS } from '../src/game/gathering/fishing';
 import { floodFill3D } from '../src/game/world/worldGen';
 
 let failures = 0;
@@ -813,7 +819,7 @@ console.log('Mining and blacksmithing');
     const d = ITEMS[id];
     if (!d) return false;
     const usedIn = RECIPES.some((r) => r.inputs.some((i) => i.id === id) || r.tool === id);
-    return !(bought.has(id) || equipSlotFor(d) || d.kind === 'tool' || usedIn);
+    return !(bought.has(id) || equipSlotFor(d) || d.kind === 'tool' || d.kind === 'consumable' || usedIn);
   });
   check(useless.length === 0, `every new item has a buyer or a use${useless.length ? ` (${useless.join(' ')})` : ''}`);
   const unsold = [...ORE_ITEMS, ...BAR_ITEMS].filter((id) => !bought.has(id));
@@ -840,7 +846,7 @@ console.log('Mining and blacksmithing');
   check(SMITHING_RECIPES.every((r) => r.tool === SMITHING_HAMMER) && loops.length === 0, `smithing needs a hammer and shop goods never turn into more gold${loops.length ? ` (${loops.map((r) => r.id).join(' ')})` : ''}`);
   check([...ORE_ITEMS, ...BAR_ITEMS].every((id) => !cheapest.has(id)), 'ores and bars come only from mining and smelting');
   check(NONCOMBAT_SKILLS.some((d) => d.id === 'mining' && d.kind === 'gathering') && NONCOMBAT_SKILLS.some((d) => d.id === 'smithing' && d.kind === 'production'), 'mining (gathering) and blacksmithing (production) are in the skill list');
-  check(NONCOMBAT_SKILLS.every((d) => !!ITEMS[d.icon]) && PLANNED_SKILLS.length === 6, 'every skill has an icon; six more are planned');
+  check(NONCOMBAT_SKILLS.every((d) => !!ITEMS[d.icon]) && PLANNED_SKILLS.map((p) => p.id).join() === 'construction,alchemy', 'every skill has an icon; construction and alchemy are still planned');
   // the world: rocks in every mine, all of them reachable, a furnace and an anvil in every smithy
   const g = new Game();
   const w = g.world;
@@ -888,6 +894,71 @@ console.log('Mining and blacksmithing');
       return (d.kind === 'weapon' && !LOOKS[id]) || (d.kind === 'shield' && !SHIELDS[id]) || (d.kind === 'armor' && !ARMOR_LOOK[id]) || (d.kind === 'helmet' && !HELMETS[id]) || (d.kind === 'legs' && !LEGS[id]);
     });
     check(lookless.length === 0, `every new smithed wearable has a look${lookless.length ? ` (${lookless.join(' ')})` : ''}`);
+  } catch (err) {
+    console.log(`  skip looks: ${(err as Error).message}`);
+  }
+}
+
+// ---------------------------------------------------------------- fletching, crafting, cooking, firemaking content
+console.log('Fletching, crafting, cooking and firemaking');
+{
+  const NEW = [
+    'tinderbox', 'knife', 'needle', 'chisel', 'thread', 'feather', 'arrow_shaft', 'wooden_stock', 'teak_stock', 'bear_hide', 'leather', 'tanned_fur',
+    ...CUT_GEMS, ...RAW_FOOD_ITEMS, 'burnt_food', 'longbow', 'pine_shortbow', 'palm_shortbow', 'teak_shortbow', 'starsteel_arrow', 'darkstone_arrow',
+  ];
+  const missing = NEW.filter((id) => !ITEMS[id]);
+  check(missing.length === 0, `${NEW.length} new items exist${missing.length ? ` (missing ${missing.join(' ')})` : ''}`);
+  const noIcon = NEW.filter((id) => ITEMS[id] && (!ITEMS[id].icon || !ITEMS[id].tint || (ITEMS[id].kind === 'material' && !MATERIAL_SHAPE[id])));
+  check(noIcon.length === 0, `every new item has an icon${noIcon.length ? ` (${noIcon.join(' ')})` : ''}`);
+  const bought = new Set(Object.values(NPCS).flatMap((n) => n.buys ?? []));
+  const sold = new Set(Object.values(NPCS).flatMap((n) => (n.sells ?? []).map((e) => e.id)));
+  const dropped = new Set(Object.values(ENEMIES).flatMap((e) => e.loot.map((l) => l.id)));
+  const made = new Set(RECIPES.flatMap((r) => [r.output.id, ...(r.fail ? [r.fail.id] : [])]));
+  const sourceless = NEW.filter((id) => !(sold.has(id) || dropped.has(id) || made.has(id) || RAW_FISH_ITEMS.includes(id)));
+  check(sourceless.length === 0, `every new item has a source (shop, loot, fishing or a recipe)${sourceless.length ? ` (${sourceless.join(' ')})` : ''}`);
+  const useless = NEW.filter((id) => {
+    const d = ITEMS[id];
+    if (!d) return false;
+    const usedIn = RECIPES.some((r) => r.inputs.some((i) => i.id === id) || r.tool === id);
+    return !(bought.has(id) || equipSlotFor(d) || usedIn);
+  });
+  check(useless.length === 0, `every new item has a use or a buyer${useless.length ? ` (${useless.join(' ')})` : ''}`);
+  check(['tinderbox', 'knife', 'needle', 'chisel'].every((id) => ITEMS[id].kind === 'tool' && !equipSlotFor(ITEMS[id]) && stationForItem(id)?.items?.[0] === id), 'the four hand tools are tools that open their production window');
+  const outfitters = Object.values(NPCS).filter((n) => n.role.startsWith('Outfitter'));
+  const tools = ['tinderbox', 'knife', 'needle', 'chisel', 'thread', 'feather'];
+  check(outfitters.length > 5 && outfitters.every((n) => tools.every((id) => n.sells?.some((e) => e.id === id))), `every outfitter (${outfitters.length}) sells tinderboxes, knives, needles, chisels, thread and feathers`);
+  const questGivers = Object.values(NPCS).filter((n) => n.quests && n.buys?.length);
+  check(questGivers.length > 5 && questGivers.every((n) => tools.every((id) => n.sells?.some((e) => e.id === id)) && RAW_FOOD_ITEMS.every((id) => n.buys?.includes(id))), `general traders and quest givers (${questGivers.length}) sell the tools and buy raw food`);
+  check(!!NPCS.zuri.sells?.some((e) => e.id === 'knife') && !!NPCS.brann.sells?.some((e) => e.id === 'tinderbox') && CUT_GEMS.every((id) => NPCS.orwin.buys?.includes(id)), 'Zuri and Brann sell tools; bankers buy cut gems');
+  const captains = Object.values(NPCS).filter((n) => n.role === 'Ship captain' || n.role.startsWith('Ferry'));
+  check(captains.every((n) => RAW_FISH_ITEMS.every((id) => n.buys?.includes(id))), 'harbour captains buy raw fish too');
+  // recipes
+  const groups: Array<[string, typeof RECIPES]> = [['cooking', COOKING_RECIPES], ['fletching', FLETCHING_RECIPES], ['crafting', CRAFTING_RECIPES], ['firemaking', FIREMAKING_RECIPES]];
+  for (const [skill, list] of groups) {
+    check(list.length >= 4 && list.every((r) => r.skill === skill && r.level >= 1 && r.level <= 99 && r.xp > 0 && RECIPES.includes(r)), `${skill}: ${list.length} recipes, levels 1–99, all registered`);
+    check(NONCOMBAT_SKILLS.some((d) => d.id === skill && d.kind === 'production' && !!ITEMS[d.icon]), `${skill} is a production skill in the Skills panel`);
+  }
+  check(COOKING_RECIPES.every((r) => r.fail?.id === 'burnt_food' && !!r.success) && FOODS.every((f) => (ITEMS[f.cooked].heal ?? 0) > 0 && !ITEMS[f.raw].heal), 'every cooked food heals, raw food does not, and cooking can burn');
+  check(FOODS.every((f) => COOKING_RECIPES.some((r) => r.station === 'campfire' && r.output.id === f.cooked) && COOKING_RECIPES.some((r) => r.station === 'stove' && r.output.id === f.cooked)), 'every food cooks on a campfire and on a stove');
+  check(FIREMAKING_RECIPES.every((r) => !!r.fire && r.fire[0] >= 60 && r.fire[1] <= 120 && LOG_ITEMS.includes(r.inputs[0].id)) && FIREMAKING_RECIPES.map((r) => r.level).every((l, i, a) => i === 0 || l > a[i - 1]), 'every log lights a fire burning 60–120 s; better logs need higher levels');
+  const existingOut = ['hunting_bow', 'composite_bow', 'sylvan_bow', 'elven_longbow', 'light_crossbow', 'heavy_crossbow', 'arrow', 'onyx_arrow', 'hawkeye_arrow',
+    'leather_helmet', 'leather_armor', 'leather_legs', 'leather_boots', 'bag', 'backpack', 'fur_cap', 'fur_armor', 'fur_legs', 'fur_boots', 'fur_bag', 'fur_backpack', 'explorer_pack',
+    'sunstone_ring', 'sapphire_ring', 'ring_of_vigor', 'ring_of_swiftness', 'ring_of_might', 'frost_pendant', 'jade_amulet', 'garnet_amulet', 'amulet_of_warding'];
+  check(existingOut.every((id) => RECIPES.some((r) => r.output.id === id)), `${existingOut.length} existing bows, crossbows, arrows, leather/fur pieces, rings and amulets can be made`);
+  check(Object.values(STATIONS).every((st) => RECIPES.some((r) => r.station === st.id)), 'every station has recipes');
+  // the world: a stove in (or by) every depot, a tanning rack in every smithy
+  const g = new Game();
+  const w = g.world;
+  const has = (h: { x: number; y: number; w: number; h: number }, o: Obj) => { for (let y = h.y; y < h.y + h.h; y++) for (let x = h.x; x < h.x + h.w; x++) if (w.getObj(x, y, 0) === o) return true; return false; };
+  const smithies = w.houses.filter((h) => h.z === 0 && /smithy/i.test(h.name));
+  check(smithies.length >= 14 && smithies.every((h) => has(h, Obj.TanningRack)), `every smithy (${smithies.length}) has a tanning rack`);
+  const depots = w.houses.filter((h) => h.z === 0 && /depot/i.test(h.name));
+  const stoveless = depots.filter((d) => !w.houses.some((h) => h.z === 0 && has(h, Obj.Stove) && Math.max(Math.abs(h.x - d.x), Math.abs(h.y - d.y)) < 40));
+  check(depots.length >= 14 && stoveless.length === 0, `every depot (${depots.length}) has a stove in it or close by${stoveless.length ? ` (missing: ${stoveless.map((h) => h.name).join(', ')})` : ''}`);
+  check(stationAt(Obj.Stove)?.id === 'stove' && stationAt(Obj.TanningRack)?.id === 'tanning' && stationAt(Obj.Campfire)?.id === 'campfire', 'stoves, tanning racks and campfires are stations');
+  try {
+    const { LOOKS } = await import('../src/render/models/weapons');
+    check(['longbow', 'pine_shortbow', 'palm_shortbow', 'teak_shortbow'].every((id) => !!LOOKS[id]), 'every new bow has a look');
   } catch (err) {
     console.log(`  skip looks: ${(err as Error).message}`);
   }

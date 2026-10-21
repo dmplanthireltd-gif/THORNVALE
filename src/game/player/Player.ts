@@ -117,7 +117,7 @@ export class Player extends Creature {
   /** Mining in progress: the ore rock and seconds to the next swing. Not saved. */
   mine: { x: number; y: number; z: number; timer: number } | null = null;
   /** Production in progress at a station (furnace, anvil): recipe, how many are left, seconds to the next. Not saved. */
-  craft: { recipe: string; left: number; timer: number; x: number; y: number; z: number } | null = null;
+  craft: { recipe: string; left: number; timer: number; x: number; y: number; z: number; stepping?: boolean } | null = null;
   // derived from vocation, level and gear (refreshed by the game)
   baseStep = 0.545;
   hpRegen = 0;

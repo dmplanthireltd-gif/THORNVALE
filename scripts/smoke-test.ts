@@ -23,11 +23,14 @@ import { expForLevel } from '../src/game/player/Player';
 import { legacySkills, powerLevel, triesForNext, typicalSkill } from '../src/game/player/skills';
 import { rollMelee } from '../src/game/combat/combat';
 import { gatherLevelForXp, gatherXpForLevel, TREES } from '../src/game/gathering/woodcutting';
-import { biteChance, FISH, FISH_ITEMS, FISH_RANGE, fishFor, isColdWater, isFishingWater } from '../src/game/gathering/fishing';
+import { biteChance, FISH, FISH_RANGE, fishFor, isColdWater, isFishingWater, RAW_FISH_ITEMS } from '../src/game/gathering/fishing';
 import { MARKET_OFFER_MS, type MarketChange } from '../src/game/market/market';
 import { mineChance, ORES, oreAt, rollGem } from '../src/game/gathering/mining';
 import { recipeById, recipeChance } from '../src/game/production/recipes';
 import type { MirrorExtras } from '../src/game/net/protocol';
+import { FISH_ITEMS } from '../src/game/gathering/fishing';
+import { ENEMIES } from '../src/game/enemies/enemyDefs';
+import { FOODS } from '../src/game/production/cooking';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -1237,31 +1240,31 @@ console.log('Fishing');
   check(msgs.some((m) => m.startsWith('You need a fishing rod')) && p.fish === null, 'no rod, no fishing');
   s.inventory.add('fishing_rod', 1);
   check(g.isUsable(sh.wx, sh.wy, 0), 'with a rod, nearby water can be used (fished)');
-  const caught = () => FISH_ITEMS.reduce((n, id) => n + s.inventory.count(id), 0);
+  const caught = () => RAW_FISH_ITEMS.reduce((n, id) => n + s.inventory.count(id), 0);
   executeCommand(g, pid, { c: 'useTile', x: sh.wx, y: sh.wy });
   run(g, 0.2);
   check(p.fish !== null && p.x === sh.x && p.y === sh.y, 'fishing starts without walking');
   run(g, 200, () => caught() > 0);
-  check(s.inventory.count('fish') === 1 && s.gathering.fishing >= FISH[0].xp && casts.length > 0, `fishing gives fish and fishing experience (${casts.length} casts, ${s.gathering.fishing} xp)`);
+  check(s.inventory.count('raw_fish') === 1 && s.gathering.fishing >= FISH[0].xp && casts.length > 0, `fishing gives raw fish and fishing experience (${casts.length} casts, ${s.gathering.fishing} xp)`);
   check(p.fish !== null, 'you keep fishing after a catch');
   // level gate: many casts at level 1 in deep water never land anything better than small fish
   g.teleport(p, dp.x, dp.y, 0);
   clearFoes();
   s.gathering.fishing = 0;
-  for (const id of FISH_ITEMS) s.inventory.removeById(id, s.inventory.count(id));
+  for (const id of RAW_FISH_ITEMS) s.inventory.removeById(id, s.inventory.count(id));
   s.inventory.removeById('old_boot', s.inventory.count('old_boot'));
   p.capacity = 1e6;
   executeCommand(g, pid, { c: 'useTile', x: dp.wx, y: dp.wy });
-  run(g, 240, () => s.inventory.count('fish') >= 6);
-  check(s.inventory.count('fish') >= 1 && FISH_ITEMS.slice(1).every((id) => s.inventory.count(id) === 0), `no swordfish (or any better fish) at level 1 (${s.inventory.count('fish')} small fish)`);
+  run(g, 240, () => s.inventory.count('raw_fish') >= 6);
+  check(s.inventory.count('raw_fish') >= 1 && RAW_FISH_ITEMS.slice(1).every((id) => s.inventory.count(id) === 0), `no swordfish (or any better fish) at level 1 (${s.inventory.count('raw_fish')} small fish)`);
   // at level 50 in deep water swordfish bite
   s.gathering.fishing = gatherXpForLevel(50);
-  for (const id of FISH_ITEMS) s.inventory.removeById(id, s.inventory.count(id));
+  for (const id of RAW_FISH_ITEMS) s.inventory.removeById(id, s.inventory.count(id));
   g.teleport(p, dp.x, dp.y, 0);
   clearFoes();
   executeCommand(g, pid, { c: 'useTile', x: dp.wx, y: dp.wy });
-  run(g, 900, () => s.inventory.count('swordfish') > 0);
-  check(s.inventory.count('swordfish') > 0 && s.inventory.count('salmon') === 0 && s.inventory.count('pike') === 0, 'at level 50 deep water gives swordfish (never salmon or pike)');
+  run(g, 900, () => s.inventory.count('raw_swordfish') > 0);
+  check(s.inventory.count('raw_swordfish') > 0 && s.inventory.count('raw_salmon') === 0 && s.inventory.count('raw_pike') === 0, 'at level 50 deep water gives (raw) swordfish (never salmon or pike)');
   // range: water further than 3 tiles is refused
   msgs.length = 0;
   const far = (() => { for (let r = FISH_RANGE + 1; r < 12; r++) for (const [dx, dy] of [[r, 0], [-r, 0], [0, r], [0, -r]]) if (isFishingWater(w, p.x + dx, p.y + dy, 0)) return { x: p.x + dx, y: p.y + dy }; return null; })();
@@ -1657,12 +1660,12 @@ console.log('Mining and blacksmithing');
 
   // ---- save, load and migration
   const data = g.serialize(pid);
-  check(SAVE_VERSION === 8 && data.version === 8 && data.gathering?.mining === s.gathering.mining && data.gathering?.smithing === s.gathering.smithing, 'saves carry mining and blacksmithing (save v8)');
+  check(SAVE_VERSION >= 8 && data.version === SAVE_VERSION && data.gathering?.mining === s.gathering.mining && data.gathering?.smithing === s.gathering.smithing, 'saves carry mining and blacksmithing (save v8)');
   const t2 = solo('knight');
   check(t2.g.applySave(t2.pid, data) && t2.s.gathering.mining === s.gathering.mining && t2.s.gathering.smithing === s.gathering.smithing && t2.s.inventory.count('bronze_dagger') === 1, 'mining and blacksmithing survive save and load');
   const v7 = JSON.parse(JSON.stringify({ ...data, version: 7, gathering: { woodcutting: 4321, fishing: 777 } })) as Record<string, unknown>;
   const mig = migrateSave(v7);
-  check(typeof mig !== 'string' && mig.from === 7 && mig.data.version === 8 && mig.data.gathering?.mining === 0 && mig.data.gathering?.smithing === 0 && mig.data.gathering?.woodcutting === 4321 && mig.data.gathering?.fishing === 777, 'a v7 save migrates: mining and blacksmithing 0, woodcutting and fishing kept');
+  check(typeof mig !== 'string' && mig.from === 7 && mig.data.version === SAVE_VERSION && mig.data.gathering?.mining === 0 && mig.data.gathering?.smithing === 0 && mig.data.gathering?.woodcutting === 4321 && mig.data.gathering?.fishing === 777, 'a v7 save migrates: mining and blacksmithing 0, woodcutting and fishing kept');
   const t3 = solo('knight');
   check(t3.g.applySave(t3.pid, v7) && t3.s.gathering.mining === 0 && t3.s.gathering.woodcutting === 4321 && t3.s.inventory.count('starsteel_pickaxe') === 1, 'a migrated v7 character loads with its items and skills');
 }
@@ -1675,6 +1678,252 @@ console.log('Walking speed grows with level');
   g.refreshStats(s);
   const t100 = s.player.baseStep;
   check(t1 > 0.5 && t100 < 0.32 && t100 > 0.25, `level 1 takes ${t1.toFixed(2)} s per tile, level 100 ${t100.toFixed(2)} s`);
+}
+
+console.log('Fletching, crafting, cooking and firemaking');
+{
+  const { g, s, pid } = solo('paladin');
+  const p = s.player;
+  const w = g.world;
+  p.god = true;
+  s.admin = true;
+  p.capacity = 1e6;
+  s.inventory.equipment.backpack = { id: 'dragonhide_pack', qty: 1 };
+  const msgs: string[] = [];
+  g.events.on((e) => { if (e.type === 'message' && e.to === pid) msgs.push(e.text); });
+  g.localId = pid;
+  const findObj = (o: Obj): { x: number; y: number; z: number; sx: number; sy: number } | null => {
+    for (let y = 2; y < w.height - 2; y++) for (let x = 2; x < w.width - 2; x++) {
+      if (w.getObj(x, y, 0) !== o) continue;
+      for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) if (w.isWalkable(x + dx, y + dy, 0) && !w.linkAt(x + dx, y + dy, 0) && !g.isOccupied(x + dx, y + dy, 0)) return { x, y, z: 0, sx: x + dx, sy: y + dy };
+    }
+    return null;
+  };
+  const clearFoes = () => { for (const e of g.enemies) if (!e.dead && e.z === p.z && Math.abs(e.x - p.x) < 16 && Math.abs(e.y - p.y) < 16) { e.dead = true; e.respawnTimer = 1e9; } };
+  const strip = openStrip(g);
+  const goStrip = () => { g.teleport(p, strip.x + 8, strip.y, 0); clearFoes(); };
+
+  // ---- registry, admin, levels
+  for (const k of ['fletching', 'crafting', 'cooking', 'firemaking'] as const) check(s.gathering[k] === 0 && g.skillLevel(s, k) === 1, `${k} starts at level 1`);
+  g.say(pid, '/fletching 30');
+  g.say(pid, '/skill crafting 20');
+  g.say(pid, '/cooking 12');
+  g.say(pid, '/firemaking 7');
+  check(g.skillLevel(s, 'fletching') === 30 && g.skillLevel(s, 'crafting') === 20 && g.skillLevel(s, 'cooking') === 12 && g.skillLevel(s, 'firemaking') === 7, '/fletching, /skill crafting, /cooking, /firemaking N set the new skills');
+  for (const k of ['fletching', 'crafting', 'cooking', 'firemaking']) g.say(pid, `/skill ${k} 1`);
+
+  // ---- firemaking
+  goStrip();
+  s.inventory.add('logs', 3);
+  s.inventory.add('pine_logs', 1);
+  executeCommand(g, pid, { c: 'useItem', item: 'logs' });
+  check(g.craftView(pid) === null, 'logs alone open nothing');
+  s.inventory.add('tinderbox', 1);
+  executeCommand(g, pid, { c: 'useItem', item: 'tinderbox' });
+  const fw = g.craftView(pid);
+  check(fw?.station === 'tinderbox' && fw.recipes.length === 4 && fw.recipes.find((r) => r.id === 'fire:pine_logs')?.locked === true, 'a tinderbox opens the firemaking window (pine locked at level 1)');
+  msgs.length = 0;
+  executeCommand(g, pid, { c: 'craft', recipe: 'fire:pine_logs', count: 1 });
+  check(p.craft === null && msgs.some((m) => m.startsWith('You need firemaking level 15')), 'pine logs need firemaking 15');
+  const x0 = p.x, y0 = p.y;
+  executeCommand(g, pid, { c: 'craft', recipe: 'fire:logs', count: 2 });
+  check(p.craft?.left === 2, 'Make 2 fires starts a batch');
+  run(g, 12, () => p.craft === null);
+  check(w.getObj(x0, y0, 0) === Obj.Campfire && g.isLitFire(x0, y0, 0) && w.getObj(x0 - 1, y0, 0) === Obj.Campfire, 'two campfires lit in a line');
+  check(p.x === x0 - 2 && p.y === y0 && s.inventory.count('logs') === 1 && s.gathering.firemaking === 80, `you step aside after each fire; logs used, 2 × 40 xp (${s.gathering.firemaking})`);
+  check(!w.isWalkable(x0, y0, 0), 'a campfire blocks the tile');
+  const snapF = buildSnapshot(g, s);
+  const mirF = new Game({ simulate: false });
+  if (snapF.t === 'snap') {
+    check(!!snapF.fi?.includes(`${x0},${y0},0`), 'the snapshot lists lit fires nearby (fi)');
+    applySnapshot(mirF, snapF);
+    check(mirF.world.getObj(x0, y0, 0) === Obj.Campfire && mirF.isLitFire(x0, y0, 0), 'clients see the campfire');
+    const again = buildSnapshot(g, s);
+    check(again.t === 'snap' && again.fi === undefined, 'an unchanged fire list is not sent again');
+  }
+  // protection zones: no fires
+  const temple = g.world.playerSpawn;
+  g.teleport(p, temple.x, temple.y, temple.z);
+  msgs.length = 0;
+  executeCommand(g, pid, { c: 'useItem', item: 'tinderbox' });
+  executeCommand(g, pid, { c: 'craft', recipe: 'fire:logs', count: 1 });
+  check(p.craft === null && msgs.some((m) => m.includes('protection zone')) && s.inventory.count('logs') === 1, 'no fires in a protection zone');
+
+  // ---- cooking on the campfire
+  g.teleport(p, x0, y0 + 1, 0);
+  clearFoes();
+  check(g.isUsable(x0, y0, 0), 'a campfire is usable (cook)');
+  executeCommand(g, pid, { c: 'useTile', x: x0, y: y0 });
+  run(g, 0.5);
+  check(g.craftView(pid)?.station === 'campfire', 'using a campfire opens the cooking window');
+  s.inventory.add('raw_meat', 12);
+  const cookXp0 = s.gathering.cooking;
+  executeCommand(g, pid, { c: 'craft', recipe: 'cook:campfire:meat', count: 12 });
+  run(g, 40, () => p.craft === null);
+  const meat = s.inventory.count('meat'), burnt = s.inventory.count('burnt_food');
+  check(s.inventory.count('raw_meat') === 0 && meat + burnt === 12 && burnt > 0 && meat > 0, `raw meat cooks into meat, some burns at level 1 (${meat} cooked, ${burnt} burnt)`);
+  check(s.gathering.cooking >= cookXp0 + meat * 30 && s.gathering.cooking < cookXp0 + 12 * 30, 'only cooked food gives cooking experience');
+  msgs.length = 0;
+  s.inventory.add('raw_swordfish', 1);
+  executeCommand(g, pid, { c: 'craft', recipe: 'cook:campfire:swordfish', count: 1 });
+  check(p.craft === null && msgs.some((m) => m.startsWith('You need cooking level 50')), 'swordfish needs cooking 50');
+  const meatR = recipeById('cook:campfire:meat')!, stoveR = recipeById('cook:stove:meat')!;
+  check(recipeChance(meatR, 1) === 0.55 && recipeChance(meatR, 24) === 1 && recipeChance(stoveR, 1) > recipeChance(meatR, 1) && recipeChance(stoveR, 19) === 1, 'burning falls with level and a stove burns less');
+  check(FOODS.every((f) => (ITEMS[f.cooked].heal ?? 0) > 0 && ITEMS[f.raw].kind === 'material') && FISH.every((f) => FOODS.some((x) => x.raw === f.raw && x.cooked === f.item)), 'raw food cannot be eaten; every caught fish cooks into the old fish item');
+  g.useItem(pid, 'raw_swordfish');
+  check(s.inventory.count('raw_swordfish') === 1, 'eating raw fish does nothing');
+  // the fire burns out (and a cook at it stops)
+  check(g.craftView(pid)?.station === 'campfire', 'using raw food beside a fire opens it');
+  executeCommand(g, pid, { c: 'useTile', x: x0, y: y0 });
+  run(g, 0.3);
+  g.say(pid, '/cooking 1');
+  s.inventory.add('raw_meat', 50);
+  executeCommand(g, pid, { c: 'craft', recipe: 'cook:campfire:meat', count: 50 });
+  run(g, 130, () => w.getObj(x0, y0, 0) !== Obj.Campfire);
+  run(g, 3);
+  check(w.getObj(x0, y0, 0) === Obj.None && !g.isLitFire(x0, y0, 0) && p.craft === null && g.craftView(pid) === null, 'a campfire burns out (60–80 s) and the cooking stops');
+  const snapF2 = buildSnapshot(g, s);
+  if (snapF2.t === 'snap') {
+    applySnapshot(mirF, snapF2);
+    check(mirF.world.getObj(x0, y0, 0) === Obj.None && !mirF.isLitFire(x0, y0, 0), 'clients see it go out');
+  }
+  // ---- cooking on a stove
+  const stove = findObj(Obj.Stove)!;
+  check(!!stove, 'stoves exist');
+  g.teleport(p, stove.sx, stove.sy, 0);
+  executeCommand(g, pid, { c: 'useTile', x: stove.x, y: stove.y });
+  run(g, 0.5);
+  check(g.craftView(pid)?.station === 'stove', 'using a stove opens the cooking window');
+  g.say(pid, '/cooking 30');
+  s.inventory.add('raw_trout', 3);
+  const trout0 = s.inventory.count('trout');
+  executeCommand(g, pid, { c: 'craft', recipe: 'cook:stove:trout', count: 3 });
+  run(g, 12, () => p.craft === null);
+  check(s.inventory.count('trout') === trout0 + 3 && s.inventory.count('raw_trout') === 0, 'at cooking 30 trout never burns on a stove');
+  executeCommand(g, pid, { c: 'craftClose' });
+  // raw food next to a stove opens it
+  s.inventory.add('raw_fish', 1);
+  executeCommand(g, pid, { c: 'useItem', item: 'raw_fish' });
+  check(g.craftView(pid)?.station === 'stove', 'using raw food beside a stove opens the stove');
+  executeCommand(g, pid, { c: 'craftClose' });
+
+  // ---- fletching
+  goStrip();
+  s.inventory.removeById('logs', s.inventory.count('logs'));
+  s.inventory.add('logs', 6);
+  executeCommand(g, pid, { c: 'useItem', item: 'feather' });
+  check(g.craftView(pid) === null, 'no feathers, nothing to use');
+  s.inventory.add('arrow_shaft', 1);
+  executeCommand(g, pid, { c: 'useItem', item: 'arrow_shaft' });
+  check(g.craftView(pid)?.station === 'knife', 'arrow shafts open the fletching window');
+  msgs.length = 0;
+  executeCommand(g, pid, { c: 'craft', recipe: 'fletch:shafts:logs', count: 1 });
+  check(p.craft === null && msgs.some((m) => m.startsWith('You need a knife')), 'carving needs a knife');
+  s.inventory.removeById('arrow_shaft', 1);
+  s.inventory.add('knife', 1);
+  executeCommand(g, pid, { c: 'useItem', item: 'knife' });
+  const kv = g.craftView(pid);
+  check(kv?.station === 'knife' && ['Shafts', 'Bows', 'Crossbows', 'Arrows'].every((gr) => kv.recipes.some((r) => r.group === gr)), 'a knife opens fletching: shafts, bows, crossbows, arrows');
+  executeCommand(g, pid, { c: 'craft', recipe: 'fletch:shafts:logs', count: 2 });
+  run(g, 6, () => p.craft === null);
+  check(s.inventory.count('arrow_shaft') === 30 && s.inventory.count('logs') === 4 && s.gathering.fletching === 10, 'logs carve into 15 arrow shafts each (5 xp)');
+  msgs.length = 0;
+  executeCommand(g, pid, { c: 'craft', recipe: 'fletch:longbow', count: 1 });
+  check(p.craft === null && msgs.some((m) => m.startsWith('You need fletching level 10')), 'a longbow needs fletching 10');
+  g.say(pid, '/fletching 10');
+  const bows0 = s.inventory.count('hunting_bow');
+  executeCommand(g, pid, { c: 'craft', recipe: 'fletch:hunting_bow', count: 1 });
+  run(g, 4, () => p.craft === null);
+  executeCommand(g, pid, { c: 'craft', recipe: 'fletch:longbow', count: 1 });
+  run(g, 4, () => p.craft === null);
+  check(s.inventory.count('hunting_bow') === bows0 + 1 && s.inventory.count('longbow') === 1 && s.inventory.count('logs') === 1, 'logs make a hunting bow (short) and a longbow (2 logs)');
+  s.inventory.add('feather', 20);
+  s.inventory.add('bronze_arrowheads', 20);
+  const arrows0 = s.inventory.count('arrow') + (s.inventory.equipment.ammo?.id === 'arrow' ? 0 : 0);
+  executeCommand(g, pid, { c: 'craft', recipe: 'fletch:arrow', count: 2 });
+  run(g, 6, () => p.craft === null);
+  check(s.inventory.count('arrow') === arrows0 + 20 && s.inventory.count('arrow_shaft') === 10 && s.inventory.count('feather') === 0, 'shafts + feathers + bronze arrowheads make arrows, ten at a time');
+  msgs.length = 0;
+  s.inventory.add('iron_arrowheads', 10);
+  s.inventory.add('feather', 10);
+  executeCommand(g, pid, { c: 'craft', recipe: 'fletch:onyx_arrow', count: 1 });
+  check(p.craft === null && msgs.some((m) => m.startsWith('You need fletching level 15')), 'iron-tipped (onyx) arrows need fletching 15');
+  // moving stops the work, the hand-tool window stays open
+  s.inventory.add('logs', 5);
+  executeCommand(g, pid, { c: 'craft', recipe: 'fletch:shafts:logs', count: 5 });
+  run(g, 0.3);
+  check(p.craft !== null, 'carving again');
+  executeCommand(g, pid, { c: 'moveTo', x: p.x + 3, y: p.y });
+  run(g, 0.5);
+  check(p.craft === null && g.craftView(pid)?.station === 'knife', 'walking stops carving; the knife window stays open');
+  executeCommand(g, pid, { c: 'craftClose' });
+
+  // ---- crafting: tanning, sewing, gems, jewellery
+  const rack = findObj(Obj.TanningRack)!;
+  check(!!rack, 'tanning racks exist');
+  g.teleport(p, rack.sx, rack.sy, 0);
+  executeCommand(g, pid, { c: 'useTile', x: rack.x, y: rack.y });
+  run(g, 0.5);
+  check(g.craftView(pid)?.station === 'tanning', 'using a tanning rack opens tanning');
+  s.inventory.add('wolf_pelt', 4);
+  executeCommand(g, pid, { c: 'craft', recipe: 'tan:wolf_pelt', count: 4 });
+  run(g, 10, () => p.craft === null);
+  check(s.inventory.count('leather') === 4 && s.inventory.count('wolf_pelt') === 0 && s.gathering.crafting === 40, 'wolf pelts tan into leather (10 xp each)');
+  msgs.length = 0;
+  s.inventory.add('polar_bear_fur', 1);
+  executeCommand(g, pid, { c: 'craft', recipe: 'tan:polar_bear_fur', count: 1 });
+  check(p.craft === null && msgs.some((m) => m.startsWith('You need crafting level 30')), 'polar bear fur needs crafting 30');
+  executeCommand(g, pid, { c: 'craftClose' });
+  s.inventory.add('needle', 1);
+  executeCommand(g, pid, { c: 'useItem', item: 'needle' });
+  check(g.craftView(pid)?.station === 'needle', 'a needle opens leatherwork');
+  msgs.length = 0;
+  executeCommand(g, pid, { c: 'craft', recipe: 'sew:leather_helmet', count: 1 });
+  check(p.craft === null && msgs.some((m) => m.includes('thread')), 'sewing needs thread');
+  s.inventory.add('thread', 5);
+  const caps0 = s.inventory.count('leather_helmet');
+  executeCommand(g, pid, { c: 'craft', recipe: 'sew:leather_helmet', count: 1 });
+  run(g, 4, () => p.craft === null);
+  check(s.inventory.count('leather_helmet') === caps0 + 1 && s.inventory.count('leather') === 3 && s.inventory.count('thread') === 4, 'leather + thread make a leather cap');
+  g.say(pid, '/crafting 20');
+  s.inventory.add('chisel', 1);
+  s.inventory.add('small_sapphire', 2);
+  executeCommand(g, pid, { c: 'useItem', item: 'chisel' });
+  executeCommand(g, pid, { c: 'craft', recipe: 'cut:small_sapphire', count: 2 });
+  run(g, 6, () => p.craft === null);
+  check(s.inventory.count('cut_sapphire') === 2 && s.inventory.count('small_sapphire') === 0, 'a chisel cuts sapphires (crafting 20)');
+  const furnace = findObj(Obj.Furnace)!;
+  g.teleport(p, furnace.sx, furnace.sy, 0);
+  executeCommand(g, pid, { c: 'useTile', x: furnace.x, y: furnace.y });
+  run(g, 0.5);
+  const jv = g.craftView(pid);
+  const ringRow = jv?.recipes.find((r) => r.id === 'jewel:sapphire_ring');
+  check(jv?.station === 'furnace' && jv.skill === 'smithing' && ringRow?.skill === 'crafting' && ringRow.locked === true, 'the furnace lists jewellery, trained by crafting (sapphire ring locked at crafting 20)');
+  g.say(pid, '/crafting 25');
+  s.inventory.add('silver_bar', 1);
+  executeCommand(g, pid, { c: 'craft', recipe: 'jewel:sapphire_ring', count: 1 });
+  run(g, 4, () => p.craft === null);
+  check(s.inventory.count('sapphire_ring') >= 1 && s.inventory.count('cut_sapphire') === 1 && s.inventory.count('silver_bar') === 0, 'a silver bar and a cut sapphire make a sapphire ring');
+  executeCommand(g, pid, { c: 'craftClose' });
+
+  // ---- loot
+  check(['wolf', 'deer', 'bear', 'winter_wolf', 'polar_bear', 'silver_rabbit'].every((k) => ENEMIES[k as Enemy['enemyKind']].loot.some((l) => l.id === 'raw_meat')), 'wolves, deer, bears and rabbits drop raw meat');
+  check(ENEMIES.dire_penguin.loot.some((l) => l.id === 'feather') && ENEMIES.bear.loot.some((l) => l.id === 'bear_hide'), 'penguins drop feathers, bears drop hides');
+  check(FISH_ITEMS.every((id) => FOODS.some((f) => f.cooked === id)), 'every old fish item is a cooking result');
+
+  // ---- save, load and migration
+  const data = g.serialize(pid);
+  check(SAVE_VERSION === 9 && data.version === 9 && (['fletching', 'crafting', 'cooking', 'firemaking'] as const).every((k) => data.gathering?.[k] === s.gathering[k]), 'saves carry fletching, crafting, cooking and firemaking (save v9)');
+  const t2 = solo('knight');
+  check(t2.g.applySave(t2.pid, data) && t2.s.gathering.crafting === s.gathering.crafting && t2.s.gathering.fletching === s.gathering.fletching && t2.s.inventory.count('longbow') === 1, 'the new skills survive save and load');
+  const v8 = JSON.parse(JSON.stringify({ ...data, version: 8, gathering: { woodcutting: 4321, fishing: 777, mining: 55, smithing: 99 } })) as Record<string, unknown>;
+  const mig = migrateSave(v8);
+  check(typeof mig !== 'string' && mig.from === 8 && mig.data.version === 9 && mig.data.gathering?.fletching === 0 && mig.data.gathering?.crafting === 0 && mig.data.gathering?.cooking === 0 && mig.data.gathering?.firemaking === 0
+    && mig.data.gathering?.woodcutting === 4321 && mig.data.gathering?.fishing === 777 && mig.data.gathering?.mining === 55 && mig.data.gathering?.smithing === 99, 'a v8 save migrates: the four new skills 0, every other skill kept');
+  const t3 = solo('knight');
+  check(t3.g.applySave(t3.pid, v8) && t3.s.gathering.cooking === 0 && t3.s.gathering.smithing === 99 && t3.s.inventory.count('longbow') === 1, 'a migrated v8 character loads with its items and skills');
+  const snapS = buildSnapshot(g, s);
+  if (snapS.t === 'snap') check(snapS.self.gx?.cooking === Math.floor(s.gathering.cooking) && snapS.self.gx?.firemaking === Math.floor(s.gathering.firemaking), 'the snapshot carries the new skills (gx)');
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);

@@ -94,6 +94,10 @@ export enum Obj {
   // blacksmithing stations (production/smithing.ts), in every smithy
   Furnace = 56,
   Anvil = 57,
+  /** Cooking stove (one in every depot). */
+  Stove = 58,
+  /** Tanning rack for hides (crafting; one in every smithy). */
+  TanningRack = 59,
 }
 
 const SOLID = new Set<number>([
@@ -102,7 +106,7 @@ const SOLID = new Set<number>([
   Obj.Cliff, Obj.Palisade, Obj.Campfire, Obj.Chest, Obj.Locker, Obj.Palm, Obj.Pillar,
   Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall, Obj.MagicWall, Obj.MarketBoard, Obj.Stump,
   Obj.CopperRock, Obj.TinRock, Obj.IronRock, Obj.CoalRock, Obj.SilverRock, Obj.GoldRock, Obj.StarsteelRock, Obj.DarkstoneRock, Obj.DepletedRock,
-  Obj.Furnace, Obj.Anvil,
+  Obj.Furnace, Obj.Anvil, Obj.Stove, Obj.TanningRack,
 ]);
 
 /** Objects that stop arrows and spells. Trees and fences do not. */

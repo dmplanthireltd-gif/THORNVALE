@@ -5,7 +5,8 @@ import { Ground, Obj, type WorldMap } from '../world/WorldMap';
  * woodcutting.ts: gatherLevelForXp / gatherXpForLevel). Use open water within
  * FISH_RANGE tiles while carrying a fishing rod and you keep casting on a timer.
  * Each cast may get a bite; a bite lands the best fish that lives in that water
- * and that your level allows, with a chance, otherwise a lower one.
+ * and that your level allows, with a chance, otherwise a lower one. Catches
+ * are raw (cook them on a campfire or stove: production/cooking.ts).
  */
 /** Seconds between two casts. */
 export const FISH_INTERVAL = 2.5;
@@ -25,8 +26,10 @@ export const SPOT_RECOVER_SECONDS = 20;
 export type FishWater = 'any' | 'shallow' | 'cold' | 'deep';
 
 export interface FishDef {
-  /** Item id of the fish. */
+  /** Item id of the cooked fish (the food; the fishing items from before cooking existed). */
   item: string;
+  /** Item id of the raw fish a catch gives (cook it into `item`, save v9+). */
+  raw: string;
   name: string;
   /** Fishing level needed. */
   level: number;
@@ -36,16 +39,18 @@ export interface FishDef {
 
 /** Cheapest first. */
 export const FISH: FishDef[] = [
-  { item: 'fish', name: 'small fish', level: 1, xp: 10, where: 'any' },
-  { item: 'trout', name: 'trout', level: 10, xp: 25, where: 'any' },
-  { item: 'pike', name: 'pike', level: 20, xp: 40, where: 'shallow' },
-  { item: 'salmon', name: 'salmon', level: 30, xp: 60, where: 'shallow' },
-  { item: 'ice_fish', name: 'ice fish', level: 40, xp: 80, where: 'cold' },
-  { item: 'swordfish', name: 'swordfish', level: 50, xp: 110, where: 'deep' },
+  { item: 'fish', raw: 'raw_fish', name: 'small fish', level: 1, xp: 10, where: 'any' },
+  { item: 'trout', raw: 'raw_trout', name: 'trout', level: 10, xp: 25, where: 'any' },
+  { item: 'pike', raw: 'raw_pike', name: 'pike', level: 20, xp: 40, where: 'shallow' },
+  { item: 'salmon', raw: 'raw_salmon', name: 'salmon', level: 30, xp: 60, where: 'shallow' },
+  { item: 'ice_fish', raw: 'raw_ice_fish', name: 'ice fish', level: 40, xp: 80, where: 'cold' },
+  { item: 'swordfish', raw: 'raw_swordfish', name: 'swordfish', level: 50, xp: 110, where: 'deep' },
 ];
 
-/** Every fish item id, cheapest first. */
+/** Every (cooked) fish item id, cheapest first. */
 export const FISH_ITEMS = FISH.map((f) => f.item);
+/** Every raw fish a catch gives, cheapest first. */
+export const RAW_FISH_ITEMS = FISH.map((f) => f.raw);
 
 /** Gems and rings a lucky cast can pull up (all existing loot items). */
 export const TREASURE_ITEMS = ['small_ruby', 'small_sapphire', 'small_emerald', 'sunstone_ring', 'ring_of_vigor', 'sapphire_ring'];

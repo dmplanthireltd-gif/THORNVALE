@@ -15,7 +15,8 @@ import { beamTiles, exivaText, facingDir, GROUP_COOLDOWN, isSpellId, parseSpellW
 import { CHOP_INTERVAL, chopChance, gatherLevelForXp, treeAt } from './gathering/woodcutting';
 import { emptySkillXp, parseSkillXp, skillDef, SKILL_XP_CAP, type NonCombatSkill } from './gathering/skills';
 import { GEM_CHANCE, MINE_INTERVAL, mineChance, oreAt, PICKAXES, rollGem, type PickaxeDef } from './gathering/mining';
-import { MAX_BATCH, recipeById, recipeChance, recipesAt, stationAt, STATIONS, type CraftView, type Station } from './production/recipes';
+import { MAX_BATCH, recipeById, recipeChance, recipesAt, stationAt, stationForItem, STATIONS, type CraftView, type Recipe, type Station } from './production/recipes';
+import { RAW_FOOD_ITEMS } from './production/cooking';
 import {
   biteChance, FISH_INTERVAL, FISH_RANGE, fishFor, FISHING_ROD, isFishingWater, JUNK_CHANCE, rollFish, SPOT_RECOVER_SECONDS, SPOT_WARY_AFTER, spotKey,
   TREASURE_CHANCE, TREASURE_ITEMS,
@@ -178,7 +179,7 @@ export interface SaveData {
   pvp?: { secure?: boolean; whiteSkullUntil?: number; redSkullUntil?: number; unjustKills?: number[] };
   /** Combat skills (save v5+): level and tries towards the next level. */
   skills?: Partial<Record<CombatSkill, { level: number; tries: number }>>;
-  /** Non-combat skills (save v5+): total experience per skill (fishing v7+, mining and smithing v8+). */
+  /** Non-combat skills (save v5+): total experience per skill (fishing v7+, mining and smithing v8+, fletching, crafting, cooking and firemaking v9+). */
   gathering?: Partial<Record<NonCombatSkill, number>>;
   /** Market deliveries already received (save v5+). */
   market?: { claimed?: string[] };
@@ -255,6 +256,11 @@ export class Game implements AIContext {
    * seconds left (mirror games: until the server says otherwise). Not saved.
    */
   private stumps = new Map<string, { obj: Obj; left: number }>();
+  /**
+   * Campfires lit with a tinderbox: key → what the tile held before and seconds left
+   * (mirror games: until the server says otherwise). Not saved.
+   */
+  private fires = new Map<string, { prev: Obj; left: number }>();
   /** Fishing spots (3×3 tiles) fished recently: catches there, and seconds until one is forgotten. Not saved. */
   private fishSpots = new Map<string, { n: number; t: number }>();
   /** The player market (sell offers, escrow, deliveries to offline sellers). */
@@ -658,6 +664,7 @@ export class Game implements AIContext {
     this.updateHoles(dt);
     this.updateFields(dt);
     this.updateStumps(dt);
+    this.updateFires(dt);
     this.updateFishSpots(dt);
     this.marketTimer -= dt;
     if (this.marketTimer <= 0) {
@@ -666,7 +673,11 @@ export class Game implements AIContext {
     }
     for (const s of this.sessions.values()) {
       if (s.marketOpen && (s.player.dead || s.player.z !== s.marketOpen.z || chebyshev(s.player.x, s.player.y, s.marketOpen.x, s.marketOpen.y) > MARKET_RANGE)) this.closeMarket(s.id);
-      if (s.craftOpen && (s.player.dead || s.player.z !== s.craftOpen.z || chebyshev(s.player.x, s.player.y, s.craftOpen.x, s.craftOpen.y) > 1)) this.closeCraft(s.id);
+      if (s.craftOpen) {
+        const o = s.craftOpen, obj = STATIONS[o.station].obj;
+        // station windows close when you walk away or the station is gone (a campfire burnt out); hand-tool windows stay open
+        if (s.player.dead || (obj !== null && (s.player.z !== o.z || chebyshev(s.player.x, s.player.y, o.x, o.y) > 1 || this.world.getObj(o.x, o.y, o.z) !== obj))) this.closeCraft(s.id);
+      }
       if (s.dialogue) {
         const n = this.npcs.find((x) => x.id === s.dialogue!.npcId);
         if (!n || s.player.dead || this.dist(n, s.player) > 3) this.closeDialogue(s.id);
@@ -1272,7 +1283,7 @@ export class Game implements AIContext {
     if (!isFishingWater(this.world, x, y, z)) return;
     if (!this.hasRod(s)) return this.msg(s.id, 'You need a fishing rod to fish. Outfitters and harbour captains sell them.', 'warn');
     if (!this.canReachWater(p, x, y, z)) return this.msg(s.id, `The water is too far away. Stand within ${FISH_RANGE} tiles of it.`, 'warn');
-    if (!s.inventory.canFit('fish', 1) && s.inventory.freeSlots() === 0) return this.msg(s.id, 'Your backpack is full.', 'warn');
+    if (!s.inventory.canFit('raw_fish', 1) && s.inventory.freeSlots() === 0) return this.msg(s.id, 'Your backpack is full.', 'warn');
     p.targetId = null;
     stopWork(p, 'fish');
     p.faceTowards(x, y);
@@ -1323,7 +1334,7 @@ export class Game implements AIContext {
     } else if (Math.random() < biteChance(lvl, spot?.n ?? 0)) {
       const fish = rollFish(fishFor(this.world, f.x, f.y, f.z, lvl), lvl);
       if (fish) {
-        catchId = fish.item;
+        catchId = fish.raw;
         xp = fish.xp;
         what = `You catch ${/^[aeiou]/.test(fish.name) ? 'an' : 'a'} ${fish.name}.`;
       }
@@ -1461,12 +1472,22 @@ export class Game implements AIContext {
     this.events.emit({ type: 'tileChanged', x, y, z });
   }
 
-  // ================================================================ production (furnace, anvil)
+  // ================================================================ production (stations and hand tools)
 
+  /** Opens a station window: a map object at x,y,z, or a hand tool worked where the player stands. */
   private openCraft(s: Session, station: Station, x: number, y: number, z: number): void {
     s.craftOpen = { station, x, y, z };
-    s.player.faceTowards(x, y);
+    if (STATIONS[station].obj !== null) s.player.faceTowards(x, y);
     this.events.emit({ type: 'craftChanged', to: s.id });
+  }
+
+  /** Opens a hand-tool window (knife, needle, chisel, tinderbox) for the item used, if it opens one. */
+  private openToolCraft(s: Session, itemId: string): boolean {
+    const st = stationForItem(itemId);
+    if (!st) return false;
+    const p = s.player;
+    this.openCraft(s, st.id, p.x, p.y, p.z);
+    return true;
   }
 
   /** Closes the station window (and stops whatever was being made there). */
@@ -1496,14 +1517,17 @@ export class Game implements AIContext {
     const level = this.skillLevel(s, st.skill);
     const c = s.player.craft;
     return {
-      station: st.id, title: st.title, skill: st.skill, level,
+      station: st.id, title: st.title, note: st.note, skill: st.skill, level,
       making: c ? { recipe: c.recipe, left: c.left } : null,
-      recipes: recipesAt(st.id).map((r) => ({
-        id: r.id, group: r.group, level: r.level, xp: r.xp,
-        inputs: r.inputs.map((it) => ({ id: it.id, qty: it.qty, have: s.inventory.count(it.id) })),
-        output: { ...r.output }, tool: r.tool, hasTool: !r.tool || s.inventory.has(r.tool),
-        chance: Math.round(recipeChance(r, level) * 100), can: this.craftable(s, r.id),
-      })),
+      recipes: recipesAt(st.id).map((r) => {
+        const lv = r.skill === st.skill ? level : this.skillLevel(s, r.skill);
+        return {
+          id: r.id, group: r.group, level: r.level, xp: r.xp,
+          inputs: r.inputs.map((it) => ({ id: it.id, qty: it.qty, have: s.inventory.count(it.id) })),
+          output: { ...r.output }, label: r.label, skill: r.skill, locked: lv < r.level, tool: r.tool, hasTool: !r.tool || s.inventory.has(r.tool),
+          chance: Math.round(recipeChance(r, lv) * 100), can: this.craftable(s, r.id),
+        };
+      }),
     };
   }
 
@@ -1522,22 +1546,37 @@ export class Game implements AIContext {
     }
     const r = recipeById(recipeId);
     if (!open || !r || r.station !== open.station) return;
-    if (p.z !== open.z || chebyshev(p.x, p.y, open.x, open.y) > 1) return this.closeCraft(pid);
     const st = STATIONS[r.station];
+    const portable = st.obj === null;
+    if (!portable && (p.z !== open.z || chebyshev(p.x, p.y, open.x, open.y) > 1)) return this.closeCraft(pid);
+    if (portable && p.moving) return this.msg(pid, 'Stand still to work.', 'warn');
     const out = itemDef(r.output.id);
-    if (this.skillLevel(s, r.skill) < r.level) return this.msg(pid, `You need ${skillDef(r.skill).name.toLowerCase()} level ${r.level} to make ${out.name.toLowerCase()}.`, 'warn');
-    if (r.tool && !s.inventory.has(r.tool)) return this.msg(pid, `You need ${article(itemDef(r.tool).name)} for that. Smiths sell them.`, 'warn');
+    const what = r.label ? r.label.toLowerCase() : `make ${out.name.toLowerCase()}`;
+    if (this.skillLevel(s, r.skill) < r.level) return this.msg(pid, `You need ${skillDef(r.skill).name.toLowerCase()} level ${r.level} to ${what}.`, 'warn');
+    if (r.tool && !s.inventory.has(r.tool)) return this.msg(pid, `You need ${article(itemDef(r.tool).name)} for that. ${TOOL_SELLERS[r.tool] ?? 'Smiths sell them.'}`, 'warn');
     if (this.craftable(s, r.id) <= 0) return this.msg(pid, `You need ${r.inputs.map((it) => `${it.qty} ${itemDef(it.id).name.toLowerCase()}`).join(' and ')}.`, 'warn');
+    if (r.fire) {
+      const why = this.fireProblem(s);
+      if (why) return this.msg(pid, why, 'warn');
+    }
     p.targetId = null;
     p.path = [];
     p.pending = null;
     stopWork(p);
-    p.faceTowards(open.x, open.y);
+    if (portable) {
+      // a hand tool works where you stand
+      open.x = p.x;
+      open.y = p.y;
+      open.z = p.z;
+    } else p.faceTowards(open.x, open.y);
     p.craft = { recipe: r.id, left: Math.max(1, Math.min(MAX_BATCH, Math.floor(count))), timer: st.interval, x: open.x, y: open.y, z: open.z };
     this.events.emit({ type: 'craftChanged', to: pid });
   }
 
-  /** Makes one item every station interval; walking, attacking or running out of materials stops it. */
+  /**
+   * Makes one item every station interval; walking, attacking or running out of materials stops it.
+   * Hand tools work on the spot: leaving the tile stops them (except the step aside after lighting a fire).
+   */
   private updateCraft(s: Session, dt: number): void {
     const p = s.player;
     const c = p.craft;
@@ -1547,31 +1586,148 @@ export class Game implements AIContext {
       if (why) this.msg(s.id, why, kind);
       this.events.emit({ type: 'craftChanged', to: s.id });
     };
-    if (p.dead || p.moving || p.path.length || p.pending || p.targetId !== null || p.z !== c.z || chebyshev(p.x, p.y, c.x, c.y) > 1) return done();
     const r = recipeById(c.recipe);
     const st = r ? STATIONS[r.station] : null;
-    if (!r || !st || this.world.getObj(c.x, c.y, c.z) !== st.obj) return done();
+    if (!r || !st) return done();
+    const portable = st.obj === null;
+    if (c.stepping && !p.moving) c.stepping = false;
+    const walked = portable ? p.x !== c.x || p.y !== c.y || p.z !== c.z || (p.moving && !c.stepping) : p.moving || p.z !== c.z || chebyshev(p.x, p.y, c.x, c.y) > 1;
+    if (p.dead || walked || p.path.length || p.pending || p.targetId !== null) return done();
+    if (!portable && this.world.getObj(c.x, c.y, c.z) !== st.obj) return done(st.obj === Obj.Campfire ? 'The fire has gone out.' : undefined, 'warn');
+    if (p.moving) return;
     c.timer -= dt;
     if (c.timer > 0) return;
     c.timer += st.interval;
-    p.faceTowards(c.x, c.y);
+    if (!portable) p.faceTowards(c.x, c.y);
     if (this.craftable(s, r.id) <= 0) return done(`You have run out of ${r.inputs.map((it) => itemDef(it.id).name.toLowerCase()).join(' or ')}.`, 'warn');
-    const out = itemDef(r.output.id);
-    for (const it of r.inputs) s.inventory.removeById(it.id, it.qty);
-    const made = Math.random() < recipeChance(r, this.skillLevel(s, r.skill));
-    if (made) {
-      const left = s.inventory.add(r.output.id, r.output.qty);
-      if (left > 0) this.dropBag(p.x, p.y, p.z, [{ id: r.output.id, qty: left }]);
-      this.msg(s.id, `You make ${r.output.qty > 1 ? `${r.output.qty} ${out.name.toLowerCase()}` : article(out.name)}${left > 0 ? ' (it falls to the floor, your backpack is full)' : ''}.`, 'loot');
-      this.gainSkill(s, r.skill, r.xp, p.id);
+    if (r.fire) {
+      if (!this.lightFire(s, r)) return done();
     } else {
-      this.msg(s.id, r.station === 'furnace' ? `The ${r.inputs.map((it) => itemDef(it.id).name.toLowerCase()).join(' and ')} is too impure and the bar crumbles.` : `You ruin the ${out.name.toLowerCase()}.`, 'warn');
+      const out = itemDef(r.output.id);
+      for (const it of r.inputs) s.inventory.removeById(it.id, it.qty);
+      const made = Math.random() < recipeChance(r, this.skillLevel(s, r.skill));
+      if (made) {
+        const left = s.inventory.add(r.output.id, r.output.qty);
+        if (left > 0) this.dropBag(p.x, p.y, p.z, [{ id: r.output.id, qty: left }]);
+        this.msg(s.id, `You make ${r.output.qty > 1 ? `${r.output.qty} ${plural(out.name.toLowerCase())}` : article(out.name)}${left > 0 ? ' (it falls to the floor, your backpack is full)' : ''}.`, 'loot');
+        this.gainSkill(s, r.skill, r.xp, p.id);
+      } else {
+        if (r.fail) {
+          const left = s.inventory.add(r.fail.id, r.fail.qty);
+          if (left > 0) this.dropBag(p.x, p.y, p.z, [{ id: r.fail.id, qty: left }]);
+        }
+        this.msg(s.id, r.skill === 'cooking' ? `You accidentally burn the ${itemDef(r.inputs[0].id).name.toLowerCase().replace(/^raw /, '')}.`
+          : r.station === 'furnace' ? `The ${r.inputs.map((it) => itemDef(it.id).name.toLowerCase()).join(' and ')} is too impure and the bar crumbles.` : `You ruin the ${out.name.toLowerCase()}.`, 'warn');
+      }
+      this.events.emit({ type: 'inventoryChanged', to: s.id });
+      this.events.emit({ type: 'craft', id: p.id, x: c.x, y: c.y, z: c.z, station: r.station, made });
     }
-    this.events.emit({ type: 'inventoryChanged', to: s.id });
-    this.events.emit({ type: 'craft', id: p.id, x: c.x, y: c.y, z: c.z, station: r.station, made });
     c.left -= 1;
     if (c.left <= 0) return done();
     this.events.emit({ type: 'craftChanged', to: s.id });
+  }
+
+  // ---------------------------------------------------------------- firemaking
+
+  /** Why a fire cannot be lit where the player stands (null = it can). */
+  private fireProblem(s: Session): string | null {
+    const p = s.player;
+    const w = this.world;
+    if (w.isSafe(p.x, p.y, p.z)) return 'You may not light a fire in a protection zone.';
+    if (w.getObj(p.x, p.y, p.z) !== Obj.None || w.linkAt(p.x, p.y, p.z) || this.fires.has(WorldMap.key(p.x, p.y, p.z)) || this.fields.has(WorldMap.key(p.x, p.y, p.z))) return 'You cannot light a fire here.';
+    if (!this.stepAside(p, true)) return 'There is no room to step away from a fire here.';
+    return null;
+  }
+
+  /** Steps the player off their tile (west first, like an old habit); `dry` only checks. */
+  private stepAside(p: Player, dry = false): boolean {
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, 1], [0, -1], [-1, 1], [1, 1], [-1, -1], [1, -1]]) {
+      if (!this.world.canStep(p.x, p.y, p.z, dx, dy) || this.isOccupied(p.x + dx, p.y + dy, p.z, p.id, true) || this.world.isSafe(p.x + dx, p.y + dy, p.z)) continue;
+      if (dry) return true;
+      if (this.tryStep(p, dx, dy)) return true;
+    }
+    return false;
+  }
+
+  /** One firemaking attempt: uses the logs, lights a campfire where the player stood and steps them aside. */
+  private lightFire(s: Session, r: Recipe): boolean {
+    const p = s.player;
+    const c = p.craft!;
+    const why = this.fireProblem(s);
+    if (why) {
+      this.msg(s.id, why, 'warn');
+      return false;
+    }
+    const x = p.x, y = p.y, z = p.z;
+    if (!this.stepAside(p)) return false;
+    for (const it of r.inputs) s.inventory.removeById(it.id, it.qty);
+    const [a, b] = r.fire!;
+    this.fires.set(WorldMap.key(x, y, z), { prev: this.world.getObj(x, y, z), left: a + Math.random() * (b - a) });
+    this.world.setObj(x, y, Obj.Campfire, z);
+    this.events.emit({ type: 'tileChanged', x, y, z });
+    this.events.emit({ type: 'inventoryChanged', to: s.id });
+    this.events.emit({ type: 'craft', id: p.id, x, y, z, station: r.station, made: true });
+    this.msg(s.id, `The ${itemDef(r.inputs[0].id).name.toLowerCase()} catch fire.`, 'loot');
+    this.gainSkill(s, r.skill, r.xp, p.id);
+    c.stepping = true;
+    c.x = p.x;
+    c.y = p.y;
+    if (s.craftOpen) {
+      s.craftOpen.x = p.x;
+      s.craftOpen.y = p.y;
+    }
+    return true;
+  }
+
+  private putOutFire(x: number, y: number, z: number): void {
+    const k = WorldMap.key(x, y, z);
+    const f = this.fires.get(k);
+    if (!f) return;
+    this.fires.delete(k);
+    if (this.world.getObj(x, y, z) === Obj.Campfire) this.world.setObj(x, y, f.prev, z);
+    this.events.emit({ type: 'tileChanged', x, y, z });
+  }
+
+  private updateFires(dt: number): void {
+    for (const [k, f] of this.fires) {
+      f.left -= dt;
+      if (f.left > 0) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      this.putOutFire(x, y, z);
+    }
+  }
+
+  /** Whether a campfire was lit by a player (it burns out), as opposed to one built into the map. */
+  isLitFire(x: number, y: number, z: number): boolean {
+    return this.fires.has(WorldMap.key(x, y, z));
+  }
+
+  /** Lit campfires near a spot (snapshot: only what a player can see). */
+  firesNear(x: number, y: number, z: number, radius: number): string[] {
+    const out: string[] = [];
+    for (const k of this.fires.keys()) {
+      const [fx, fy, fz] = k.split(',').map(Number);
+      if (Math.abs(fz - z) <= 2 && chebyshev(fx, fy, x, y) <= radius) out.push(k);
+    }
+    return out;
+  }
+
+  /** Mirror mode: shows exactly the lit fires the server listed (the ones near the player). */
+  syncFires(keys: string[]): void {
+    const want = new Set(keys);
+    for (const k of [...this.fires.keys()]) {
+      if (want.has(k)) continue;
+      const [fx, fy, fz] = k.split(',').map(Number);
+      this.putOutFire(fx, fy, fz);
+    }
+    for (const k of want) {
+      if (this.fires.has(k)) continue;
+      const [fx, fy, fz] = k.split(',').map(Number);
+      if (!this.world.inBounds(fx, fy)) continue;
+      this.fires.set(k, { prev: this.world.getObj(fx, fy, fz), left: Infinity });
+      this.world.setObj(fx, fy, Obj.Campfire, fz);
+      this.events.emit({ type: 'tileChanged', x: fx, y: fy, z: fz });
+    }
   }
 
   /** Turns a tree into a stump that grows back later. */
@@ -2513,6 +2669,15 @@ export class Game implements AIContext {
         if (!s.inventory.has('smithing_hammer')) this.msg(s.id, "You need a smith's hammer to work the anvil. Smiths sell them.", 'info');
         this.openCraft(s, 'anvil', x, y, z);
         return;
+      case Obj.Campfire:
+        this.openCraft(s, 'campfire', x, y, z);
+        return;
+      case Obj.Stove:
+        this.openCraft(s, 'stove', x, y, z);
+        return;
+      case Obj.TanningRack:
+        this.openCraft(s, 'tanning', x, y, z);
+        return;
       case Obj.Chest: {
         const c = this.world.chests.find((ch) => ch.x === x && ch.y === y && ch.z === z);
         if (!c) return;
@@ -3023,6 +3188,16 @@ export class Game implements AIContext {
     if (d.tool === 'rope') return this.msg(pid, 'Click a rope spot to climb up with your rope.', 'info');
     if (d.tool === 'shovel') return this.msg(pid, 'Click loose stones to dig them open.', 'info');
     if (d.tool === 'fishing') return this.msg(pid, `Click open water within ${FISH_RANGE} tiles to fish.`, 'info');
+    // hand tools (knife, needle, chisel, tinderbox) and their materials open their production window
+    if (this.openToolCraft(s, d.id)) return;
+    if (RAW_FOOD_ITEMS.includes(d.id)) {
+      // raw food used next to a fire or stove opens it
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const st = stationAt(this.world.getObj(p.x + dx, p.y + dy, p.z));
+        if (st && (st.id === 'campfire' || st.id === 'stove')) return this.openCraft(s, st.id, p.x + dx, p.y + dy, p.z);
+      }
+      return this.msg(pid, 'Cook it on a campfire or a stove (every depot has one). Use the fire or stove to cook.', 'info');
+    }
     this.msg(pid, `${d.name}: ${describeItem(d)}${d.value ? ` — traders pay ${d.value} gold.` : ''}`, 'info');
   }
 
@@ -4003,6 +4178,10 @@ export class Game implements AIContext {
     for (const b of this.bags) this.events.emit({ type: 'bagRemoved', bagId: b.id });
     this.bags.length = 0;
     this.fishSpots.clear();
+    for (const k of [...this.fires.keys()]) {
+      const [x, y, z] = k.split(',').map(Number);
+      this.putOutFire(x, y, z);
+    }
     for (const e of this.enemies) {
       e.placeAt(e.spawnX, e.spawnY, e.spawnZ);
       e.homeX = e.spawnX;
@@ -4056,6 +4235,12 @@ function resetPlayerState(p: Player): void {
 }
 
 /** Stops every gathering or production activity (except `keep`). */
+/** Shops that sell each production tool (for "you need a …" messages). */
+const TOOL_SELLERS: Record<string, string> = {
+  smithing_hammer: 'Smiths sell them.', knife: 'Outfitters and general traders sell them.', needle: 'Outfitters and general traders sell them.',
+  chisel: 'Outfitters, general traders and smiths sell them.', tinderbox: 'Outfitters and general traders sell them.',
+};
+
 function stopWork(p: Player, keep?: 'chop' | 'fish' | 'mine' | 'craft'): void {
   if (keep !== 'chop') p.chop = null;
   if (keep !== 'fish') p.fish = null;

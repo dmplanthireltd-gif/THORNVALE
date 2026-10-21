@@ -10,7 +10,7 @@
  * NonCombatSkill and a row to NONCOMBAT_SKILLS, bump SAVE_VERSION with a
  * migration that sets it to 0, then write the activity (gathering/ or production/).
  */
-export type NonCombatSkill = 'woodcutting' | 'fishing' | 'mining' | 'smithing';
+export type NonCombatSkill = 'woodcutting' | 'fishing' | 'mining' | 'smithing' | 'fletching' | 'crafting' | 'cooking' | 'firemaking';
 
 /** Gathering skills take from the world; production skills turn materials into items at a station. */
 export type SkillKind = 'gathering' | 'production';
@@ -32,18 +32,18 @@ export const NONCOMBAT_SKILLS: NonCombatSkillDef[] = [
   { id: 'fishing', name: 'Fishing', kind: 'gathering', icon: 'fishing_rod', hint: 'Click water near you with a fishing rod.', aliases: ['fish'] },
   { id: 'mining', name: 'Mining', kind: 'gathering', icon: 'bronze_pickaxe', hint: 'Mine ore rocks with a pickaxe.', aliases: ['mine', 'min'] },
   { id: 'smithing', name: 'Blacksmithing', kind: 'production', icon: 'smithing_hammer', hint: 'Smelt ore into bars at a furnace, then hammer bars into gear at an anvil.', aliases: ['smith', 'blacksmithing', 'smelting'] },
+  { id: 'fletching', name: 'Fletching', kind: 'production', icon: 'knife', hint: 'Use a knife to carve logs into arrow shafts, bows and crossbow stocks; add feathers and arrowheads for arrows.', aliases: ['fletch', 'fl', 'bowyer'] },
+  { id: 'crafting', name: 'Crafting', kind: 'production', icon: 'needle', hint: 'Tan hides at a tanning rack, sew leather with a needle and thread, cut gems with a chisel, make jewellery at a furnace.', aliases: ['craft', 'cr', 'leatherwork', 'jewellery'] },
+  { id: 'cooking', name: 'Cooking', kind: 'production', icon: 'meat', hint: 'Cook raw fish and meat on a campfire or a stove (every depot has one). Burns less as you level.', aliases: ['cook', 'ck'] },
+  { id: 'firemaking', name: 'Firemaking', kind: 'production', icon: 'tinderbox', hint: 'Use a tinderbox to light logs on open ground outside towns. Better logs need a higher level.', aliases: ['fire', 'fm'] },
 ];
 
 export const NONCOMBAT_IDS: NonCombatSkill[] = NONCOMBAT_SKILLS.map((d) => d.id);
 
 /** Skills the owner has asked for that are not built yet (owner decision 2026-10-21). */
 export const PLANNED_SKILLS: Array<{ id: string; name: string; kind: SkillKind }> = [
-  { id: 'fletching', name: 'Fletching', kind: 'production' },
-  { id: 'crafting', name: 'Crafting', kind: 'production' },
   { id: 'construction', name: 'Construction', kind: 'production' },
   { id: 'alchemy', name: 'Alchemy', kind: 'production' },
-  { id: 'cooking', name: 'Cooking', kind: 'production' },
-  { id: 'firemaking', name: 'Firemaking', kind: 'production' },
 ];
 
 /** Experience in one skill never goes above this (classic cap). */

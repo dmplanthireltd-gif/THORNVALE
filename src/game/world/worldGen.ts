@@ -222,12 +222,25 @@ function placeMarketBoards(m: WorldMap): void {
   }
 }
 
-/** A furnace and, beside it, an anvil in every smithy (blacksmithing). */
+/**
+ * A furnace and, beside it, an anvil in every smithy (blacksmithing), plus a
+ * tanning rack (crafting); a cooking stove in every depot (there are no taverns).
+ */
 function placeSmithies(m: WorldMap): void {
   for (const h of m.houses) {
     if (h.z !== 0 || !/smithy/i.test(h.name)) continue;
     const f = placeAgainstWall(m, h, Obj.Furnace);
     if (f) placeAgainstWall(m, h, Obj.Anvil, f);
+    placeAgainstWall(m, h, Obj.TanningRack);
+  }
+  for (const h of m.houses) {
+    if (h.z !== 0 || !/depot/i.test(h.name)) continue;
+    if (placeAgainstWall(m, h, Obj.Stove)) continue;
+    // a crowded depot: the stove goes into the nearest house that has room
+    const cx = h.x + h.w / 2, cy = h.y + h.h / 2;
+    const near = m.houses.filter((o) => o !== h && o.z === 0 && !/temple/i.test(o.name) && Math.max(Math.abs(o.x + o.w / 2 - cx), Math.abs(o.y + o.h / 2 - cy)) < 40)
+      .sort((a, b) => Math.max(Math.abs(a.x + a.w / 2 - cx), Math.abs(a.y + a.h / 2 - cy)) - Math.max(Math.abs(b.x + b.w / 2 - cx), Math.abs(b.y + b.h / 2 - cy)));
+    for (const o of near) if (placeAgainstWall(m, o, Obj.Stove)) break;
   }
 }
 
@@ -269,7 +282,7 @@ function placeAgainstWall(m: WorldMap, h: House, obj: Obj, near?: { x: number; y
   const needs: Array<{ x: number; y: number }> = [];
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const o = m.getObj(x, y, 0);
-    if (o === Obj.Locker || o === Obj.Counter || o === Obj.MarketBoard || o === Obj.Furnace || o === Obj.Anvil || npcAt(x, y)) needs.push({ x, y });
+    if (o === Obj.Locker || o === Obj.Counter || o === Obj.MarketBoard || o === Obj.Furnace || o === Obj.Anvil || o === Obj.Stove || o === Obj.TanningRack || npcAt(x, y)) needs.push({ x, y });
     if (o === Obj.StairsUp || o === Obj.StairsDown || o === Obj.Ladder) needs.push({ x, y });
   }
   const before = reachable();

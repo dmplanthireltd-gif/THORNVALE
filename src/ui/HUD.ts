@@ -13,7 +13,8 @@ import { COMBAT_SKILLS, SKILL_NAMES, skillProgress, triesForNext } from '../game
 import { gatherLevelForXp, gatherProgress, gatherXpForLevel, WC_MAX_LEVEL } from '../game/gathering/woodcutting';
 import { marketFee, MARKET_MAX_PRICE, type MarketView } from '../game/market/market';
 import { NONCOMBAT_SKILLS } from '../game/gathering/skills';
-import { MAX_BATCH, type CraftView } from '../game/production/recipes';
+import { MAX_BATCH, stationForItem, type CraftView } from '../game/production/recipes';
+import { RAW_FOOD_ITEMS } from '../game/production/cooking';
 import { Obj } from '../game/world/WorldMap';
 import { QUESTS } from '../game/quests/quests';
 import { hpColor } from '../render/Overlay';
@@ -696,7 +697,8 @@ export class HUD {
     else if (d.rune) {
       items.push({ label: 'Use with crosshair…', run: () => this.beginAim(d.id) });
       items.push({ label: !runeIsAimed(d.rune) ? 'Use on yourself' : 'Use on target', run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
-    }
+    } else if (stationForItem(d.id)) items.push({ label: `Use (${stationForItem(d.id)!.title.toLowerCase()})`, run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
+    else if (d.kind === 'tool' || RAW_FOOD_ITEMS.includes(d.id)) items.push({ label: 'Use', run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
     if (d.kind === 'consumable' || d.rune) items.push({ label: 'Assign to hotkey…', run: () => this.beginAssign({ kind: 'item', id: d.id }) });
     if (this.ctl.depot()) items.push({ label: 'Put in depot', run: () => this.ctl.send({ c: 'deposit', slot: i }) });
     const t = this.ctl.trade();
@@ -1115,7 +1117,7 @@ export class HUD {
     this.makeWin('depot', 'Depot', 'depot-win');
     this.makeWin('trade', 'Trade', 'trade-win');
     this.makeWin('market', 'Market', 'market-win');
-    this.makeWin('craft', 'Smithing', 'craft-win');
+    this.makeWin('craft', 'Production', 'craft-win');
     this.makeWin('outfit', 'Outfit', 'outfit-win');
     this.makeWin('spells', 'Spellbook', 'spells-win');
     this.makeWin('quests', 'Quest Log', 'quests-win');
@@ -1401,15 +1403,15 @@ export class HUD {
     if (st.station !== view.station || !groups.includes(st.tab)) {
       // open on the best metal you can work right now
       st.station = view.station;
-      const usable = view.recipes.filter((r) => r.level <= view.level);
+      const usable = view.recipes.filter((r) => !r.locked);
       st.tab = (usable.find((r) => r.can > 0) ? [...usable].reverse().find((r) => r.can > 0)!.group : usable[usable.length - 1]?.group) ?? groups[0];
     }
     const name = SKILL_NAMES[view.skill];
-    el('div', 'shop-gold', b, `${name} level ${view.level}.${view.station === 'anvil' ? " Smithing needs a smith's hammer in your backpack." : ''} Walking away stops the work.`);
+    el('div', 'shop-gold', b, `${name} level ${view.level}.${view.note ? ` ${view.note}` : ''} Walking away stops the work.`);
     if (view.making) {
       const r = view.recipes.find((x) => x.id === view.making!.recipe);
       const row = el('div', 'craft-making', b);
-      el('span', '', row, `Making ${r ? itemDef(r.output.id).name.toLowerCase() : '…'} — ${view.making.left} left`);
+      el('span', '', row, `${r?.label ? r.label : `Making ${r ? itemDef(r.output.id).name.toLowerCase() : '…'}`} — ${view.making.left} left`);
       button(row, 'Stop', () => this.ctl.send({ c: 'craft', recipe: '', count: 0 }), 'btn small');
     }
     if (groups.length > 1) {
@@ -1435,20 +1437,21 @@ export class HUD {
     for (const r of view.recipes) {
       if (r.group !== st.tab) continue;
       const d = itemDef(r.output.id);
-      const locked = r.level > view.level;
+      const locked = r.locked;
+      const rname = SKILL_NAMES[r.skill];
       const row = el('div', `shop-row${locked ? ' locked' : ''}`, list);
       const ic = el('div', 'slot mini', row);
       paintSlot(ic, { id: r.output.id, qty: r.output.qty });
       ic.title = describeItem(d);
       const info = el('div', 'shop-info', row);
-      el('div', 'shop-name', info, `${r.output.qty > 1 ? `${r.output.qty}× ` : ''}${d.name}`);
+      el('div', 'shop-name', info, r.label ?? `${r.output.qty > 1 ? `${r.output.qty}× ` : ''}${d.name}`);
       const needs = r.inputs.map((it) => `${it.qty} ${itemDef(it.id).name.toLowerCase()} (${it.have})`).join(' + ');
-      el('div', 'shop-desc', info, `Level ${r.level} · ${needs} · ${r.xp} xp${r.chance < 100 ? ` · ${r.chance}% success` : ''}${r.hasTool ? '' : ` · needs ${itemDef(r.tool!).name.toLowerCase()}`}`);
+      el('div', 'shop-desc', info, `${r.skill === view.skill ? 'Level' : `${rname} level`} ${r.level} · ${needs} · ${r.xp} xp${r.chance < 100 ? ` · ${r.chance}% success` : ''}${r.hasTool ? '' : ` · needs ${itemDef(r.tool!).name.toLowerCase()}`}`);
       const btns = el('div', 'shop-btns', row);
       const make = (label: string, n: () => number) => {
         const bt = button(btns, label, () => this.ctl.send({ c: 'craft', recipe: r.id, count: n() }), 'btn small');
         bt.disabled = locked || r.can <= 0;
-        if (locked) bt.title = `Needs ${name.toLowerCase()} level ${r.level}`;
+        if (locked) bt.title = `Needs ${rname.toLowerCase()} level ${r.level}`;
       };
       make('1', () => 1);
       make('5', () => 5);
@@ -1920,7 +1923,11 @@ export class HUD {
       ['Click water within 3 tiles (with a fishing rod)', 'Fish: catches to eat or sell and fishing experience (better fish need higher fishing; ice fish near snow, swordfish in deep sea)'],
       ['Market board (in depots)', 'Buy from and sell to other players; gold goes to the bank, items to the depot'],
       ['Click an ore rock (with a pickaxe)', 'Mine it: ore, sometimes a gem, and mining experience (copper and tin near towns, rarer ore deeper underground)'],
-      ['Furnace / anvil (in every smithy)', "Furnace: smelt ore into bars. Anvil (with a smith's hammer): smith bars into weapons, armour, pickaxes and arrowheads. Make 1, 5, X or All; walking stops it"],
+      ['Furnace / anvil (in every smithy)', "Furnace: smelt ore into bars, or cast rings and amulets from silver/gold bars and cut gems (crafting). Anvil (with a smith's hammer): smith bars into weapons, armour, pickaxes and arrowheads. Make 1, 5, X or All; walking stops it"],
+      ['Use a knife (or arrow shafts)', 'Fletching: carve logs into arrow shafts, bows and crossbow stocks; shafts + feathers + arrowheads make arrows'],
+      ['Use a needle / a chisel', 'Crafting: sew leather and fur (with thread) into armour, bags and backpacks; cut gems. Tan hides at the tanning rack in every smithy'],
+      ['Use a tinderbox', 'Firemaking: light logs where you stand (not in towns); you step aside. The fire burns 1–2 minutes'],
+      ['Click a campfire or a stove', 'Cooking: raw fish and meat become food that heals more; burns less as you level. Every depot has a stove'],
     ];
     for (const [k, v] of rows) {
       el('div', 'help-key', grid, k);

@@ -25,7 +25,7 @@ export const ADMIN_HELP = [
   '/kill — kill your current target (full admins only, not in test mode)',
   '/goto place — teleport to a place (e.g. /goto caldera) or /goto x y z',
   '/vocation name — change vocation',
-  '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing); also /fishing N, /mining N, /smithing N',
+  '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing, fletching, crafting, cooking, firemaking); also /fishing N, /mining N, /smithing N, /fletching N, /crafting N, /cooking N, /firemaking N',
 ];
 
 /** Short names accepted by /skill. */
@@ -218,6 +218,10 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
     case 'woodcutting':
     case 'mining':
     case 'smithing':
+    case 'fletching':
+    case 'crafting':
+    case 'cooking':
+    case 'firemaking':
     case 'skill':
     case 'skills': {
       // "/fishing 30" is short for "/skill fishing 30"

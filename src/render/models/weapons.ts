@@ -47,6 +47,11 @@ export const LOOKS: Record<string, Look> = {
   war_hammer: { c: 0x6b7380, t: 0xc9d0da, s: 1.15 },
   thunder_maul: { c: 0x3a5ad0, t: 0xf0e060, g: 0x2040a0, s: 1.3 },
   hunting_bow: { c: 0x8a5a2c, t: 0xe8e0c6, s: 0.9 },
+  // fletching bows (production/fletching.ts)
+  longbow: { c: 0x9a6a3a, t: 0xe8e0c6, s: 1.05 },
+  pine_shortbow: { c: 0xb08850, t: 0xe8e0c6, s: 0.9 },
+  palm_shortbow: { c: 0xc8a870, t: 0xf0e8d0, s: 0.92 },
+  teak_shortbow: { c: 0x7a4a28, t: 0xe0c070, s: 0.95 },
   composite_bow: { c: 0x5a3a20, t: 0xc9a04a, s: 1.0 },
   elven_longbow: { c: 0xd8e8b0, t: 0x5ab060, g: 0x204a20, s: 1.15 },
   light_crossbow: { c: 0x8a5a2c, t: 0x9aa0a8, s: 0.9 },

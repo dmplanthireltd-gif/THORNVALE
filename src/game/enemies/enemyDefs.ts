@@ -68,7 +68,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   }),
   wolf: E('wolf', {
     name: 'Wolf', maxHp: 55, minDmg: 3, maxDmg: 13, armor: 2, attackInterval: 1.5, stepTime: 0.3, aggroRange: 6, leash: 11, wanderRadius: 3, exp: 25, respawn: 30,
-    loot: [L('gold', 0.6, 2, 9), L('meat', 0.45, 1, 2), L('wolf_pelt', 0.35)],
+    loot: [L('gold', 0.6, 2, 9), L('meat', 0.45, 1, 2), L('wolf_pelt', 0.35), L('raw_meat', 0.4)],
   }),
   skeleton: E('skeleton', {
     name: 'Skeleton', maxHp: 90, minDmg: 6, maxDmg: 19, armor: 4, attackInterval: 1.8, stepTime: 0.42, aggroRange: 5, leash: 9, wanderRadius: 2, exp: 55, respawn: 40,
@@ -212,11 +212,11 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   silver_rabbit: E('silver_rabbit', {
     name: 'Silver Rabbit', maxHp: 18, minDmg: 0, maxDmg: 2, armor: 0, attackInterval: 1.6, stepTime: 0.26, aggroRange: 0, leash: 8, wanderRadius: 4, exp: 6, respawn: 20,
     resist: { ice: 20 },
-    loot: [L('meat', 0.4), L('silver_fur', 0.5)],
+    loot: [L('meat', 0.4), L('silver_fur', 0.5), L('raw_meat', 0.35)],
   }),
   deer: E('deer', {
     name: 'Deer', maxHp: 30, minDmg: 0, maxDmg: 3, armor: 1, attackInterval: 1.6, stepTime: 0.27, aggroRange: 0, leash: 9, wanderRadius: 5, exp: 12, respawn: 25,
-    loot: [L('meat', 0.6, 1, 3), L('ham', 0.25), L('antlers', 0.2)],
+    loot: [L('meat', 0.6, 1, 3), L('ham', 0.25), L('antlers', 0.2), L('raw_meat', 0.5, 1, 2), L('raw_ham', 0.2)],
   }),
   snake: E('snake', {
     name: 'Snake', maxHp: 30, minDmg: 1, maxDmg: 9, armor: 1, attackInterval: 1.4, stepTime: 0.38, aggroRange: 4, leash: 8, wanderRadius: 3, exp: 12, respawn: 20,
@@ -226,21 +226,21 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   dire_penguin: E('dire_penguin', {
     name: 'Dire Penguin', maxHp: 45, minDmg: 1, maxDmg: 10, armor: 2, attackInterval: 1.5, stepTime: 0.4, aggroRange: 3, leash: 8, wanderRadius: 3, exp: 18, respawn: 25,
     resist: { ice: 60, fire: -15 },
-    loot: [L('fish', 0.6, 1, 2), L('penguin_feather', 0.4), L('gold', 0.3, 1, 4)],
+    loot: [L('fish', 0.6, 1, 2), L('penguin_feather', 0.4), L('gold', 0.3, 1, 4), L('feather', 0.6, 2, 6)],
   }),
   winter_wolf: E('winter_wolf', {
     name: 'Winter Wolf', maxHp: 75, minDmg: 4, maxDmg: 18, armor: 3, attackInterval: 1.5, stepTime: 0.29, aggroRange: 6, leash: 11, wanderRadius: 4, exp: 38, respawn: 30,
     resist: { ice: 50, fire: -15 },
-    loot: [L('meat', 0.5, 1, 2), L('winter_wolf_fur', 0.35), L('gold', 0.3, 2, 8)],
+    loot: [L('meat', 0.5, 1, 2), L('winter_wolf_fur', 0.35), L('gold', 0.3, 2, 8), L('raw_meat', 0.4)],
   }),
   bear: E('bear', {
     name: 'Bear', maxHp: 130, minDmg: 6, maxDmg: 28, armor: 4, attackInterval: 1.7, stepTime: 0.36, aggroRange: 5, leash: 9, wanderRadius: 3, exp: 65, respawn: 40,
-    loot: [L('meat', 0.6, 1, 3), L('ham', 0.35), L('bear_paw', 0.25), L('gold', 0.3, 3, 10)],
+    loot: [L('meat', 0.6, 1, 3), L('ham', 0.35), L('bear_paw', 0.25), L('gold', 0.3, 3, 10), L('raw_meat', 0.5, 1, 2), L('raw_ham', 0.3), L('bear_hide', 0.3)],
   }),
   polar_bear: E('polar_bear', {
     name: 'Polar Bear', maxHp: 240, minDmg: 12, maxDmg: 48, armor: 7, attackInterval: 1.7, stepTime: 0.36, aggroRange: 5, leash: 9, wanderRadius: 3, exp: 135, respawn: 45,
     resist: { ice: 50, fire: -10 },
-    loot: [L('meat', 0.6, 1, 3), L('ham', 0.4, 1, 2), L('polar_bear_fur', 0.3), L('bear_paw', 0.2)],
+    loot: [L('meat', 0.6, 1, 3), L('ham', 0.4, 1, 2), L('polar_bear_fur', 0.3), L('bear_paw', 0.2), L('raw_meat', 0.5, 1, 2), L('raw_ham', 0.35)],
   }),
   // --- outlaws & mountain folk (beginner) ------------------------------------------
   bandit: E('bandit', {

@@ -94,6 +94,12 @@ class FloorView {
   oreLayers: TrunkLayer[] = [];
   /** Tiles currently drawn as mined-out rubble. */
   rubble = new Set<number>();
+  /** Campfires built into the map (drawn with the instanced objects). */
+  staticFires = new Set<number>();
+  /** Campfires lit by players (firemaking), by tile: built and removed as they flare up and burn out. */
+  litFires = new Map<number, THREE.Group>();
+  /** Materials shared by every lit campfire on this floor (made on the first one). */
+  litMats: { wood: Mat; flame: Mat; glow: THREE.MeshBasicMaterial } | null = null;
   roofs: RoofView[] = [];
   features = new Map<number, Feature>();
   dim = 1;
@@ -533,6 +539,7 @@ export class WorldView {
             torchFlame.add(compose(x, 0, y - 0.42));
             break;
           case Obj.Campfire:
+            fv.staticFires.add(this.world.idx(x, y));
             for (let i = 0; i < 3; i++) flames.add(compose(x + Math.cos(i * 2.1) * 0.12, 0, y + Math.sin(i * 2.1) * 0.12, 0, 1, 1.2, 1));
             for (let i = 0; i < 4; i++) deadBranch.add(compose(x + Math.cos(i * 1.6) * 0.2, 0.05, y + Math.sin(i * 1.6) * 0.2, i * 1.6, 0.6, 0.6, 0.6, Math.PI / 2, 0));
             break;
@@ -570,6 +577,12 @@ export class WorldView {
             break;
           case Obj.Anvil:
             this.buildAnvil(fv, x, y);
+            break;
+          case Obj.Stove:
+            this.buildStove(fv, x, y);
+            break;
+          case Obj.TanningRack:
+            this.buildTanningRack(fv, x, y);
             break;
           case Obj.CopperRock:
           case Obj.TinRock:
@@ -706,6 +719,92 @@ export class WorldView {
     hammer.rotation.y = 0.5;
     g.add(block, waist, face, horn, hammer);
     this.add(fv, g);
+  }
+
+  /** An iron cooking stove with a glowing grate and a pot on top (cooking; in every depot). */
+  private buildStove(fv: FloorView, x: number, y: number): void {
+    const g = new THREE.Group();
+    g.position.set(x, 0, y);
+    const iron = fv.m(0x3a3c42);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.7), iron);
+    body.position.y = 0.35;
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.06, 0.76), fv.m(0x55595f));
+    top.position.y = 0.73;
+    const fire = fv.m(0xff8a2a, { emissive: 0xff5a10 });
+    this.flameMats.push(fire);
+    const grate = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.04), fire);
+    grate.position.set(0, 0.25, 0.36);
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.9, 6), iron);
+    pipe.position.set(-0.26, 1.18, -0.22);
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.2, 8), fv.m(0x6a6e76));
+    pot.position.set(0.12, 0.86, 0.05);
+    g.add(body, top, grate, pipe, pot);
+    this.add(fv, g);
+  }
+
+  /** A wooden frame with a hide stretched across it (crafting; in every smithy). */
+  private buildTanningRack(fv: FloorView, x: number, y: number): void {
+    const g = new THREE.Group();
+    g.position.set(x, 0, y);
+    const wood = fv.m(0x6a4428, { map: objTex.logs() });
+    for (const px of [-0.38, 0.38]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.2, 0.07), wood);
+      post.position.set(px, 0.6, 0);
+      g.add(post);
+    }
+    for (const py of [0.25, 1.12]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.06, 0.06), wood);
+      rail.position.set(0, py, 0);
+      g.add(rail);
+    }
+    const hide = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.78, 0.02), fv.m(0xa8743f));
+    hide.position.set(0, 0.68, 0.02);
+    hide.rotation.z = 0.04;
+    g.add(hide);
+    this.add(fv, g);
+  }
+
+  /** A campfire a player lit: crossed logs and a flickering flame (removed when it burns out). */
+  private setLitFire(fv: FloorView, x: number, y: number, on: boolean): void {
+    const ti = this.world.idx(x, y);
+    const had = fv.litFires.get(ti);
+    if (on === !!had || fv.staticFires.has(ti)) return;
+    if (had) {
+      fv.group.remove(had);
+      had.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).geometry.dispose(); });
+      fv.litFires.delete(ti);
+      return;
+    }
+    if (!fv.litMats) {
+      const flameMat = fv.m(0xff8a2a, { emissive: 0xff5a10 });
+      this.flameMats.push(flameMat);
+      fv.litMats = {
+        wood: fv.m(0x5b3d24, { map: objTex.logs() }), flame: flameMat,
+        glow: new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending }),
+      };
+    }
+    const { wood, flame, glow } = fv.litMats;
+    const g = new THREE.Group();
+    g.position.set(x, 0, y);
+    for (let i = 0; i < 4; i++) {
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.55, 6), wood);
+      log.rotation.z = Math.PI / 2 - 0.25;
+      log.rotation.y = i * (Math.PI / 4) + 0.3;
+      log.position.y = 0.07;
+      g.add(log);
+    }
+    for (let i = 0; i < 3; i++) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.45 + i * 0.08, 5), flame);
+      f.position.set(Math.cos(i * 2.1) * 0.08, 0.28, Math.sin(i * 2.1) * 0.08);
+      f.castShadow = false;
+      g.add(f);
+    }
+    const glowDisc = new THREE.Mesh(new THREE.CircleGeometry(0.75, 16), glow);
+    glowDisc.rotation.x = -Math.PI / 2;
+    glowDisc.position.y = 0.03;
+    g.add(glowDisc);
+    fv.group.add(g);
+    fv.litFires.set(ti, g);
   }
 
   /** Shows a tree as a stump (canopy gone, trunk cut short) or restores it. */
@@ -969,6 +1068,8 @@ export class WorldView {
     if (o === Obj.Stump || o === Obj.Tree || o === Obj.Pine || o === Obj.JungleTree || o === Obj.Palm) this.setStump(fv, ti, o === Obj.Stump);
     // mining: an ore rock was mined out or filled again
     if (o === Obj.DepletedRock || oreAt(o)) this.setRubble(fv, ti, o === Obj.DepletedRock);
+    // firemaking: a campfire flared up or burnt out
+    if (o === Obj.Campfire || fv.litFires.has(ti)) this.setLitFire(fv, x, y, o === Obj.Campfire);
     const f = fv.features.get(ti);
     if (!f) return;
     if (f.looseStone) f.looseStone.visible = o === Obj.LooseStone;
