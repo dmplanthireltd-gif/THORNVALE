@@ -18,7 +18,7 @@ import { buyPrice, NPCS } from './npc/npcs';
 import { runAdminCommand } from './admin';
 import { migrateSave, SAVE_VERSION } from './save/migrate';
 import { DEFAULT_OUTFIT, isOutfit, type Outfit } from './player/outfits';
-import { BUFF_NAMES, emptyBuffs, expForLevel, Player } from './player/Player';
+import { BUFF_NAMES, emptyBuffs, expForLevel, FIGHT_MODE, Player, type FightMode } from './player/Player';
 import { isVocation, VOCATIONS, type Vocation } from './player/vocations';
 import { QUESTS, QuestLog } from './quests/quests';
 import { buildWorld } from './world/worldGen';
@@ -531,7 +531,7 @@ export class Game implements AIContext {
 
     // chase the target until it is in weapon range and in sight
     const t = this.getEnemy(p.targetId);
-    if (t && !t.dead && p.chaseSuppressed <= 0 && t.z === p.z) {
+    if (t && !t.dead && p.chase && p.chaseSuppressed <= 0 && t.z === p.z) {
       const range = this.weaponRange(s);
       const d = chebyshev(p.x, p.y, t.x, t.y);
       const inRange = d <= range && (range === 1 || this.canSee(p, t));
@@ -674,6 +674,8 @@ export class Game implements AIContext {
         const near = this.alivePlayers().some((p) => p.z === e.spawnZ && chebyshev(p.x, p.y, e.spawnX, e.spawnY) <= 5);
         if (!near && !this.isOccupied(e.spawnX, e.spawnY, e.spawnZ, e.id)) {
           e.placeAt(e.spawnX, e.spawnY, e.spawnZ);
+          e.homeX = e.spawnX;
+          e.homeY = e.spawnY;
           e.hp = e.maxHp;
           e.dead = false;
           e.state = 'idle';
@@ -777,7 +779,7 @@ export class Game implements AIContext {
       const wd = w ? itemDef(w) : null;
       const atk = (wd?.attack ?? FIST_ATTACK) + this.attackBonus(s) + this.potionAttack(s, 'melee');
       const roll = rollMelee(attacker.level, atk, VOCATIONS[attacker.vocation].melee, target.def.armor);
-      roll.amount = applyResist(roll.amount, target.def.resist.physical);
+      roll.amount = applyResist(Math.round(roll.amount * FIGHT_MODE[attacker.fightMode].dealt), target.def.resist.physical);
       this.applyDamage(target, attacker, roll, 'physical');
       if (roll.result === 'hit' && wd?.element && wd.elementDamage && !target.dead) {
         const extra = applyResist(Math.round(wd.elementDamage * (1 + attacker.level / 60) * (0.6 + Math.random() * 0.8)), target.def.resist[wd.element]);
@@ -787,7 +789,7 @@ export class Game implements AIContext {
       const s = this.sessions.get(target.id);
       if (!s || this.isProtected(target)) return;
       const roll = rollMonsterMelee(attacker.def.minDmg, attacker.def.maxDmg, this.armor(s), this.defense(s));
-      roll.amount = applyResist(roll.amount, this.resist(s, 'physical'));
+      roll.amount = applyResist(Math.round(roll.amount * FIGHT_MODE[target.fightMode].taken), this.resist(s, 'physical'));
       this.applyDamage(target, attacker, roll, 'physical');
     }
   }
@@ -856,7 +858,7 @@ export class Game implements AIContext {
     // a steady hand (Potion of the Hawk) shoots as if two tiles closer
     const aimD = p.buffs.bullseye > 0 ? Math.max(1, d - 2) : d;
     const roll = rollDistance(p.level, atk, VOCATIONS[p.vocation].distance, t.def.armor, aimD);
-    roll.amount = applyResist(roll.amount, t.def.resist.physical);
+    roll.amount = applyResist(Math.round(roll.amount * FIGHT_MODE[p.fightMode].dealt), t.def.resist.physical);
     this.applyDamage(t, p, roll, 'physical');
     if (roll.result === 'hit' && element && elementDamage && !t.dead) {
       const extra = applyResist(Math.round(elementDamage * (1 + p.level / 60)), t.def.resist[element]);
@@ -1787,6 +1789,30 @@ export class Game implements AIContext {
     this.events.emit({ type: 'tradeChanged', to: otherId });
   }
 
+  /** Fight stance and chase/stand, like the classic combat controls. */
+  setFightMode(pid: number, mode: FightMode, chase: boolean): void {
+    const p = this.getPlayer(pid);
+    if (!p || !(mode in FIGHT_MODE)) return;
+    p.fightMode = mode;
+    p.chase = chase;
+  }
+
+  /** Puts a backpack item on the table for another player, opening the trade first if needed. */
+  offerItemTo(pid: number, otherId: number, slot: number): void {
+    const s = this.sessions.get(pid);
+    if (!s || !s.inventory.slots[slot]) return;
+    let t = this.tradeOf(pid);
+    if (t && t.a !== otherId && t.b !== otherId) return this.msg(pid, 'You are already trading with someone else.', 'warn');
+    if (!t) {
+      this.requestTrade(pid, otherId);
+      t = this.tradeOf(pid);
+      if (!t) return;
+    }
+    const mine = t.offers[pid];
+    if (mine.slots.includes(slot)) return;
+    this.setTradeOffer(pid, [...mine.slots, slot], mine.gold);
+  }
+
   /** Sets what you offer: backpack slot indices plus an amount of gold. Resets both acceptances. */
   setTradeOffer(pid: number, slots: number[], gold: number): void {
     const t = this.tradeOf(pid);
@@ -2181,6 +2207,8 @@ export class Game implements AIContext {
     this.bags.length = 0;
     for (const e of this.enemies) {
       e.placeAt(e.spawnX, e.spawnY, e.spawnZ);
+      e.homeX = e.spawnX;
+      e.homeY = e.spawnY;
       e.hp = e.maxHp;
       e.dead = false;
       e.state = 'idle';

@@ -127,7 +127,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 2. **Every player action is a `Command`** sent through `Controller.send(...)` → `Game.executeCommand`. UI/input never mutate game state directly. Offline = LocalController runs it locally; online = NetController sends it, the server is authoritative.
 3. **Game → view communication is via the event bus** (`core/events.ts`). Renderer, HUD and Sfx subscribe; they never poll internal fields they don't own.
 4. **Online:** server ticks at 20 Hz and sends snapshots (`VIEW_RADIUS = 20`). The client keeps a mirror Game (`simulate:false`) and applies snapshots. Messages arriving before the HUD exists go to the backlog.
-5. **Protocol:** `PROTOCOL_VERSION` (currently **5**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
+5. **Protocol:** `PROTOCOL_VERSION` (currently **6**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
 6. Admin/test commands are typed in chat with `/` (`/help` lists them). Offline always allowed; online only for names in `ADMINS` or when `ALLOW_ADMIN=1`. Dev console opens with the **`** key.
 
 ---
@@ -231,6 +231,11 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Dark realistic monster models (owner chose this style; sample of 4 in progress, behind `?monsters=dark`).
 - [x] Ground items can be dragged to other tiles (`moveBag`); items can be put on depot lockers, tables, counters, crates, barrels (`Game.SURFACES`); depot lockers are placed every second tile.
 - [x] Minimap: wheel zoom, right-drag pan, double-click centre. Battle list: click title to fold, drag bottom edge to resize.
+- [x] Trade items: drag an item onto a player (world or battle list) or into the trade window (`tradeItem`); click your offered item to take it back.
+- [x] Fight stance Atk/Bal/Def (+20% dealt & +15% taken / normal / −30% dealt & −25% taken, weapon attacks only) and Follow/Stand (`fightMode`, remembered per browser).
+- [x] Luring: monsters have no leash, never run home and never regenerate; when they lose their target they idle where they are (`Enemy.homeX/homeY`). Monster heal spells still exist.
+- [ ] Skills like the classic game (fist, club, sword, axe, distance, shielding, magic level, fishing) trained by use, shown in a left-side Skills panel — needs SAVE_VERSION bump. Do after PvP merges.
+- [ ] RuneScape-style gathering skills (woodcutting first: chop trees with an axe → logs, levels, sell) and a player market — after skills.
 - [x] Runes on the battle list: drag a rune onto a row, or pick a rune (hotkey/click) and click a row (`useRuneOn`).
 - [ ] Better spell effects (Effects.ts).
 - [ ] Integrate, test all, push, refresh artifact.
@@ -258,4 +263,5 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | c93fc10 | Website planned on WordPress.com (superseded by the next row) | 2 | 3 |
 | 2026-10-21 | — | Game moved to /play/ (Vite base '/play/'); marketing website from `site/` served at the root by server.ts; domain thornvaleonline.com on Render | 2 | 3 |
 | 2026-10-21 | 8fa1064 | New 640×800 world (14 towns), 35 monsters, 63 items, 5 spells, buff potions; saves v3 respawn everyone at the Thornvale temple | 3 | 4 |
-| 2026-10-21 | — | Move ground items, items on lockers/tables, depot gaps, minimap zoom/pan, foldable/resizable battle list, runes on battle list | 3 | 5 |
+| 2026-10-21 | 0eb9396 | Move ground items, items on lockers/tables, depot gaps, minimap zoom/pan, foldable/resizable battle list, runes on battle list | 3 | 5 |
+| 2026-10-21 | — | Item trading by drag-and-drop, fight stance + follow/stand, lurable monsters (no leash/home-healing) | 3 | 6 |

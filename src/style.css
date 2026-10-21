@@ -432,3 +432,6 @@ select.text-input { flex: 1; }
 .char-list { display: flex; flex-direction: column; gap: 4px; }
 
 .dragging .battle-row:hover, .aiming .battle-row:hover { border-color: #ffd23a; background: #3a3020; }
+.fight-modes { display: flex; gap: 3px; padding: 3px; }
+.fight-modes .btn.fm { flex: 1; padding: 3px 0; font-size: 12px; min-width: 0; }
+.fight-modes .btn.fm.on { background: #5a4a2a; border-color: #e0b03c; color: #ffe9a8; }

@@ -6,7 +6,7 @@ import { describeItem, equipSlotFor, ITEMS, itemDef, type EquipSlot, type ItemSt
 import { GROUP_COOLDOWN, isSpellId, SPELL_LIST, SPELLS, type CooldownGroup, type SpellDef, type SpellId } from '../game/magic/spells';
 import { NPCS } from '../game/npc/npcs';
 import { OUTFIT_PARTS, OUTFIT_TYPES, PALETTE, PALETTE_COLS, PALETTE_ROWS, type Outfit, type OutfitPart } from '../game/player/outfits';
-import { expForLevel } from '../game/player/Player';
+import { expForLevel, type FightMode } from '../game/player/Player';
 import { VOCATIONS } from '../game/player/vocations';
 import { QUESTS } from '../game/quests/quests';
 import { hpColor } from '../render/Overlay';
@@ -255,6 +255,33 @@ export class HUD {
     button(mp, 'World map (M)', () => this.toggleWorldMap(), 'btn small wm-open');
     this.buildStatus();
 
+    // classic combat controls: stance (attack / balanced / defence) and chase / stand
+    const fight = el('div', 'panel fight-modes', col);
+    let mode: FightMode = 'balanced';
+    let chase = true;
+    try {
+      const m = localStorage.getItem('thornvale.fightMode');
+      if (m === 'offensive' || m === 'balanced' || m === 'defensive') mode = m;
+      chase = localStorage.getItem('thornvale.chase') !== '0';
+    } catch { /* storage off */ }
+    const fbtn: Array<[HTMLButtonElement, () => boolean]> = [];
+    const apply = () => {
+      this.ctl.send({ c: 'fightMode', mode, chase });
+      try { localStorage.setItem('thornvale.fightMode', mode); localStorage.setItem('thornvale.chase', chase ? '1' : '0'); } catch { /* storage off */ }
+      for (const [b, on] of fbtn) b.classList.toggle('on', on());
+    };
+    const fb = (label: string, tip: string, click: () => void, on: () => boolean) => {
+      const b = button(fight, label, () => { click(); apply(); }, 'btn fm');
+      b.title = tip;
+      fbtn.push([b, on]);
+    };
+    fb('Atk', 'Offensive: hit harder (+20%), take more damage', () => { mode = 'offensive'; }, () => mode === 'offensive');
+    fb('Bal', 'Balanced', () => { mode = 'balanced'; }, () => mode === 'balanced');
+    fb('Def', 'Defensive: take less damage (−25%), hit softer', () => { mode = 'defensive'; }, () => mode === 'defensive');
+    fb('Follow', 'Chase: follow your target', () => { chase = true; }, () => chase);
+    fb('Stand', 'Stand: keep your position while attacking', () => { chase = false; }, () => !chase);
+    apply();
+
     const tools = el('div', 'panel toolbar', col);
     button(tools, 'Spells', () => this.toggleWin('spells'), 'btn tool');
     button(tools, 'Quests', () => this.toggleWin('quests'), 'btn tool');
@@ -400,7 +427,16 @@ export class HUD {
     const target = under.closest('.battle-row') as HTMLElement | null;
     if (target && src.kind === 'inv') {
       const id = this.dragItemId(src);
-      if (id && itemDef(id).rune) return this.runeOn(Number(target.dataset.cid), src.index);
+      const cid = Number(target.dataset.cid);
+      if (id && itemDef(id).rune) return this.runeOn(cid, src.index);
+      // any other item dropped on a player offers it in a trade
+      if (target.classList.contains('k-player')) this.ctl.send({ c: 'tradeItem', id: cid, slot: src.index });
+      return;
+    }
+    // dropped into the open trade window: add to your offer
+    if (src.kind === 'inv' && under.closest('.trade-win')) {
+      const t = this.ctl.trade();
+      if (t && !t.mine.slots.includes(src.index)) this.ctl.send({ c: 'tradeOffer', slots: [...t.mine.slots, src.index], gold: t.mine.gold });
       return;
     }
     if (invSlot) {
@@ -430,6 +466,14 @@ export class HUD {
     if (under === this.renderer.canvas) {
       const t = this.renderer.pickTile(e.clientX, e.clientY);
       if (!t) return;
+      // dropped on another player standing there: offer it in a trade
+      if (src.kind === 'inv') {
+        const other = this.ctl.game.players().find((o) => o.id !== this.ctl.pid && !o.dead && o.z === this.s.player.z && Math.round(o.x) === t.x && Math.round(o.y) === t.y);
+        if (other) {
+          this.ctl.send({ c: 'tradeItem', id: other.id, slot: src.index });
+          return;
+        }
+      }
       if (src.kind === 'bag') {
         this.ctl.send({ c: 'moveBag', id: src.id, x: t.x, y: t.y, qty: d.ctrl ? 1 : undefined });
         this.renderer.showClickMarker(t.x, t.y);
@@ -1132,18 +1176,26 @@ export class HUD {
     (w.root.querySelector('.win-title') as HTMLElement).textContent = `Trade with ${t.partnerName}`;
     const b = w.body;
     b.replaceChildren();
-    el('p', 'hint', b, 'Right-click backpack items to add them to your offer. Changing an offer clears both acceptances; the trade happens only when both of you accept.');
+    el('p', 'hint', b, 'Drag items from your backpack here (or onto the other player) to offer them; click an item in your offer to take it back. Changing an offer clears both acceptances; the trade happens only when both of you accept.');
     const cols = el('div', 'trade-cols', b);
-    const side = (title: string, items: ItemStack[], gold: number, accepted: boolean) => {
+    const side = (title: string, items: ItemStack[], gold: number, accepted: boolean, onClick?: (i: number) => void) => {
       const c = el('div', 'trade-col', cols);
       el('div', 'panel-title', c, `${title}${accepted ? ' ✔ accepted' : ''}`);
       const grid = el('div', 'bag-grid', c);
-      for (const it of items) paintSlot(el('div', 'slot', grid), it);
+      items.forEach((it, i) => {
+        const d = el('div', 'slot', grid);
+        paintSlot(d, it);
+        if (onClick) {
+          d.title = `${itemDef(it.id).name} — click to take it back`;
+          d.style.cursor = 'pointer';
+          d.addEventListener('click', () => onClick(i));
+        }
+      });
       if (!items.length) el('div', 'shop-empty', c, 'No items.');
       el('div', 'trade-gold', c, `Gold: ${fmtGold(gold)}`);
       return c;
     };
-    const mine = side('Your offer', t.mine.items, t.mine.gold, t.mine.accepted);
+    const mine = side('Your offer', t.mine.items, t.mine.gold, t.mine.accepted, (i) => this.ctl.send({ c: 'tradeOffer', slots: t.mine.slots.filter((_, k) => k !== i), gold: t.mine.gold }));
     side(`${t.partnerName}'s offer`, t.theirs.items, t.theirs.gold, t.theirs.accepted);
     const gr = el('div', 'bank-row', mine);
     const gi = el('input', 'num-input', gr);

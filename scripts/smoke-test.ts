@@ -704,5 +704,47 @@ console.log('Ground items, depot tops and battle-list runes');
   check(foe.hp < hp0 || foe.dead, `rune from the backpack hits a creature picked on the battle list (${runeId})`);
 }
 
+console.log('Trading items, fight stance, luring');
+{
+  const g = new Game();
+  const a = g.addPlayer('Alice', { vocation: 'paladin' });
+  const b = g.addPlayer('Bob', { vocation: 'knight' });
+  g.teleport(b.player, a.player.x + 1, a.player.y, a.player.z);
+  a.inventory.add('wolf_pelt', 2);
+  const slot = a.inventory.slots.findIndex((x) => x?.id === 'wolf_pelt');
+  executeCommand(g, a.id, { c: 'tradeItem', id: b.id, slot });
+  check(g.tradeView(a.id)?.mine.items.some((i) => i.id === 'wolf_pelt') === true && !!g.tradeView(b.id), 'dragging an item onto a player opens a trade with it offered');
+  executeCommand(g, a.id, { c: 'tradeAccept' });
+  executeCommand(g, b.id, { c: 'tradeAccept' });
+  check(b.inventory.count('wolf_pelt') === 2 && a.inventory.count('wolf_pelt') === 0, 'items change hands when both accept');
+
+  executeCommand(g, a.id, { c: 'fightMode', mode: 'defensive', chase: false });
+  check(a.player.fightMode === 'defensive' && a.player.chase === false, 'fight stance and stand mode are set');
+
+  // a monster follows its target far from home and does not run back or heal
+  const { g: g2, s, pid } = solo('knight');
+  const p = s.player;
+  p.god = true;
+  const w = g2.world;
+  let at: [number, number] | null = null;
+  for (let y = 300; y < 500 && !at; y++) for (let x = 100; x < 500; x++) {
+    let ok = !w.isSafe(x, y, 0);
+    for (let dx = -1; dx <= 30 && ok; dx++) if (!w.isWalkable(x + dx, y, 0) || w.getObj(x + dx, y, 0) !== 0 || w.isSafe(x + dx, y, 0)) ok = false;
+    if (ok) { at = [x, y]; break; }
+  }
+  g2.teleport(p, at![0] + 2, at![1], 0);
+  const Ctor = g2.enemies[0].constructor as new (id: number, kind: string, x: number, y: number, z: number) => (typeof g2.enemies)[number];
+  const foe = new Ctor(999101, 'wolf', at![0], at![1], 0);
+  g2.enemies.push(foe);
+  foe.hp = Math.floor(foe.maxHp / 2);
+  for (let step = 0; step < 24; step++) {
+    g2.teleport(p, Math.min(at![0] + 2 + step, at![0] + 28), at![1], 0);
+    for (let k = 0; k < 20; k++) g2.update(0.05);
+  }
+  check(foe.distFromSpawn() >= 15 && !foe.dead, `a lured monster follows far from its spawn (${foe.distFromSpawn()} tiles)`);
+  check(foe.hp <= Math.floor(foe.maxHp / 2), 'a lured monster does not heal by running home');
+  void pid;
+}
+
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

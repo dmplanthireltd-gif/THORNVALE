@@ -31,6 +31,14 @@ export type Pending =
   | { type: 'bag'; bagId: number }
   | { type: 'use'; x: number; y: number; z: number };
 
+export type FightMode = 'offensive' | 'balanced' | 'defensive';
+/** Damage dealt and taken (weapon attacks only) for each stance. */
+export const FIGHT_MODE: Record<FightMode, { dealt: number; taken: number }> = {
+  offensive: { dealt: 1.2, taken: 1.15 },
+  balanced: { dealt: 1, taken: 1 },
+  defensive: { dealt: 0.7, taken: 0.75 },
+};
+
 export class Player extends Creature {
   readonly kind = 'player' as const;
   vocation: Vocation;
@@ -55,6 +63,10 @@ export class Player extends Creature {
   outfit: Outfit = { ...DEFAULT_OUTFIT };
   /** Test mode: takes no damage. Not saved. */
   god = false;
+  /** Classic fight stance: how much you put into hitting versus covering yourself (melee and distance). */
+  fightMode: FightMode = 'balanced';
+  /** Chase: walk after your target. Stand: keep your position and only hit what comes into reach. */
+  chase = true;
   /** Show worn equipment on the model; off = classic outfit-only look. */
   showGear = true;
   /** Town whose temple is home. */

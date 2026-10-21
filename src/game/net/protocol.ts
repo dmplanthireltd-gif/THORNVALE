@@ -6,7 +6,7 @@ import { EQUIP_SLOTS, isItem, type EquipSlot, type ItemStack } from '../inventor
 import { isSpellId, type SpellId } from '../magic/spells';
 import type { DialogueState } from '../npc/dialogue';
 import { isOutfit, type Outfit } from '../player/outfits';
-import { emptyBuffs, type Buffs } from '../player/Player';
+import { emptyBuffs, FIGHT_MODE, type Buffs, type FightMode } from '../player/Player';
 import { isVocation, type Vocation } from '../player/vocations';
 import type { QuestLog } from '../quests/quests';
 
@@ -16,7 +16,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -51,6 +51,9 @@ export type Command =
   | { c: 'closeDepot' }
   | { c: 'tradeRequest'; id: number }
   | { c: 'tradeOffer'; slots: number[]; gold: number }
+  /** Drag an item onto another player: opens the trade if needed and offers that item. */
+  | { c: 'tradeItem'; id: number; slot: number }
+  | { c: 'fightMode'; mode: FightMode; chase: boolean }
   | { c: 'tradeAccept' }
   | { c: 'tradeCancel' };
 
@@ -199,6 +202,8 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'closeDepot': game.closeDepot(pid); break;
     case 'tradeRequest': if (num(m.id)) game.requestTrade(pid, m.id); break;
     case 'tradeOffer': if (Array.isArray(m.slots) && num(m.gold)) game.setTradeOffer(pid, m.slots.filter(num), m.gold); break;
+    case 'tradeItem': if (num(m.id) && num(m.slot)) game.offerItemTo(pid, Math.floor(m.id), Math.floor(m.slot)); break;
+    case 'fightMode': if (typeof m.mode === 'string' && m.mode in FIGHT_MODE && typeof m.chase === 'boolean') game.setFightMode(pid, m.mode, m.chase); break;
     case 'tradeAccept': game.acceptTrade(pid); break;
     case 'tradeCancel': game.cancelTrade(pid); break;
   }

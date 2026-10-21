@@ -13,6 +13,9 @@ export class Enemy extends Creature {
   /** Player tile the current chase path was computed for. */
   pathFor = { x: -1, y: -1 };
   respawnTimer = 0;
+  /** Where it hangs around when idle: its spawn, or wherever it lost its target after being lured. */
+  homeX: number;
+  homeY: number;
   /** Seconds the corpse stays visible. */
   corpseTimer = 0;
   stuckTimer = 0;
@@ -26,6 +29,8 @@ export class Enemy extends Creature {
   constructor(id: number, readonly enemyKind: EnemyKind, readonly spawnX: number, readonly spawnY: number, readonly spawnZ = 0) {
     const def = ENEMIES[enemyKind];
     super(id, def.name, spawnX, spawnY, def.maxHp, def.stepTime);
+    this.homeX = spawnX;
+    this.homeY = spawnY;
     this.z = spawnZ;
     this.def = def;
     this.wanderTimer = 1 + Math.random() * 3;

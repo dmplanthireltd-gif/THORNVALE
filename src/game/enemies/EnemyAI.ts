@@ -40,9 +40,9 @@ export function updateEnemyAI(e: Enemy, ctx: AIContext, dt: number): void {
   const def = e.def;
   for (let i = 0; i < e.abilityTimers.length; i++) e.abilityTimers[i] -= dt;
 
+  // Monsters can be lured anywhere, like the classic game: no leash, no running home, no free healing.
   if (e.state === 'idle') {
-    e.hp = Math.min(e.maxHp, e.hp + dt * Math.max(1.5, e.maxHp * 0.01));
-    const p = e.distFromSpawn() < def.leash ? nearestPlayer(e, ctx, def.aggroRange) : null;
+    const p = nearestPlayer(e, ctx, def.aggroRange);
     if (p) {
       e.targetId = p.id;
       e.state = 'chase';
@@ -56,37 +56,18 @@ export function updateEnemyAI(e: Enemy, ctx: AIContext, dt: number): void {
       const dx = Math.floor(Math.random() * 3) - 1;
       const dy = Math.floor(Math.random() * 3) - 1;
       const nx = e.x + dx, ny = e.y + dy;
-      if ((dx || dy) && chebyshev(nx, ny, e.spawnX, e.spawnY) <= def.wanderRadius) ctx.tryStep(e, dx, dy);
+      if ((dx || dy) && chebyshev(nx, ny, e.homeX, e.homeY) <= def.wanderRadius) ctx.tryStep(e, dx, dy);
     }
     return;
   }
 
   if (e.state === 'return') {
-    e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.12 * dt);
-    if (e.distFromSpawn() <= 1 && !e.moving) {
-      e.state = 'idle';
-      e.path = [];
-      e.stuckTimer = 0;
-      e.damageBy.clear();
-      return;
-    }
-    if (e.moving) return;
-    if (e.path.length === 0) e.path = ctx.pathTo(e, e.spawnX, e.spawnY, false, 2500) ?? [];
-    const next = e.path[0];
-    if (next && ctx.tryStep(e, next.x - e.x, next.y - e.y)) {
-      e.path.shift();
-      e.stuckTimer = 0;
-    } else {
-      e.path = [];
-      e.stuckTimer += dt;
-      if (e.stuckTimer > 3) {
-        e.state = 'idle';
-        e.stuckTimer = 0;
-      }
-    }
+    // (kept for old states only: nothing sends monsters home any more)
+    e.state = 'idle';
+    e.homeX = e.x;
+    e.homeY = e.y;
     return;
   }
-
   if (e.state !== 'chase' && e.state !== 'attack') return;
 
   let p = ctx.getPlayer(e.targetId);
@@ -94,10 +75,13 @@ export function updateEnemyAI(e: Enemy, ctx: AIContext, dt: number): void {
     p = nearestPlayer(e, ctx, def.aggroRange);
     e.targetId = p ? p.id : null;
   }
-  if (!p || e.distFromSpawn() > def.leash) {
-    e.state = 'return';
+  if (!p) {
+    // lost everyone: stay and wander around here
+    e.state = 'idle';
     e.targetId = null;
     e.path = [];
+    e.homeX = e.x;
+    e.homeY = e.y;
     return;
   }
   const d = dist(e, p);
@@ -149,7 +133,7 @@ function stepAway(e: Enemy, p: Player, ctx: AIContext): void {
   const dy = sign(e.y - p.y);
   const options: Array<[number, number]> = [[dx, dy], [dx, 0], [0, dy], [dx, -dy], [-dx, dy]];
   for (const [ox, oy] of options) {
-    if ((ox || oy) && chebyshev(e.x + ox, e.y + oy, e.spawnX, e.spawnY) <= e.def.leash && ctx.tryStep(e, ox, oy)) return;
+    if ((ox || oy) && ctx.tryStep(e, ox, oy)) return;
   }
 }
 
@@ -176,10 +160,10 @@ function stepToward(e: Enemy, p: Player, ctx: AIContext, dt: number): void {
   if (dy !== 0) ctx.tryStep(e, 0, dy);
 }
 
-/** Called when the enemy is hit by a player: re-engage unless it is already far from home. */
+/** Called when the enemy is hit by a player: it turns on them. */
 export function onEnemyDamaged(e: Enemy, byPlayerId: number): void {
   if (e.dead) return;
-  if (e.state === 'idle' || (e.state === 'return' && e.distFromSpawn() < e.def.leash - 2)) {
+  if (e.state === 'idle' || e.state === 'return') {
     e.state = 'chase';
     e.targetId = byPlayerId;
     e.path = [];
