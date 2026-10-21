@@ -227,6 +227,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Better spell effects (Effects.ts).
 - [ ] Integrate, test all, push, refresh artifact.
 - [ ] Owner decision: upgrade the thornvale service from Free to a paid instance (Starter is enough for ~50 players) so the server never sleeps; then set `plan:` in render.yaml.
+- [ ] **Graphics overhaul (owner decision 2026-10-21):** replace the whole look with a darker, "brutal" dark-fantasy style. Gameplay, controls, camera, tiles, systems and saves stay exactly the same — visuals only (`src/render/**`, `ui/icons.ts`, textures, models, effects, HUD skin). Start after the new map is live, with a side-by-side test area for the owner to approve. Style direction still to be chosen.
 - [ ] Later: custom SMTP for recovery mails; more map/game polish.
 - [ ] Marketing website (mockups approved on the "Thornvale Website" design canvas): home page at `/`, game moved to `/play`, live player count from `/status`, news. Same Render service, no new dependencies. Update §4 when the routes change.
 - [ ] New sign-in and character screens (email + password, up to 5 characters per account, "Play offline" kept) replacing the current start screen.
