@@ -132,6 +132,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 1. **`src/game/**` imports nothing from `render/`, `ui/`, `input/`, `audio/`, DOM or three.js.** It must run in Node (server, tests).
 2. **Every player action is a `Command`** sent through `Controller.send(...)` → `Game.executeCommand`. UI/input never mutate game state directly. Offline = LocalController runs it locally; online = NetController sends it, the server is authoritative.
 3. **Game → view communication is via the event bus** (`core/events.ts`). Renderer, HUD and Sfx subscribe; they never poll internal fields they don't own.
+- **Performance rules:** never allocate per-map arrays per call (the world is 512k tiles per floor); never loop over all creatures inside a per-tile callback; send bulky snapshot parts only when changed.
 4. **Online:** server ticks at 20 Hz and sends snapshots (`VIEW_RADIUS = 20`). The client keeps a mirror Game (`simulate:false`) and applies snapshots. Messages arriving before the HUD exists go to the backlog.
 5. **Protocol:** `PROTOCOL_VERSION` (currently **13**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
 6. **PvP** (server option `PVP`, passed as `GameOptions.pvp`; off offline). Rules live in `Game` (`pvpProblem`, `onPvpAttack`, `onPvpKill`); every PvP hit passes `applyDamage`, which re-checks them:
