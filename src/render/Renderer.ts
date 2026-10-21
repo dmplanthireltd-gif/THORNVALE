@@ -12,14 +12,14 @@ import { NPCS } from '../game/npc/npcs';
 import { Npc } from '../game/npc/Npc';
 import { Player, spellLight } from '../game/player/Player';
 import { CreatureView } from './CreatureView';
-import { EFFECT_COLOR, Effects } from './Effects';
+import { Effects, type FieldKind } from './Effects';
 import { applyGear, buildOutfitRig } from './models/humanoid';
 import { mat, toonGradient } from './models/parts';
 import { CAMERA_TILT_DEG, CameraController } from './CameraController';
 import { itemIcon } from '../ui/icons';
 import { buildEnemy, buildNpc, ENEMY_SCALE, type BipedRig, type Rig } from './models/rigs';
 import { Overlay } from './Overlay';
-import { PixelPass } from './PixelPass';
+import { PixelPass, TILE_PX } from './PixelPass';
 import { WorldView } from './WorldView';
 import { Blood } from './Blood';
 import { playSkillFx } from './skillFx';
@@ -61,6 +61,12 @@ export class Renderer {
   private raycaster = new THREE.Raycaster();
   private plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private delayed: Array<{ t: number; fn: () => void }> = [];
+  /** Counts frames, so events of one game tick can be tied together. */
+  private fxFrame = 0;
+  /** Visuals of a hit wait for the missile that carries them (target id → pending hit). */
+  private pendingHits = new Map<number, { frame: number; fns: Array<() => void> }>();
+  private lastProjectile: { frame: number; toId: number } | null = null;
+  private lastCast: { frame: number; casterId: number } | null = null;
   private hover: PickResult = null;
   private time = 0;
   private lastPz = Number.NaN;
@@ -196,6 +202,12 @@ export class Renderer {
   /** Meshes for fields laid by runes: "x,y,z" → mesh. */
   private fieldMeshes = new Map<string, THREE.Mesh>();
   private fieldTime = 0;
+  private fieldPlane = new THREE.PlaneGeometry(0.94, 0.94);
+  private wallBox = new THREE.BoxGeometry(0.94, 1.5, 0.94);
+
+  private fieldKind(obj: number): FieldKind {
+    return obj === Obj.FireField ? 'fire' : obj === Obj.EnergyField ? 'energy' : obj === Obj.MagicWall ? 'wall' : 'poison';
+  }
 
   private syncFieldMesh(x: number, y: number, z: number): void {
     const k = WorldMap.key(x, y, z);
@@ -204,23 +216,30 @@ export class Renderer {
     if (old && old.userData.obj === obj) return;
     if (old) {
       this.scene.remove(old);
-      old.geometry.dispose();
+      // geometry and textures are shared; only the material is per field
       (old.material as THREE.Material).dispose();
       this.fieldMeshes.delete(k);
     }
     if (obj === null) return;
+    const kind = this.fieldKind(obj);
     let mesh: THREE.Mesh;
-    if (obj === Obj.MagicWall) {
-      mesh = new THREE.Mesh(new THREE.BoxGeometry(0.94, 1.5, 0.94), new THREE.MeshBasicMaterial({ color: 0x7fb2ff, transparent: true, opacity: 0.55, depthWrite: false }));
+    if (kind === 'wall') {
+      // a translucent arcane wall with glowing runes
+      mesh = new THREE.Mesh(this.wallBox, new THREE.MeshBasicMaterial({
+        color: 0x9fc0ff, map: this.effects.fieldTexture('wall'), transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending,
+      }));
       mesh.userData.h = 0.75;
     } else {
-      const color = obj === Obj.FireField ? EFFECT_COLOR.fire : obj === Obj.EnergyField ? EFFECT_COLOR.energy : EFFECT_COLOR.earth;
-      mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending }));
+      mesh = new THREE.Mesh(this.fieldPlane, new THREE.MeshBasicMaterial({
+        color: 0xffffff, map: this.effects.fieldTexture(kind), transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending,
+      }));
       mesh.rotation.x = -Math.PI / 2;
-      mesh.userData.h = 0.05;
+      mesh.userData.h = 0.035;
     }
     mesh.userData.obj = obj;
+    mesh.userData.kind = kind;
     mesh.userData.tile = { x, y, z };
+    mesh.userData.seed = Math.random() * 10;
     mesh.renderOrder = 4;
     this.scene.add(mesh);
     this.fieldMeshes.set(k, mesh);
@@ -228,6 +247,7 @@ export class Renderer {
 
   private updateFieldMeshes(dt: number): void {
     this.fieldTime += dt;
+    const ft = this.fieldTime;
     for (const m of this.fieldMeshes.values()) {
       const t = m.userData.tile as { x: number; y: number; z: number };
       const off = this.worldView.floorOffset(t.z);
@@ -235,10 +255,25 @@ export class Renderer {
       if (!m.visible) continue;
       m.position.set(t.x, off! + (m.userData.h as number), t.y);
       const mat = m.material as THREE.MeshBasicMaterial;
-      if (m.userData.obj !== Obj.MagicWall) {
-        mat.opacity = 0.45 + 0.2 * Math.sin(this.fieldTime * 7 + t.x * 1.3 + t.y);
-        if (Math.random() < dt * 3) this.effects.burst(new THREE.Vector3(t.x, off! + 0.1, t.y), mat.color.getHex(), 2, 0.8, m.userData.obj === Obj.FireField ? -1.5 : 2, 0.06);
+      const kind = m.userData.kind as FieldKind;
+      const sd = m.userData.seed as number;
+      // stepped flicker so it reads as animation frames
+      const q = (v: number) => Math.round(v * 6) / 6;
+      if (kind === 'fire') {
+        mat.opacity = q(0.55 + 0.25 * Math.sin(ft * 13 + sd) * Math.sin(ft * 7.3 + sd * 2));
+        m.rotation.z = Math.floor(ft * 6 + sd) % 4 * (Math.PI / 2);
+      } else if (kind === 'energy') {
+        mat.opacity = Math.random() < 0.12 ? 0.95 : q(0.45 + 0.15 * Math.sin(ft * 20 + sd));
+        m.rotation.z = Math.floor(ft * 10 + sd) % 4 * (Math.PI / 2);
+      } else if (kind === 'poison') {
+        mat.opacity = q(0.5 + 0.15 * Math.sin(ft * 3 + sd));
+        m.rotation.z = Math.floor(ft * 2 + sd) % 4 * (Math.PI / 2);
+      } else {
+        mat.opacity = q(0.55 + 0.2 * Math.sin(ft * 4 + sd));
+        const map = mat.map;
+        if (map) map.offset.y = (ft * 0.15) % 1;
       }
+      this.effects.fieldTick(kind, t.x, off!, t.y, dt);
     }
   }
 
@@ -367,6 +402,53 @@ export class Renderer {
     this.overlay.float(text, cls, at, () => this.head(id).add(new THREE.Vector3(0, rise, 0)), max);
   }
 
+  /** Runs a hit's visuals now, or when the missile launched at `id` this tick lands. */
+  private withHit(id: number, fn: () => void): void {
+    const rec = this.pendingHits.get(id);
+    if (rec && rec.frame === this.fxFrame) rec.fns.push(fn);
+    else fn();
+  }
+
+  private damageFx(e: Extract<GameEvent, { type: 'damage' }>): void {
+    const v = this.visibleView(e.targetId);
+    if (!v) return;
+    const me = this.ctl.pid;
+    const pos = this.chest(e.targetId);
+    if (e.result === 'hit') {
+      v.onHurt();
+      const el: Element = e.element;
+      const power = Math.min(1.6, 0.35 + e.amount / 90);
+      if (el === 'physical') {
+        const col = this.bloodFor(e.targetId);
+        this.effects.burst(pos, col, 16 + Math.min(14, Math.floor(e.amount / 8)), 2.8);
+        this.effects.burst(pos, col, 6, 1.2, 9, 0.11);
+        this.bleed(e.targetId, col, e.amount);
+      } else {
+        this.effects.impact(pos, el as Effect, power);
+        if (el === 'death' && e.amount > 0) {
+          // death magic tears flesh: a bloody burst on top of the dark one
+          const col = this.bloodFor(e.targetId);
+          this.effects.burst(pos, col, 10 + Math.min(16, Math.floor(e.amount / 10)), 2.6);
+          this.bleed(e.targetId, col, e.amount);
+        } else if (e.amount > 0 && Math.random() < 0.5) this.bleed(e.targetId, this.bloodFor(e.targetId), e.amount * 0.6);
+      }
+      // a heavy blow on you jolts the view a little
+      if (e.targetId === me && e.amount > 0) {
+        const share = e.amount / Math.max(1, this.me.maxHp);
+        if (share > 0.08) this.effects.shake(Math.min(3, 1 + share * 8), 0.25);
+      }
+      const cls = `dmg el-${el}${e.targetId === me ? ' taken' : ''}`;
+      if (e.amount > 0) this.float(e.targetId, String(e.amount), cls);
+      if (e.manaShield) this.float(e.targetId, String(e.manaShield), 'mana', 1.1, 0.25);
+    } else if (e.result === 'blocked') {
+      this.effects.burst(pos, 0x9fd0ff, 6, 1.6, 3, 0.05);
+      this.float(e.targetId, 'blocked', 'miss', 0.8);
+    } else {
+      this.effects.burst(pos, 0xcfcfcf, 5, 1.0, 0, 0.09);
+      this.float(e.targetId, 'miss', 'miss', 0.8);
+    }
+  }
+
   private onEvent(e: GameEvent): void {
     const me = this.ctl.pid;
     switch (e.type) {
@@ -374,49 +456,44 @@ export class Renderer {
         this.visibleView(e.attackerId)?.onAttack();
         break;
       case 'damage': {
-        const v = this.visibleView(e.targetId);
-        if (!v) break;
-        const pos = this.chest(e.targetId);
-        if (e.result === 'hit') {
-          v.onHurt();
-          const el: Element = e.element;
-          if (el === 'physical') {
-            const col = this.bloodFor(e.targetId);
-            this.effects.burst(pos, col, 16 + Math.min(14, Math.floor(e.amount / 8)), 2.8);
-            this.effects.burst(pos, col, 6, 1.2, 9, 0.11);
-            this.bleed(e.targetId, col, e.amount);
-          } else {
-            this.effects.impact(pos, el as Effect);
-            if (e.amount > 0 && Math.random() < 0.5) this.bleed(e.targetId, this.bloodFor(e.targetId), e.amount * 0.6);
-          }
-          const cls = `dmg el-${el}${e.targetId === me ? ' taken' : ''}`;
-          if (e.amount > 0) this.float(e.targetId, String(e.amount), cls);
-          if (e.manaShield) this.float(e.targetId, String(e.manaShield), 'mana', 1.1, 0.25);
-        } else if (e.result === 'blocked') {
-          this.effects.burst(pos, 0x9fd0ff, 6, 1.6, 3, 0.05);
-          this.float(e.targetId, 'blocked', 'miss', 0.8);
-        } else {
-          this.effects.burst(pos, 0xcfcfcf, 5, 1.0, 0, 0.09);
-          this.float(e.targetId, 'miss', 'miss', 0.8);
-        }
+        if (!this.visibleView(e.targetId)) break;
+        this.withHit(e.targetId, () => this.damageFx(e));
         break;
       }
-      case 'heal':
+      case 'heal': {
         if (!this.visibleView(e.targetId)) break;
-        this.effects.sparkle(this.chest(e.targetId).setY(this.views.get(e.targetId)!.yOffset + 0.2), 0x7dff9a, 18, 0.45);
-        this.float(e.targetId, `+${e.amount}`, 'heal');
+        const id = e.targetId, amount = e.amount;
+        this.withHit(id, () => {
+          const v = this.visibleView(id);
+          if (!v) return;
+          const c = v.creature;
+          // bigger heals look bigger: by share of max health and raw amount
+          const power = Math.min(1.5, Math.max(amount / Math.max(1, c.maxHp) * 2.2, amount / 260));
+          const p = v.rig.root.position;
+          this.effects.heal(new THREE.Vector3(p.x, v.yOffset, p.z), power, v.rig.height);
+          this.float(id, `+${amount}`, 'heal');
+        });
         break;
-      case 'mana':
-        if (!this.visibleView(e.targetId)) break;
-        this.effects.sparkle(this.chest(e.targetId), 0x7fb2ff, 16, 0.45);
+      }
+      case 'mana': {
+        const v = this.visibleView(e.targetId);
+        if (!v) break;
+        const p = v.rig.root.position;
+        this.effects.mana(new THREE.Vector3(p.x, v.yOffset, p.z), e.amount / 150);
         this.float(e.targetId, `+${e.amount}`, 'mana');
         break;
+      }
       case 'projectile': {
         if (!this.visibleView(e.fromId) && !this.visibleView(e.toId)) break;
         const to = e.toId;
         const effect = e.effect;
+        const rec = { frame: this.fxFrame, fns: [] as Array<() => void> };
+        this.pendingHits.set(to, rec);
+        this.lastProjectile = { frame: this.fxFrame, toId: to };
         this.effects.missile(this.chest(e.fromId), () => this.chest(to), effect, () => {
-          if (effect !== 'arrow' && effect !== 'bolt' && effect !== 'spear' && effect !== 'star' && effect !== 'stone') this.effects.impact(this.chest(to), effect);
+          if (this.pendingHits.get(to) === rec) this.pendingHits.delete(to);
+          if (rec.fns.length) for (const fn of rec.fns) fn();
+          else if (effect !== 'arrow' && effect !== 'bolt' && effect !== 'spear' && effect !== 'star' && effect !== 'stone') this.effects.impact(this.chest(to), effect);
         });
         break;
       }
@@ -424,31 +501,43 @@ export class Renderer {
         const off = this.worldView.floorOffset(e.z);
         if (off === null) break;
         if (chebyshev(e.x, e.y, this.me.x, this.me.y) > VIEW_RANGE + 2) break;
-        if (e.radius === 0 && (e.effect === 'heal' || e.effect === 'haste' || e.effect === 'shield' || e.effect === 'light')) {
-          this.effects.ring(new THREE.Vector3(e.x, off + 0.05, e.y), EFFECT_COLOR[e.effect], 0.2, 1.0, 0.6, 0.6);
-          this.effects.sparkle(new THREE.Vector3(e.x, off + 0.2, e.y), EFFECT_COLOR[e.effect], 16, 0.45);
-        } else {
-          this.effects.area(e.x, e.y, off, e.radius, e.effect);
-        }
+        const fx = () => {
+          if (e.radius === 0) {
+            this.effects.buff(new THREE.Vector3(e.x, off, e.y), e.effect);
+          } else {
+            this.effects.explosion(e.x, e.y, off, e.radius, e.effect);
+          }
+        };
+        // a rune thrown at a creature bursts when its missile lands
+        const lp = this.lastProjectile;
+        const t = lp && lp.frame === this.fxFrame ? this.ctl.game.getCreature(lp.toId) : null;
+        if (t && t.x === e.x && t.y === e.y && e.radius > 0) this.withHit(t.id, fx);
+        else fx();
         break;
       }
       case 'tiles': {
-        // waves, beams, walls: flash each tile in order, nearest first
         const off = this.worldView.floorOffset(e.z);
         if (off === null || !e.tiles.length) break;
         if (chebyshev(e.tiles[0], e.tiles[1], this.me.x, this.me.y) > VIEW_RANGE + 6) break;
-        const color = EFFECT_COLOR[e.effect];
-        for (let i = 0; i < e.tiles.length; i += 2) {
-          const x = e.tiles[i], y = e.tiles[i + 1];
-          const delay = (i / 2) * 0.025;
-          this.effects.tileFlash(x, off, y, e.effect, delay);
-          const pos = new THREE.Vector3(x, off + 0.15, y);
-          if (e.effect === 'holy' || e.effect === 'shield') this.effects.sparkle(pos, color, 4, 0.4);
-          else this.effects.burst(pos, color, 5, 1.6, e.effect === 'fire' ? -1 : 5, 0.08);
+        const lc = this.lastCast;
+        const caster = lc && lc.frame === this.fxFrame ? this.ctl.game.getCreature(lc.casterId) : null;
+        if (!caster) {
+          // runes laying fields and walls
+          this.effects.fieldPlaced(e.tiles, off, e.effect);
+          break;
         }
+        // a spell: a straight line is a beam, anything wider a wave
+        const t = e.tiles;
+        let line = true;
+        for (let i = 2; i < t.length; i += 2) {
+          if ((t[i] - caster.x) * (t[1] - caster.y) !== (t[i + 1] - caster.y) * (t[0] - caster.x)) line = false;
+        }
+        if (line && t.length >= 4) this.effects.beam(t, caster.x, caster.y, off, e.effect);
+        else this.effects.wave(t, caster.x, caster.y, off, e.effect);
         break;
       }
       case 'cast':
+        this.lastCast = { frame: this.fxFrame, casterId: e.casterId };
         this.float(e.casterId, e.words, 'speech spell', 3, 0.15);
         break;
       case 'chat':
@@ -460,7 +549,9 @@ export class Renderer {
         if (v && e.on) {
           const c = e.buff === 'haste' || e.buff === 'strongHaste' ? 0x9fe8ff : e.buff === 'magicShield' ? 0x7fb2ff
             : e.buff === 'poisoned' ? 0x7ad04a : e.buff === 'invisible' || e.buff === 'illusion' ? 0xb07aff : 0xfff2b0;
-          this.effects.ring(new THREE.Vector3(v.rig.root.position.x, v.yOffset + 0.05, v.rig.root.position.z), c, 0.2, 1.1, 0.7, 0.8);
+          const at = new THREE.Vector3(v.rig.root.position.x, v.yOffset + 0.05, v.rig.root.position.z);
+          if (e.buff === 'poisoned') this.effects.burst(this.chest(e.id), 0x7ad04a, 10, 1.2, 2, 0.06);
+          else this.effects.ring(at, c, 0.2, 1.1, 0.7, 0.8);
         }
         break;
       }
@@ -730,6 +821,7 @@ export class Renderer {
 
   update(dt: number): void {
     this.time += dt;
+    this.fxFrame++;
     const g = this.ctl.game;
     const p = this.me;
     const pz = p.z;
@@ -856,6 +948,14 @@ export class Renderer {
     this.torch.distance = 3 + light * 1.8;
     this.torch.position.set(vp.x, 2.2, vp.y + 0.3);
 
+    // shake the view in whole art pixels so the pixel grid never swims
+    const sh = this.effects.shakeOffset();
+    if (sh) {
+      const px = this.cam.pixelMode ? 1 / TILE_PX : 0.03;
+      this.cam.camera.position.x += sh.x * px;
+      this.cam.camera.position.z += (sh.y * px) / Math.cos(THREE.MathUtils.degToRad(CAMERA_TILT_DEG));
+    }
+    this.effects.focus = { x: vp.x, z: vp.y };
     this.effects.update(dt);
     this.blood.update(dt);
     this.overlay.update(dt);

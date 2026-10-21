@@ -15,7 +15,8 @@ type Sound =
   | 'hit' | 'hitHard' | 'miss' | 'block' | 'swing' | 'bow' | 'throw'
   | 'fire' | 'energy' | 'ice' | 'earth' | 'death' | 'holy'
   | 'heal' | 'mana' | 'buff' | 'shield' | 'levelUp' | 'die' | 'monsterDie'
-  | 'coins' | 'pickup' | 'drink' | 'click' | 'teleport' | 'dig' | 'error' | 'explosion' | 'chop' | 'treeFall' | 'skillUp' | 'cast' | 'splash';
+  | 'coins' | 'pickup' | 'drink' | 'click' | 'teleport' | 'dig' | 'error' | 'explosion' | 'chop' | 'treeFall' | 'skillUp' | 'cast' | 'splash'
+  | 'boom' | 'thunder' | 'shatter' | 'implode' | 'roar' | 'quake' | 'healBig';
 
 const HEARING = 11;
 
@@ -75,7 +76,14 @@ export class Sfx {
     }
     this.master = this.ctx.createGain();
     this.master.gain.value = this.muted ? 0 : this.volume;
-    this.master.connect(this.ctx.destination);
+    // a gentle limiter so the big explosions can be loud without clipping
+    const limit = this.ctx.createDynamicsCompressor();
+    limit.threshold.value = -10;
+    limit.knee.value = 8;
+    limit.ratio.value = 6;
+    limit.attack.value = 0.003;
+    limit.release.value = 0.25;
+    this.master.connect(limit).connect(this.ctx.destination);
     const len = this.ctx.sampleRate;
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
@@ -144,7 +152,7 @@ export class Sfx {
   }
 
   /** Plays a sound; `gain` scales it (distance falloff). */
-  play(s: Sound, gain = 1): void {
+  play(s: Sound, gain = 1, delay = 0): void {
     if (this.muted || gain <= 0.02) return;
     const c = this.ensure();
     if (!c || !this.master || c.state !== 'running') return;
@@ -155,7 +163,7 @@ export class Sfx {
     const out = c.createGain();
     out.gain.value = gain;
     out.connect(this.master);
-    const t = now + 0.005;
+    const t = now + 0.005 + delay;
     const r = (a: number, b: number) => a + Math.random() * (b - a);
     switch (s) {
       case 'hit':
@@ -186,6 +194,51 @@ export class Sfx {
       case 'fire':
         this.noise(out, 'lowpass', 900, 3500, t, 0.35, 0.6, 1, 0.03);
         this.noise(out, 'bandpass', 300, 120, t + 0.05, 0.4, 0.4, 1);
+        break;
+      case 'boom':
+        // a heavy, deep blast: sub-bass drop, a crack on top, a long rumble tail
+        this.tone(out, 'sine', 120, 28, t, 0.9, 1.0, 0.004);
+        this.tone(out, 'triangle', 70, 30, t, 0.7, 0.6, 0.004);
+        this.noise(out, 'lowpass', 4000, 300, t, 0.25, 1.0, 0.7, 0.002);
+        this.noise(out, 'lowpass', 600, 60, t + 0.05, 1.4, 0.8, 0.8, 0.02);
+        break;
+      case 'roar':
+        // a rushing firestorm
+        this.noise(out, 'lowpass', 500, 2600, t, 0.5, 0.8, 0.8, 0.04);
+        this.noise(out, 'bandpass', 240, 90, t + 0.1, 1.2, 0.7, 0.9, 0.05);
+        for (let i = 0; i < 6; i++) this.noise(out, 'highpass', 2500, 1800, t + 0.15 + i * r(0.07, 0.15), 0.04, 0.25, 1);
+        break;
+      case 'thunder':
+        // a sharp crack followed by rolling thunder
+        this.noise(out, 'highpass', 6000, 1500, t, 0.08, 1.0, 0.7, 0.001);
+        for (let i = 0; i < 6; i++) this.tone(out, 'sawtooth', r(1200, 3000), r(150, 400), t + i * 0.03, 0.06, 0.18);
+        this.noise(out, 'lowpass', 900, 70, t + 0.06, 1.3, 0.9, 0.8, 0.03);
+        this.tone(out, 'sine', 80, 32, t + 0.05, 0.9, 0.6, 0.01);
+        break;
+      case 'shatter':
+        // ice bursting: glassy breaks over a cold boom
+        for (let i = 0; i < 9; i++) this.tone(out, 'triangle', r(2200, 5200), r(1500, 3500), t + i * r(0.015, 0.05), 0.12, 0.18);
+        this.noise(out, 'highpass', 7000, 3000, t, 0.4, 0.4, 1);
+        this.noise(out, 'bandpass', 900, 300, t + 0.05, 0.9, 0.5, 0.7, 0.05);
+        break;
+      case 'quake':
+        // the ground erupts
+        this.noise(out, 'lowpass', 350, 50, t, 1.4, 1.0, 1, 0.03);
+        for (let i = 0; i < 7; i++) this.noise(out, 'lowpass', r(700, 1400), 150, t + i * r(0.06, 0.14), 0.12, 0.6, 1);
+        this.tone(out, 'sine', 60, 25, t, 1.1, 0.8, 0.02);
+        break;
+      case 'implode':
+        // the air sucked in, then a dead, hollow thud
+        this.noise(out, 'bandpass', 300, 3000, t, 0.14, 0.35, 2, 0.12);
+        this.tone(out, 'sawtooth', 160, 40, t + 0.14, 0.5, 0.35, 0.005);
+        this.tone(out, 'sine', 110, 30, t + 0.14, 0.6, 0.8, 0.005);
+        this.tone(out, 'sine', 233, 120, t + 0.14, 0.6, 0.15, 0.02);
+        break;
+      case 'healBig':
+        // a warm swell of bells
+        [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(out, 'sine', f, f, t + i * 0.05, 0.6, 0.15, 0.01));
+        [262, 392].forEach((f) => this.tone(out, 'triangle', f, f, t, 0.8, 0.1, 0.15));
+        this.noise(out, 'bandpass', 3000, 6000, t, 0.7, 0.08, 3, 0.2);
         break;
       case 'explosion':
         this.noise(out, 'lowpass', 2500, 120, t, 0.55, 0.9, 0.7);
@@ -348,6 +401,7 @@ export class Sfx {
         const s = this.elementSound(e.effect);
         const v = Math.max(this.atId(e.fromId), this.atId(e.toId));
         if (s) this.play(s, v * 0.8);
+        if (e.effect === 'death') this.play('implode', v * 0.9, 0.1);
         break;
       }
       case 'tiles': {
@@ -363,14 +417,29 @@ export class Sfx {
         const v = this.at(e.x, e.y, e.z);
         const s = this.elementSound(e.effect);
         if (s) this.play(s, v);
-        if (e.radius >= 2 && (e.effect === 'fire' || e.effect === 'earth' || e.effect === 'energy')) this.play('explosion', v * 0.7);
         const el = spellElement(e.effect);
         if (el && e.radius >= 1) this.sound((k) => spellSweep(k, el, (e.radius * 2 + 1) ** 2, 1), v * 0.7);
+        if (e.radius >= 4) {
+          // the ultimate explosions: as loud and deep as it gets
+          const big: Partial<Record<Effect, Sound>> = { fire: 'roar', energy: 'thunder', ice: 'shatter', earth: 'quake', stone: 'quake', death: 'implode' };
+          const layer = big[e.effect];
+          this.play('boom', Math.min(1.6, v * 1.8), 0.16);
+          if (layer) this.play(layer, Math.min(1.5, v * 1.5), 0.14);
+        } else if (e.radius >= 1 && e.effect !== 'heal' && e.effect !== 'blood') {
+          this.play('explosion', v * (e.radius >= 2 ? 1 : 0.6), 0.1);
+          if (e.radius >= 2 && e.effect === 'energy') this.play('thunder', v * 0.8, 0.1);
+          if (e.radius >= 2 && e.effect === 'ice') this.play('shatter', v * 0.8, 0.1);
+          if (e.radius >= 2 && (e.effect === 'earth' || e.effect === 'stone')) this.play('quake', v * 0.7, 0.1);
+        }
         break;
       }
-      case 'heal':
-        if (e.targetId === me) this.play('heal', 0.8);
+      case 'heal': {
+        if (e.targetId === me) {
+          const p = this.ctl.game.getPlayer(me);
+          this.play(p && e.amount > p.maxHp * 0.3 ? 'healBig' : 'heal', 0.8);
+        }
         break;
+      }
       case 'mana':
         if (e.to === me) this.play('mana', 0.8);
         break;
