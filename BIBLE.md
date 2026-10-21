@@ -297,7 +297,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [x] Runes on the battle list: drag a rune onto a row, or pick a rune (hotkey/click) and click a row (`useRuneOn`).
 - [x] PvP: player collision outside protection zones, secure mode, white/red skulls, PZ lock, red-skull backpack loss (server env `PVP`).
 - [ ] PvP later (owner decision): logout block while PZ-locked / in a fight, skulls on the minimap, party/guild war marks, frags list.
-- [ ] Better spell effects (Effects.ts).
+- [x] Better spell effects (Effects.ts): classic tile-sprite effects, animated fields, magic wall (2026-10-21). Polish continues.
 - [ ] Integrate, test all, push, refresh artifact.
 - [ ] Owner decision: upgrade the thornvale service from Free to a paid instance (Starter is enough for ~50 players) so the server never sleeps; then set `plan:` in render.yaml.
 - [ ] **Graphics overhaul (owner decision 2026-10-21):** replace the whole look with a darker, "brutal" dark-fantasy style. Gameplay, controls, camera, tiles, systems and saves stay exactly the same — visuals only (`src/render/**`, `ui/icons.ts`, textures, models, effects, HUD skin). Start after the new map is live, with a side-by-side test area for the owner to approve. Style direction still to be chosen.
@@ -356,3 +356,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Mining (copper, tin, iron, coal, silver, gold, starsteel, darkstone rocks in fields, Greyspine, Stonedeep mines and deep caves; 4 pickaxes; rare gems; rocks turn to rubble and refill) and blacksmithing (furnace + anvil in every smithy: smelt 7 bars, smith daggers to plate armour, pickaxes and arrowheads, Make X); smiths buy ores and bars; Skills panel Gathering / Production; `/mining N`, `/smithing N`; generic skill registry for later skills | 8 | 15 |
 | 2026-10-21 | — | Walking speed follows a classic level curve (slower at low level, faster at high level) | — | — |
 | 2026-10-21 | — | Audio overhaul: 11 region music tracks (new forest + swamp zones) played by synthesized instrument bands (`scripts/music/`, `public/audio/music/`), material footsteps/hits, monster voices, ambience, element spell sounds | — | — |
+| 2026-10-21 | — | Spell/rune effects in the classic tile-sprite style: one procedurally painted pixel-art atlas (8-frame 32×32 bursts per element, heal sparkles, mana rings, poff, buff/teleport rings, missile sprites) drawn by a single instanced mesh; every tile of an area/UE/wave/beam bursts; missiles fly as sprites; fire/energy/poison fields animate on every tile (also when synced online); translucent rune-lit magic wall; deeper UE sounds; subtle shake for big blasts (off with reduced motion). Render/audio only | — | — |

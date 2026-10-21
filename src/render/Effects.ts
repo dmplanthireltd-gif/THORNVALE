@@ -2,14 +2,18 @@ import * as THREE from 'three';
 import type { Effect } from '../game/core/events';
 
 /**
- * Spell, rune, missile and hit effects.
+ * Spell, rune, missile and hit effects in the classic tile-sprite style.
  *
- * Everything is pooled: two instanced particle meshes (solid debris and
- * additive glow), and fixed pools of rings, tile flashes, ground decals, glow
- * sprites, light columns, domes, lightning bolts, beams and point lights.
- * Nothing allocates geometry or materials per effect, so many effects at once
- * stay cheap. Shapes are sized in whole art pixels (1/32 tile) so they read in
- * the pixel-art pass.
+ * Every effect is a small pixel-art animation (32×32 art pixels, 8 frames)
+ * played on a tile: an area spell plays its element's burst on every affected
+ * tile, a rune lands with a burst on its target, missiles are little sprites
+ * flying from caster to target. All animations live in ONE atlas painted on a
+ * canvas at startup (original art, no files) and are drawn by ONE instanced
+ * mesh of camera-facing quads, each instance picking its frame by atlas cell.
+ * So any number of effects costs a single draw call, and nothing allocates
+ * geometry or materials per effect. A few extras support the look: a small
+ * pool of point lights, ground marks (scorch, frost, cracks), a subtle camera
+ * shake for big blasts near you, and a capped particle system for embers.
  */
 
 /** Colours used by every effect type. */
@@ -19,25 +23,39 @@ export const EFFECT_COLOR: Record<Effect, number> = {
   heal: 0x7dff9a, haste: 0x9fe8ff, shield: 0x7fb2ff, light: 0xfff2b0, blood: 0xb3221b,
 };
 
-const ELEMENTAL = new Set<Effect>(['fire', 'energy', 'ice', 'earth', 'death', 'holy', 'physical']);
-
 /** Field kinds the renderer animates. */
 export type FieldKind = 'fire' | 'energy' | 'poison' | 'wall';
 
+/** The tile animations in the atlas. */
+export type TileAnim = 'fire' | 'energy' | 'ice' | 'earth' | 'death' | 'holy' | 'hit' | 'block' | 'heal' | 'mana' | 'poff' | 'buff' | 'teleport';
+const ANIM_ROW: Record<TileAnim, number> = {
+  fire: 0, energy: 1, ice: 2, earth: 3, death: 4, holy: 5, hit: 6, block: 7, heal: 8, mana: 9, poff: 10, buff: 11, teleport: 12,
+};
+/** Missile sprites: [row, first column] of a 4-frame spin. */
+type MissileSprite = 'fireball' | 'energyball' | 'iceshard' | 'stone' | 'skull' | 'holystar' | 'healorb' | 'earthball';
+const MISSILE_CELL: Record<MissileSprite, [number, number]> = {
+  fireball: [13, 0], energyball: [13, 4], iceshard: [14, 0], stone: [14, 4], skull: [15, 0], holystar: [15, 4], healorb: [16, 0], earthball: [16, 4],
+};
+const CELL = 32;
+const ACOLS = 8;
+const AROWS = 17;
+const FRAMES = 8;
+
 // ------------------------------------------------------------------ pool sizes
 
-const MAX_SOLID = 1400;
-const MAX_GLOW = 1800;
-const RINGS = 56;
-const FLASHES = 260;
-const DECALS = 110;
-const SPRITES = 90;
-const COLUMNS = 8;
-const DOMES = 4;
-const BOLTS = 32;
-const BOLT_PTS = 14;
-const BEAMS = 4;
+const MAX_TILE_FX = 900;
+const MAX_SOLID = 500;
+const MAX_GLOW = 700;
+const RINGS = 24;
+const DECALS = 90;
 const LIGHTS = 3;
+
+/** The view tilt (keep in step with CameraController.CAMERA_TILT_DEG). */
+const TILT = THREE.MathUtils.degToRad(32);
+/** Unit vector from the scene toward the camera. */
+const TO_CAM = new THREE.Vector3(0, Math.cos(TILT), Math.sin(TILT));
+/** Height of a camera-facing quad that shows exactly 32 art pixels tall. */
+const QUAD_H = Math.cos(TILT);
 
 // ------------------------------------------------------------------ helpers
 
@@ -52,7 +70,6 @@ function col(hex: number): THREE.Color {
 }
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
-const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
 /** Opacity stepped into a few levels so fades read as pixel-art frames. */
 const step4 = (k: number) => Math.round(Math.max(0, Math.min(1, k)) * 4) / 4;
 
@@ -91,9 +108,440 @@ function pixTex(size: number, px: (x: number, y: number) => [number, number, num
   return t;
 }
 
+/** Like pixTex but any width/height; `px(x, yUp)` gets y counted from the bottom row. */
+function pixTexWH(w: number, h: number, px: (x: number, yUp: number) => [number, number, number, number] | null): THREE.Texture {
+  const t = typeof document !== 'undefined' ? (() => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d')!;
+    const img = g.createImageData(w, h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const v = px(x, h - 1 - y);
+      if (!v) continue;
+      const i = (y * w + x) * 4;
+      img.data[i] = v[0];
+      img.data[i + 1] = v[1];
+      img.data[i + 2] = v[2];
+      img.data[i + 3] = v[3];
+    }
+    g.putImageData(img, 0, 0);
+    return new THREE.CanvasTexture(c);
+  })() : new THREE.Texture();
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 function seeded(seed: number): () => number {
   let s = seed;
   return () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+}
+
+// ------------------------------------------------------------------ pixel-art atlas
+
+type RGB = readonly [number, number, number];
+const hh = (a: number, b: number, c = 0) => {
+  const v = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453;
+  return v - Math.floor(v);
+};
+
+/** One 32×32 frame being painted. */
+class Pix {
+  readonly d = new Uint8ClampedArray(CELL * CELL * 4);
+  set(x: number, y: number, c: RGB): void {
+    x = Math.round(x);
+    y = Math.round(y);
+    if (x < 1 || y < 1 || x > CELL - 2 || y > CELL - 2) return;
+    const i = (y * CELL + x) * 4;
+    this.d[i] = c[0];
+    this.d[i + 1] = c[1];
+    this.d[i + 2] = c[2];
+    this.d[i + 3] = 255;
+  }
+  has(x: number, y: number): boolean {
+    if (x < 0 || y < 0 || x >= CELL || y >= CELL) return false;
+    return this.d[(y * CELL + x) * 4 + 3] > 0;
+  }
+  clear(x: number, y: number): void {
+    this.d[(y * CELL + x) * 4 + 3] = 0;
+  }
+  disc(cx: number, cy: number, r: number, c: RGB): void {
+    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+      if (Math.hypot(x - cx, y - cy) <= r) this.set(x, y, c);
+    }
+  }
+  line(x0: number, y0: number, x1: number, y1: number, c: RGB): void {
+    const n = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0))));
+    for (let i = 0; i <= n; i++) this.set(x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n, c);
+  }
+  /** A little sparkle: a plus with a bright centre. */
+  plus(x: number, y: number, s: number, arm: RGB, core: RGB): void {
+    for (let k = 1; k <= s; k++) {
+      this.set(x + k, y, arm);
+      this.set(x - k, y, arm);
+      this.set(x, y + k, arm);
+      this.set(x, y - k, arm);
+    }
+    this.set(x, y, core);
+  }
+  /** Dark rim around everything painted: the classic sprite outline. */
+  outline(c: RGB): void {
+    const src = new Uint8ClampedArray(this.d);
+    const at = (x: number, y: number) => x >= 0 && y >= 0 && x < CELL && y < CELL && src[(y * CELL + x) * 4 + 3] > 0;
+    for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) {
+      if (at(x, y)) continue;
+      if (at(x - 1, y) || at(x + 1, y) || at(x, y - 1) || at(x, y + 1)) this.set(x, y, c);
+    }
+  }
+  /** Knocks out a share of the pixels (a pixel-art fade). */
+  dither(share: number, seed: number): void {
+    if (share <= 0) return;
+    for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) if (hh(x, y, seed) < share) this.clear(x, y);
+  }
+}
+
+const SKULL = [
+  '..######..',
+  '.########.',
+  '##########',
+  '#..####..#',
+  '#..####..#',
+  '##########',
+  '.###..###.',
+  '..######..',
+  '..#.##.#..',
+];
+
+function skull(P: Pix, ox: number, oy: number, bone: RGB, dark: RGB): void {
+  SKULL.forEach((row, y) => [...row].forEach((ch, x) => {
+    if (ch === '#') P.set(ox + x, oy + y, bone);
+    else if (y >= 3 && y <= 6 && x > 0 && x < 9) P.set(ox + x, oy + y, dark);
+  }));
+}
+
+const C = {
+  white: [255, 255, 240], yellow: [255, 222, 70], orange: [255, 136, 24], red: [214, 50, 12], darkRed: [110, 18, 4],
+  vWhite: [250, 240, 255], violet: [184, 96, 255], deepViolet: [62, 12, 120],
+  iceHi: [240, 252, 255], ice: [150, 214, 255], iceDark: [32, 84, 168],
+  rock: [138, 108, 70], rockHi: [184, 152, 102], rockDark: [52, 36, 18], leaf: [86, 186, 48], leafHi: [150, 232, 84], dust: [172, 150, 110],
+  dVoid: [36, 8, 52], dPurple: [128, 46, 186], dGlow: [196, 116, 255], bone: [232, 222, 242], dRim: [16, 0, 26],
+  gold: [255, 214, 80], goldHi: [255, 250, 210], goldRim: [140, 88, 8],
+  blood: [204, 20, 20], bloodDark: [130, 6, 6], grey: [232, 232, 232], greyRim: [56, 56, 64],
+  hBlue: [124, 192, 255], hWhite: [245, 252, 255], hRim: [20, 58, 150],
+  mBlue: [86, 136, 255], mLight: [206, 222, 255], mRim: [18, 28, 118],
+  puffHi: [222, 222, 222], puff: [168, 168, 168], puffRim: [88, 88, 92],
+  cyan: [140, 232, 255],
+} as const satisfies Record<string, RGB>;
+
+/** Paints frame `f` (0–7) of a tile animation. */
+function paintAnim(name: TileAnim, f: number, P: Pix): void {
+  const t = f / (FRAMES - 1);
+  switch (name) {
+    case 'fire': {
+      const R = [6, 9, 12, 14, 15, 15, 14, 12][f];
+      const cy = 17 - f * 0.7;
+      for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) {
+        const dx = x - 16, dy = y - cy;
+        const d = Math.hypot(dx, dy);
+        const a = Math.atan2(dy, dx);
+        // flames lick upwards: the top edge reaches higher and is more ragged
+        const up = dy < 0 ? 1 + (-dy / (R + 1)) * 0.3 * (0.4 + t) : 0.92;
+        const rr = R * (0.74 + 0.36 * hh(Math.floor((a + Math.PI) * 3.2), f)) * up;
+        if (d > rr) continue;
+        const k = d / rr;
+        if (f >= 6 && hh(x, y, f) < (f - 5) * 0.32) continue;
+        let c: RGB = k < 0.3 ? (f < 4 ? C.white : C.yellow) : k < 0.56 ? C.yellow : k < 0.82 ? C.orange : C.red;
+        if (f >= 4 && k < 0.25 + (f - 4) * 0.12) c = f >= 6 ? C.red : C.orange;
+        P.set(x, y, c);
+      }
+      if (f >= 5) for (let i = 0; i < 5; i++) P.set(6 + hh(i, f) * 20, 4 + hh(i, f, 3) * 10, C.yellow);
+      P.outline(C.darkRed);
+      return;
+    }
+    case 'energy': {
+      const r = seeded(40 + f * 7);
+      if (f < 4) {
+        P.disc(16, 16, 4 + f * 1.6, C.violet);
+        P.disc(16, 16, 2.5 + f * 1.1, C.vWhite);
+      }
+      const nb = [6, 8, 8, 7, 6, 5, 4, 2][f];
+      for (let b = 0; b < nb; b++) {
+        let a = r() * Math.PI * 2;
+        let x = 16 + Math.cos(a) * f * 0.9, y = 16 + Math.sin(a) * f * 0.9;
+        const len = 5 + r() * (4 + f * 1.3);
+        for (let s = 0; s < len; s++) {
+          a += (r() - 0.5) * 1.3;
+          const nx = x + Math.cos(a) * 1.4, ny = y + Math.sin(a) * 1.4;
+          P.line(x + 1, y, nx + 1, ny, C.violet);
+          P.line(x - 1, y, nx - 1, ny, C.violet);
+          P.line(x, y + 1, nx, ny + 1, C.violet);
+          P.line(x, y, nx, ny, C.vWhite);
+          x = nx;
+          y = ny;
+        }
+      }
+      if (f >= 6) P.dither(0.25, f);
+      P.outline(C.deepViolet);
+      return;
+    }
+    case 'ice': {
+      if (f <= 2) {
+        const s = (f + 1) / 3;
+        for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) {
+          const dx = x - 16, dy = y - 16;
+          if (Math.abs(dx) / (3.5 * s) + Math.abs(dy) / (8 * s) <= 1) P.set(x, y, dx < 0 ? C.iceHi : C.ice);
+        }
+      }
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 + 0.4;
+        const dist = 3 + f * 1.75;
+        const sz = f < 6 ? 1 : 0.65;
+        const sx = 16 + Math.cos(a) * dist, sy = 16 + Math.sin(a) * dist;
+        for (let y = -6; y <= 6; y++) for (let x = -6; x <= 6; x++) {
+          const u = x * Math.cos(a) + y * Math.sin(a);
+          const v = -x * Math.sin(a) + y * Math.cos(a);
+          if (Math.abs(u) / (3.8 * sz) + Math.abs(v) / (1.7 * sz) > 1) continue;
+          P.set(sx + x, sy + y, u > 1.6 || v > 0.4 ? C.iceHi : C.ice);
+        }
+      }
+      if (f >= 6) P.dither(0.2 * (f - 5), f);
+      P.outline(C.iceDark);
+      return;
+    }
+    case 'earth': {
+      if (f < 5) {
+        P.disc(16, 18, 3 + f * 1.6, C.dust);
+        P.dither(0.45 + f * 0.1, 9 + f);
+      }
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + 0.3;
+        const sp = 0.8 + hh(i, 2) * 0.5;
+        const x = 16 + Math.cos(a) * (2 + f * 1.8) * sp;
+        const y = 17 + Math.sin(a) * (2 + f * 1.4) * sp * 0.7 - (f * 2.4 - f * f * 0.32);
+        P.disc(x, y, f < 6 ? 2.3 : 1.6, C.rock);
+        P.set(x - 1, y - 1, C.rockHi);
+      }
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + 1.1 + f * 0.25;
+        const x = 16 + Math.cos(a) * (1 + f * 1.9), y = 14 + Math.sin(a) * (1 + f * 1.5) + f * 0.5;
+        P.set(x, y, C.leaf);
+        P.set(x + 1, y, C.leafHi);
+        P.set(x, y + 1, C.leaf);
+      }
+      P.outline(C.rockDark);
+      return;
+    }
+    case 'death': {
+      const R = [8, 11, 13, 14, 14, 14, 12, 10][f];
+      for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) {
+        const dx = x - 16, dy = y - 16;
+        const d = Math.hypot(dx, dy);
+        if (d > R) continue;
+        const v = Math.sin(Math.atan2(dy, dx) * 2 + d * 0.55 - f * 1.3);
+        if (v < 0.15) continue;
+        P.set(x, y, v > 0.8 && d > R * 0.45 ? C.dGlow : d < R * 0.55 ? C.dVoid : C.dPurple);
+      }
+      if (f >= 2 && f <= 5) skull(P, 11, 11 - (f - 2), C.bone, C.dRim);
+      if (f >= 6) P.dither(0.3 * (f - 5), f);
+      P.outline(C.dRim);
+      return;
+    }
+    case 'holy': {
+      const L = [4, 8, 11, 13, 13, 12, 9, 6][f];
+      for (let k = 0; k < 8; k++) {
+        const a = (k * Math.PI) / 4 + f * 0.08;
+        const len = k % 2 === 0 ? L : L * 0.6;
+        P.line(16, 16, 16 + Math.cos(a) * len, 16 + Math.sin(a) * len, C.gold);
+        P.line(16, 16, 16 + Math.cos(a) * len * 0.5, 16 + Math.sin(a) * len * 0.5, C.goldHi);
+      }
+      P.disc(16, 16, f < 5 ? 3 : 2, C.goldHi);
+      if (f >= 3) for (let i = 0; i < 6; i++) {
+        const a = hh(i, f) * Math.PI * 2, r = L * (0.6 + hh(i, f, 2) * 0.5);
+        P.plus(16 + Math.cos(a) * r, 16 + Math.sin(a) * r, 1, C.gold, C.goldHi);
+      }
+      if (f >= 6) P.dither(0.25 * (f - 5), f);
+      P.outline(C.goldRim);
+      return;
+    }
+    case 'hit':
+    case 'block': {
+      const s = [4, 7, 6, 4, 2, 0, 0, 0][f];
+      if (s) {
+        P.line(16 - s, 16, 16 + s, 16, C.grey);
+        P.line(16, 16 - s, 16, 16 + s, C.grey);
+        P.line(16 - s * 0.6, 16 - s * 0.6, 16 + s * 0.6, 16 + s * 0.6, C.grey);
+        P.line(16 - s * 0.6, 16 + s * 0.6, 16 + s * 0.6, 16 - s * 0.6, C.grey);
+        P.disc(16, 16, 1, C.white);
+      }
+      if (name === 'hit') {
+        for (let i = 0; i < 7; i++) {
+          const a = (i / 7) * Math.PI * 2 + 0.2;
+          const dist = 2 + f * 1.8 * (0.8 + hh(i, 1) * 0.4);
+          const x = 16 + Math.cos(a) * dist, y = 16 + Math.sin(a) * dist * 0.8 + f * f * 0.16;
+          if (f < 7 || i % 2) P.disc(x, y, f < 5 ? 1.5 : 1, i % 3 ? C.blood : C.bloodDark);
+        }
+        P.outline(C.bloodDark);
+      } else {
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          const r0 = 3 + f * 1.5;
+          if (f < 6) P.line(16 + Math.cos(a) * r0, 16 + Math.sin(a) * r0, 16 + Math.cos(a) * (r0 + 2), 16 + Math.sin(a) * (r0 + 2), C.hWhite);
+        }
+        P.outline(C.greyRim);
+      }
+      return;
+    }
+    case 'heal': {
+      for (let i = 0; i < 13; i++) {
+        const start = i % 3;
+        if (f < start) continue;
+        const x = 5 + hh(i, 1) * 22;
+        const y = 28 - hh(i, 2) * 14 - (f - start) * 2.4;
+        const big = (f + i) % 3 === 0;
+        P.plus(x, y, big ? 3 : 2, C.hBlue, C.hWhite);
+        if (big) P.set(x, y + 1, C.hWhite);
+      }
+      P.outline(C.hRim);
+      return;
+    }
+    case 'mana': {
+      for (const lag of [0, 5]) {
+        const r = 2 + f * 1.9 - lag;
+        if (r < 1.5) continue;
+        for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) {
+          const d = Math.hypot(x - 16, y - 16);
+          if (Math.abs(d - r) <= 1) P.set(x, y, d < r ? C.mLight : C.mBlue);
+        }
+      }
+      if (f >= 6) P.dither(0.3 * (f - 5), f);
+      P.outline(C.mRim);
+      return;
+    }
+    case 'poff': {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + 0.5;
+        const o = 3 * (1 + f * 0.45);
+        const cx = 16 + Math.cos(a) * o, cy = 17 + Math.sin(a) * o * 0.8 - f * 0.6;
+        const r = Math.min(6, 2.5 + f * 0.8);
+        for (let y = Math.floor(cy - r); y <= cy + r; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++) {
+          if (Math.hypot(x - cx, y - cy) > r) continue;
+          P.set(x, y, x - cx + (y - cy) < 0 ? C.puffHi : C.puff);
+        }
+      }
+      if (f >= 4) P.dither(0.18 * (f - 3), f);
+      P.outline(C.puffRim);
+      return;
+    }
+    case 'buff':
+    case 'teleport': {
+      const tel = name === 'teleport';
+      const R = tel ? 3 + f * 1.4 : f > 5 ? 11 - (f - 5) * 2 : 11;
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4 + f * 0.3;
+        P.plus(16 + Math.cos(a) * R, 16 + Math.sin(a) * R * 0.9, (f + i) % 2 ? 2 : 1, tel ? C.cyan : C.gold, C.hWhite);
+      }
+      P.outline(tel ? C.hRim : C.goldRim);
+      return;
+    }
+  }
+}
+
+/** Paints frame `f` (0–3) of a missile's spin. */
+function paintMissile(name: MissileSprite, f: number, P: Pix): void {
+  const rot = (f * Math.PI) / 4;
+  switch (name) {
+    case 'fireball':
+      for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) {
+        const d = Math.hypot(x - 16, y - 16);
+        const rr = 5 * (0.8 + 0.35 * hh(Math.floor((Math.atan2(y - 16, x - 16) + Math.PI) * 2.5), f));
+        if (d <= rr) P.set(x, y, d < 2 ? C.white : d < 3.5 ? C.yellow : C.orange);
+      }
+      P.outline(C.darkRed);
+      return;
+    case 'energyball':
+      P.disc(16, 16, 4, C.violet);
+      P.disc(16, 16, 2.2, C.vWhite);
+      for (let k = 0; k < 4; k++) {
+        const a = rot + (k * Math.PI) / 2;
+        P.line(16 + Math.cos(a) * 5, 16 + Math.sin(a) * 5, 16 + Math.cos(a + 0.4) * 8, 16 + Math.sin(a + 0.4) * 8, C.vWhite);
+      }
+      P.outline(C.deepViolet);
+      return;
+    case 'iceshard':
+      for (let y = -8; y <= 8; y++) for (let x = -8; x <= 8; x++) {
+        const u = x * Math.cos(rot) + y * Math.sin(rot);
+        const v = -x * Math.sin(rot) + y * Math.cos(rot);
+        if (Math.abs(u) / 7 + Math.abs(v) / 2.4 <= 1 || Math.abs(v) / 4 + Math.abs(u) / 1.8 <= 1) P.set(16 + x, 16 + y, v > 0 ? C.iceHi : C.ice);
+      }
+      P.outline(C.iceDark);
+      return;
+    case 'stone':
+    case 'earthball':
+      P.disc(16, 16, 4.5, name === 'stone' ? C.rock : [96, 120, 56]);
+      P.disc(16 + Math.cos(rot) * 2, 16 + Math.sin(rot) * 2, 1.3, C.rockHi);
+      if (name === 'earthball') {
+        P.set(16 + Math.cos(rot + 2) * 6, 16 + Math.sin(rot + 2) * 6, C.leafHi);
+        P.set(16 + Math.cos(rot + 4) * 6, 16 + Math.sin(rot + 4) * 6, C.leaf);
+      }
+      P.outline(C.rockDark);
+      return;
+    case 'skull':
+      P.disc(16, 16, 7 + (f % 2), C.dPurple);
+      P.dither(0.5, f);
+      skull(P, 11, 12, C.bone, C.dRim);
+      P.outline(C.dRim);
+      return;
+    case 'holystar': {
+      const s = 6;
+      const a0 = f % 2 ? Math.PI / 4 : 0;
+      for (let k = 0; k < 4; k++) {
+        const a = a0 + (k * Math.PI) / 2;
+        P.line(16, 16, 16 + Math.cos(a) * s, 16 + Math.sin(a) * s, C.gold);
+      }
+      P.disc(16, 16, 2, C.goldHi);
+      P.outline(C.goldRim);
+      return;
+    }
+    case 'healorb':
+      P.plus(16, 16, 3, C.hBlue, C.hWhite);
+      P.disc(16, 16, 1.2, C.hWhite);
+      for (let k = 0; k < 4; k++) P.set(16 + Math.cos(rot + (k * Math.PI) / 2) * 6, 16 + Math.sin(rot + (k * Math.PI) / 2) * 6, C.hWhite);
+      P.outline(C.hRim);
+      return;
+  }
+}
+
+/** The whole effect atlas: 8 columns of 32×32 frames, one row per animation. */
+function buildAtlas(): THREE.Texture {
+  if (typeof document === 'undefined') return new THREE.Texture();
+  const c = document.createElement('canvas');
+  c.width = ACOLS * CELL;
+  c.height = AROWS * CELL;
+  const g = c.getContext('2d')!;
+  const put = (P: Pix, col: number, row: number) => g.putImageData(new ImageData(P.d, CELL, CELL), col * CELL, row * CELL);
+  for (const [name, row] of Object.entries(ANIM_ROW) as Array<[TileAnim, number]>) {
+    for (let f = 0; f < FRAMES; f++) {
+      const P = new Pix();
+      paintAnim(name, f, P);
+      put(P, f, row);
+    }
+  }
+  for (const [name, [row, col]] of Object.entries(MISSILE_CELL) as Array<[MissileSprite, [number, number]]>) {
+    for (let f = 0; f < 4; f++) {
+      const P = new Pix();
+      paintMissile(name, f, P);
+      put(P, col + f, row);
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 // ------------------------------------------------------------------ pooled things
@@ -121,24 +569,31 @@ interface Slot<M extends THREE.Object3D> {
   max: number;
   delay: number;
   data: Record<string, number>;
-  color: THREE.Color;
 }
 
-interface Timer { t: number; fn: () => void }
+/** One playing tile animation. */
+interface TileFx {
+  x: number; y: number; z: number;
+  row: number;
+  t: number;
+  dur: number;
+  delay: number;
+  scale: number;
+}
 
 interface Missile {
-  obj: THREE.Object3D;
+  /** a 3D projectile (arrows, bolts, spears, throwing stars) or null for a sprite */
+  obj: THREE.Object3D | null;
+  cell: [number, number] | null;
+  pos: THREE.Vector3;
   from: THREE.Vector3;
   to: () => THREE.Vector3;
   t: number;
   dur: number;
   arc: number;
   spin: number;
-  trail: Effect | null;
   orient: boolean;
   onHit: () => void;
-  acc: number;
-  effect: Effect;
 }
 
 type DecalKind = 'scorch' | 'frost' | 'crack' | 'death' | 'sigil' | 'burn';
@@ -147,9 +602,8 @@ const dummy = new THREE.Object3D();
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const FWD = new THREE.Vector3(0, 0, 1);
-const WHITE = new THREE.Color(0xffffff);
 
-/** Pooled particles, rings, flashes, decals, sprites, bolts, missiles and tile markers. */
+/** Tile animations, missiles, fields, ground marks, light flashes and markers. */
 export class Effects {
   readonly group = new THREE.Group();
   private solid: Particle[] = [];
@@ -157,21 +611,18 @@ export class Effects {
   private solidMesh: THREE.InstancedMesh;
   private glowMesh: THREE.InstancedMesh;
   private missiles: Missile[] = [];
-  private timers: Timer[] = [];
+  private timers: Array<{ t: number; fn: () => void }> = [];
+
+  private tileFx: TileFx[] = [];
+  private spriteMesh: THREE.InstancedMesh;
+  private spriteCell: THREE.InstancedBufferAttribute;
 
   private rings: Slot<THREE.Mesh>[] = [];
-  private flashes: Slot<THREE.Mesh>[] = [];
   private decals: Slot<THREE.Mesh>[] = [];
-  private sprites: Slot<THREE.Sprite>[] = [];
-  private columns: Slot<THREE.Mesh>[] = [];
-  private domes: Slot<THREE.Mesh>[] = [];
-  private bolts: Slot<THREE.Group>[] = [];
-  private beams: Slot<THREE.Group>[] = [];
   private lights: Slot<THREE.PointLight>[] = [];
 
   private ringThin = new THREE.RingGeometry(0.86, 1, 40);
   private ringThick = new THREE.RingGeometry(0.55, 1, 40);
-  private flashGeo = new THREE.PlaneGeometry(0.96, 0.96);
   private decalGeo = new THREE.PlaneGeometry(1, 1);
 
   private tex: Record<string, THREE.Texture> = {};
@@ -187,17 +638,46 @@ export class Effects {
   private clickMarker: THREE.Mesh;
   private clickLife = 0;
 
+  /** Where the local player is (for shake distance). */
+  focus: { x: number; z: number } | null = null;
+
   constructor(scene: THREE.Scene) {
     scene.add(this.group);
     this.buildTextures();
+    // coloured art (not tint masks) is authored in sRGB
+    for (const k of ['scorch', 'burn', 'frost', 'crack', 'deathMark', 'wall', 'fieldFire', 'fieldEnergy', 'fieldPoison', 'skull']) {
+      this.tex[k].colorSpace = THREE.SRGBColorSpace;
+      this.tex[k].needsUpdate = true;
+    }
     this.decalTex = {
       scorch: this.tex.scorch, frost: this.tex.frost, crack: this.tex.crack, death: this.tex.deathMark, sigil: this.tex.sigil, burn: this.tex.burn,
     };
 
+    // the tile-sprite layer: one instanced quad facing the camera, frames picked per instance
+    const quad = new THREE.PlaneGeometry(1, QUAD_H);
+    quad.rotateX(-(Math.PI / 2 - TILT));
+    this.spriteCell = new THREE.InstancedBufferAttribute(new Float32Array(MAX_TILE_FX * 2), 2);
+    this.spriteCell.setUsage(THREE.DynamicDrawUsage);
+    quad.setAttribute('aCell', this.spriteCell);
+    const spriteMat = new THREE.MeshBasicMaterial({ map: buildAtlas(), transparent: true, alphaTest: 0.5, depthWrite: false });
+    spriteMat.onBeforeCompile = (sh) => {
+      sh.vertexShader = 'attribute vec2 aCell;\n' + sh.vertexShader.replace(
+        '#include <uv_vertex>',
+        `#include <uv_vertex>\n  vMapUv = vec2((uv.x + aCell.x) / ${ACOLS}.0, 1.0 - ((1.0 - uv.y) + aCell.y) / ${AROWS}.0);`,
+      );
+    };
+    spriteMat.customProgramCacheKey = () => 'tile-sprites';
+    this.spriteMesh = new THREE.InstancedMesh(quad, spriteMat, MAX_TILE_FX);
+    this.spriteMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.spriteMesh.count = 0;
+    this.spriteMesh.frustumCulled = false;
+    this.spriteMesh.renderOrder = 9;
+    this.group.add(this.spriteMesh);
+
     const box = new THREE.BoxGeometry(1, 1, 1);
     this.solidMesh = new THREE.InstancedMesh(box, new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_SOLID);
     this.glowMesh = new THREE.InstancedMesh(box, new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: true,
+      color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     }), MAX_GLOW);
     for (const m of [this.solidMesh, this.glowMesh]) {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -208,9 +688,6 @@ export class Effects {
     }
     this.glowMesh.renderOrder = 6;
 
-    const additive = (map?: THREE.Texture) => new THREE.MeshBasicMaterial({
-      color: 0xffffff, map: map ?? null, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
-    });
     const flat = (m: THREE.Mesh, order: number) => {
       m.rotation.x = -Math.PI / 2;
       m.renderOrder = order;
@@ -219,73 +696,17 @@ export class Effects {
       this.group.add(m);
       return m;
     };
-    const slot = <M extends THREE.Object3D>(obj: M): Slot<M> => ({ obj, busy: false, life: 0, max: 1, delay: 0, data: {}, color: new THREE.Color() });
-
-    for (let i = 0; i < RINGS; i++) this.rings.push(slot(flat(new THREE.Mesh(this.ringThin, additive()), 5)));
-    for (let i = 0; i < FLASHES; i++) this.flashes.push(slot(flat(new THREE.Mesh(this.flashGeo, additive(this.tex.tile)), 4)));
+    const slot = <M extends THREE.Object3D>(obj: M): Slot<M> => ({ obj, busy: false, life: 0, max: 1, delay: 0, data: {} });
+    for (let i = 0; i < RINGS; i++) {
+      this.rings.push(slot(flat(new THREE.Mesh(this.ringThin, new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+      })), 5)));
+    }
     for (let i = 0; i < DECALS; i++) {
       const m = new THREE.Mesh(this.decalGeo, new THREE.MeshBasicMaterial({
         color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
       }));
       this.decals.push(slot(flat(m, 2)));
-    }
-    for (let i = 0; i < SPRITES; i++) {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex.glow, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
-      s.visible = false;
-      s.renderOrder = 7;
-      s.frustumCulled = false;
-      this.group.add(s);
-      this.sprites.push(slot(s));
-    }
-    const colGeo = new THREE.CylinderGeometry(1, 1, 1, 18, 1, true);
-    colGeo.translate(0, 0.5, 0);
-    for (let i = 0; i < COLUMNS; i++) {
-      const m = new THREE.Mesh(colGeo, additive(this.tex.column));
-      m.visible = false;
-      m.renderOrder = 6;
-      m.frustumCulled = false;
-      this.group.add(m);
-      this.columns.push(slot(m));
-    }
-    const domeGeo = new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
-    for (let i = 0; i < DOMES; i++) {
-      const mat = additive(this.tex.hex);
-      mat.side = THREE.FrontSide;
-      const m = new THREE.Mesh(domeGeo, mat);
-      m.visible = false;
-      m.renderOrder = 6;
-      m.frustumCulled = false;
-      this.group.add(m);
-      this.domes.push(slot(m));
-    }
-    for (let i = 0; i < BOLTS; i++) {
-      const g = new THREE.Group();
-      for (let k = 0; k < 2; k++) {
-        const geo = new THREE.BufferGeometry();
-        const attr = new THREE.BufferAttribute(new Float32Array(BOLT_PTS * 3), 3);
-        attr.setUsage(THREE.DynamicDrawUsage);
-        geo.setAttribute('position', attr);
-        const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
-        line.frustumCulled = false;
-        line.renderOrder = 8;
-        g.add(line);
-      }
-      g.visible = false;
-      this.group.add(g);
-      this.bolts.push(slot(g));
-    }
-    const beamGeo = new THREE.BoxGeometry(1, 1, 1);
-    beamGeo.translate(0, 0, 0.5);
-    for (let i = 0; i < BEAMS; i++) {
-      const g = new THREE.Group();
-      const glow = new THREE.Mesh(beamGeo, additive());
-      const core = new THREE.Mesh(beamGeo, additive());
-      glow.renderOrder = 7;
-      core.renderOrder = 8;
-      g.add(glow, core);
-      g.visible = false;
-      this.group.add(g);
-      this.beams.push(slot(g));
     }
     for (let i = 0; i < LIGHTS; i++) {
       const l = new THREE.PointLight(0xffffff, 0, 6, 1.6);
@@ -508,6 +929,216 @@ export class Effects {
     return kind === 'fire' ? this.tex.fieldFire : kind === 'energy' ? this.tex.fieldEnergy : kind === 'poison' ? this.tex.fieldPoison : this.tex.wall;
   }
 
+  // ------------------------------------------------------------------ standing fields
+
+  /** Animation frames for standing fields (built once). */
+  private fieldFrames: Record<'flame' | 'arc' | 'slime', THREE.Texture[]> | null = null;
+  /** Shared materials: two phases per look, so neighbouring tiles never flicker in step. */
+  private fieldMats: Record<string, THREE.Material> = {};
+  private fieldGeo: { quad: THREE.PlaneGeometry; ground: THREE.PlaneGeometry; glow: THREE.PlaneGeometry; wall: THREE.BoxGeometry } | null = null;
+
+  private buildFieldFrames(): void {
+    const W = 32, H = 40;
+    const flame: THREE.Texture[] = [];
+    const arc: THREE.Texture[] = [];
+    const slime: THREE.Texture[] = [];
+    for (let f = 0; f < 4; f++) {
+      // tall flames: a few tongues whose heights dance from frame to frame
+      const r = seeded(101 + f * 17);
+      const tongues = [4, 10, 16, 22, 28].map((c) => ({ c: c + (r() - 0.5) * 3, h: 18 + r() * 21, w: 4 + r() * 3 }));
+      const embers = new Set<number>();
+      for (let i = 0; i < 4; i++) embers.add(Math.floor(r() * W) + (Math.floor(26 + r() * 13)) * W);
+      flame.push(pixTexWH(W, H, (x, y) => {
+        let h = 0;
+        let core = 0;
+        for (const t of tongues) {
+          const d = (x + 0.5 - t.c) / t.w;
+          if (Math.abs(d) >= 1) continue;
+          const v = t.h * (1 - d * d);
+          if (v > h) {
+            h = v;
+            core = 1 - Math.abs(d);
+          }
+        }
+        // the base is a solid bed of fire, ragged at the edges of the tile
+        const edge = Math.min(x, W - 1 - x);
+        h = Math.max(h, edge < 2 ? 3 : 7);
+        if (y >= h) return embers.has(y * W + x) ? [255, 210, 90, 255] : null;
+        const rel = y / h;
+        if (y >= h - 1.2) return [150, 26, 6, 255];
+        if (rel < 0.42 && core > 0.45) return [255, 250, 205, 255];
+        if (rel < 0.62 && core > 0.25) return [255, 214, 80, 255];
+        if (rel < 0.82) return [255, 132, 26, 255];
+        return [214, 54, 12, 255];
+      }));
+
+      // crackling arcs: jagged bolts climbing from the ground
+      const ra = seeded(301 + f * 23);
+      const lit = new Map<number, number>();
+      for (let b = 0; b < 3; b++) {
+        let x = 4 + ra() * 24;
+        const top = 16 + ra() * 22;
+        for (let y = 0; y < top; y++) {
+          x += (ra() - 0.5) * 3.2;
+          x = Math.max(1, Math.min(W - 2, x));
+          const ix = Math.round(x);
+          lit.set(y * W + ix, 2);
+          for (const n of [ix - 1, ix + 1]) if (!lit.has(y * W + n)) lit.set(y * W + n, 1);
+          if (ra() < 0.12) {
+            // a short side fork
+            let fx = ix, fy = y;
+            const dir = ra() < 0.5 ? -1 : 1;
+            for (let k = 0; k < 4; k++) {
+              fx += dir;
+              fy += ra() < 0.5 ? 1 : 0;
+              if (fx > 0 && fx < W && fy < H) lit.set(fy * W + fx, Math.max(lit.get(fy * W + fx) ?? 0, 1));
+            }
+          }
+        }
+      }
+      arc.push(pixTexWH(W, H, (x, y) => {
+        const v = lit.get(y * W + x);
+        if (v === 2) return [255, 255, 255, 255];
+        if (v === 1) return [190, 120, 255, 255];
+        if (y < 3 && ra() < 0.25) return [120, 60, 220, 255];
+        return null;
+      }));
+
+      // bubbling slime: a green puddle with bubbles swelling and popping
+      const rs = seeded(501);
+      const blobs = Array.from({ length: 8 }, () => [16 + (rs() - 0.5) * 14, 16 + (rs() - 0.5) * 14, 7 + rs() * 6]);
+      const bubbles = Array.from({ length: 7 }, (_, i) => ({ x: 6 + rs() * 20, y: 6 + rs() * 20, ph: i }));
+      const rn = seeded(601 + f);
+      slime.push(pixTex(32, (x, y) => {
+        let m = 0;
+        for (const [bx, by, br] of blobs) m = Math.max(m, 1 - Math.hypot(x - bx, y - by) / br);
+        if (m <= 0) return null;
+        for (const b of bubbles) {
+          const stage = (b.ph + f) % 4; // 0 small, 1 big, 2 popping ring, 3 gone
+          const d = Math.hypot(x - b.x, y - b.y);
+          if (stage === 0 && d < 1.3) return [190, 255, 120, 255];
+          if (stage === 1 && d < 2.4) return d > 1.5 ? [170, 245, 100, 255] : [220, 255, 170, 255];
+          if (stage === 2 && Math.abs(d - 3) < 0.6) return [200, 255, 140, 255];
+        }
+        const n = rn();
+        if (m < 0.18) return [30, 80, 12, 255];
+        return n < 0.1 ? [120, 210, 60, 255] : m > 0.55 ? [70, 170, 34, 255] : [50, 130, 22, 255];
+      }));
+    }
+    for (const t of slime) t.colorSpace = THREE.SRGBColorSpace;
+    this.fieldFrames = { flame, arc, slime };
+
+    const quad = new THREE.PlaneGeometry(1, 1.25);
+    quad.translate(0, 0.625, 0);
+    // lean the standing quads back so they face the tilted camera at full height
+    quad.rotateX(-THREE.MathUtils.degToRad(90 - 32));
+    this.fieldGeo = {
+      quad,
+      ground: new THREE.PlaneGeometry(0.98, 0.98).rotateX(-Math.PI / 2),
+      glow: new THREE.PlaneGeometry(1.7, 1.7).rotateX(-Math.PI / 2),
+      wall: new THREE.BoxGeometry(0.96, 1.6, 0.96).translate(0, 0.8, 0),
+    };
+    const cut = (map: THREE.Texture) => new THREE.MeshBasicMaterial({ map, transparent: true, alphaTest: 0.5, depthWrite: false, side: THREE.DoubleSide });
+    const add = (map: THREE.Texture, color = 0xffffff, opacity = 1) => new THREE.MeshBasicMaterial({
+      map, color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    this.fieldMats = {
+      flameA: cut(flame[0]), flameB: cut(flame[2]),
+      fireGround: add(this.tex.fieldFire, 0xffffff, 0.85),
+      fireGlow: add(this.tex.glow, 0xff6a10, 0.55),
+      arcA: add(arc[0]), arcB: add(arc[2]),
+      energyGround: add(this.tex.fieldEnergy, 0xffffff, 0.9),
+      energyGlow: add(this.tex.glow, 0x8a4aff, 0.6),
+      slimeA: new THREE.MeshBasicMaterial({ map: slime[0], transparent: true, alphaTest: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+      slimeB: new THREE.MeshBasicMaterial({ map: slime[2], transparent: true, alphaTest: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+      poisonGlow: add(this.tex.glow, 0x4aff2a, 0.35),
+      wall: new THREE.MeshBasicMaterial({ map: this.tex.wall, color: 0xc8dcff, transparent: true, opacity: 0.82, depthWrite: false }),
+      wallGlow: add(this.tex.glow, 0x6a9aff, 0.7),
+    };
+  }
+
+  /**
+   * The standing look of a field or magic wall on one tile: tall flickering
+   * flames, crackling arcs, bubbling slime or a rune-lit wall. Built from shared
+   * geometry and materials only; the caller just adds it to the scene and
+   * drops it when the field goes (nothing to dispose).
+   */
+  fieldObject(kind: FieldKind, x: number, z: number): THREE.Object3D {
+    if (!this.fieldFrames) this.buildFieldFrames();
+    const G = this.fieldGeo!;
+    const M = this.fieldMats;
+    const g = new THREE.Group();
+    const phase = (x + z) & 1;
+    const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, order: number, px = 0, py = 0, pz = 0, sx = 1, sy = 1) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(px, py, pz);
+      m.scale.set(sx, sy, 1);
+      m.renderOrder = order;
+      m.frustumCulled = false;
+      g.add(m);
+      return m;
+    };
+    const h = (k: number) => {
+      const v = Math.sin(x * 12.9898 + z * 78.233 + k * 37.719) * 43758.5453;
+      return v - Math.floor(v);
+    };
+    switch (kind) {
+      case 'fire': {
+        mesh(G.glow, M.fireGlow, 3, 0, 0.03, 0);
+        mesh(G.ground, M.fireGround, 4, 0, 0.035, 0);
+        // a back row and a front row of flames, mirrored at random
+        mesh(G.quad, phase ? M.flameA : M.flameB, 5, (h(1) - 0.5) * 0.1, 0.02, -0.22, h(2) < 0.5 ? -1 : 1, 0.95 + h(3) * 0.3);
+        mesh(G.quad, phase ? M.flameB : M.flameA, 6, (h(4) - 0.5) * 0.12, 0.02, 0.18, (h(5) < 0.5 ? -1 : 1) * 0.92, 0.75 + h(6) * 0.25);
+        break;
+      }
+      case 'energy': {
+        mesh(G.glow, M.energyGlow, 3, 0, 0.03, 0);
+        mesh(G.ground, M.energyGround, 4, 0, 0.035, 0);
+        mesh(G.quad, phase ? M.arcA : M.arcB, 6, 0, 0.02, -0.15, h(2) < 0.5 ? -1 : 1, 0.85 + h(3) * 0.3);
+        mesh(G.quad, phase ? M.arcB : M.arcA, 6, 0, 0.02, 0.2, (h(5) < 0.5 ? -1 : 1) * 0.8, 0.6 + h(6) * 0.2);
+        break;
+      }
+      case 'poison': {
+        mesh(G.glow, M.poisonGlow, 3, 0, 0.03, 0);
+        const s = mesh(G.ground, phase ? M.slimeA : M.slimeB, 4, 0, 0.04, 0);
+        s.rotation.y = Math.floor(h(7) * 4) * (Math.PI / 2);
+        break;
+      }
+      case 'wall': {
+        mesh(G.glow, M.wallGlow, 3, 0, 0.03, 0, 1.2, 1.2);
+        mesh(G.wall, M.wall, 6);
+        break;
+      }
+    }
+    return g;
+  }
+
+  private animateFields(): void {
+    if (!this.fieldFrames) return;
+    const F = this.fieldFrames;
+    const M = this.fieldMats as Record<string, THREE.MeshBasicMaterial>;
+    const fi = Math.floor(this.time * 9) % 4;
+    const ai = Math.floor(this.time * 14) % 4;
+    const si = Math.floor(this.time * 3.5) % 4;
+    M.flameA.map = F.flame[fi];
+    M.flameB.map = F.flame[(fi + 2) % 4];
+    M.arcA.map = F.arc[ai];
+    M.arcB.map = F.arc[(ai + 1) % 4];
+    // arcs blink like real sparks
+    const blink = Math.floor(this.time * 20) % 5;
+    M.arcA.opacity = blink === 0 ? 0.35 : 1;
+    M.arcB.opacity = blink === 2 ? 0.35 : 1;
+    M.slimeA.map = F.slime[si];
+    M.slimeB.map = F.slime[(si + 2) % 4];
+    const step = (v: number) => Math.round(v * 5) / 5;
+    M.fireGlow.opacity = step(0.45 + 0.2 * Math.sin(this.time * 11) * Math.sin(this.time * 4.3));
+    M.fireGround.opacity = step(0.7 + 0.2 * Math.sin(this.time * 9));
+    M.energyGround.opacity = Math.floor(this.time * 20) % 7 === 0 ? 1 : 0.7;
+    M.wall.opacity = step(0.74 + 0.1 * Math.sin(this.time * 3));
+    M.wallGlow.opacity = step(0.55 + 0.2 * Math.sin(this.time * 5));
+    this.tex.wall.offset.y = (this.time * 0.12) % 1;
+  }
+
   // ------------------------------------------------------------------ markers
 
   /** Flat square outline lying on a tile. */
@@ -539,16 +1170,20 @@ export class Effects {
     else this.timers.push({ t, fn });
   }
 
-  private particle(glow: boolean, x: number, y: number, z: number, vx: number, vy: number, vz: number, max: number, size: number, color: number, o: Partial<Particle> = {}): Particle {
+  /** How busy the effect layer is, 0..1 (extras are skipped when it is crowded). */
+  private load(): number {
+    return Math.max(this.tileFx.length / MAX_TILE_FX, (this.solid.length + this.glow.length) / (MAX_SOLID + MAX_GLOW));
+  }
+
+  private particle(glow: boolean, x: number, y: number, z: number, vx: number, vy: number, vz: number, max: number, size: number, color: number, o: Partial<Particle> = {}): void {
+    const list = glow ? this.glow : this.solid;
+    const cap = glow ? MAX_GLOW : MAX_SOLID;
     const p: Particle = {
       x, y, z, vx, vy, vz, life: 0, max, size, grow: 0, g: 0, drag: 0, c0: col(color), c1: null,
       floor: Number.NaN, bounce: 0, stretch: 0, spin: 4, orbit: false, ox: 0, oz: 0, or: 0, oa: 0, ow: 0, oshrink: 0, pop: 0, ...o,
     };
-    const list = glow ? this.glow : this.solid;
-    const cap = glow ? MAX_GLOW : MAX_SOLID;
     if (list.length >= cap) list[Math.floor(Math.random() * cap)] = p;
     else list.push(p);
-    return p;
   }
 
   private take<M extends THREE.Object3D>(pool: Slot<M>[]): Slot<M> {
@@ -575,18 +1210,6 @@ export class Effects {
     (s.obj.material as THREE.MeshBasicMaterial).color.setHex(color);
   }
 
-  /** A glowing tile, the classic area-spell look. */
-  tileFlash(x: number, y: number, z: number, effect: Effect, delay = 0, dur = 0.55, colorHex?: number): void {
-    const s = this.take(this.flashes);
-    s.busy = true;
-    s.life = 0;
-    s.max = dur;
-    s.delay = delay;
-    s.obj.position.set(x, y + 0.04, z);
-    s.obj.visible = false;
-    (s.obj.material as THREE.MeshBasicMaterial).color.setHex(colorHex ?? EFFECT_COLOR[effect]);
-  }
-
   /** A mark left on the ground that fades after a few seconds. */
   decal(x: number, y: number, z: number, kind: DecalKind, size: number, life: number, tint = 0xffffff, additive = false, delay = 0): void {
     const s = this.take(this.decals);
@@ -608,121 +1231,9 @@ export class Effects {
     m.color.setHex(tint);
   }
 
-  /** A camera-facing glow (flash, fireball core, implosion, skull). */
-  sprite(pos: THREE.Vector3, color: number, from: number, to: number, dur: number, o: { delay?: number; rise?: number; tex?: 'glow' | 'skull'; dark?: boolean; peak?: number; hold?: number } = {}): void {
-    const s = this.take(this.sprites);
-    s.busy = true;
-    s.life = 0;
-    s.max = dur;
-    s.delay = o.delay ?? 0;
-    s.data = { from, to, rise: o.rise ?? 0, peak: o.peak ?? 1, hold: o.hold ?? 0.15 };
-    s.obj.position.copy(pos);
-    s.obj.scale.setScalar(from);
-    s.obj.visible = false;
-    const m = s.obj.material as THREE.SpriteMaterial;
-    const map = o.tex === 'skull' ? this.tex.skull : this.tex.glow;
-    if (m.map !== map) {
-      m.map = map;
-      m.needsUpdate = true;
-    }
-    m.blending = o.dark || o.tex === 'skull' ? THREE.NormalBlending : THREE.AdditiveBlending;
-    m.color.setHex(color);
-  }
-
-  /** A rising column of light. */
-  column(pos: THREE.Vector3, color: number, radius: number, height: number, dur: number, delay = 0): void {
-    const s = this.take(this.columns);
-    s.busy = true;
-    s.life = 0;
-    s.max = dur;
-    s.delay = delay;
-    s.data = { r: radius, h: height };
-    s.obj.position.copy(pos);
-    s.obj.visible = false;
-    (s.obj.material as THREE.MeshBasicMaterial).color.setHex(color);
-  }
-
-  /** A shimmering half-sphere (shields and buffs). */
-  dome(pos: THREE.Vector3, color: number, radius: number, dur: number): void {
-    const s = this.take(this.domes);
-    s.busy = true;
-    s.life = 0;
-    s.max = dur;
-    s.delay = 0;
-    s.data = { r: radius };
-    s.obj.position.copy(pos);
-    s.obj.visible = false;
-    (s.obj.material as THREE.MeshBasicMaterial).color.setHex(color);
-  }
-
-  /** A jagged lightning bolt that re-forks every few frames. */
-  bolt(from: THREE.Vector3, to: THREE.Vector3, color: number, dur: number, jitter = 0.3, delay = 0): void {
-    const s = this.take(this.bolts);
-    s.busy = true;
-    s.life = 0;
-    s.max = dur;
-    s.delay = delay;
-    s.data = { fx: from.x, fy: from.y, fz: from.z, tx: to.x, ty: to.y, tz: to.z, j: jitter, next: 0 };
-    s.color.setHex(color);
-    s.obj.visible = false;
-    const [core, glow] = s.obj.children as THREE.Line[];
-    (core.material as THREE.LineBasicMaterial).color.copy(WHITE).lerp(col(color), 0.25);
-    (glow.material as THREE.LineBasicMaterial).color.setHex(color);
-    this.reforkBolt(s);
-  }
-
-  private reforkBolt(s: Slot<THREE.Group>): void {
-    const d = s.data;
-    const lines = s.obj.children as THREE.Line[];
-    const from = tmpV.set(d.fx, d.fy, d.fz);
-    const to = tmpV2.set(d.tx, d.ty, d.tz);
-    const len = from.distanceTo(to);
-    // sideways direction, horizontal and perpendicular to the bolt
-    const sx = -(to.z - from.z), sz = to.x - from.x;
-    const sl = Math.hypot(sx, sz) || 1;
-    const vertical = Math.abs(to.y - from.y) > len * 0.7;
-    for (let k = 0; k < 2; k++) {
-      const attr = lines[k].geometry.getAttribute('position') as THREE.BufferAttribute;
-      let off = 0;
-      let offY = 0;
-      for (let i = 0; i < BOLT_PTS; i++) {
-        const t = i / (BOLT_PTS - 1);
-        const env = Math.sin(t * Math.PI);
-        if (i > 0 && i < BOLT_PTS - 1) {
-          off += (Math.random() - 0.5) * d.j;
-          offY += (Math.random() - 0.5) * d.j * 0.5;
-        }
-        off *= 0.85;
-        const o = off * (0.3 + env);
-        const shift = k * 0.035;
-        const x = from.x + (to.x - from.x) * t + (vertical ? o : (sx / sl) * o) + shift;
-        const z = from.z + (to.z - from.z) * t + (vertical ? offY * 1.6 : (sz / sl) * o);
-        const y = from.y + (to.y - from.y) * t + (vertical ? 0 : offY);
-        attr.setXYZ(i, x, y, z);
-      }
-      attr.needsUpdate = true;
-    }
-  }
-
-  /** A straight beam from `from` to `to` (energy beams). */
-  beamMesh(from: THREE.Vector3, to: THREE.Vector3, color: number, dur: number, width = 0.32): void {
-    const s = this.take(this.beams);
-    s.busy = true;
-    s.life = 0;
-    s.max = dur;
-    s.delay = 0;
-    const len = from.distanceTo(to);
-    s.data = { len, w: width };
-    s.obj.position.copy(from);
-    s.obj.lookAt(to);
-    s.obj.visible = false;
-    const [glow, core] = s.obj.children as THREE.Mesh[];
-    (glow.material as THREE.MeshBasicMaterial).color.setHex(color);
-    (core.material as THREE.MeshBasicMaterial).color.copy(WHITE).lerp(col(color), 0.15);
-  }
-
-  /** A brief point-light flash from a small shared pool. */
+  /** A brief point-light flash from a small shared pool; skipped when the pool is busy and the screen is crowded. */
   light(pos: THREE.Vector3, color: number, intensity: number, distance: number, dur: number, delay = 0): void {
+    if (this.lights.every((l) => l.busy) && this.load() > 0.3) return;
     const s = this.take(this.lights);
     s.busy = true;
     s.life = 0;
@@ -749,7 +1260,15 @@ export class Effects {
     return { x: Math.round((Math.random() * 2 - 1) * a), y: Math.round((Math.random() * 2 - 1) * a) };
   }
 
-  // ------------------------------------------------------------------ simple particle bursts
+  /** Shake if the local player stands near; skipped when lots is going on. */
+  shakeNear(x: number, z: number, amount: number, dur = 0.3): void {
+    const f = this.focus;
+    if (!f || this.load() > 0.75) return;
+    const d = Math.max(Math.abs(f.x - x), Math.abs(f.z - z));
+    if (d <= 6) this.shake(amount * (d <= 2 ? 1 : d <= 4 ? 0.6 : 0.35), dur);
+  }
+
+  // ------------------------------------------------------------------ small particle bursts
 
   burst(pos: THREE.Vector3, color: number, count: number, speed = 2.2, gravity = 7, size = 0.07): void {
     for (let i = 0; i < count; i++) {
@@ -761,7 +1280,7 @@ export class Effects {
     }
   }
 
-  /** Rising sparkles (level up, buffs). */
+  /** Rising sparkles (level up). */
   sparkle(pos: THREE.Vector3, color: number, count: number, radius = 0.5): void {
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -771,101 +1290,72 @@ export class Effects {
     }
   }
 
-  /** Motes spiralling up around a point (heals, mana, conjuring). */
-  spiral(x: number, y: number, z: number, colors: readonly number[], count: number, radius: number, rise: number, dur: number, size = 0.07): void {
-    for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2 * 2 + Math.random() * 0.4;
-      this.particle(true, x, y + Math.random() * 0.25, z, 0, rise * rand(0.7, 1.3), 0, dur * rand(0.7, 1.1), size * rand(0.7, 1.3), pick(colors), {
-        orbit: true, ox: x, oz: z, or: radius * rand(0.75, 1.15), oa: a, ow: rand(4.5, 7) * (i % 2 ? 1 : -1) * (i % 5 === 0 ? -1 : 1), oshrink: 0.35, spin: 0,
-        c1: col(0xffffff),
-      });
+  // ------------------------------------------------------------------ tile animations
+
+  /** The tile animation an element plays. */
+  animFor(effect: Effect): TileAnim {
+    switch (effect) {
+      case 'fire': return 'fire';
+      case 'energy': return 'energy';
+      case 'ice': return 'ice';
+      case 'earth': case 'stone': return 'earth';
+      case 'death': return 'death';
+      case 'holy': case 'light': return 'holy';
+      case 'heal': return 'heal';
+      case 'haste': return 'teleport';
+      case 'shield': return 'buff';
+      default: return 'hit';
     }
   }
 
-  // ------------------------------------------------------------------ element pieces
-
-  /** Debris and glow thrown out by an element at a point. `n` scales the amount. */
-  private debris(effect: Effect, x: number, y: number, z: number, floor: number, n: number, speed: number): void {
-    const out = (glow: boolean, max: number, size: number, color: number, up: number, o: Partial<Particle> = {}) => {
-      const a = Math.random() * Math.PI * 2;
-      const sp = speed * rand(0.35, 1.1);
-      return this.particle(glow, x, y, z, Math.cos(a) * sp, up * rand(0.5, 1.2), Math.sin(a) * sp, max, size, color, o);
-    };
-    switch (effect) {
-      case 'fire':
-        for (let i = 0; i < n; i++) {
-          // burning chunks: arc out, bounce, cool from yellow to dark red
-          out(true, rand(0.6, 1.1), rand(0.06, 0.11), pick([0xffe070, 0xffb030, 0xff7a1a]), rand(3, 5.5), { g: 11, floor, bounce: 0.35, c1: col(0x8a1a05), drag: 0.4 });
-          if (i % 2 === 0) out(true, rand(0.4, 0.7), rand(0.08, 0.14), 0xff9a2a, rand(1.5, 3), { g: -2.5, drag: 2.5, c1: col(0xa01a00), grow: 0.6 });
-          if (i % 3 === 0) out(false, rand(1.0, 1.6), rand(0.1, 0.16), pick([0x2a2420, 0x3a302a, 0x1e1a18]), rand(0.6, 1.4), { g: -1.2, drag: 2.2, grow: 1.8 });
-        }
-        break;
-      case 'ice':
-        for (let i = 0; i < n; i++) {
-          out(false, rand(0.6, 1.0), rand(0.05, 0.09), pick([0xe8fbff, 0xb6ecff, 0x8adcff]), rand(3, 5), { g: 12, floor, bounce: 0.25, stretch: 2.2, drag: 0.3 });
-          if (i % 2 === 0) out(true, rand(0.5, 0.9), rand(0.08, 0.14), 0x9fdcff, rand(0.3, 0.8), { drag: 3, grow: 1.4, c1: col(0x2a5a8a) });
-        }
-        break;
-      case 'earth':
-      case 'stone':
-        for (let i = 0; i < n; i++) {
-          out(false, rand(0.7, 1.2), rand(0.08, 0.16), pick([0x7a6a58, 0x5a5048, 0x8a7a62, 0x4a4038]), rand(3.5, 6), { g: 14, floor, bounce: 0.3, drag: 0.3, spin: 8 });
-          if (i % 2 === 0) out(false, rand(0.8, 1.3), rand(0.1, 0.16), pick([0xa89a7a, 0x8a7e66]), rand(0.4, 1), { g: -0.6, drag: 3, grow: 2 });
-          if (effect === 'earth' && i % 2 === 1) out(true, rand(0.6, 1.0), rand(0.05, 0.08), pick([0x9aff5a, 0x6ad03a]), rand(1, 2.2), { g: 1.5, drag: 1.5, c1: col(0x1a5a10) });
-        }
-        break;
-      case 'energy':
-        for (let i = 0; i < n; i++) {
-          out(true, rand(0.25, 0.5), rand(0.04, 0.06), pick([0xffffff, 0xe2c8ff, 0xb07aff]), rand(1.5, 4), { g: 6, drag: 1.2, stretch: 3, c1: col(0x5a2aa0), floor, bounce: 0.5 });
-        }
-        break;
-      case 'death':
-        for (let i = 0; i < n; i++) {
-          out(false, rand(1.0, 1.6), rand(0.1, 0.16), pick([0x140a18, 0x22102a, 0x0a060c]), rand(0.6, 1.6), { g: -1.5, drag: 2.4, grow: 1.6 });
-          if (i % 2 === 0) out(true, rand(0.6, 1.0), rand(0.05, 0.08), pick([0xc06aff, 0x8a3ab0, 0xe0a0ff]), rand(1, 2.4), { g: -1, drag: 1.8, c1: col(0x2a0a40) });
-        }
-        break;
-      case 'holy':
-      case 'light':
-        for (let i = 0; i < n; i++) out(true, rand(0.6, 1.1), rand(0.05, 0.08), pick([0xfff6c0, 0xffe27a, 0xffffff]), rand(1.5, 3), { g: -1, drag: 1.6, c1: col(0xb08020) });
-        break;
-      case 'blood':
-        for (let i = 0; i < n; i++) {
-          out(false, rand(0.5, 0.9), rand(0.05, 0.1), pick([0xb3221b, 0x8a140e, 0xd0302a]), rand(2.5, 4.5), { g: 12, floor, bounce: 0.1 });
-          if (i % 2 === 0) out(false, rand(0.8, 1.2), rand(0.1, 0.15), 0x9a8a72, rand(0.3, 0.9), { g: -0.5, drag: 3, grow: 1.6 });
-        }
-        break;
-      case 'heal':
-        for (let i = 0; i < n; i++) out(true, rand(0.7, 1.2), rand(0.05, 0.08), pick([0x7dff9a, 0xffe27a, 0xd8ffe0]), rand(1.2, 2.4), { g: -0.5, drag: 1.5, spin: 0 });
-        break;
-      default:
-        for (let i = 0; i < n; i++) out(false, rand(0.4, 0.7), rand(0.05, 0.08), EFFECT_COLOR[effect], rand(2, 3.5), { g: 9, floor, bounce: 0.3 });
+  /** Plays `anim` centred on a world point (seen from the camera), e.g. a creature's chest. */
+  playAt(anim: TileAnim, at: THREE.Vector3, delay = 0, scale = 1, dur = 0.6): void {
+    let fx: TileFx;
+    if (this.tileFx.length >= MAX_TILE_FX) {
+      // full: recycle the oldest-looking one
+      fx = this.tileFx[Math.floor(Math.random() * MAX_TILE_FX)];
+    } else {
+      fx = { x: 0, y: 0, z: 0, row: 0, t: 0, dur: 0, delay: 0, scale: 1 };
+      this.tileFx.push(fx);
     }
+    // pulled toward the camera so it draws over whoever stands there; an
+    // orthographic view does not move it on screen
+    fx.x = at.x + TO_CAM.x;
+    fx.y = at.y + TO_CAM.y;
+    fx.z = at.z + TO_CAM.z;
+    fx.row = ANIM_ROW[anim];
+    fx.t = 0;
+    fx.dur = dur;
+    fx.delay = delay;
+    fx.scale = scale;
+  }
+
+  /** Plays `anim` on tile (x, z) of the floor at height `off`. */
+  playTile(anim: TileAnim, x: number, off: number, z: number, delay = 0, scale = 1, dur = 0.6): void {
+    this.playAt(anim, tmpV2.set(x, off + 0.02, z), delay, scale, dur);
   }
 
   private flashColor(effect: Effect): number {
     switch (effect) {
-      case 'fire': return 0xffc060;
-      case 'ice': return 0xd8f6ff;
-      case 'energy': return 0xe6d0ff;
-      case 'earth': return 0xb8ff80;
-      case 'stone': return 0xd8c8a8;
-      case 'death': return 0xb050ff;
-      case 'holy': case 'light': return 0xfff4c0;
-      case 'blood': return 0xff6040;
+      case 'fire': return 0xffa040;
+      case 'ice': return 0xa8e6ff;
+      case 'energy': return 0xc890ff;
+      case 'earth': case 'stone': return 0x9ae060;
+      case 'death': return 0x9040e0;
+      case 'holy': case 'light': return 0xfff0b0;
+      case 'heal': return 0x9dc8ff;
       default: return 0xffffff;
     }
   }
 
-  private decalFor(effect: Effect): { kind: DecalKind; tint: number; add: boolean } | null {
+  private decalFor(effect: Effect): { kind: DecalKind; tint: number } | null {
     switch (effect) {
-      case 'fire': return { kind: 'scorch', tint: 0xffffff, add: false };
-      case 'ice': return { kind: 'frost', tint: 0xffffff, add: false };
-      case 'earth': return { kind: 'crack', tint: 0xb0d890, add: false };
-      case 'stone': case 'physical': case 'blood': return { kind: 'crack', tint: 0xffffff, add: false };
-      case 'energy': return { kind: 'burn', tint: 0xd0b8ff, add: false };
-      case 'death': return { kind: 'death', tint: 0xffffff, add: false };
-      case 'holy': case 'light': return { kind: 'sigil', tint: 0xb89a40, add: true };
+      case 'fire': return { kind: 'scorch', tint: 0xffffff };
+      case 'ice': return { kind: 'frost', tint: 0xffffff };
+      case 'earth': return { kind: 'crack', tint: 0xb0d890 };
+      case 'stone': return { kind: 'crack', tint: 0xffffff };
+      case 'energy': return { kind: 'burn', tint: 0xd0b8ff };
+      case 'death': return { kind: 'death', tint: 0xffffff };
       default: return null;
     }
   }
@@ -873,514 +1363,99 @@ export class Effects {
   // ------------------------------------------------------------------ spell and rune looks
 
   /**
-   * Area spell or rune: a short anticipation flash, then the blast — core
-   * flash, shockwave, tiles lighting outwards, element debris, a lingering
-   * ground mark and a light flash.
+   * Area spell or rune: every affected tile plays the element's burst at the
+   * same moment. The ultimate spells (radius 4+) roll out from the caster in a
+   * fast stagger and add a light flash, ground marks and a shake.
    */
   explosion(cx: number, cz: number, off: number, radius: number, effect: Effect): void {
     const R = Math.max(0, radius);
-    const big = R >= 2;
-    const fc = this.flashColor(effect);
-    const color = EFFECT_COLOR[effect];
-    const centre = new THREE.Vector3(cx, off + 0.35, cz);
-    const ground = new THREE.Vector3(cx, off + 0.05, cz);
-
-    if (effect === 'heal') return this.massHeal(cx, cz, off, R);
-    if (R >= 4) return this.ultimate(cx, cz, off, R, effect);
-
-    // anticipation: everything is sucked in for a blink
-    const pre = effect === 'death' ? 0.16 : 0.1;
-    if (effect === 'death') {
-      this.sprite(centre, 0x12041c, 1.6 + R * 0.7, 0.25, pre + 0.04, { dark: true, peak: 0.9 });
-      this.sprite(centre, 0x9a40ff, 1.2 + R * 0.6, 0.2, pre + 0.04, { peak: 0.6 });
-      for (let i = 0; i < 18 + R * 6; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const r = 0.6 + R * 0.7 + Math.random() * 0.6;
-        this.particle(true, cx + Math.cos(a) * r, off + rand(0.2, 1.0), cz + Math.sin(a) * r, -Math.cos(a) * r / pre, rand(-1, 1), -Math.sin(a) * r / pre, pre, 0.06, 0xd090ff, { spin: 0, stretch: 1.2 });
-      }
-    } else {
-      this.sprite(centre, fc, 0.3, 0.9 + R * 0.35, pre + 0.04, { peak: 0.8 });
-      this.ring(ground, fc, 0.6 + R * 1.0, 0.15, pre, 0, false, 0, 0.7);
-    }
-
-    this.after(pre, () => {
-      // the blast
-      this.sprite(centre, fc, 0.6, 1.6 + R * 1.1, 0.28, { peak: 1, hold: 0.05 });
-      this.sprite(centre.clone().setY(off + 0.25), color, 0.8, 2.2 + R * 1.3, 0.5, { peak: 0.75, hold: 0.1 });
-      this.ring(ground, fc, 0.3, R + 0.75, 0.4 + R * 0.04, 0, true, 0, 1);
-      this.ring(ground.clone().setY(off + 0.06), color, 0.2, R + 1.4, 0.65, 0, false, 0.05, 0.6);
-      this.light(new THREE.Vector3(cx, off + 1.4, cz), fc, 5 + R * 3, 4 + R * 2.5, 0.45);
-      if (big) this.shakeNear(cx, cz, 1.5 + R * 0.5);
-
-      // tiles light up outwards
-      for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
-        if (dx * dx + dy * dy > R * R + R) continue;
-        const d = Math.max(Math.abs(dx), Math.abs(dy));
-        const delay = d * 0.05;
-        this.tileFlash(cx + dx, off, cz + dy, effect, delay, 0.5, fc);
-        this.after(delay, () => this.tileBurst(effect, cx + dx, off, cz + dy, d === 0 ? 1 : 0.6));
-      }
-      // main debris from the centre
-      this.debris(effect, cx, off + 0.35, cz, off + 0.04, 14 + R * 8, 2.4 + R * 1.1);
-
-      // element signatures
-      switch (effect) {
-        case 'fire':
-          for (let i = 0; i < 2 + R * 2; i++) {
-            const a = Math.random() * Math.PI * 2, r = Math.random() * R;
-            this.sprite(new THREE.Vector3(cx + Math.cos(a) * r, off + rand(0.3, 0.7), cz + Math.sin(a) * r), pick([0xff9a2a, 0xffc04a, 0xff6010]), 0.3, rand(0.9, 1.5), rand(0.35, 0.5), { delay: rand(0, 0.15), rise: 0.8, peak: 0.8 });
-          }
-          break;
-        case 'energy':
-          for (let i = 0; i < 2 + R * 2; i++) {
-            const a = Math.random() * Math.PI * 2, r = i === 0 ? 0 : Math.random() * R;
-            const tx = cx + Math.cos(a) * r, tz = cz + Math.sin(a) * r;
-            this.bolt(new THREE.Vector3(tx + rand(-0.4, 0.4), off + 6, tz - 1.5), new THREE.Vector3(tx, off + 0.05, tz), 0xc89aff, 0.22, 0.45, i * 0.05);
-            this.after(i * 0.05, () => this.sprite(new THREE.Vector3(tx, off + 0.2, tz), 0xe6d0ff, 0.3, 1.2, 0.2, { peak: 0.9 }));
-          }
-          break;
-        case 'death':
-          this.sprite(centre.clone().setY(off + 0.6), 0xe8d8ff, 0.5, 0.95, 1.2, { tex: 'skull', rise: 0.9, peak: 1, hold: 0.25 });
-          this.spiral(cx, off + 0.2, cz, [0xb060ff, 0x6a20a0, 0xe0b0ff], 12 + R * 4, 0.4 + R * 0.25, 1.4, 1.2, 0.07);
-          break;
-        case 'holy':
-          this.column(new THREE.Vector3(cx, off, cz), 0xffe9a0, 0.5 + R * 0.25, 5, 0.7);
-          break;
-        case 'ice':
-          // ice spikes burst up from the ground
-          for (let i = 0; i < 3 + R * 3; i++) {
-            const a = Math.random() * Math.PI * 2, r = Math.random() * (R + 0.4);
-            this.particle(false, cx + Math.cos(a) * r, off + 0.05, cz + Math.sin(a) * r, 0, rand(2.5, 3.5), 0, rand(0.5, 0.8), rand(0.09, 0.13), pick([0xe8fbff, 0xb6ecff]), { g: 9, drag: 2, stretch: 3.2, spin: 0 });
-          }
-          break;
-        default:
-          break;
-      }
-
-      // ground marks that linger
-      const dec = this.decalFor(effect);
-      if (dec) {
-        const life = big ? 3.6 : 2.6;
-        this.decal(cx, off, cz, dec.kind, 1.2 + R * 0.9, life, dec.tint, dec.add);
-        const extra = R * 2;
-        for (let i = 0; i < extra; i++) {
-          const a = Math.random() * Math.PI * 2, r = rand(0.6, R);
-          this.decal(cx + Math.round(Math.cos(a) * r), off, cz + Math.round(Math.sin(a) * r), dec.kind, rand(0.6, 1.0), life * rand(0.6, 0.9), dec.tint, dec.add, rand(0.05, 0.25));
-        }
-      }
-    });
-  }
-
-  /**
-   * The ultimate explosions (radius 4+ around the caster): a gathering flash,
-   * then the element erupts across every tile, rolling outwards from the
-   * caster, with a blinding flash, a huge shockwave, heavy shake and scorched
-   * ground.
-   */
-  private ultimate(cx: number, cz: number, off: number, R: number, effect: Effect): void {
-    const fc = this.flashColor(effect);
-    const color = EFFECT_COLOR[effect];
-    const centre = new THREE.Vector3(cx, off + 0.5, cz);
-    const ground = new THREE.Vector3(cx, off + 0.05, cz);
-    const pre = 0.16;
-    // gathering: the caster draws the power in
-    this.sprite(centre, fc, 0.3, 1.6, pre + 0.05, { peak: 1 });
-    this.ring(ground, fc, R + 1.2, 0.2, pre, 0, true, 0, 0.8);
-    this.column(new THREE.Vector3(cx, off, cz), fc, 0.45, 4, pre + 0.2);
-    for (let i = 0; i < 30; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = R * rand(0.6, 1.1);
-      this.particle(true, cx + Math.cos(a) * r, off + rand(0.2, 1.4), cz + Math.sin(a) * r, -Math.cos(a) * r / pre, rand(-1, 1), -Math.sin(a) * r / pre, pre, 0.06, fc, { spin: 0, stretch: 2 });
-    }
-
-    this.after(pre, () => {
-      // blinding flash, huge light, shockwaves, shake
-      this.sprite(centre, 0xffffff, 1, 3 + R * 1.5, 0.3, { peak: 1, hold: 0.1 });
-      this.sprite(centre.clone().setY(off + 0.3), fc, 1, 4 + R * 2, 0.55, { peak: 0.9, hold: 0.15 });
-      this.light(new THREE.Vector3(cx, off + 2.5, cz), fc, 16, 9 + R * 2, 0.7);
-      this.light(new THREE.Vector3(cx + R * 0.6, off + 1.5, cz - R * 0.4), color, 8, 6 + R, 0.6, 0.12);
-      this.ring(ground, 0xffffff, 0.4, R + 1.3, 0.6, 0, true, 0, 1);
-      this.ring(ground.clone().setY(off + 0.06), fc, 0.3, R + 2.2, 0.85, 0, true, 0.08, 0.7);
-      this.ring(ground.clone().setY(off + 0.07), color, 0.2, R + 0.6, 0.5, 0, false, 0.2, 0.8);
-      this.shakeNear(cx, cz, 3.2, 0.7);
-      this.debris(effect, cx, off + 0.4, cz, off + 0.04, 30, 5);
-
-      for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
-        if (dx * dx + dy * dy > R * R + R || (dx === 0 && dy === 0)) continue;
-        const d = Math.max(Math.abs(dx), Math.abs(dy));
-        const delay = (d - 1) * 0.065 + Math.random() * 0.04;
-        const x = cx + dx, z = cz + dy;
-        this.tileFlash(x, off, z, effect, delay, 0.75, fc);
-        this.after(delay, () => this.ultimateTile(effect, x, off, z, cx, cz, d === R));
-      }
-    });
-  }
-
-  private ultimateTile(effect: Effect, x: number, off: number, z: number, cx: number, cz: number, edge: boolean): void {
-    // outward direction from the caster
-    let ox = x - cx, oz = z - cz;
-    const ol = Math.hypot(ox, oz) || 1;
-    ox /= ol;
-    oz /= ol;
-    const roll = Math.random();
-    switch (effect) {
-      case 'fire': {
-        // tall flame tongues
-        for (let i = 0; i < 5; i++) {
-          this.particle(true, x + rand(-0.4, 0.4), off + 0.08, z + rand(-0.4, 0.4), ox * rand(0.2, 0.9), rand(3, 5.5), oz * rand(0.2, 0.9), rand(0.45, 0.75), rand(0.1, 0.17), pick([0xfff0a0, 0xffd050, 0xffa030, 0xff7a1a]), { g: -0.5, drag: 1.2, c1: col(0x8a1000), grow: 0.5, spin: 0 });
-        }
-        // rolling fireballs
-        if (roll < 0.45) this.sprite(new THREE.Vector3(x + rand(-0.2, 0.2), off + rand(0.3, 0.6), z + rand(-0.2, 0.2)), pick([0xff9a2a, 0xffc04a, 0xff6010]), 0.4, rand(1.1, 1.7), rand(0.4, 0.6), { rise: 1.2, peak: 0.85, hold: 0.2 });
-        // burning chunks and smoke
-        this.particle(true, x, off + 0.3, z, ox * rand(1, 2.5) + rand(-0.5, 0.5), rand(3, 5), oz * rand(1, 2.5) + rand(-0.5, 0.5), rand(0.7, 1.1), rand(0.06, 0.1), 0xffd060, { g: 11, floor: off + 0.04, bounce: 0.35, c1: col(0x6a0a00) });
-        if (roll > 0.55) this.particle(false, x, off + 0.8, z, ox * 0.4, rand(0.8, 1.4), oz * 0.4, rand(1.4, 2), rand(0.14, 0.2), pick([0x2a2420, 0x1e1a18, 0x3a302a]), { g: -0.4, drag: 1.2, grow: 2.2 });
-        if (roll < 0.7) this.decal(x, off, z, 'scorch', rand(0.85, 1.15), rand(3, 4), 0xffffff, false, 0.1);
-        break;
-      }
-      case 'energy': {
-        // lightning on many tiles, arcs jumping between neighbours
-        if (roll < 0.42) {
-          this.bolt(new THREE.Vector3(x + rand(-0.5, 0.5), off + 7, z - 2), new THREE.Vector3(x, off + 0.05, z), pick([0xc89aff, 0xe6d0ff]), rand(0.2, 0.32), 0.5);
-          this.sprite(new THREE.Vector3(x, off + 0.25, z), 0xf0e4ff, 0.3, 1.5, 0.22, { peak: 1 });
-          this.decal(x, off, z, 'burn', rand(0.8, 1.1), rand(2.8, 3.8), 0xd0b8ff, false, 0.05);
-          this.debris('energy', x, off + 0.2, z, off + 0.04, 6, 2.5);
-        } else if (roll < 0.7) {
-          const a = Math.floor(Math.random() * 4) * (Math.PI / 2);
-          this.bolt(new THREE.Vector3(x, off + rand(0.1, 0.5), z), new THREE.Vector3(x + Math.round(Math.cos(a)), off + rand(0.1, 0.5), z + Math.round(Math.sin(a))), 0xb07aff, rand(0.15, 0.28), 0.35);
-        }
-        for (let i = 0; i < 3; i++) {
-          const a = Math.random() * Math.PI * 2;
-          this.particle(true, x, off + 0.15, z, Math.cos(a) * rand(1.5, 3), rand(0.5, 2.5), Math.sin(a) * rand(1.5, 3), rand(0.2, 0.4), 0.05, pick([0xffffff, 0xd8b8ff]), { g: 5, stretch: 3, c1: col(0x6a2ac0) });
-        }
-        break;
-      }
-      case 'ice': {
-        // the blizzard: ice spikes burst up, shards fly, frost spreads
-        for (let i = 0; i < 2; i++) this.particle(false, x + rand(-0.3, 0.3), off + 0.05, z + rand(-0.3, 0.3), 0, rand(3, 4.2), 0, rand(0.55, 0.85), rand(0.1, 0.15), pick([0xe8fbff, 0xb6ecff]), { g: 10, drag: 2.2, stretch: 3.5, spin: 0 });
-        for (let i = 0; i < 2; i++) this.particle(false, x, off + 0.3, z, ox * rand(1, 3) + rand(-1, 1), rand(2, 4), oz * rand(1, 3) + rand(-1, 1), rand(0.6, 0.9), rand(0.05, 0.08), pick([0xe8fbff, 0x8adcff]), { g: 12, floor: off + 0.04, bounce: 0.25, stretch: 2.2 });
-        this.particle(true, x, off + 0.25, z, -oz * 2.5, rand(0.2, 0.6), ox * 2.5, rand(0.7, 1.0), rand(0.16, 0.24), 0x6ab0e0, { drag: 1.5, grow: 1.6, spin: 0, c1: col(0x0a1a2a) });
-        if (roll < 0.35) this.sprite(new THREE.Vector3(x, off + 0.3, z), 0xd8f6ff, 0.3, 1.1, 0.3, { peak: 0.8 });
-        if (roll < 0.75) this.decal(x, off, z, 'frost', rand(0.9, 1.15), rand(3, 4), 0xffffff, false, 0.05);
-        break;
-      }
-      case 'earth': {
-        // the ground erupts: rocks, thorns and spores
-        for (let i = 0; i < 3; i++) this.particle(false, x + rand(-0.3, 0.3), off + 0.05, z + rand(-0.3, 0.3), ox * rand(0.3, 1.5) + rand(-0.6, 0.6), rand(3.5, 5.5), oz * rand(0.3, 1.5) + rand(-0.6, 0.6), rand(0.7, 1.0), rand(0.08, 0.16), pick([0x7a6a58, 0x5a5048, 0x8a7a62]), { g: 14, floor: off + 0.04, bounce: 0.3, spin: 9 });
-        if (roll < 0.6) for (let i = 0; i < 2; i++) this.particle(false, x + rand(-0.3, 0.3), off + 0.05, z + rand(-0.3, 0.3), rand(-0.2, 0.2), rand(3, 4), rand(-0.2, 0.2), rand(0.6, 0.9), rand(0.07, 0.1), pick([0x3a6a20, 0x4a8a2a, 0x2a5a18]), { g: 9, drag: 2.5, stretch: 3.5, spin: 0 });
-        this.particle(true, x, off + 0.2, z, rand(-0.6, 0.6), rand(1, 2.2), rand(-0.6, 0.6), 0.9, 0.06, 0x9aff5a, { drag: 1.5, c1: col(0x1a5a10) });
-        this.particle(false, x, off + 0.2, z, ox * 0.8, 0.5, oz * 0.8, 1.2, 0.18, 0x9a8c70, { drag: 2.2, grow: 2.2 });
-        if (roll < 0.65) this.decal(x, off, z, 'crack', rand(0.85, 1.1), rand(3, 4), 0xb0d890, false, 0.05);
-        break;
-      }
-      default:
-        this.tileBurst(effect, x, off, z, 1);
-        if (roll < 0.5) {
-          const dec = this.decalFor(effect);
-          if (dec) this.decal(x, off, z, dec.kind, rand(0.8, 1.1), rand(2.6, 3.6), dec.tint, dec.add, 0.05);
-        }
-    }
-    if (edge && roll < 0.5) this.ring(new THREE.Vector3(x, off + 0.06, z), this.flashColor(effect), 0.2, 0.6, 0.3, 0, true, 0, 0.6);
-  }
-
-  /** What one tile of an area or wave spits out. */
-  private tileBurst(effect: Effect, x: number, off: number, z: number, k: number): void {
-    const n = Math.max(1, Math.round(4 * k));
-    switch (effect) {
-      case 'fire':
-        for (let i = 0; i < n + 2; i++) {
-          this.particle(true, x + rand(-0.35, 0.35), off + 0.1, z + rand(-0.35, 0.35), rand(-0.3, 0.3), rand(1.6, 3), rand(-0.3, 0.3), rand(0.35, 0.6), rand(0.08, 0.14), pick([0xffe070, 0xffa030]), { g: -1, drag: 1.5, c1: col(0xa01a00), grow: 0.4, spin: 0 });
-        }
-        break;
-      case 'ice':
-        for (let i = 0; i < n; i++) {
-          this.particle(false, x + rand(-0.35, 0.35), off + 0.05, z + rand(-0.35, 0.35), rand(-0.4, 0.4), rand(1.8, 3), rand(-0.4, 0.4), rand(0.4, 0.7), rand(0.05, 0.09), pick([0xe8fbff, 0xb6ecff, 0x8adcff]), { g: 10, floor: off + 0.04, bounce: 0.2, stretch: 2.4 });
-        }
-        this.particle(true, x, off + 0.15, z, 0, 0.4, 0, 0.7, 0.2, 0x5a9ac8, { drag: 2, grow: 1.4, spin: 0, c1: col(0x0a1a2a) });
-        break;
-      case 'earth':
-      case 'stone':
-        for (let i = 0; i < n; i++) {
-          this.particle(false, x + rand(-0.3, 0.3), off + 0.05, z + rand(-0.3, 0.3), rand(-0.8, 0.8), rand(2.5, 4), rand(-0.8, 0.8), rand(0.6, 0.9), rand(0.07, 0.13), pick([0x7a6a58, 0x5a5048, 0x8a7a62]), { g: 14, floor: off + 0.04, bounce: 0.3, spin: 8 });
-        }
-        this.particle(false, x, off + 0.12, z, 0, 0.3, 0, 0.9, 0.16, 0x9a8c70, { drag: 3, grow: 1.8 });
-        break;
-      case 'energy':
-        for (let i = 0; i < n + 1; i++) {
-          const a = Math.random() * Math.PI * 2;
-          this.particle(true, x, off + 0.15, z, Math.cos(a) * rand(1.5, 3), rand(0.5, 2.5), Math.sin(a) * rand(1.5, 3), rand(0.2, 0.4), 0.05, pick([0xffffff, 0xd8b8ff]), { g: 5, stretch: 3, c1: col(0x6a2ac0) });
-        }
-        break;
-      case 'death':
-        for (let i = 0; i < n; i++) {
-          this.particle(false, x + rand(-0.3, 0.3), off + 0.1, z + rand(-0.3, 0.3), rand(-0.3, 0.3), rand(0.5, 1.2), rand(-0.3, 0.3), rand(0.8, 1.2), rand(0.1, 0.15), pick([0x140a18, 0x26102e]), { drag: 2, grow: 1.5, g: -0.5 });
-          if (i % 2 === 0) this.particle(true, x, off + 0.1, z, rand(-0.5, 0.5), rand(1, 2), rand(-0.5, 0.5), rand(0.5, 0.8), 0.06, 0xc070ff, { drag: 1.5, c1: col(0x2a0a40) });
-        }
-        break;
-      case 'blood':
-        for (let i = 0; i < n; i++) this.particle(false, x, off + 0.3, z, rand(-1.5, 1.5), rand(1.5, 3), rand(-1.5, 1.5), rand(0.5, 0.8), rand(0.05, 0.09), pick([0xb3221b, 0x8a140e]), { g: 12, floor: off + 0.04, bounce: 0.1 });
-        break;
-      case 'holy':
-      case 'light':
-      case 'heal':
-        for (let i = 0; i < n; i++) this.particle(true, x + rand(-0.3, 0.3), off + 0.1, z + rand(-0.3, 0.3), 0, rand(1, 2.2), 0, rand(0.6, 1.0), 0.06, pick([0xfff6c0, 0xffe27a]), { spin: 0, c1: col(0x806010) });
-        break;
-      default:
-        this.burst(new THREE.Vector3(x, off + 0.15, z), EFFECT_COLOR[effect], n, 1.6, 5, 0.08);
-    }
-  }
-
-  /** Small single-target hit (missile lands, strike spell). `power` ~0.3–1.6 by damage. */
-  impact(pos: THREE.Vector3, effect: Effect, power = 1): void {
-    const p = Math.max(0.3, Math.min(1.6, power));
-    const fc = this.flashColor(effect);
-    const floor = pos.y - 0.6;
-    switch (effect) {
-      case 'heal':
-      case 'holy':
-      case 'light':
-        this.sprite(pos, fc, 0.3, 0.9 + p * 0.5, 0.3, { peak: 0.85 });
-        this.debris(effect, pos.x, pos.y, pos.z, floor, Math.round(8 + 8 * p), 1.4);
-        if (effect === 'holy' && p > 0.5) this.column(new THREE.Vector3(pos.x, floor + 0.05, pos.z), 0xffe9a0, 0.3, 4, 0.45);
-        return;
-      case 'death':
-        // implosion, then a dark burst and a skull rising from the victim
-        this.sprite(pos, 0x10041a, 1.1 + p * 0.4, 0.2, 0.14, { dark: true, peak: 0.95 });
-        this.sprite(pos, 0xa040ff, 0.9 + p * 0.3, 0.15, 0.14, { peak: 0.7 });
-        for (let i = 0; i < 12; i++) {
-          const a = Math.random() * Math.PI * 2, r = 0.7 + Math.random() * 0.3;
-          this.particle(true, pos.x + Math.cos(a) * r, pos.y + rand(-0.3, 0.4), pos.z + Math.sin(a) * r, -Math.cos(a) * r / 0.13, 0, -Math.sin(a) * r / 0.13, 0.13, 0.06, 0xe0b0ff, { spin: 0, stretch: 1.4 });
-        }
-        this.after(0.12, () => {
-          this.sprite(pos, 0xc070ff, 0.4, 1.3 + p * 0.6, 0.3, { peak: 1, hold: 0.05 });
-          this.sprite(pos.clone().setY(pos.y + 0.3), 0xeedcff, 0.45, 0.85, 1.1, { tex: 'skull', rise: 0.8, hold: 0.3 });
-          this.ring(new THREE.Vector3(pos.x, floor + 0.06, pos.z), 0xa040ff, 0.2, 1.1 + p * 0.4, 0.35, 0, true);
-          this.debris('death', pos.x, pos.y, pos.z, floor, Math.round(8 + 8 * p), 1.8);
-          this.spiral(pos.x, floor + 0.2, pos.z, [0xb060ff, 0x6a20a0, 0xe0b0ff], Math.round(6 + 6 * p), 0.35, 1.5, 1.0, 0.06);
-          if (p > 0.7) this.decal(pos.x, floor, pos.z, 'death', 0.9 + p * 0.3, 2.6, 0xffffff);
-          this.light(pos, 0xa040ff, 3 + p * 3, 4, 0.4);
-        });
-        return;
-      default: {
-        this.sprite(pos, fc, 0.3, 0.75 + p * 0.55, 0.22, { peak: 0.95, hold: 0.05 });
-        this.debris(effect, pos.x, pos.y, pos.z, floor, Math.round(6 + 7 * p), 1.8 + p * 0.8);
-        if (effect === 'energy') {
-          this.bolt(new THREE.Vector3(pos.x + rand(-0.3, 0.3), pos.y + 3.5, pos.z - 1), pos, 0xc89aff, 0.16, 0.3);
-        }
-        if (effect === 'ice') {
-          for (let i = 0; i < 4; i++) this.particle(false, pos.x + rand(-0.3, 0.3), floor + 0.05, pos.z + rand(-0.3, 0.3), 0, rand(2, 3), 0, 0.5, rand(0.07, 0.1), 0xe8fbff, { g: 9, drag: 2, stretch: 3, spin: 0 });
-        }
-        if (ELEMENTAL.has(effect) && effect !== 'physical') {
-          this.ring(new THREE.Vector3(pos.x, floor + 0.06, pos.z), fc, 0.2, 0.7 + p * 0.4, 0.3, 0, true, 0, 0.7);
-          if (p >= 0.6) this.light(pos, fc, 2 + p * 2.5, 3.5, 0.3);
-          const dec = this.decalFor(effect);
-          if (dec && p >= 0.9) this.decal(pos.x, floor, pos.z, dec.kind, 0.7 + p * 0.25, 2.2, dec.tint, dec.add);
-        }
-      }
-    }
-  }
-
-  /** Waves roll outwards row by row: each row bursts its element. `dir` = caster's facing. */
-  wave(tiles: number[], ox: number, oz: number, off: number, effect: Effect): void {
-    const fc = this.flashColor(effect);
-    let far = 1;
-    let sx = 0, sz = 0;
-    for (let i = 0; i < tiles.length; i += 2) {
-      const x = tiles[i], z = tiles[i + 1];
-      const d = Math.max(Math.abs(x - ox), Math.abs(z - oz));
-      far = Math.max(far, d);
-      sx += x;
-      sz += z;
-    }
-    const n = tiles.length / 2 || 1;
-    // direction the wave travels
-    let dx = sx / n - ox, dz = sz / n - oz;
-    const dl = Math.hypot(dx, dz) || 1;
-    dx /= dl;
-    dz /= dl;
-    for (let i = 0; i < tiles.length; i += 2) {
-      const x = tiles[i], z = tiles[i + 1];
-      const d = Math.max(Math.abs(x - ox), Math.abs(z - oz));
-      const delay = (d - 1) * 0.07;
-      this.tileFlash(x, off, z, effect, delay, 0.5, fc);
-      this.after(delay, () => this.waveTile(effect, x, off, z, dx, dz, d === far));
-    }
-    this.light(new THREE.Vector3(ox + dx * far * 0.6, off + 1.2, oz + dz * far * 0.6), fc, 4 + far, 5 + far, 0.5);
-    this.shakeNear(ox, oz, 1);
-    // the leading edge: a shockwave front along the last row
-    this.sprite(new THREE.Vector3(ox + dx * 0.8, off + 0.4, oz + dz * 0.8), fc, 0.3, 1.0, 0.18, { peak: 0.8 });
-  }
-
-  private waveTile(effect: Effect, x: number, off: number, z: number, dx: number, dz: number, last: boolean): void {
-    const push = 1.6;
-    switch (effect) {
-      case 'fire':
-        for (let i = 0; i < 6; i++) {
-          this.particle(true, x + rand(-0.4, 0.4), off + 0.1, z + rand(-0.4, 0.4), dx * push * rand(0.5, 1.2), rand(1.8, 3.4), dz * push * rand(0.5, 1.2), rand(0.35, 0.6), rand(0.09, 0.15), pick([0xffe070, 0xffb030, 0xff7a1a]), { g: -1, drag: 1.4, c1: col(0x901800), grow: 0.5, spin: 0 });
-        }
-        this.particle(false, x, off + 0.5, z, dx * 0.5, 1, dz * 0.5, 1.1, 0.13, 0x2a2420, { g: -0.6, drag: 2, grow: 1.6 });
-        this.particle(true, x, off + 0.2, z, rand(-1, 1), rand(2.5, 4), rand(-1, 1), 0.8, 0.07, 0xffd060, { g: 9, floor: off + 0.04, bounce: 0.3, c1: col(0x801000) });
-        if (last || Math.random() < 0.3) this.decal(x, off, z, 'scorch', rand(0.7, 1.0), rand(2.2, 3.2), 0xffffff);
-        break;
-      case 'ice':
-        for (let i = 0; i < 4; i++) {
-          this.particle(false, x + rand(-0.35, 0.35), off + 0.05, z + rand(-0.35, 0.35), dx * rand(0.2, 1), rand(2.2, 3.4), dz * rand(0.2, 1), rand(0.45, 0.75), rand(0.06, 0.1), pick([0xe8fbff, 0xb6ecff, 0x8adcff]), { g: 10, floor: off + 0.04, bounce: 0.25, stretch: 2.8 });
-        }
-        for (let i = 0; i < 2; i++) this.particle(true, x + rand(-0.3, 0.3), off + 0.2, z + rand(-0.3, 0.3), dx * push, rand(0.2, 0.6), dz * push, rand(0.6, 0.9), rand(0.14, 0.2), 0x6ab0e0, { drag: 2.5, grow: 1.5, spin: 0, c1: col(0x0a1a2a) });
-        if (last || Math.random() < 0.4) this.decal(x, off, z, 'frost', rand(0.8, 1.05), rand(2.4, 3.4), 0xffffff);
-        break;
-      case 'earth':
-      case 'stone':
-        for (let i = 0; i < 4; i++) {
-          this.particle(false, x + rand(-0.3, 0.3), off + 0.05, z + rand(-0.3, 0.3), dx * rand(0.3, 1.2) + rand(-0.5, 0.5), rand(3, 4.8), dz * rand(0.3, 1.2) + rand(-0.5, 0.5), rand(0.6, 0.9), rand(0.08, 0.15), pick([0x7a6a58, 0x5a5048, 0x8a7a62]), { g: 14, floor: off + 0.04, bounce: 0.3, spin: 9 });
-        }
-        if (effect === 'earth') for (let i = 0; i < 2; i++) this.particle(true, x, off + 0.2, z, rand(-0.6, 0.6), rand(1, 2), rand(-0.6, 0.6), 0.8, 0.06, 0x9aff5a, { drag: 1.5, c1: col(0x1a5a10) });
-        this.particle(false, x, off + 0.15, z, dx * 0.6, 0.4, dz * 0.6, 1.0, 0.16, 0x9a8c70, { drag: 2.5, grow: 2 });
-        if (last || Math.random() < 0.3) this.decal(x, off, z, 'crack', rand(0.7, 1.0), rand(2.2, 3.2), effect === 'earth' ? 0xb0d890 : 0xffffff);
-        break;
-      case 'energy':
-        for (let i = 0; i < 4; i++) {
-          const a = Math.random() * Math.PI * 2;
-          this.particle(true, x, off + 0.2, z, Math.cos(a) * 2 + dx * push, rand(0.5, 2.5), Math.sin(a) * 2 + dz * push, rand(0.2, 0.4), 0.05, pick([0xffffff, 0xd8b8ff]), { g: 5, stretch: 3, c1: col(0x6a2ac0) });
-        }
-        if (Math.random() < 0.5) this.bolt(new THREE.Vector3(x + rand(-0.4, 0.4), off + 0.05, z + rand(-0.4, 0.4)), new THREE.Vector3(x + rand(-0.4, 0.4), off + rand(0.5, 1), z + rand(-0.4, 0.4)), 0xc89aff, 0.14, 0.2);
-        if (last) this.decal(x, off, z, 'burn', 0.8, 2.4, 0xd0b8ff);
-        break;
-      default:
-        this.tileBurst(effect, x, off, z, 0.8);
-    }
-  }
-
-  /** A beam: a bright core and glow along the tiles, with crackling arcs. */
-  beam(tiles: number[], ox: number, oz: number, off: number, effect: Effect): void {
-    if (!tiles.length) return;
-    const fc = this.flashColor(effect);
-    const color = EFFECT_COLOR[effect];
-    const lx = tiles[tiles.length - 2], lz = tiles[tiles.length - 1];
-    const dx = Math.sign(lx - ox), dz = Math.sign(lz - oz);
-    const y = off + 0.6;
-    const from = new THREE.Vector3(ox + dx * 0.35, y, oz + dz * 0.35);
-    const to = new THREE.Vector3(lx + dx * 0.45, y, lz + dz * 0.45);
-    this.beamMesh(from, to, color, 0.42);
-    this.bolt(from, to, fc, 0.4, 0.22);
-    this.bolt(from, to, color, 0.35, 0.32, 0.04);
-    this.sprite(from, fc, 0.4, 1.1, 0.25, { peak: 1 });
-    this.sprite(to, fc, 0.4, 1.3, 0.35, { peak: 0.9, delay: 0.05 });
-    this.light(new THREE.Vector3((from.x + to.x) / 2, y + 0.6, (from.z + to.z) / 2), fc, 6, 6, 0.45);
-    for (let i = 0; i < tiles.length; i += 2) {
-      const x = tiles[i], z = tiles[i + 1];
-      const delay = (i / 2) * 0.02;
-      this.tileFlash(x, off, z, effect, delay, 0.45, fc);
-      this.after(delay, () => {
-        for (let k = 0; k < 5; k++) {
-          const a = Math.random() * Math.PI * 2;
-          this.particle(true, x, y + rand(-0.1, 0.1), z, Math.cos(a) * rand(1, 2.6), rand(-0.5, 2), Math.sin(a) * rand(1, 2.6), rand(0.2, 0.45), 0.05, pick([0xffffff, fc, color]), { g: 6, stretch: 3, floor: off + 0.04, bounce: 0.5, c1: col(0x4a1a90) });
-        }
-      });
-    }
-    this.decal(lx, off, lz, effect === 'energy' ? 'burn' : 'scorch', 0.9, 2.6, effect === 'energy' ? 0xd0b8ff : 0xffffff);
-    this.shakeNear(ox, oz, 1);
-  }
-
-  /** Mass healing: a wide ring of light sweeping out and motes rising on every tile. */
-  private massHeal(cx: number, cz: number, off: number, R: number): void {
-    const ground = new THREE.Vector3(cx, off + 0.05, cz);
-    this.decal(cx, off, cz, 'sigil', 1.6 + R * 0.8, 1.8, 0x5ad07a, true);
-    this.ring(ground, 0xb8ffc8, 0.3, R + 0.8, 0.7, 0, true, 0, 0.8);
-    this.ring(ground.clone().setY(off + 0.07), 0xffe27a, 0.2, R + 0.4, 0.9, 0, false, 0.12, 0.7);
-    this.light(new THREE.Vector3(cx, off + 1.6, cz), 0x9dffb0, 4, 5 + R * 2, 0.9);
+    const big = R >= 4;
+    const anim = this.animFor(effect);
+    const dec = big ? this.decalFor(effect) : null;
     for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
       if (dx * dx + dy * dy > R * R + R) continue;
       const d = Math.max(Math.abs(dx), Math.abs(dy));
-      const delay = d * 0.06;
-      this.tileFlash(cx + dx, off, cz + dy, 'heal', delay, 0.7, 0x5ad07a);
-      this.after(delay, () => {
-        for (let i = 0; i < 3; i++) {
-          this.particle(true, cx + dx + rand(-0.35, 0.35), off + 0.1, cz + dy + rand(-0.35, 0.35), 0, rand(1.0, 2.0), 0, rand(0.8, 1.2), rand(0.05, 0.08), pick([0x7dff9a, 0xffe27a, 0xd8ffe0]), { spin: 0, drag: 0.6, c1: col(0x2a8a40) });
-        }
-      });
+      const delay = big ? d * 0.03 : 0;
+      this.playTile(anim, cx + dx, off, cz + dy, delay, 1, big ? 0.7 : 0.6);
+      if (dec && (dx + dy * 3) % 2 === 0) this.decal(cx + dx, off, cz + dy, dec.kind, 0.95, 2.6 + Math.random(), dec.tint, false, delay + 0.1);
     }
+    if (effect === 'heal') {
+      this.light(new THREE.Vector3(cx, off + 1.5, cz), 0x9dc8ff, 2.5, 4 + R, 0.6);
+      return;
+    }
+    const fc = this.flashColor(effect);
+    this.light(new THREE.Vector3(cx, off + 1.6, cz), fc, big ? 9 : 2 + R * 1.5, big ? 12 : 4 + R * 1.5, big ? 0.7 : 0.45);
+    if (big) this.shakeNear(cx, cz, 2.5, 0.5);
+    else if (R >= 2) this.shakeNear(cx, cz, 1, 0.2);
   }
 
-  /** Healing: a rising column of light with spiralling green-gold motes. `power` 0–1.5 by how much was healed. */
-  heal(foot: THREE.Vector3, power: number, height = 1.4): void {
-    const p = Math.max(0.15, Math.min(1.5, power));
-    const g = new THREE.Vector3(foot.x, foot.y + 0.02, foot.z);
-    this.column(g, 0x5ad07a, 0.3 + p * 0.16, 1.4 + p * 1.6, 0.85 + p * 0.35);
-    this.column(g, 0xe8ffc0, 0.14 + p * 0.06, 1.8 + p * 2, 0.6 + p * 0.3, 0.05);
-    this.spiral(foot.x, foot.y + 0.1, foot.z, [0x7dff9a, 0xffe27a, 0xb8ffc8, 0xffffff], Math.round(12 + 26 * p), 0.38 + p * 0.1, 1.2 + p * 0.5, 0.9 + p * 0.3, 0.06 + p * 0.015);
-    this.ring(new THREE.Vector3(foot.x, foot.y + 0.05, foot.z), 0x9dffb0, 0.2, 0.75 + p * 0.45, 0.55, 0, true, 0, 0.75);
-    this.ring(new THREE.Vector3(foot.x, foot.y + 0.06, foot.z), 0xffe27a, 0.15, 0.6 + p * 0.4, 0.7, 0, false, 0.15, 0.6);
-    this.decal(foot.x, foot.y, foot.z, 'sigil', 0.9 + p * 0.5, 1.1 + p * 0.5, 0x4ab86a, true);
-    // a few golden petals drifting down from the top of the column
-    for (let i = 0; i < Math.round(3 + 6 * p); i++) {
-      this.particle(true, foot.x + rand(-0.4, 0.4), foot.y + height + p, foot.z + rand(-0.4, 0.4), rand(-0.2, 0.2), rand(-0.8, -0.3), rand(-0.2, 0.2), rand(0.8, 1.3), 0.05, pick([0xffe27a, 0xfff6c0]), { spin: 0 });
+  /** Waves: every tile of the cone bursts at once. */
+  wave(tiles: number[], ox: number, oz: number, off: number, effect: Effect): void {
+    const anim = this.animFor(effect);
+    let sx = 0, sz = 0;
+    for (let i = 0; i < tiles.length; i += 2) {
+      this.playTile(anim, tiles[i], off, tiles[i + 1]);
+      sx += tiles[i];
+      sz += tiles[i + 1];
     }
-    if (p > 0.45) this.light(new THREE.Vector3(foot.x, foot.y + 1.2, foot.z), 0x9dffb0, 1.5 + p * 2.5, 3.5 + p, 0.8);
+    const n = tiles.length / 2 || 1;
+    this.light(new THREE.Vector3((sx / n + ox) / 2, off + 1.4, (sz / n + oz) / 2), this.flashColor(effect), 3, 6, 0.4);
+    this.shakeNear(ox, oz, 1, 0.2);
   }
 
-  /** Mana: blue motes swirling up. */
+  /** Beams: every tile of the line bursts at once. */
+  beam(tiles: number[], ox: number, oz: number, off: number, effect: Effect): void {
+    this.wave(tiles, ox, oz, off, effect);
+  }
+
+  /** A hit on a creature (missile landing, strike spell, melee). `power` ~0.3–1.6 by damage. */
+  impact(pos: THREE.Vector3, effect: Effect, power = 1): void {
+    const anim = this.animFor(effect);
+    this.playAt(anim, pos, 0, (anim === 'death' ? 1.2 : 1) + Math.max(0, Math.min(0.25, (power - 0.8) * 0.3)));
+    if (power >= 0.8 && anim !== 'hit') this.light(pos, this.flashColor(effect), 1.5 + power * 1.5, 3.5, 0.3);
+  }
+
+  /** A miss: the grey puff. */
+  poff(pos: THREE.Vector3): void {
+    this.playAt('poff', pos, 0, 1, 0.5);
+  }
+
+  /** A blocked blow: grey sparks. */
+  block(pos: THREE.Vector3): void {
+    this.playAt('block', pos, 0, 1, 0.4);
+  }
+
+  /** Healing: blue-white sparkles rising on the tile; bigger heals stack a second, larger wave. */
+  heal(foot: THREE.Vector3, power: number): void {
+    const at = tmpV.set(foot.x, foot.y + 0.75, foot.z);
+    this.playAt('heal', at, 0, 1.2, 0.9);
+    if (power > 0.6) this.playAt('heal', at, 0.2, 1.45, 0.9);
+    if (power > 1) this.playAt('buff', at, 0.05, 1.1, 0.7);
+  }
+
+  /** Mana: blue rings. */
   mana(foot: THREE.Vector3, power: number): void {
-    const p = Math.max(0.2, Math.min(1.5, power));
-    this.spiral(foot.x, foot.y + 0.15, foot.z, [0x7fb2ff, 0xb8d8ff, 0x4a7aff, 0xffffff], Math.round(10 + 18 * p), 0.36, 1.3, 0.9, 0.06);
-    this.ring(new THREE.Vector3(foot.x, foot.y + 0.05, foot.z), 0x7fb2ff, 0.2, 0.7 + p * 0.3, 0.5, 0, true, 0, 0.6);
-    if (p > 0.6) this.column(new THREE.Vector3(foot.x, foot.y + 0.02, foot.z), 0x4a7aff, 0.26, 1.6, 0.7);
+    const at = tmpV.set(foot.x, foot.y + 0.45, foot.z);
+    this.playAt('mana', at, 0, 1, 0.6);
+    if (power > 0.8) this.playAt('mana', at, 0.15, 1.2, 0.6);
   }
 
-  /** Self-buffs (radius-0 support areas): shields get a dome, haste a whirl, light a warm flash. */
+  /** Self-buffs and other radius-0 casts on the caster's tile. */
   buff(foot: THREE.Vector3, effect: Effect): void {
-    const g = new THREE.Vector3(foot.x, foot.y + 0.03, foot.z);
-    const color = EFFECT_COLOR[effect];
-    switch (effect) {
-      case 'shield':
-        this.dome(g, 0x6a9aff, 0.62, 1.3);
-        this.ring(g, 0x9fc4ff, 0.2, 0.9, 0.5, 0, true);
-        this.spiral(foot.x, foot.y + 0.1, foot.z, [0x9fc4ff, 0xffffff], 14, 0.6, 0.6, 1.0, 0.05);
-        break;
-      case 'haste':
-        this.ring(g, color, 0.2, 1.0, 0.5, 0, true);
-        for (let i = 0; i < 18; i++) {
-          const a = (i / 18) * Math.PI * 2;
-          this.particle(true, foot.x, foot.y + rand(0.1, 0.9), foot.z, 0, rand(0.2, 0.8), 0, rand(0.4, 0.7), 0.05, pick([0x9fe8ff, 0xffffff]), {
-            orbit: true, ox: foot.x, oz: foot.z, or: rand(0.4, 0.6), oa: a, ow: 11, oshrink: -0.6, stretch: 2.5, spin: 0,
-          });
-        }
-        break;
-      case 'light':
-        this.sprite(foot.clone().setY(foot.y + 0.9), 0xfff2b0, 0.4, 2.4, 0.6, { peak: 0.8 });
-        this.sparkle(foot.clone().setY(foot.y + 0.2), 0xffe27a, 18, 0.5);
-        this.light(foot.clone().setY(foot.y + 1.5), 0xfff2b0, 4, 6, 0.8);
-        break;
-      case 'heal':
-        // cures and heal-rune landings: the sigil and ring (the heal event adds the column)
-        this.ring(g, 0x9dffb0, 0.2, 0.8, 0.5, 0, false);
-        this.sparkle(foot.clone().setY(foot.y + 0.2), 0x7dff9a, 10, 0.4);
-        break;
-      default:
-        // conjuring and other radius-0 casts: the element swirls up around the caster
-        this.spiral(foot.x, foot.y + 0.1, foot.z, [color, this.flashColor(effect), 0xffffff], 18, 0.45, 1.4, 0.8, 0.06);
-        this.ring(g, color, 0.2, 0.85, 0.5, 0, true, 0, 0.7);
-        this.sprite(foot.clone().setY(foot.y + 0.6), this.flashColor(effect), 0.3, 1.0, 0.3, { peak: 0.6 });
-    }
+    // a heal's sparkles come with its heal event; the cast itself rings the caster
+    const anim = effect === 'shield' || effect === 'heal' ? 'buff' : this.animFor(effect);
+    this.playAt(anim, tmpV.set(foot.x, foot.y + 0.45, foot.z), 0, 1, 0.7);
+  }
+
+  /** A teleport or spawn: the ring of sparkles. */
+  teleport(foot: THREE.Vector3): void {
+    this.playAt('teleport', tmpV.set(foot.x, foot.y + 0.45, foot.z), 0, 1, 0.6);
   }
 
   /** A field or wall appearing on its tiles. */
   fieldPlaced(tiles: number[], off: number, effect: Effect): void {
-    for (let i = 0; i < tiles.length; i += 2) {
-      const x = tiles[i], z = tiles[i + 1];
-      const d = (i / 2) * 0.03;
-      this.tileFlash(x, off, z, effect, d, 0.45, this.flashColor(effect));
-      this.after(d, () => {
-        if (effect === 'shield') {
-          this.column(new THREE.Vector3(x, off, z), 0x7fb2ff, 0.5, 1.8, 0.5);
-          this.sparkle(new THREE.Vector3(x, off + 0.2, z), 0xb8d8ff, 8, 0.45);
-        } else if (effect === 'energy') {
-          this.bolt(new THREE.Vector3(x, off + 3, z - 0.8), new THREE.Vector3(x, off + 0.05, z), 0xc89aff, 0.16, 0.3);
-          this.tileBurst('energy', x, off, z, 1);
-        } else if (effect === 'earth') {
-          for (let k = 0; k < 6; k++) this.particle(false, x, off + 0.1, z, rand(-1, 1), rand(1.5, 3), rand(-1, 1), 0.6, 0.07, pick([0x6ad03a, 0x9aff5a]), { g: 10, floor: off + 0.04, bounce: 0.2 });
-        } else this.tileBurst(effect, x, off, z, 1);
-      });
-    }
+    const anim = effect === 'shield' ? 'teleport' : this.animFor(effect);
+    for (let i = 0; i < tiles.length; i += 2) this.playTile(anim, tiles[i], off, tiles[i + 1]);
   }
 
   /** One frame of a standing field's life: flames, crackles, bubbles. */
@@ -1392,14 +1467,13 @@ export class Effects {
           this.particle(true, x + rand(-0.38, 0.38), off + 0.06, z + rand(-0.38, 0.38), rand(-0.15, 0.15), rand(0.9, 1.7), rand(-0.15, 0.15), rand(0.4, 0.7), rand(0.08, 0.14), pick([0xffe070, 0xffb030, 0xff8a20]), { g: -0.5, drag: 1, c1: col(0x901800), grow: 0.3, spin: 0 });
         }
         if (chance(1.5)) this.particle(true, x + rand(-0.3, 0.3), off + 0.3, z + rand(-0.3, 0.3), rand(-0.3, 0.3), rand(1.5, 2.5), rand(-0.3, 0.3), 1.0, 0.04, 0xffd060, { g: 0.5, c1: col(0x801000) });
-        if (chance(0.8)) this.particle(false, x, off + 0.6, z, 0, 0.6, 0, 1.2, 0.1, 0x2a2420, { g: -0.3, drag: 1, grow: 1.5 });
+        if (chance(0.35)) this.particle(false, x + rand(-0.2, 0.2), off + 1.0, z - 0.3, 0, 0.5, 0, 1.4, 0.09, pick([0x5a524c, 0x4a4440]), { g: -0.3, drag: 1, grow: 1.8 });
         break;
       case 'energy':
         if (chance(6)) {
           const a = Math.random() * Math.PI * 2;
           this.particle(true, x + rand(-0.3, 0.3), off + rand(0.05, 0.5), z + rand(-0.3, 0.3), Math.cos(a) * 1.5, rand(0, 1.5), Math.sin(a) * 1.5, 0.2, 0.04, pick([0xffffff, 0xd8b8ff]), { g: 4, stretch: 3 });
         }
-        if (chance(1.4)) this.bolt(new THREE.Vector3(x + rand(-0.4, 0.4), off + 0.05, z + rand(-0.4, 0.4)), new THREE.Vector3(x + rand(-0.4, 0.4), off + rand(0.4, 0.9), z + rand(-0.4, 0.4)), 0xc89aff, 0.1, 0.25);
         break;
       case 'poison':
         if (chance(3.5)) this.particle(false, x + rand(-0.35, 0.35), off + 0.05, z + rand(-0.35, 0.35), 0, rand(0.15, 0.35), 0, rand(0.6, 1.0), rand(0.06, 0.1), pick([0x6ad03a, 0x8ae050, 0x4aa02a]), { grow: 0.8, spin: 0, pop: 1 });
@@ -1411,34 +1485,25 @@ export class Effects {
     }
   }
 
-  /** Shake if the local player stands near (set by the renderer). */
-  shakeNear(x: number, z: number, amount: number, dur = 0.3): void {
-    const f = this.focus;
-    if (!f) return;
-    const d = Math.max(Math.abs(f.x - x), Math.abs(f.z - z));
-    if (d <= 6) this.shake(amount * (d <= 2 ? 1 : d <= 4 ? 0.6 : 0.35), dur);
-  }
-
-  /** Where the local player is (for shake distance). */
-  focus: { x: number; z: number } | null = null;
-
   // ------------------------------------------------------------------ missiles
 
-  private missileObject(effect: Effect): { obj: THREE.Object3D; orient: boolean; spin: number } {
-    let make = this.missileParts.get(effect);
-    if (!make) {
-      make = this.missileFactory(effect);
-      this.missileParts.set(effect, make);
+  private missileSprite(effect: Effect): MissileSprite | null {
+    switch (effect) {
+      case 'fire': return 'fireball';
+      case 'energy': return 'energyball';
+      case 'ice': return 'iceshard';
+      case 'stone': case 'physical': case 'blood': return 'stone';
+      case 'earth': return 'earthball';
+      case 'death': return 'skull';
+      case 'holy': case 'light': return 'holystar';
+      case 'heal': case 'haste': case 'shield': return 'healorb';
+      default: return null;
     }
-    return make();
   }
 
-  /** Builds the shared geometry/materials for a missile type once; returns a maker. */
+  /** Arrows, bolts, spears and throwing stars stay little 3D models that point where they fly. */
   private missileFactory(effect: Effect): () => { obj: THREE.Object3D; orient: boolean; spin: number } {
-    const color = EFFECT_COLOR[effect];
-    const basic = (c: number, opts: THREE.MeshBasicMaterialParameters = {}) => new THREE.MeshBasicMaterial({ color: c, ...opts });
-    const add = (c: number) => basic(c, { transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
-    const glowSprite = (c: number) => new THREE.SpriteMaterial({ map: this.tex.glow, color: c, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    const basic = (c: number) => new THREE.MeshBasicMaterial({ color: c });
     switch (effect) {
       case 'arrow':
       case 'bolt': {
@@ -1472,8 +1537,8 @@ export class Effects {
           return { obj: g, orient: true, spin: 0 };
         };
       }
-      case 'star': {
-        const cone = new THREE.ConeGeometry(0.05, 0.18, 3), m = basic(color);
+      default: {
+        const cone = new THREE.ConeGeometry(0.05, 0.18, 3), m = basic(EFFECT_COLOR[effect] ?? 0xd8dde6);
         return () => {
           const g = new THREE.Group();
           for (let i = 0; i < 4; i++) {
@@ -1488,133 +1553,32 @@ export class Effects {
           return { obj: holder, orient: false, spin: 25 };
         };
       }
-      case 'stone':
-      case 'earth': {
-        const rock = new THREE.DodecahedronGeometry(effect === 'stone' ? 0.2 : 0.15, 0);
-        const m = new THREE.MeshToonMaterial({ color: effect === 'stone' ? color : 0x6a7a48 });
-        const sm = glowSprite(0x7ad04a);
-        return () => {
-          const g = new THREE.Group();
-          g.add(new THREE.Mesh(rock, m));
-          if (effect === 'earth') {
-            const s = new THREE.Sprite(sm);
-            s.scale.setScalar(0.5);
-            g.add(s);
-          }
-          return { obj: g, orient: false, spin: 9 };
-        };
-      }
-      case 'ice': {
-        // a spinning icicle pointing where it flies
-        const shard = new THREE.OctahedronGeometry(0.1, 0);
-        shard.scale(0.8, 0.8, 2.6);
-        const m = basic(0xe8fbff);
-        const sm = glowSprite(0x8adcff);
-        return () => {
-          const g = new THREE.Group();
-          g.add(new THREE.Mesh(shard, m));
-          const s = new THREE.Sprite(sm);
-          s.scale.setScalar(0.55);
-          g.add(s);
-          return { obj: g, orient: true, spin: 0 };
-        };
-      }
-      case 'death': {
-        const core = new THREE.IcosahedronGeometry(0.12, 1), cm = basic(0x0a0410);
-        const sm = glowSprite(0xa040ff);
-        return () => {
-          const g = new THREE.Group();
-          g.add(new THREE.Mesh(core, cm));
-          const s = new THREE.Sprite(sm);
-          s.scale.setScalar(0.75);
-          g.add(s);
-          return { obj: g, orient: false, spin: 0 };
-        };
-      }
-      default: {
-        const size = ELEMENTAL.has(effect) ? 0.15 : 0.12;
-        const core = new THREE.IcosahedronGeometry(size, 1);
-        const cm = add(0xffffff);
-        const om = add(color);
-        const outer = new THREE.IcosahedronGeometry(size * 1.5, 1);
-        const sm = glowSprite(this.flashColor(effect));
-        return () => {
-          const g = new THREE.Group();
-          g.add(new THREE.Mesh(core, cm));
-          g.add(new THREE.Mesh(outer, om));
-          const s = new THREE.Sprite(sm);
-          s.scale.setScalar(effect === 'heal' ? 0.6 : 0.8);
-          g.add(s);
-          return { obj: g, orient: false, spin: 0 };
-        };
-      }
     }
   }
 
   /** A projectile flying from `from` to a (possibly moving) target. Returns its flight time. */
   missile(from: THREE.Vector3, to: () => THREE.Vector3, effect: Effect, onHit: () => void = () => {}): number {
-    const { obj, orient, spin } = this.missileObject(effect);
-    obj.position.copy(from);
-    this.group.add(obj);
     const dist = from.distanceTo(to());
-    const physical = !ELEMENTAL.has(effect) && effect !== 'heal';
-    const dur = Math.max(0.12, dist * (physical ? 0.045 : 0.06));
-    this.missiles.push({
-      obj, from: from.clone(), to, t: 0, dur, arc: physical ? Math.min(0.5, dist * 0.05) : 0.25,
-      spin, trail: effect, orient, onHit, acc: 0, effect,
-    });
-    // a muzzle flash for spells
-    if (!physical) this.sprite(from, this.flashColor(effect), 0.2, 0.6, 0.14, { peak: 0.7 });
-    return dur;
-  }
-
-  private trail(m: Missile, dt: number): void {
-    const p = m.obj.position;
-    m.acc += dt;
-    const every = 0.012;
-    while (m.acc >= every) {
-      m.acc -= every;
-      const j = () => rand(-0.05, 0.05);
-      switch (m.effect) {
-        case 'fire':
-          this.particle(true, p.x + j(), p.y + j(), p.z + j(), rand(-0.3, 0.3), rand(0.3, 0.9), rand(-0.3, 0.3), rand(0.2, 0.35), rand(0.08, 0.12), pick([0xffe070, 0xffa030]), { c1: col(0x8a1000), spin: 0 });
-          if (Math.random() < 0.25) this.particle(false, p.x, p.y, p.z, 0, 0.5, 0, 0.5, 0.08, 0x2a2420, { grow: 1.2, drag: 2 });
-          break;
-        case 'ice':
-          this.particle(true, p.x + j(), p.y + j(), p.z + j(), 0, -0.2, 0, 0.3, 0.05, pick([0xe8fbff, 0x8adcff]), { g: 2, spin: 0 });
-          break;
-        case 'energy':
-          this.particle(true, p.x + j(), p.y + j(), p.z + j(), rand(-1.5, 1.5), rand(-1.5, 1.5), rand(-1.5, 1.5), rand(0.1, 0.2), 0.04, pick([0xffffff, 0xd8b8ff, 0xb07aff]), { stretch: 2, spin: 0 });
-          break;
-        case 'death':
-          this.particle(false, p.x + j(), p.y + j(), p.z + j(), 0, 0.3, 0, 0.45, 0.09, pick([0x140a18, 0x2a1036]), { grow: 0.8, drag: 2 });
-          if (Math.random() < 0.5) this.particle(true, p.x, p.y, p.z, rand(-0.4, 0.4), rand(-0.2, 0.4), rand(-0.4, 0.4), 0.35, 0.05, 0xc070ff, { c1: col(0x2a0a40), spin: 0 });
-          break;
-        case 'earth':
-        case 'stone':
-          if (Math.random() < 0.45) this.particle(false, p.x, p.y, p.z, rand(-0.3, 0.3), 0.2, rand(-0.3, 0.3), 0.4, 0.07, 0x8a7a62, { grow: 1, drag: 2 });
-          if (m.effect === 'earth' && Math.random() < 0.4) this.particle(true, p.x, p.y, p.z, rand(-0.3, 0.3), 0.3, rand(-0.3, 0.3), 0.35, 0.05, 0x9aff5a, { spin: 0 });
-          break;
-        case 'holy':
-          this.particle(true, p.x + j(), p.y + j(), p.z + j(), 0, 0.2, 0, 0.35, 0.06, pick([0xfff6c0, 0xffe27a]), { spin: 0 });
-          break;
-        case 'heal':
-          this.particle(true, p.x + j() * 2, p.y + j() * 2, p.z + j() * 2, 0, 0.4, 0, 0.4, 0.05, pick([0x7dff9a, 0xffe27a]), { spin: 0 });
-          break;
-        case 'arrow':
-        case 'bolt':
-        case 'spear':
-          if (Math.random() < 0.35) this.particle(true, p.x, p.y, p.z, 0, 0, 0, 0.1, 0.03, 0x8a8a8a, { spin: 0 });
-          break;
-        default:
-          if (Math.random() < 0.5) this.particle(true, p.x, p.y, p.z, 0, 0.3, 0, 0.3, 0.06, EFFECT_COLOR[m.effect], { spin: 0 });
+    const sprite = this.missileSprite(effect);
+    const dur = Math.max(0.12, dist * (sprite ? 0.055 : 0.045));
+    let obj: THREE.Object3D | null = null;
+    let orient = false;
+    let spin = 0;
+    if (!sprite) {
+      let make = this.missileParts.get(effect);
+      if (!make) {
+        make = this.missileFactory(effect);
+        this.missileParts.set(effect, make);
       }
+      ({ obj, orient, spin } = make());
+      obj.position.copy(from);
+      this.group.add(obj);
     }
-  }
-
-  private removeMissile(o: THREE.Object3D): void {
-    // shared geometry and materials stay alive in the missile cache
-    this.group.remove(o);
+    this.missiles.push({
+      obj, cell: sprite ? MISSILE_CELL[sprite] : null, pos: from.clone(), from: from.clone(), to, t: 0, dur,
+      arc: sprite ? 0.15 : Math.min(0.5, dist * 0.05), spin, orient, onHit,
+    });
+    return dur;
   }
 
   // ------------------------------------------------------------------ frame
@@ -1710,6 +1674,16 @@ export class Effects {
     return t;
   }
 
+  /** Writes one camera-facing sprite instance. */
+  private spriteInstance(n: number, x: number, y: number, z: number, scale: number, col: number, row: number): void {
+    dummy.position.set(x, y, z);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(scale, scale, scale);
+    dummy.updateMatrix();
+    this.spriteMesh.setMatrixAt(n, dummy.matrix);
+    this.spriteCell.setXY(n, col, row);
+  }
+
   update(dt: number): void {
     this.time += dt;
     if (this.shakeT > 0) this.shakeT -= dt;
@@ -1725,29 +1699,55 @@ export class Effects {
       }
     }
 
-    // missiles (before particles, so their trails draw this frame)
-    for (let i = this.missiles.length - 1; i >= 0; i--) {
-      const p = this.missiles[i];
-      p.t += dt / p.dur;
-      const to = p.to();
-      if (p.t >= 1) {
-        this.removeMissile(p.obj);
-        this.missiles.splice(i, 1);
-        p.onHit();
+    // tile animations
+    let n = 0;
+    const list = this.tileFx;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const fx = list[i];
+      if (fx.delay > 0) {
+        fx.delay -= dt;
         continue;
       }
-      const prev = tmpV2.copy(p.obj.position);
-      p.obj.position.lerpVectors(p.from, to, p.t);
-      p.obj.position.y += Math.sin(p.t * Math.PI) * p.arc;
-      if (p.orient) {
-        const dir = tmpV.copy(p.obj.position).sub(prev);
-        if (dir.lengthSq() > 1e-8) p.obj.lookAt(dir.add(p.obj.position));
-        if (p.effect === 'ice') p.obj.rotateZ(this.time * 14);
+      fx.t += dt;
+      if (fx.t >= fx.dur) {
+        list[i] = list[list.length - 1];
+        list.pop();
       }
-      if (p.spin) p.obj.rotation.y += p.spin * dt;
-      if (p.spin && p.effect !== 'star') p.obj.rotation.x += p.spin * 0.7 * dt;
-      if (p.trail) this.trail(p, dt);
     }
+    for (const fx of list) {
+      if (fx.delay > 0 || n >= MAX_TILE_FX) continue;
+      const frame = Math.min(FRAMES - 1, Math.floor((fx.t / fx.dur) * FRAMES));
+      this.spriteInstance(n++, fx.x, fx.y, fx.z, fx.scale, frame, fx.row);
+    }
+
+    // missiles
+    const spin = Math.floor(this.time * 12) % 4;
+    for (let i = this.missiles.length - 1; i >= 0; i--) {
+      const m = this.missiles[i];
+      m.t += dt / m.dur;
+      if (m.t >= 1) {
+        if (m.obj) this.group.remove(m.obj);
+        this.missiles.splice(i, 1);
+        m.onHit();
+        continue;
+      }
+      const prev = tmpV2.copy(m.pos);
+      m.pos.lerpVectors(m.from, m.to(), m.t);
+      m.pos.y += Math.sin(m.t * Math.PI) * m.arc;
+      if (m.cell) {
+        if (n < MAX_TILE_FX) this.spriteInstance(n++, m.pos.x + TO_CAM.x * 0.6, m.pos.y + TO_CAM.y * 0.6, m.pos.z + TO_CAM.z * 0.6, 1, m.cell[1] + spin, m.cell[0]);
+      } else if (m.obj) {
+        m.obj.position.copy(m.pos);
+        if (m.orient) {
+          const dir = tmpV.copy(m.pos).sub(prev);
+          if (dir.lengthSq() > 1e-8) m.obj.lookAt(dir.add(m.pos));
+        }
+        if (m.spin) m.obj.rotation.y += m.spin * dt;
+      }
+    }
+    this.spriteMesh.count = n;
+    this.spriteMesh.instanceMatrix.needsUpdate = true;
+    this.spriteCell.needsUpdate = true;
 
     this.stepParticles(this.solid, this.solidMesh, dt, MAX_SOLID);
     this.stepParticles(this.glow, this.glowMesh, dt, MAX_GLOW);
@@ -1755,19 +1755,11 @@ export class Effects {
     for (const s of this.rings) {
       const t = this.tick(s, dt);
       if (t < 0) continue;
-      const k = easeOut(t);
+      const k = 1 - (1 - t) * (1 - t);
       const sc = s.data.from + (s.data.to - s.data.from) * k;
       s.obj.scale.set(sc, sc, sc);
       s.obj.position.y += s.data.rise * dt;
       (s.obj.material as THREE.MeshBasicMaterial).opacity = step4(1 - t) * s.data.peak;
-    }
-
-    for (const s of this.flashes) {
-      const t = this.tick(s, dt);
-      if (t < 0) continue;
-      // quick flare in, slow fade out, stepped so it reads as pixel-art frames
-      const k = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
-      (s.obj.material as THREE.MeshBasicMaterial).opacity = step4(k) * 0.9;
     }
 
     for (const s of this.decals) {
@@ -1777,83 +1769,15 @@ export class Effects {
       (s.obj.material as THREE.MeshBasicMaterial).opacity = step4(k) * (s.data.add ? 0.8 : 0.85);
     }
 
-    for (const s of this.sprites) {
-      const t = this.tick(s, dt);
-      if (t < 0) continue;
-      const d = s.data;
-      const sc = d.from + (d.to - d.from) * easeOut(t);
-      s.obj.scale.set(sc, sc, 1);
-      s.obj.position.y += d.rise * dt;
-      const k = t < d.hold ? 1 : 1 - (t - d.hold) / (1 - d.hold);
-      (s.obj.material as THREE.SpriteMaterial).opacity = step4(k) * d.peak;
-    }
-
-    for (const s of this.columns) {
-      const t = this.tick(s, dt);
-      if (t < 0) continue;
-      // shoots up fast, then thins out and fades
-      const up = Math.min(1, t / 0.25);
-      const w = s.data.r * (t < 0.2 ? 0.6 + 2 * t : 1 - (t - 0.2) * 0.5);
-      s.obj.scale.set(w, s.data.h * easeOut(up), w);
-      s.obj.rotation.y += dt * 1.5;
-      const k = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
-      (s.obj.material as THREE.MeshBasicMaterial).opacity = step4(k) * 0.9;
-    }
-    (this.tex.column as THREE.Texture).offset.y = -this.time * 0.8;
-
-    for (const s of this.domes) {
-      const t = this.tick(s, dt);
-      if (t < 0) continue;
-      const grow = Math.min(1, t / 0.15);
-      const r = s.data.r * (0.5 + 0.5 * easeOut(grow));
-      s.obj.scale.set(r, r * 1.15, r);
-      s.obj.rotation.y += dt * 0.8;
-      const k = t < 0.15 ? 1 : 1 - (t - 0.15) / 0.85;
-      const shimmer = 0.7 + 0.3 * Math.sin(this.time * 18);
-      (s.obj.material as THREE.MeshBasicMaterial).opacity = step4(k * shimmer) * 0.75;
-    }
-    this.tex.hex.offset.set(this.time * 0.05, this.time * 0.35);
-
-    for (const s of this.bolts) {
-      const t = this.tick(s, dt);
-      if (t < 0) continue;
-      s.data.next -= dt;
-      if (s.data.next <= 0) {
-        s.data.next = 0.045;
-        this.reforkBolt(s);
-      }
-      const flick = Math.random() < 0.2 ? 0.4 : 1;
-      const k = step4((1 - t) * flick);
-      const [core, glow] = s.obj.children as THREE.Line[];
-      (core.material as THREE.LineBasicMaterial).opacity = k;
-      (glow.material as THREE.LineBasicMaterial).opacity = k * 0.8;
-    }
-
-    for (const s of this.beams) {
-      const t = this.tick(s, dt);
-      if (t < 0) continue;
-      const [glow, core] = s.obj.children as THREE.Mesh[];
-      const shoot = Math.min(1, t / 0.12);
-      const thin = t < 0.5 ? 1 : 1 - (t - 0.5) * 1.6;
-      const pulse = 0.85 + 0.3 * Math.sin(this.time * 60);
-      const w = s.data.w * thin * pulse;
-      glow.scale.set(w, w, s.data.len * shoot);
-      core.scale.set(w * 0.3, w * 0.3, s.data.len * shoot);
-      (glow.material as THREE.MeshBasicMaterial).opacity = step4(1 - t * 0.8) * 0.6;
-      (core.material as THREE.MeshBasicMaterial).opacity = step4(1 - t * 0.6);
-    }
+    this.animateFields();
 
     for (const s of this.lights) {
       const t = this.tick(s, dt);
-      if (t < 0) {
-        if (!s.busy) s.obj.intensity = 0;
-        continue;
-      }
+      if (t >= 0) s.obj.intensity = s.data.i * (t < 0.1 ? t / 0.1 : (1 - t) / 0.9);
+      else if (!s.busy) s.obj.intensity = 0;
+      // lights stay in the scene (visible) so shaders never recompile
       s.obj.visible = true;
-      s.obj.intensity = s.data.i * (t < 0.1 ? t / 0.1 : (1 - t) / 0.9);
     }
-    // lights stay in the scene (visible) so shaders never recompile
-    for (const s of this.lights) s.obj.visible = true;
 
     if (this.clickLife > 0) {
       this.clickLife -= dt;

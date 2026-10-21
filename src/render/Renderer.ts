@@ -199,11 +199,8 @@ export class Renderer {
 
   // ------------------------------------------------------------------ rune fields
 
-  /** Meshes for fields laid by runes: "x,y,z" → mesh. */
-  private fieldMeshes = new Map<string, THREE.Mesh>();
-  private fieldTime = 0;
-  private fieldPlane = new THREE.PlaneGeometry(0.94, 0.94);
-  private wallBox = new THREE.BoxGeometry(0.94, 1.5, 0.94);
+  /** Standing looks of fields laid by runes (and synced from snapshots online): "x,y,z" → object. */
+  private fieldMeshes = new Map<string, THREE.Object3D>();
 
   private fieldKind(obj: number): FieldKind {
     return obj === Obj.FireField ? 'fire' : obj === Obj.EnergyField ? 'energy' : obj === Obj.MagicWall ? 'wall' : 'poison';
@@ -215,67 +212,31 @@ export class Renderer {
     const old = this.fieldMeshes.get(k);
     if (old && old.userData.obj === obj) return;
     if (old) {
+      // geometry, materials and textures are shared by every field: nothing to dispose
       this.scene.remove(old);
-      // geometry and textures are shared; only the material is per field
-      (old.material as THREE.Material).dispose();
       this.fieldMeshes.delete(k);
     }
     if (obj === null) return;
     const kind = this.fieldKind(obj);
-    let mesh: THREE.Mesh;
-    if (kind === 'wall') {
-      // a translucent arcane wall with glowing runes
-      mesh = new THREE.Mesh(this.wallBox, new THREE.MeshBasicMaterial({
-        color: 0x9fc0ff, map: this.effects.fieldTexture('wall'), transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending,
-      }));
-      mesh.userData.h = 0.75;
-    } else {
-      mesh = new THREE.Mesh(this.fieldPlane, new THREE.MeshBasicMaterial({
-        color: 0xffffff, map: this.effects.fieldTexture(kind), transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending,
-      }));
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.userData.h = 0.035;
-    }
-    mesh.userData.obj = obj;
-    mesh.userData.kind = kind;
-    mesh.userData.tile = { x, y, z };
-    mesh.userData.seed = Math.random() * 10;
-    mesh.renderOrder = 4;
-    this.scene.add(mesh);
-    this.fieldMeshes.set(k, mesh);
+    const o = this.effects.fieldObject(kind, x, y);
+    o.userData.obj = obj;
+    o.userData.kind = kind;
+    o.userData.tile = { x, y, z };
+    this.scene.add(o);
+    this.fieldMeshes.set(k, o);
   }
 
   private updateFieldMeshes(dt: number): void {
-    this.fieldTime += dt;
-    const ft = this.fieldTime;
     for (const m of this.fieldMeshes.values()) {
       const t = m.userData.tile as { x: number; y: number; z: number };
       const off = this.worldView.floorOffset(t.z);
       m.visible = off !== null && chebyshev(t.x, t.y, this.me.x, this.me.y) <= VIEW_RANGE + 2;
       if (!m.visible) continue;
-      m.position.set(t.x, off! + (m.userData.h as number), t.y);
-      const mat = m.material as THREE.MeshBasicMaterial;
-      const kind = m.userData.kind as FieldKind;
-      const sd = m.userData.seed as number;
-      // stepped flicker so it reads as animation frames
-      const q = (v: number) => Math.round(v * 6) / 6;
-      if (kind === 'fire') {
-        mat.opacity = q(0.55 + 0.25 * Math.sin(ft * 13 + sd) * Math.sin(ft * 7.3 + sd * 2));
-        m.rotation.z = Math.floor(ft * 6 + sd) % 4 * (Math.PI / 2);
-      } else if (kind === 'energy') {
-        mat.opacity = Math.random() < 0.12 ? 0.95 : q(0.45 + 0.15 * Math.sin(ft * 20 + sd));
-        m.rotation.z = Math.floor(ft * 10 + sd) % 4 * (Math.PI / 2);
-      } else if (kind === 'poison') {
-        mat.opacity = q(0.5 + 0.15 * Math.sin(ft * 3 + sd));
-        m.rotation.z = Math.floor(ft * 2 + sd) % 4 * (Math.PI / 2);
-      } else {
-        mat.opacity = q(0.55 + 0.2 * Math.sin(ft * 4 + sd));
-        const map = mat.map;
-        if (map) map.offset.y = (ft * 0.15) % 1;
-      }
-      this.effects.fieldTick(kind, t.x, off!, t.y, dt);
+      m.position.set(t.x, off!, t.y);
+      this.effects.fieldTick(m.userData.kind as FieldKind, t.x, off!, t.y, dt);
     }
   }
+
 
   // ------------------------------------------------------------------ bags
 
@@ -420,15 +381,15 @@ export class Renderer {
       const power = Math.min(1.6, 0.35 + e.amount / 90);
       if (el === 'physical') {
         const col = this.bloodFor(e.targetId);
-        this.effects.burst(pos, col, 16 + Math.min(14, Math.floor(e.amount / 8)), 2.8);
-        this.effects.burst(pos, col, 6, 1.2, 9, 0.11);
+        this.effects.impact(pos, 'physical', power);
+        this.effects.burst(pos, col, 6 + Math.min(10, Math.floor(e.amount / 10)), 2.4);
         this.bleed(e.targetId, col, e.amount);
       } else {
         this.effects.impact(pos, el as Effect, power);
         if (el === 'death' && e.amount > 0) {
           // death magic tears flesh: a bloody burst on top of the dark one
           const col = this.bloodFor(e.targetId);
-          this.effects.burst(pos, col, 10 + Math.min(16, Math.floor(e.amount / 10)), 2.6);
+          this.effects.burst(pos, col, 4 + Math.min(10, Math.floor(e.amount / 15)), 2.4);
           this.bleed(e.targetId, col, e.amount);
         } else if (e.amount > 0 && Math.random() < 0.5) this.bleed(e.targetId, this.bloodFor(e.targetId), e.amount * 0.6);
       }
@@ -441,10 +402,10 @@ export class Renderer {
       if (e.amount > 0) this.float(e.targetId, String(e.amount), cls);
       if (e.manaShield) this.float(e.targetId, String(e.manaShield), 'mana', 1.1, 0.25);
     } else if (e.result === 'blocked') {
-      this.effects.burst(pos, 0x9fd0ff, 6, 1.6, 3, 0.05);
+      this.effects.block(pos);
       this.float(e.targetId, 'blocked', 'miss', 0.8);
     } else {
-      this.effects.burst(pos, 0xcfcfcf, 5, 1.0, 0, 0.09);
+      this.effects.poff(pos);
       this.float(e.targetId, 'miss', 'miss', 0.8);
     }
   }
@@ -470,7 +431,7 @@ export class Renderer {
           // bigger heals look bigger: by share of max health and raw amount
           const power = Math.min(1.5, Math.max(amount / Math.max(1, c.maxHp) * 2.2, amount / 260));
           const p = v.rig.root.position;
-          this.effects.heal(new THREE.Vector3(p.x, v.yOffset, p.z), power, v.rig.height);
+          this.effects.heal(new THREE.Vector3(p.x, v.yOffset, p.z), power);
           this.float(id, `+${amount}`, 'heal');
         });
         break;
@@ -587,7 +548,10 @@ export class Renderer {
           this.effects.ring(new THREE.Vector3(p.x, 0.05, p.y), 0xffffff, 0.2, 0.9, 0.5);
         }
         const v = this.views.get(e.id);
-        if (v) v.onRespawn();
+        if (v) {
+          v.onRespawn();
+          this.effects.teleport(new THREE.Vector3(v.creature.x, v.yOffset, v.creature.y));
+        }
         break;
       }
       case 'xp':
