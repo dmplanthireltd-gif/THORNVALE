@@ -1,6 +1,9 @@
 import { ITEMS } from '../inventory/items';
 import type { SpellId } from '../magic/spells';
 import type { Outfit } from '../player/outfits';
+import { SPELLS } from '../magic/spells';
+import { FERRIES, fare, TOWNS, type StaffRole } from '../world/townList';
+import { EXTRA_BUYS, EXTRA_SELLS, EXTRA_SPELLS } from './stock';
 
 export interface ShopEntry {
   id: string;
@@ -138,6 +141,122 @@ export const NPCS: Record<string, NpcDef> = {
 };
 
 /** Gold an NPC pays for an item. */
+// merge stock added by content updates (see stock.ts)
+for (const [key, list] of Object.entries(EXTRA_SELLS)) {
+  const n = NPCS[key];
+  if (n) n.sells = [...(n.sells ?? []), ...list.filter((e) => ITEMS[e.id] && !(n.sells ?? []).some((x) => x.id === e.id))];
+}
+for (const [key, list] of Object.entries(EXTRA_BUYS)) {
+  const n = NPCS[key];
+  if (n) n.buys = [...new Set([...(n.buys ?? []), ...list.filter((id) => ITEMS[id])])];
+}
+
+// ---------------------------------------------------------------- the towns of the new world
+// Generated from the town table, after the stock merge above so every smith,
+// magic shop and outfitter carries the same (extended) wares as Thornvale's.
+{
+  const hashKey = (k: string) => [...k].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const ROLE: Record<StaffRole, { role: string; prop: NpcDef['prop']; type: Outfit['type'] }> = {
+    smith: { role: 'Weapon & armour smith', prop: 'hammer', type: 'barbarian' },
+    mage: { role: 'Magic, runes & potions', prop: 'staff', type: 'mage' },
+    outfit: { role: 'Outfitter — bows, ammo & tools', prop: 'bow', type: 'ranger' },
+    bank: { role: 'Banker', prop: 'ledger', type: 'noble' },
+    travel: { role: 'Ship captain', prop: 'oar', type: 'citizen' },
+    quest: { role: 'Quest giver', prop: 'halberd', type: 'knight' },
+    trainer: { role: 'Spell trainer', prop: 'book', type: 'mage' },
+  };
+  const QUEST_ROLES: Record<string, string> = {
+    westmarch_marshal: 'Marshal of Westmarch', stonedeep_thane: 'Thane of Stonedeep', highmoor_reeve: 'Reeve of Highmoor', millbrook_elder: 'Village elder',
+    valdrheim_jarl: 'Jarl of Valdrheim', aurelion_magistrate: 'High Magistrate', briarwatch_ranger: 'Ranger captain', corvane_reeve: 'Reeve of Corvane',
+    saltmere_abbot: 'Abbot of Saltmere', sunspire_vizier: 'Vizier of Sunspire', dunewatch_sergeant: 'Sergeant of the watch',
+  };
+  const trainerSpells = [...new Set([...(NPCS.elias.spells ?? []), ...(EXTRA_SPELLS.elias ?? []).filter((id) => id in SPELLS)])];
+  const ports = TOWNS.filter((t) => t.travel === 'ship');
+  const central = ['thornvale', 'westmarch', 'elderglen', 'highmoor', 'millbrook'];
+  const routesFor = (key: string): TravelEntry[] => {
+    const me = TOWNS.find((t) => t.key === key)!;
+    if (me.travel === 'cart') return central.map((k) => TOWNS.find((t) => t.key === k)!).map((t) => ({ key: t.key, name: t.name, price: Math.round(fare(me.x, me.y, t.x, t.y) / 2 / 10) * 10 }));
+    const list: TravelEntry[] = ports.filter((t) => t.key !== key).map((t) => ({ key: t.key, name: t.name, price: fare(me.x, me.y, t.x, t.y) }));
+    if (central.includes(key)) {
+      const sd = TOWNS.find((t) => t.key === 'stonedeep')!;
+      list.push({ key: 'stonedeep', name: 'Stonedeep (by cart)', price: Math.round(fare(me.x, me.y, sd.x, sd.y) / 2 / 10) * 10 });
+    }
+    for (const f of FERRIES) if (f.home === key) list.push({ key: f.key, name: f.name, price: 40 });
+    return list.sort((a, b) => a.price - b.price);
+  };
+  for (const t of TOWNS) {
+    for (const [role, st] of Object.entries(t.staff) as Array<[StaffRole, { key: string; name: string }]>) {
+      if (!st) continue;
+      const existing = NPCS[st.key];
+      if (role === 'travel') {
+        const travel = routesFor(t.key);
+        if (existing) {
+          existing.travel = travel;
+          existing.role = 'Ship captain';
+          continue;
+        }
+      }
+      if (existing) continue;
+      const r = ROLE[role];
+      const h = hashKey(st.key);
+      const def: NpcDef = {
+        key: st.key, name: st.name, role: role === 'quest' ? QUEST_ROLES[st.key] ?? r.role : role === 'travel' && t.travel === 'cart' ? 'Mine-cart master' : r.role,
+        prop: r.prop, greeting: '', look: { type: r.type, head: h % 133, body: (h >> 7) % 133, legs: (h >> 14) % 133, feet: 98 },
+      };
+      switch (role) {
+        case 'smith':
+          def.sells = NPCS.brunhild.sells?.map((e) => ({ ...e }));
+          def.buys = [...(NPCS.brunhild.buys ?? [])];
+          def.greeting = `Steel and leather, {name}. Best forge in ${t.name}.`;
+          break;
+        case 'mage':
+          def.sells = NPCS.mirella.sells?.map((e) => ({ ...e }));
+          def.buys = [...(NPCS.mirella.buys ?? [])];
+          def.greeting = `Runes, potions and wands, {name}. Mind the shelves.`;
+          break;
+        case 'outfit':
+          def.sells = NPCS.garrick.sells?.map((e) => ({ ...e }));
+          def.buys = [...(NPCS.garrick.buys ?? [])];
+          def.greeting = `Rope, arrows, a spare backpack? You look like you need all three, {name}.`;
+          break;
+        case 'bank':
+          def.bank = true;
+          def.buys = [...(NPCS.orwin.buys ?? [])];
+          def.greeting = `Welcome to the ${t.name} branch of the bank, {name}. Your gold is kept in every town.`;
+          break;
+        case 'travel':
+          def.travel = routesFor(t.key);
+          def.greeting = t.travel === 'cart' ? `The carts run through the mountain to every town of the heartland, {name}. Where to?` : `Fair winds, {name}. Where shall we sail from ${t.name}?`;
+          break;
+        case 'quest':
+          def.quests = true;
+          def.sells = [s('health_potion', 50), s('mana_potion', 55)];
+          def.buys = materials;
+          def.greeting = `Well met, {name}. ${t.flavour[0].toUpperCase()}${t.flavour.slice(1)} could use someone like you.`;
+          break;
+        case 'trainer':
+          def.spells = trainerSpells;
+          def.greeting = 'The words of power are not given lightly, {name}. Which would you learn?';
+          break;
+      }
+      NPCS[st.key] = def;
+    }
+  }
+  for (const f of FERRIES) {
+    const home = TOWNS.find((t) => t.key === f.home)!;
+    const h = hashKey(f.npc.key);
+    NPCS[f.npc.key] = {
+      key: f.npc.key, name: f.npc.name, role: `Ferry to ${home.name}`, prop: 'oar',
+      greeting: `Only a little boat, {name}, but she floats. Back to ${home.name}?`,
+      look: { type: 'citizen', head: h % 133, body: (h >> 7) % 133, legs: (h >> 14) % 133, feet: 98 },
+      travel: [{ key: home.key, name: home.name, price: 40 }],
+    };
+  }
+  NPCS.brann.greeting = 'Keep your voice down, {name}. The elves of Silverbough have sharp ears, and their fortress lies just west of Elderglen.';
+  NPCS.hask.greeting = "Sea's calm today, {name}. Where can the old Gull take you?";
+  NPCS.mara.greeting = "Ahoy, {name}! The Saltwind sails wherever there's a harbour.";
+}
+
 export function buyPrice(id: string): number {
   return ITEMS[id]?.value ?? 0;
 }

@@ -31,6 +31,12 @@ export interface Bonus {
   attack?: number;
 }
 
+/** Timed potion buffs (see Player.buffs). */
+export type PotionBuff = 'berserk' | 'bullseye' | 'mastermind';
+export const POTION_BUFF_SECONDS = 600;
+/** What each potion buff adds: melee attack, distance attack, spell/rune/wand damage percent. */
+export const POTION_BUFF_POWER = { berserk: 8, bullseye: 7, mastermind: 12 } as const;
+
 export interface RuneEffect {
   type: 'damage' | 'heal';
   element?: Element;
@@ -80,6 +86,10 @@ export interface ItemDef {
   mana?: number;
   rune?: RuneEffect;
   tool?: 'rope' | 'shovel';
+  /** Buff potions: which timed buff drinking it grants. */
+  buff?: PotionBuff;
+  /** Throwing weapons: chance a throw uses one up (default 0.85). */
+  breakChance?: number;
 }
 
 const KNIGHT: Vocation[] = ['knight'];
@@ -129,6 +139,12 @@ const defs: ItemDef[] = [
   def({ id: 'cheese', name: 'Cheese', kind: 'consumable', weight: 4, value: 2, heal: 15, tint: '#e6c84f', icon: '◆' }),
   def({ id: 'meat', name: 'Meat', kind: 'consumable', weight: 13, value: 3, heal: 30, tint: '#a8513d', icon: '▼' }),
   def({ id: 'ham', name: 'Ham', kind: 'consumable', weight: 20, value: 5, heal: 45, tint: '#c4705a', icon: '▼' }),
+  def({ id: 'fish', name: 'Fish', kind: 'consumable', weight: 5, value: 2, heal: 25, tint: '#8ab0c8', icon: '◆' }),
+  def({ id: 'mead', name: 'Horn of Mead', kind: 'consumable', weight: 6, value: 6, heal: 40, mana: 25, tint: '#d8a030', icon: '♥', note: 'Warms the bones of any northerner.' }),
+  // buff potions: ten minutes of extra power for one fighting style
+  def({ id: 'berserk_potion', name: 'Potion of Fury', kind: 'consumable', weight: 2, value: 160, level: 20, vocations: KNIGHT, buff: 'berserk', tint: '#e0402a', icon: '♥', rarity: 'uncommon', note: `+${POTION_BUFF_POWER.berserk} melee attack for 10 minutes.` }),
+  def({ id: 'bullseye_potion', name: 'Potion of the Hawk', kind: 'consumable', weight: 2, value: 160, level: 20, vocations: PALADIN, buff: 'bullseye', tint: '#40c070', icon: '♥', rarity: 'uncommon', note: `+${POTION_BUFF_POWER.bullseye} distance attack and steadier aim for 10 minutes.` }),
+  def({ id: 'mastermind_potion', name: 'Potion of Clarity', kind: 'consumable', weight: 2, value: 240, level: 20, vocations: MAGES, buff: 'mastermind', tint: '#a050e0', icon: '✦', rarity: 'uncommon', note: `+${POTION_BUFF_POWER.mastermind}% spell, rune and wand damage for 10 minutes.` }),
 
   // --- runes (charges) -----------------------------------------------------------
   def({ id: 'spark_rune', name: 'Spark Rune', kind: 'rune', weight: 0.7, value: 3, tint: '#9a7ae0', icon: 'ϟ', rune: { type: 'damage', element: 'energy', radius: 0, min: 12, max: 26, perLevel: 1.2, range: 6 } }),
@@ -145,6 +161,8 @@ const defs: ItemDef[] = [
   // --- backpacks ---------------------------------------------------------------------
   def({ id: 'bag', name: 'Bag', kind: 'backpack', slots: 12, weight: 8, value: 4, tint: '#a8743f', icon: '▤' }),
   def({ id: 'backpack', name: 'Backpack', kind: 'backpack', slots: 20, weight: 18, value: 10, tint: '#8a5a32', icon: '▤' }),
+  def({ id: 'fur_bag', name: 'Fur Bag', kind: 'backpack', slots: 16, weight: 9, value: 25, tint: '#d8d0c0', icon: '▤' }),
+  def({ id: 'fur_backpack', name: 'Fur Backpack', kind: 'backpack', slots: 24, weight: 16, value: 90, rarity: 'uncommon', icon: '▤', bonus: { resist: { ice: 2 } } }),
   def({ id: 'explorer_pack', name: "Explorer's Pack", kind: 'backpack', slots: 28, weight: 20, value: 120, rarity: 'uncommon', icon: '▤' }),
   def({ id: 'dragonhide_pack', name: 'Dragonhide Pack', kind: 'backpack', slots: 36, weight: 18, value: 900, rarity: 'legendary', icon: '▤', bonus: { resist: { fire: 3 } } }),
 
@@ -154,28 +172,40 @@ const defs: ItemDef[] = [
   W('bastard_sword', 'Knightly Bastard Sword', 'sword', 21, 13, 15, 300, 58, { vocations: KNIGHT }),
   W('frostbrand', 'Frostbrand', 'sword', 26, 16, 30, 900, 55, { vocations: KNIGHT, element: 'ice', elementDamage: 8, rarity: 'uncommon' }),
   W('ember_blade', 'Ember Blade', 'sword', 31, 18, 45, 1800, 52, { vocations: KNIGHT, element: 'fire', elementDamage: 10, rarity: 'rare' }),
+  W('lizard_blade', 'Scaleguard Sabre', 'sword', 34, 19, 55, 3200, 50, { vocations: KNIGHT, element: 'earth', elementDamage: 8, rarity: 'rare' }),
   W('kings_edge', "King's Edge", 'sword', 44, 26, 80, 9000, 60, { vocations: KNIGHT, element: 'holy', elementDamage: 12, rarity: 'legendary', bonus: { hp: 100 } }),
   // axes
   W('hatchet', "Woodcutter's Axe", 'axe', 12, 6, 1, 25, 40),
   W('battle_axe', 'Bearded Battle Axe', 'axe', 19, 10, 12, 160, 60, { vocations: KNIGHT }),
+  W('barbarian_axe', 'Northman Axe', 'axe', 22, 9, 18, 280, 65, { vocations: KNIGHT }),
+  W('dwarven_axe', 'Dwarven Axe', 'axe', 26, 12, 25, 520, 70, { vocations: KNIGHT, rarity: 'uncommon' }),
+  W('glacial_cleaver', 'Glacial Cleaver', 'axe', 40, 16, 65, 5200, 90, { vocations: KNIGHT, element: 'ice', elementDamage: 11, rarity: 'rare' }),
   W('double_axe', 'Twinmoon Greataxe', 'axe', 30, 12, 25, 700, 120, { vocations: KNIGHT, twoHanded: true, rarity: 'uncommon' }),
   W('dragonbone_cleaver', 'Dragonbone Cleaver', 'axe', 38, 18, 60, 3500, 85, { vocations: KNIGHT, rarity: 'rare' }),
   W('demon_reaver', 'Demon Reaver', 'axe', 52, 20, 100, 15000, 140, { vocations: KNIGHT, twoHanded: true, element: 'death', elementDamage: 14, rarity: 'legendary' }),
   // clubs
   W('iron_mace', 'Iron Mace', 'club', 14, 8, 3, 45, 55),
   W('morning_star', 'Morning Star', 'club', 18, 10, 10, 150, 65, { vocations: KNIGHT }),
+  W('tusk_club', 'Tusk Club', 'club', 16, 7, 8, 90, 55),
+  W('stone_maul', 'Cyclops Maul', 'club', 29, 8, 30, 650, 115, { vocations: KNIGHT, twoHanded: true, rarity: 'uncommon' }),
   W('war_hammer', 'War Hammer', 'club', 24, 10, 20, 450, 85, { vocations: KNIGHT, twoHanded: true }),
   W('thunder_maul', 'Thunder Maul', 'club', 42, 14, 70, 6000, 130, { vocations: KNIGHT, twoHanded: true, element: 'energy', elementDamage: 14, rarity: 'rare' }),
   // bows & crossbows (two-handed, need ammunition)
   W('hunting_bow', 'Hunting Bow', 'bow', 1, 0, 1, 40, 31, { twoHanded: true, range: 5, ammoType: 'arrow' }),
   W('composite_bow', 'Composite Bow', 'bow', 4, 0, 20, 400, 33, { twoHanded: true, range: 6, ammoType: 'arrow', vocations: PALADIN, rarity: 'uncommon' }),
+  W('sylvan_bow', 'Sylvan Bow', 'bow', 6, 0, 32, 1400, 30, { twoHanded: true, range: 6, ammoType: 'arrow', vocations: PALADIN, rarity: 'uncommon', bonus: { attack: 1 } }),
   W('elven_longbow', 'Elven Longbow', 'bow', 8, 0, 45, 2500, 30, { twoHanded: true, range: 7, ammoType: 'arrow', vocations: PALADIN, rarity: 'rare', bonus: { attack: 2 } }),
   W('light_crossbow', 'Light Crossbow', 'crossbow', 2, 0, 8, 120, 40, { twoHanded: true, range: 5, ammoType: 'bolt' }),
   W('heavy_crossbow', 'Heavy Crossbow', 'crossbow', 6, 0, 40, 1800, 52, { twoHanded: true, range: 6, ammoType: 'bolt', vocations: PALADIN, rarity: 'uncommon' }),
+  W('frostbite_crossbow', 'Frostbite Crossbow', 'crossbow', 8, 0, 55, 4200, 48, { twoHanded: true, range: 6, ammoType: 'bolt', vocations: PALADIN, rarity: 'rare', bonus: { resist: { ice: 5 } } }),
   W('dragonbane_crossbow', 'Dragonbane Crossbow', 'crossbow', 10, 0, 80, 12000, 50, { twoHanded: true, range: 7, ammoType: 'bolt', vocations: PALADIN, rarity: 'legendary', bonus: { resist: { fire: 5 } } }),
   // throwing weapons (the stack in your hand is used up)
   W('spear', 'Spear', 'throwing', 25, 0, 1, 3, 20, { range: 4 }),
   W('throwing_star', 'Throwing Star', 'throwing', 28, 0, 15, 4, 2, { range: 4 }),
+  W('royal_spear', 'Royal Spear', 'throwing', 30, 0, 20, 6, 20, { range: 4, breakChance: 0.7 }),
+  W('enchanted_spear', 'Runebound Spear', 'throwing', 34, 0, 30, 18, 20, { range: 5, vocations: PALADIN, breakChance: 0.3, rarity: 'uncommon', note: 'Its runes keep it whole: it is rarely lost when thrown.' }),
+  W('viper_star', 'Viper Star', 'throwing', 30, 0, 20, 8, 2, { range: 4, element: 'earth', elementDamage: 8, rarity: 'uncommon' }),
+  W('shadow_star', 'Shadow Star', 'throwing', 42, 0, 45, 25, 2, { range: 4, vocations: PALADIN, rarity: 'rare' }),
   W('royal_javelin', 'Royal Javelin', 'throwing', 36, 0, 30, 10, 15, { range: 5, vocations: PALADIN, rarity: 'uncommon' }),
   // wands (sorcerer) and rods (druid)
   W('wand_of_sparks', 'Wand of Sparks', 'wand', 0, 0, 7, 100, 23, { vocations: SORC, range: 4, element: 'energy', magicDamage: [13, 25], manaPerShot: 2 }),
@@ -191,13 +221,19 @@ const defs: ItemDef[] = [
   def({ id: 'arrow', name: 'Arrow', kind: 'ammo', ammoType: 'arrow', attack: 18, weight: 0.7, value: 1, tint: '#c9b28a' }),
   def({ id: 'poison_arrow', name: 'Venom Arrow', kind: 'ammo', ammoType: 'arrow', attack: 20, element: 'earth', elementDamage: 6, weight: 0.8, value: 2, level: 10, rarity: 'uncommon' }),
   def({ id: 'flaming_arrow', name: 'Flaming Arrow', kind: 'ammo', ammoType: 'arrow', attack: 24, element: 'fire', elementDamage: 10, weight: 0.8, value: 4, level: 30, rarity: 'rare' }),
+  def({ id: 'onyx_arrow', name: 'Onyx Arrow', kind: 'ammo', ammoType: 'arrow', attack: 26, weight: 0.8, value: 3, level: 25, tint: '#3a3a4a', rarity: 'uncommon' }),
+  def({ id: 'hawkeye_arrow', name: 'Hawkeye Arrow', kind: 'ammo', ammoType: 'arrow', attack: 30, weight: 0.7, value: 5, level: 35, tint: '#6ad0a0', rarity: 'uncommon' }),
   def({ id: 'bolt', name: 'Bolt', kind: 'ammo', ammoType: 'bolt', attack: 25, weight: 0.9, value: 2, tint: '#9aa0a8' }),
   def({ id: 'piercing_bolt', name: 'Piercing Bolt', kind: 'ammo', ammoType: 'bolt', attack: 32, weight: 0.9, value: 4, level: 25, rarity: 'uncommon' }),
+  def({ id: 'frost_bolt', name: 'Rime Bolt', kind: 'ammo', ammoType: 'bolt', attack: 34, element: 'ice', elementDamage: 10, weight: 0.9, value: 7, level: 45, rarity: 'rare' }),
   def({ id: 'infernal_bolt', name: 'Infernal Bolt', kind: 'ammo', ammoType: 'bolt', attack: 38, element: 'fire', elementDamage: 12, weight: 0.9, value: 8, level: 60, rarity: 'rare' }),
 
   // --- shields & spellbooks -------------------------------------------------------------
   def({ id: 'wooden_shield', name: 'Wooden Shield', kind: 'shield', defense: 12, weight: 40, value: 8, tint: '#a8743f' }),
   def({ id: 'iron_shield', name: 'Iron Kite Shield', kind: 'shield', defense: 18, level: 8, weight: 60, value: 80 }),
+  def({ id: 'dwarven_shield', name: 'Dwarven Shield', kind: 'shield', defense: 20, level: 12, weight: 70, value: 200 }),
+  def({ id: 'scarab_shield', name: 'Scarab Shield', kind: 'shield', defense: 22, level: 28, vocations: FIGHTERS, weight: 55, value: 1000, rarity: 'uncommon', bonus: { resist: { earth: 4 } } }),
+  def({ id: 'frostscale_shield', name: 'Frostscale Shield', kind: 'shield', defense: 30, level: 60, vocations: FIGHTERS, weight: 62, value: 5500, rarity: 'rare', bonus: { resist: { ice: 7 } } }),
   def({ id: 'tower_shield', name: 'Tower Shield', kind: 'shield', defense: 27, level: 30, vocations: KNIGHT, weight: 90, value: 900, rarity: 'uncommon' }),
   def({ id: 'dragon_shield', name: 'Dragon Scale Shield', kind: 'shield', defense: 24, level: 35, vocations: FIGHTERS, weight: 60, value: 1200, rarity: 'uncommon', bonus: { resist: { fire: 5 } } }),
   def({ id: 'elven_aegis', name: 'Elven Aegis', kind: 'shield', defense: 29, level: 50, vocations: FIGHTERS, weight: 45, value: 3500, rarity: 'rare', bonus: { resist: { earth: 6 } } }),
@@ -209,6 +245,11 @@ const defs: ItemDef[] = [
   def({ id: 'leather_helmet', name: 'Leather Cap', kind: 'helmet', armor: 1, weight: 22, value: 4 }),
   def({ id: 'chain_helmet', name: 'Chain Coif', kind: 'helmet', armor: 2, weight: 42, value: 25 }),
   def({ id: 'iron_helmet', name: 'Iron Helmet', kind: 'helmet', armor: 3, level: 8, weight: 30, value: 90 }),
+  def({ id: 'fur_cap', name: 'Fur Cap', kind: 'helmet', armor: 1, weight: 12, value: 25, bonus: { resist: { ice: 3 } } }),
+  def({ id: 'dwarven_helmet', name: 'Dwarven Helmet', kind: 'helmet', armor: 4, level: 15, weight: 42, value: 320, rarity: 'uncommon' }),
+  def({ id: 'winged_helmet', name: 'Winged Helmet', kind: 'helmet', armor: 4, level: 22, vocations: FIGHTERS, weight: 34, value: 500, rarity: 'uncommon', bonus: { speed: 3 } }),
+  def({ id: 'frost_circlet', name: 'Rime Circlet', kind: 'helmet', armor: 2, level: 40, vocations: MAGES, weight: 9, value: 2200, rarity: 'rare', bonus: { mana: 60, magic: 3, resist: { ice: 4 } } }),
+  def({ id: 'frost_helm', name: 'Glacier Helm', kind: 'helmet', armor: 6, level: 50, vocations: FIGHTERS, weight: 52, value: 3200, rarity: 'rare', bonus: { resist: { ice: 6 } } }),
   def({ id: 'orc_warhelm', name: 'Orc Warhelm', kind: 'helmet', armor: 5, level: 20, vocations: FIGHTERS, weight: 45, value: 400, rarity: 'uncommon' }),
   def({ id: 'elven_circlet', name: 'Elven Circlet', kind: 'helmet', armor: 2, level: 30, vocations: ['paladin', 'sorcerer', 'druid'], weight: 10, value: 1500, rarity: 'rare', bonus: { mana: 60, magic: 4, manaRegen: 1 } }),
   def({ id: 'dragon_helm', name: 'Dragon Helm', kind: 'helmet', armor: 7, level: 60, vocations: FIGHTERS, weight: 60, value: 4000, rarity: 'rare', bonus: { resist: { fire: 6 } } }),
@@ -216,26 +257,36 @@ const defs: ItemDef[] = [
 
   // --- body armour ----------------------------------------------------------------------------
   def({ id: 'leather_armor', name: 'Leather Armour', kind: 'armor', armor: 3, weight: 60, value: 8 }),
+  def({ id: 'fur_armor', name: 'Fur Coat', kind: 'armor', armor: 5, weight: 75, value: 120, bonus: { resist: { ice: 4 } } }),
+  def({ id: 'dwarven_armor', name: 'Dwarven Mail', kind: 'armor', armor: 8, level: 25, vocations: FIGHTERS, weight: 110, value: 900, rarity: 'uncommon', bonus: { hpRegen: 1 } }),
   def({ id: 'mage_robe', name: 'Mage Robe', kind: 'armor', armor: 3, level: 10, vocations: MAGES, weight: 35, value: 150, bonus: { mana: 60, manaRegen: 1 } }),
   def({ id: 'chain_armor', name: 'Chain Mail', kind: 'armor', armor: 6, weight: 100, value: 80 }),
   def({ id: 'plate_armor', name: 'Plate Armour', kind: 'armor', armor: 9, level: 20, vocations: FIGHTERS, weight: 120, value: 400 }),
   def({ id: 'elven_mail', name: 'Elven Mail', kind: 'armor', armor: 9, level: 40, vocations: PALADIN, weight: 70, value: 2500, rarity: 'rare', bonus: { attack: 2, resist: { earth: 5 } } }),
   def({ id: 'arcane_robe', name: 'Robe of the Arcane', kind: 'armor', armor: 6, level: 50, vocations: MAGES, weight: 40, value: 4000, rarity: 'rare', bonus: { mana: 150, magic: 6, manaRegen: 2 } }),
+  def({ id: 'lizardscale_armor', name: 'Lizardscale Armour', kind: 'armor', armor: 9, level: 45, vocations: PALADIN, weight: 65, value: 3000, rarity: 'rare', bonus: { attack: 1, resist: { earth: 6 } } }),
+  def({ id: 'glacier_robe', name: 'Glacier Robe', kind: 'armor', armor: 5, level: 40, vocations: MAGES, weight: 38, value: 3500, rarity: 'rare', bonus: { mana: 100, magic: 4, resist: { ice: 6 } } }),
+  def({ id: 'frost_plate', name: 'Frostforged Plate', kind: 'armor', armor: 12, level: 60, vocations: FIGHTERS, weight: 120, value: 6200, rarity: 'rare', bonus: { resist: { ice: 8 } } }),
   def({ id: 'dragon_scale_mail', name: 'Dragon Scale Mail', kind: 'armor', armor: 12, level: 60, vocations: FIGHTERS, weight: 110, value: 6000, rarity: 'rare', bonus: { resist: { fire: 8 } } }),
   def({ id: 'demonplate', name: 'Demonplate', kind: 'armor', armor: 15, level: 100, vocations: KNIGHT, weight: 150, value: 20000, rarity: 'legendary', bonus: { hp: 150, resist: { physical: 4, fire: 6, death: 6 } } }),
 
   // --- legs -----------------------------------------------------------------------------------
   def({ id: 'leather_legs', name: 'Leather Legs', kind: 'legs', armor: 1, weight: 18, value: 5 }),
   def({ id: 'chain_legs', name: 'Chain Legs', kind: 'legs', armor: 3, weight: 50, value: 40 }),
+  def({ id: 'fur_legs', name: 'Fur Trousers', kind: 'legs', armor: 2, weight: 25, value: 40, bonus: { resist: { ice: 3 } } }),
+  def({ id: 'dwarven_legs', name: 'Dwarven Legs', kind: 'legs', armor: 4, level: 20, weight: 55, value: 420, rarity: 'uncommon' }),
   def({ id: 'plate_legs', name: 'Plate Legs', kind: 'legs', armor: 6, level: 30, vocations: FIGHTERS, weight: 70, value: 900, rarity: 'uncommon' }),
   def({ id: 'elven_leggings', name: 'Elven Leggings', kind: 'legs', armor: 5, level: 40, vocations: ['paladin', 'sorcerer', 'druid'], weight: 30, value: 2000, rarity: 'rare', bonus: { speed: 5, mana: 40 } }),
   def({ id: 'hydra_legs', name: 'Hydrascale Legs', kind: 'legs', armor: 7, level: 60, weight: 55, value: 5000, rarity: 'rare', bonus: { resist: { ice: 6, earth: 6 } } }),
+  def({ id: 'frost_legs', name: 'Frostforged Legs', kind: 'legs', armor: 7, level: 55, vocations: FIGHTERS, weight: 65, value: 4500, rarity: 'rare', bonus: { resist: { ice: 6 } } }),
   def({ id: 'demon_legs', name: 'Infernal Greaves', kind: 'legs', armor: 9, level: 90, vocations: KNIGHT, weight: 75, value: 14000, rarity: 'legendary', bonus: { resist: { fire: 8 } } }),
 
   // --- boots ----------------------------------------------------------------------------------
   def({ id: 'leather_boots', name: 'Leather Boots', kind: 'boots', armor: 1, weight: 9, value: 2 }),
+  def({ id: 'fur_boots', name: 'Fur Boots', kind: 'boots', armor: 1, weight: 12, value: 50, bonus: { resist: { ice: 4 } } }),
   def({ id: 'traveler_boots', name: "Traveller's Boots", kind: 'boots', armor: 1, level: 10, weight: 9, value: 300, rarity: 'uncommon', bonus: { speed: 10 } }),
   def({ id: 'steel_boots', name: 'Steel Boots', kind: 'boots', armor: 3, level: 30, vocations: FIGHTERS, weight: 29, value: 1500, rarity: 'uncommon' }),
+  def({ id: 'glacier_boots', name: 'Glacier Boots', kind: 'boots', armor: 2, level: 40, weight: 16, value: 2600, rarity: 'rare', bonus: { speed: 5, resist: { ice: 8 } } }),
   def({ id: 'emberwalk_boots', name: 'Emberwalk Boots', kind: 'boots', armor: 2, level: 50, weight: 15, value: 3000, rarity: 'rare', bonus: { resist: { fire: 10 } }, note: 'Fire fields cannot burn you.' }),
   def({ id: 'windstride_boots', name: 'Windstride Boots', kind: 'boots', armor: 1, level: 60, weight: 7, value: 10000, rarity: 'legendary', bonus: { speed: 30 } }),
 
@@ -244,6 +295,7 @@ const defs: ItemDef[] = [
   def({ id: 'garnet_amulet', name: 'Garnet Amulet', kind: 'amulet', weight: 5, value: 600, rarity: 'uncommon', bonus: { resist: { fire: 10 } } }),
   def({ id: 'frost_pendant', name: 'Frost Pendant', kind: 'amulet', weight: 5, value: 600, rarity: 'uncommon', bonus: { resist: { ice: 10 } } }),
   def({ id: 'jade_amulet', name: 'Jade Amulet', kind: 'amulet', weight: 5, value: 600, rarity: 'uncommon', bonus: { resist: { earth: 10 } } }),
+  def({ id: 'scarab_amulet', name: 'Scarab Amulet', kind: 'amulet', level: 25, weight: 6, value: 900, rarity: 'uncommon', bonus: { resist: { earth: 6, death: 6 } } }),
   def({ id: 'demonbone_amulet', name: 'Demonbone Amulet', kind: 'amulet', level: 80, weight: 8, value: 15000, rarity: 'legendary', bonus: { hp: 120, resist: { physical: 4, fire: 4, ice: 4, energy: 4, earth: 4, death: 4 } } }),
   def({ id: 'ring_of_vigor', name: 'Ring of Vigour', kind: 'ring', weight: 1, value: 500, rarity: 'uncommon', bonus: { hpRegen: 4 } }),
   def({ id: 'sapphire_ring', name: 'Sapphire Ring', kind: 'ring', weight: 1, value: 500, rarity: 'uncommon', bonus: { manaRegen: 4 } }),
@@ -261,7 +313,15 @@ const defs: ItemDef[] = [
     ['demon_horn', 'Demon Horn', 2500], ['demonic_essence', 'Demonic Essence', 1000], ['dragon_scale', 'Dragon Scale', 90],
     ['red_dragon_scale', 'Crimson Dragon Scale', 400], ['small_ruby', 'Small Ruby', 250], ['small_sapphire', 'Small Sapphire', 250],
     ['small_emerald', 'Small Emerald', 250], ['small_diamond', 'Small Diamond', 300], ['golden_goblet', 'Golden Goblet', 800],
-  ] as Array<[string, string, number]>).map(([id, name, value]) => def({ id, name, kind: 'material', weight: id === 'golden_goblet' ? 30 : 2, value })),
+    // northlands, mountains and desert
+    ['silver_fur', 'Silver Rabbit Fur', 8], ['antlers', 'Antlers', 15], ['snakeskin', 'Snakeskin', 10], ['penguin_feather', 'Penguin Feather', 6],
+    ['bear_paw', 'Bear Paw', 30], ['winter_wolf_fur', 'Winter Wolf Fur', 25], ['polar_bear_fur', 'Polar Bear Fur', 60], ['iron_ore', 'Iron Ore', 20],
+    ['frost_charm', 'Frost Charm', 35], ['braided_cord', 'Braided Warrior Cord', 30], ['skull_trophy', 'Skull Trophy', 140],
+    ['minotaur_horn', 'Minotaur Horn', 45], ['minotaur_leather', 'Minotaur Leather', 55], ['cyclops_eye', 'Eye of a Cyclops', 160],
+    ['scorpion_tail', 'Scorpion Tail', 40], ['scarab_coin', 'Scarab Coin', 100], ['mummy_wrapping', 'Mummy Wrapping', 35],
+    ['lizard_scale', 'Lizard Scale', 70], ['giant_beard', 'Frost Giant Beard', 180], ['crystal_shard', 'Ice Crystal Shard', 150],
+    ['frozen_heart', 'Frozen Heart', 500], ['frost_dragon_scale', 'Frost Dragon Scale', 220],
+  ] as Array<[string, string, number]>).map(([id, name, value]) => def({ id, name, kind: 'material', weight: id === 'golden_goblet' ? 30 : id === 'iron_ore' ? 12 : id === 'skull_trophy' ? 20 : id === 'polar_bear_fur' ? 15 : 2, value })),
 ];
 
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(defs.map((d) => [d.id, d]));

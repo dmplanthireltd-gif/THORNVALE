@@ -20,6 +20,9 @@ export enum Ground {
   Jungle = 14,
   Marble = 15,
   DeepWater = 16,
+  Snow = 17,
+  /** Glacier and frozen lakes (walkable). */
+  Ice = 18,
 }
 
 /** Object layer — what stands on the tile. */
@@ -67,19 +70,27 @@ export enum Obj {
   Altar = 38,
   JungleTree = 39,
   Railing = 40,
+  /** Golden sandstone city wall. */
+  SandWall = 41,
 }
 
 const SOLID = new Set<number>([
   Obj.Tree, Obj.Pine, Obj.DeadTree, Obj.Rock, Obj.Bush, Obj.Wall, Obj.Fence,
   Obj.Grave, Obj.Well, Obj.Barrel, Obj.Crate, Obj.Table, Obj.Hay, Obj.Lamp,
   Obj.Cliff, Obj.Palisade, Obj.Campfire, Obj.Chest, Obj.Locker, Obj.Palm, Obj.Pillar,
-  Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing,
+  Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall,
 ]);
 
 /** Objects that stop arrows and spells. Trees and fences do not. */
-const BLOCKS_SIGHT = new Set<number>([Obj.Wall, Obj.Cliff, Obj.Palisade, Obj.Pillar, Obj.StoneWall, Obj.Stalagmite]);
+const BLOCKS_SIGHT = new Set<number>([Obj.Wall, Obj.Cliff, Obj.Palisade, Obj.Pillar, Obj.StoneWall, Obj.Stalagmite, Obj.SandWall]);
 
-const UNWALKABLE_GROUND = new Set<number>([Ground.Water, Ground.Lava, Ground.Void, Ground.DeepWater]);
+const UNWALKABLE_GROUND_SET = new Set<number>([Ground.Water, Ground.Lava, Ground.Void, Ground.DeepWater]);
+
+/** Lookup tables for fast whole-map passes (flood fills, renderers). */
+export const SOLID_OBJ = new Uint8Array(256);
+for (const o of SOLID) SOLID_OBJ[o] = 1;
+export const UNWALKABLE_GROUND = new Uint8Array(256);
+for (const g of UNWALKABLE_GROUND_SET) UNWALKABLE_GROUND[g] = 1;
 
 export const FLOOR_MIN = -4;
 export const FLOOR_MAX = 2;
@@ -106,7 +117,14 @@ export type EnemyKind =
   | 'elf' | 'elf_scout' | 'elf_arcanist' | 'elf_warden'
   | 'crocodile' | 'tarantula' | 'jungle_troll' | 'hydra'
   | 'ghoul' | 'fire_elemental' | 'behemoth' | 'demon'
-  | 'dragon' | 'dragon_lord';
+  | 'dragon' | 'dragon_lord'
+  // frozen north (Ice Islands style)
+  | 'frost_dragon' | 'ice_golem' | 'crystal_spider' | 'frost_giant' | 'frost_giantess' | 'ice_witch'
+  | 'barbarian_raider' | 'barbarian_skullhunter' | 'barbarian_brutetamer' | 'barbarian_headsplitter'
+  | 'frostkin' | 'frostkin_toolshaper' | 'frostkin_windcaller' | 'dire_penguin' | 'silver_rabbit' | 'winter_wolf' | 'polar_bear'
+  // desert, mountains, plains and coasts of the new world
+  | 'scorpion' | 'mummy' | 'scarab' | 'minotaur' | 'minotaur_archer' | 'minotaur_mage' | 'cyclops'
+  | 'dwarf' | 'dwarf_soldier' | 'dwarf_guard' | 'bandit' | 'amazon' | 'valkyrie' | 'bear' | 'deer' | 'snake' | 'lizard_sentinel' | 'lizard_templar';
 
 export interface Region {
   name: string;
@@ -226,8 +244,8 @@ export class WorldMap {
     const f = this.floors.get(z);
     if (!f || !this.inBounds(x, y)) return false;
     const i = this.idx(x, y);
-    if (UNWALKABLE_GROUND.has(f.ground[i])) return false;
-    return !SOLID.has(f.obj[i]);
+    if (UNWALKABLE_GROUND[f.ground[i]]) return false;
+    return !SOLID_OBJ[f.obj[i]];
   }
 
   /**
@@ -288,11 +306,49 @@ export class WorldMap {
     return null;
   }
 
+  /** Protection-zone mask per floor, rebuilt whenever regions are added (regions are append-only). */
+  private safeCache: { n: number; floors: Map<number, Uint8Array> } | null = null;
+
   isSafe(x: number, y: number, z: number): boolean {
-    for (const r of this.regions) {
-      if (r.safe && z >= r.z0 && z <= r.z1 && x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) return true;
+    if (!this.inBounds(x, y)) return false;
+    if (!this.safeCache || this.safeCache.n !== this.regions.length) {
+      const floors = new Map<number, Uint8Array>();
+      for (const r of this.regions) {
+        if (!r.safe) continue;
+        for (let fz = r.z0; fz <= r.z1; fz++) {
+          let a = floors.get(fz);
+          if (!a) floors.set(fz, (a = new Uint8Array(this.width * this.height)));
+          for (let yy = Math.max(0, r.y0); yy <= Math.min(this.height - 1, r.y1); yy++) {
+            a.fill(1, yy * this.width + Math.max(0, r.x0), yy * this.width + Math.min(this.width - 1, r.x1) + 1);
+          }
+        }
+      }
+      this.safeCache = { n: this.regions.length, floors };
     }
-    return false;
+    const a = this.safeCache.floors.get(z);
+    return !!a && a[y * this.width + x] === 1;
+  }
+
+  /** Deep copy, so one generated world can seed many games. */
+  clone(): WorldMap {
+    const m = new WorldMap(this.width, this.height);
+    m.floors.clear();
+    for (const [z, f] of this.floors) {
+      const nf = new Floor(z, 0, 0, Ground.Void);
+      (nf as { ground: Uint8Array }).ground = f.ground.slice();
+      (nf as { obj: Uint8Array }).obj = f.obj.slice();
+      m.floors.set(z, nf);
+    }
+    for (const h of this.houses) m.houses.push({ ...h });
+    for (const s of this.spawns) m.spawns.push({ ...s });
+    for (const n of this.npcs) m.npcs.push({ ...n });
+    for (const r of this.regions) m.regions.push({ ...r, temple: r.temple ? { ...r.temple } : undefined });
+    for (const [k, l] of this.links) m.links.set(k, { kind: l.kind, to: { ...l.to } });
+    for (const c of this.chests) m.chests.push({ ...c, items: c.items.map((i) => ({ ...i })) });
+    for (const [k, d] of Object.entries(this.destinations)) m.destinations[k] = { ...d };
+    m.playerSpawn = { ...this.playerSpawn };
+    m.temple = { ...this.temple };
+    return m;
   }
 
   houseAt(x: number, y: number, z = 0): House | null {

@@ -25,6 +25,18 @@ export const LOOKS: Record<string, Look> = {
   frostbrand: { c: 0x9fe6ff, t: 0x5fc8f0, g: 0x1c5a78, s: 1.0 },
   ember_blade: { c: 0xff8a3a, t: 0x2a1a14, g: 0x8a2a00, s: 1.05 },
   kings_edge: { c: 0xfff2c0, t: 0xe0b03c, g: 0x806010, s: 1.15 },
+  lizard_blade: { c: 0x9ad06a, t: 0x3a5a2a, g: 0x1a3a10, s: 1.05 },
+  barbarian_axe: { c: 0xb0b6c0, t: 0x8a5a32, s: 1.05 },
+  dwarven_axe: { c: 0xd8c080, t: 0x5a606a, s: 1.1 },
+  glacial_cleaver: { c: 0xbfeeff, t: 0x3a6a9a, g: 0x1c5a78, s: 1.2 },
+  tusk_club: { c: 0xece2c6, t: 0xd8d0b8, s: 0.95 },
+  stone_maul: { c: 0x8a8478, t: 0x5a544a, s: 1.25 },
+  sylvan_bow: { c: 0xb0d080, t: 0xf0f0d0, g: 0x203a10, s: 1.05 },
+  frostbite_crossbow: { c: 0x9fd8f0, t: 0x3a5a8a, g: 0x1c4a68, s: 1.05 },
+  royal_spear: { c: 0xf0d070, t: 0x6a4426, s: 1.05 },
+  enchanted_spear: { c: 0x8ad8ff, t: 0x4a3a6a, g: 0x2050a0, s: 1.1 },
+  viper_star: { c: 0x6ad040, t: 0x2a4a1a, s: 1.0 },
+  shadow_star: { c: 0x3a3048, t: 0xa080d0, g: 0x201030, s: 1.0 },
   hatchet: { c: 0xc9d0da, t: 0x7a5530, s: 0.75 },
   battle_axe: { c: 0xc9d0da, t: 0xa83a2a, s: 1.0 },
   double_axe: { c: 0xd8dde6, t: 0x6b7380, s: 1.2 },
@@ -101,7 +113,7 @@ function club(id: string, l: Look): THREE.Group {
   const head = m(l.c, l.g);
   const spikes = m(l.t ?? 0xc9d0da);
   const g = group(0, 0, 0, haft(len));
-  if (id === 'war_hammer' || id === 'thunder_maul') {
+  if (id === 'war_hammer' || id === 'thunder_maul' || id === 'stone_maul') {
     g.add(box(0.3 * s, 0.17 * s, 0.18 * s, head, 0, 0, len - 0.2));
     g.add(cone(0.06, 0.18, spikes, -0.22 * s, 0, len - 0.2, 4).rotateZ(Math.PI / 2));
     if (id === 'thunder_maul') g.add(sphere(0.06, m(0xf0f080, 0xa0a020), 0.18 * s, 0, len - 0.2));
@@ -149,7 +161,7 @@ function crossbow(l: Look): THREE.Group {
 
 function throwing(id: string, l: Look): THREE.Group {
   const head = m(l.c, l.g);
-  if (id === 'throwing_star') {
+  if (id.endsWith('_star')) {
     const g = group(0, 0, 0.08);
     for (let i = 0; i < 4; i++) g.add(cone(0.04, 0.16, head, Math.cos(i * Math.PI / 2) * 0.08, 0, Math.sin(i * Math.PI / 2) * 0.08, 3).rotateZ(i * Math.PI / 2 + Math.PI / 2));
     return g;
@@ -197,6 +209,9 @@ export const SHIELDS: Record<string, { face: number; rim: number; shape: 'round'
   elven_aegis: { face: 0xd8e8c0, rim: 0x4a9a5a, shape: 'kite', boss: 0x7ad08a, glow: 0x1a3a1a },
   demon_shield: { face: 0x5a1010, rim: 0x2a1a1a, shape: 'tower', boss: 0xd04020, glow: 0x300000 },
   apprentice_book: { face: 0x6a3a8a, rim: 0xe0b03c, shape: 'book' },
+  dwarven_shield: { face: 0x8a6a3a, rim: 0xc9a04a, shape: 'round', boss: 0xd8c080 },
+  scarab_shield: { face: 0x2a8a6a, rim: 0xd0a030, shape: 'kite', boss: 0x40c0a0 },
+  frostscale_shield: { face: 0xbfe6f5, rim: 0x5a8ab0, shape: 'kite', boss: 0x9fe6ff, glow: 0x0a2a3a },
   storm_tome: { face: 0x2a3a8a, rim: 0x8ad8ff, shape: 'book', glow: 0x102050 },
 };
 
@@ -251,4 +266,9 @@ export const ARMOR_LOOK: Record<string, { color: number; size: number; plate?: b
   arcane_robe: { color: 0x3a50c0, size: 0.12 },
   dragon_scale_mail: { color: 0x3f9a52, size: 0.16, plate: true },
   demonplate: { color: 0x7a1a1a, size: 0.18, plate: true },
+  fur_armor: { color: 0xd8ccb4, size: 0.15 },
+  dwarven_armor: { color: 0xb08a4a, size: 0.16, plate: true },
+  lizardscale_armor: { color: 0x5a9a4a, size: 0.14, plate: true },
+  glacier_robe: { color: 0x8ac8e8, size: 0.12 },
+  frost_plate: { color: 0xbfe6f5, size: 0.17, plate: true },
 };

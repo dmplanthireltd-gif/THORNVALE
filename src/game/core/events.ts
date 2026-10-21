@@ -22,7 +22,7 @@ export type GameEvent =
   | { type: 'projectile'; fromId: number; toId: number; effect: Effect }
   | { type: 'area'; x: number; y: number; z: number; radius: number; effect: Effect }
   | { type: 'cast'; casterId: number; words: string }
-  | { type: 'buff'; id: number; buff: 'haste' | 'magicShield' | 'light'; on: boolean }
+  | { type: 'buff'; id: number; buff: 'haste' | 'magicShield' | 'light' | 'berserk' | 'bullseye' | 'mastermind'; on: boolean }
   | { type: 'death'; id: number }
   | { type: 'spawn'; id: number }
   | { type: 'teleport'; id: number }

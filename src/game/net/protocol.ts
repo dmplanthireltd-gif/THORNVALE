@@ -6,7 +6,7 @@ import { EQUIP_SLOTS, isItem, type EquipSlot, type ItemStack } from '../inventor
 import { isSpellId, type SpellId } from '../magic/spells';
 import type { DialogueState } from '../npc/dialogue';
 import { isOutfit, type Outfit } from '../player/outfits';
-import type { Buffs } from '../player/Player';
+import { emptyBuffs, type Buffs } from '../player/Player';
 import { isVocation, type Vocation } from '../player/vocations';
 import type { QuestLog } from '../quests/quests';
 
@@ -16,7 +16,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -297,7 +297,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   p.targetId = me.target;
   p.spellCooldowns = me.cds;
   p.groupCooldowns = { ...me.gcds, potion: me.gcds.potion ?? 0 };
-  p.buffs = me.buffs;
+  p.buffs = { ...emptyBuffs(), ...me.buffs };
   p.home = me.home;
   s.bank = me.bank;
   const spellsBefore = [...s.spells].sort().join();

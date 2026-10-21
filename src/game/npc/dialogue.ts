@@ -4,6 +4,13 @@ import { SPELLS, type SpellId } from '../magic/spells';
 import type { Vocation } from '../player/vocations';
 import { QUESTS, type QuestLog } from '../quests/quests';
 import { buyPrice, NPCS } from './npcs';
+import { EXTRA_SPELLS } from './stock';
+
+// merge spells added by content updates (see stock.ts) into the trainers' lists
+for (const [key, list] of Object.entries(EXTRA_SPELLS)) {
+  const n = NPCS[key];
+  if (n) n.spells = [...new Set([...(n.spells ?? []), ...list.filter((id) => id in SPELLS)])];
+}
 
 export interface DialogueOption {
   label: string;

@@ -124,7 +124,7 @@ function drawWeapon(x: Ctx, d: ItemDef): void {
     }
     case 'club': {
       bar(x, 6, 27, 20, 12, 2.8, '#7a5530');
-      if (d.id === 'war_hammer' || d.id === 'thunder_maul') {
+      if (d.id === 'war_hammer' || d.id === 'thunder_maul' || d.id === 'stone_maul') {
         poly(x, [14, 6, 22, 1, 30, 9, 22, 14], main);
         bar(x, 17, 6, 23, 3, 0.8, shade(main, 1.35));
         if (d.id === 'thunder_maul') glyph(x, 'ϟ', 22, 8, 9, '#fff27a');
@@ -166,12 +166,13 @@ function drawWeapon(x: Ctx, d: ItemDef): void {
       bar(x, 15, 1, 31, 17, 0.5, '#e8e0c6');
       break;
     case 'throwing':
-      if (d.id === 'throwing_star') {
+      if (d.id.endsWith('_star')) {
         poly(x, [16, 2, 19, 13, 30, 16, 19, 19, 16, 30, 13, 19, 2, 16, 13, 13], main);
         circle(x, 16, 16, 2.4, trim);
       } else {
         bar(x, 4, 28, 23, 9, 2.2, trim);
         poly(x, [21, 11, 21, 6, 29, 3, 26, 11], main);
+        if (d.id === 'royal_spear') poly(x, [17, 13, 15, 11, 19, 15], '#e0b03c', 1);
       }
       break;
     case 'wand':
@@ -248,6 +249,10 @@ function drawHelmet(x: Ctx, d: ItemDef): void {
     case 'crested':
       poly(x, [9, 8, 16, 1, 23, 8, 16, 6], t);
       break;
+    case 'winged':
+      poly(x, [6, 14, 1, 5, 4, 4, 9, 11], t);
+      poly(x, [26, 14, 31, 5, 28, 4, 23, 11], t);
+      break;
     default:
       break;
   }
@@ -304,6 +309,19 @@ function drawBoots(x: Ctx, d: ItemDef): void {
 
 // ------------------------------------------------------------------ other items
 
+function drawMead(x: Ctx): void {
+  x.beginPath();
+  x.moveTo(4, 6);
+  x.quadraticCurveTo(8, 26, 26, 28);
+  x.quadraticCurveTo(28, 22, 24, 20);
+  x.quadraticCurveTo(14, 18, 12, 4);
+  x.closePath();
+  paint(x, '#e8dcc0');
+  poly(x, [4, 6, 12, 4, 11, 8, 5, 9], '#f0c040', 1);
+  bar(x, 9, 13, 14, 12, 1.2, '#8a6a3e');
+  bar(x, 13, 21, 18, 18, 1.2, '#8a6a3e');
+}
+
 function drawPotion(x: Ctx, d: ItemDef): void {
   const liquid = d.tint;
   rect(x, 13, 3, 6, 4, '#8a6a3e');
@@ -320,6 +338,7 @@ function drawPotion(x: Ctx, d: ItemDef): void {
   x.fillStyle = liquid;
   x.fill();
   circle(x, 12.5, 17, 1.6, 'rgba(255,255,255,0.8)', 0);
+  if (d.buff) glyph(x, d.buff === 'berserk' ? '⚔' : d.buff === 'bullseye' ? '◎' : '✦', 16, 21, 8, '#ffffff');
 }
 
 function drawRune(x: Ctx, d: ItemDef): void {
@@ -341,8 +360,9 @@ function drawRune(x: Ctx, d: ItemDef): void {
 }
 
 function drawBackpack(x: Ctx, d: ItemDef): void {
-  const c = d.id === 'dragonhide_pack' ? '#a8281f' : d.id === 'explorer_pack' ? '#4a6a3a' : d.id === 'bag' ? '#a8743f' : '#8a5a32';
-  if (d.id !== 'bag') bar(x, 10, 10, 10, 4, 1.6, '#5a3a22');
+  const c = d.id === 'dragonhide_pack' ? '#a8281f' : d.id === 'explorer_pack' ? '#4a6a3a' : d.id === 'bag' ? '#a8743f'
+    : d.id.startsWith('fur_') ? '#d8ccb4' : '#8a5a32';
+  if (d.id !== 'bag' && d.id !== 'fur_bag') bar(x, 10, 10, 10, 4, 1.6, '#5a3a22');
   x.beginPath();
   x.moveTo(6, 12);
   x.quadraticCurveTo(16, 4, 26, 12);
@@ -352,6 +372,7 @@ function drawBackpack(x: Ctx, d: ItemDef): void {
   paint(x, c);
   poly(x, [7, 12, 25, 12, 24, 19, 8, 19], shade(c, 0.75), 1);
   circle(x, 16, 19, 1.6, '#e0b03c', 1);
+  if (d.id.startsWith('fur_')) for (let i = 0; i < 4; i++) bar(x, 9 + i * 5, 21, 8 + i * 5, 26, 0.6, '#a89878');
 }
 
 function drawGold(x: Ctx): void {
@@ -367,6 +388,13 @@ function drawGold(x: Ctx): void {
 }
 
 function drawFood(x: Ctx, d: ItemDef): void {
+  if (d.id === 'fish') {
+    poly(x, [3, 16, 9, 10, 20, 9, 26, 15, 20, 22, 9, 22], '#8ab0c8');
+    poly(x, [25, 15, 31, 9, 30, 22], '#6a90a8');
+    circle(x, 9, 15, 1.5, '#121212', 0);
+    bar(x, 13, 12, 13, 19, 0.6, '#5a7a90');
+    return;
+  }
   if (d.id === 'cheese') {
     poly(x, [4, 24, 28, 24, 28, 14, 4, 20], '#f0c840');
     poly(x, [4, 20, 28, 14, 22, 9], '#ffe070');
@@ -412,6 +440,12 @@ const MATERIAL_SHAPE: Record<string, [string, string]> = {
   demon_horn: ['horn', '#3a1a14'], demonic_essence: ['orb', '#c040ff'], dragon_scale: ['scale', '#3f9a52'], red_dragon_scale: ['scale', '#c0281f'],
   small_ruby: ['gem', '#e8243a'], small_sapphire: ['gem', '#2a6ae8'], small_emerald: ['gem', '#24c060'], small_diamond: ['gem', '#e8f4ff'],
   golden_goblet: ['cup', '#e8b923'],
+  silver_fur: ['pelt', '#d8dce4'], antlers: ['antler', '#c8a878'], snakeskin: ['tail', '#8aa040'], penguin_feather: ['feather', '#2a2a34'],
+  bear_paw: ['paw', '#6a4a2a'], winter_wolf_fur: ['pelt', '#dfe6ee'], polar_bear_fur: ['pelt', '#f0ece0'], iron_ore: ['ore', '#8a7060'],
+  frost_charm: ['orb', '#9fe6ff'], braided_cord: ['tail', '#c0402a'], skull_trophy: ['skull', '#efe6cc'], minotaur_horn: ['horn', '#d8c8a0'],
+  minotaur_leather: ['pelt', '#8a5a32'], cyclops_eye: ['eye', '#f0f0e8'], scorpion_tail: ['tail', '#c08a3a'], scarab_coin: ['coin', '#40c0a0'],
+  mummy_wrapping: ['scroll', '#d8ccb0'], lizard_scale: ['scale', '#5a9a4a'], giant_beard: ['pelt', '#c8d8e8'], crystal_shard: ['crystal', '#9fe6ff'],
+  frozen_heart: ['heart', '#6ac8ff'], frost_dragon_scale: ['scale', '#bfe6f5'],
 };
 
 function drawMaterial(x: Ctx, d: ItemDef): void {
@@ -514,6 +548,54 @@ function drawMaterial(x: Ctx, d: ItemDef): void {
       rect(x, 9, 24, 14, 4, c);
       circle(x, 16, 10, 2, '#e8243a');
       break;
+    case 'antler':
+      bar(x, 8, 29, 12, 6, 2.2, c);
+      bar(x, 10, 18, 4, 12, 1.6, c);
+      bar(x, 11, 12, 18, 6, 1.6, c);
+      bar(x, 22, 29, 20, 8, 2.2, c);
+      bar(x, 21, 16, 28, 11, 1.6, c);
+      break;
+    case 'feather':
+      x.beginPath();
+      x.moveTo(6, 28);
+      x.quadraticCurveTo(8, 6, 26, 4);
+      x.quadraticCurveTo(22, 22, 6, 28);
+      paint(x, c);
+      bar(x, 7, 27, 24, 6, 0.6, '#f0f0f0');
+      break;
+    case 'paw':
+      circle(x, 16, 20, 8, c);
+      for (const [cx, cy] of [[8, 10], [13, 7], [19, 7], [24, 10]]) circle(x, cx, cy, 3, shade(c, 0.8));
+      break;
+    case 'ore':
+      poly(x, [5, 20, 9, 9, 18, 5, 27, 11, 28, 22, 18, 28, 8, 27], c);
+      for (const [cx, cy] of [[12, 14], [20, 18], [15, 22]]) circle(x, cx, cy, 2, '#d8d0c8', 0);
+      break;
+    case 'skull':
+      circle(x, 16, 14, 10, c);
+      rect(x, 11, 20, 10, 8, c);
+      circle(x, 12, 14, 2.6, '#1a1612', 0);
+      circle(x, 20, 14, 2.6, '#1a1612', 0);
+      break;
+    case 'eye':
+      circle(x, 16, 16, 11, c);
+      circle(x, 16, 16, 6, '#8a4a20');
+      circle(x, 16, 16, 3, '#121212', 0);
+      circle(x, 14, 13, 1.4, '#ffffff', 0);
+      break;
+    case 'coin':
+      circle(x, 16, 16, 12, '#e8b923');
+      circle(x, 16, 16, 9, shade('#e8b923', 0.8), 1);
+      x.beginPath();
+      x.ellipse(16, 16, 4, 6, 0, 0, Math.PI * 2);
+      paint(x, c, 1);
+      break;
+    case 'crystal':
+      glow(x, 16, 16, 15, `${c}88`);
+      poly(x, [16, 2, 22, 12, 19, 29, 12, 29, 10, 12], c);
+      poly(x, [7, 14, 11, 10, 12, 26, 6, 25], shade(c, 0.85), 1);
+      poly(x, [16, 2, 18, 12, 16, 28], shade(c, 1.4), 0.6);
+      break;
     case 'blob':
       x.beginPath();
       x.ellipse(16, 18, 11, 8, 0.3, 0, Math.PI * 2);
@@ -562,7 +644,8 @@ function drawJewel(x: Ctx, d: ItemDef): void {
 }
 
 function drawAmmo(x: Ctx, d: ItemDef): void {
-  const head = d.element === 'fire' ? '#ff7a1a' : d.element === 'earth' ? '#6ad040' : '#d8dde6';
+  const head = d.element === 'fire' ? '#ff7a1a' : d.element === 'earth' ? '#6ad040' : d.element === 'ice' ? '#9fe6ff'
+    : d.id === 'onyx_arrow' ? '#3a3a4a' : d.id === 'hawkeye_arrow' ? '#6ad0a0' : d.id === 'piercing_bolt' ? '#a8b0c0' : '#d8dde6';
   for (let i = 0; i < 3; i++) {
     const o = i * 6 - 6;
     bar(x, 6 + o, 28, 24 + o, 6, 1.4, d.ammoType === 'bolt' ? '#6a5040' : '#c9b28a');
@@ -575,7 +658,9 @@ function draw(x: Ctx, d: ItemDef): void {
   if (d.weaponType) return drawWeapon(x, d);
   switch (d.kind) {
     case 'gold': return drawGold(x);
-    case 'consumable': return d.heal && !d.mana && !d.id.includes('potion') ? drawFood(x, d) : drawPotion(x, d);
+    case 'consumable':
+      if (d.id === 'mead') return drawMead(x);
+      return d.heal && !d.mana && !d.id.includes('potion') ? drawFood(x, d) : drawPotion(x, d);
     case 'rune': return drawRune(x, d);
     case 'tool': return drawTool(x, d);
     case 'shield': return drawShield(x, d);
@@ -615,6 +700,7 @@ const ELEMENT_BG: Record<string, [string, string]> = {
 
 function spellLook(sp: SpellDef): { bg: [string, string]; sym: string } {
   if (sp.kind === 'heal' || sp.kind === 'healFriend') return { bg: ['#7dff9a', '#0a4a1a'], sym: sp.kind === 'healFriend' ? '✚→' : '✚' };
+  if (sp.kind === 'conjure') return { bg: ['#d8c8ff', '#2a1a5a'], sym: sp.conjure?.from ? '↟' : '➶' };
   if (sp.kind === 'buff') {
     if (sp.buff === 'haste') return { bg: ['#9fe8ff', '#103a4a'], sym: '»' };
     if (sp.buff === 'magicShield') return { bg: ['#7fb2ff', '#101a4a'], sym: '◈' };

@@ -13,7 +13,7 @@ import type { SaveData } from '../Game';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -29,6 +29,12 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   1: (d) => {
     const player = { ...(d.player as Record<string, unknown>), x: -1, y: -1, z: 0 };
     return { ...d, player, version: 2 };
+  },
+  // v2 → v3 (new 640×800 world): old coordinates point somewhere random in the new map,
+  // so everyone wakes up at the Thornvale temple. Level, items, bank, depot and quests stay.
+  2: (d) => {
+    const player = { ...(d.player as Record<string, unknown>), x: -1, y: -1, z: 0, home: 'Thornvale' };
+    return { ...d, player, version: 3 };
   },
 };
 

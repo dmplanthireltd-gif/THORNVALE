@@ -127,7 +127,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 2. **Every player action is a `Command`** sent through `Controller.send(...)` → `Game.executeCommand`. UI/input never mutate game state directly. Offline = LocalController runs it locally; online = NetController sends it, the server is authoritative.
 3. **Game → view communication is via the event bus** (`core/events.ts`). Renderer, HUD and Sfx subscribe; they never poll internal fields they don't own.
 4. **Online:** server ticks at 20 Hz and sends snapshots (`VIEW_RADIUS = 20`). The client keeps a mirror Game (`simulate:false`) and applies snapshots. Messages arriving before the HUD exists go to the backlog.
-5. **Protocol:** `PROTOCOL_VERSION` (currently **3**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
+5. **Protocol:** `PROTOCOL_VERSION` (currently **4**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
 6. Admin/test commands are typed in chat with `/` (`/help` lists them). Offline always allowed; online only for names in `ADMINS` or when `ALLOW_ADMIN=1`. Dev console opens with the **`** key.
 
 ---
@@ -154,7 +154,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 
 ## 8. Save data and migration (PRIORITY)
 
-File: `src/game/save/migrate.ts`. Current **`SAVE_VERSION = 2`**.
+File: `src/game/save/migrate.ts`. Current **`SAVE_VERSION = 3`** (v2→v3: new world, everyone respawns at the Thornvale temple).
 
 - Every save stores `version`. On load, `migrateSave()` upgrades it step by step: `MIGRATIONS[n]` turns version n into n+1.
 - **Changed the save shape?** → bump `SAVE_VERSION`, add `MIGRATIONS[old]`, add a case to the smoke test, note it in the Change Log below.
@@ -225,8 +225,12 @@ Then `npm run build` (on Render or a machine with npm registry access).
 
 - [ ] Render: `SUPABASE_SERVICE_KEY` set in dashboard; verify both startup log lines.
 - [ ] Supabase Auth: "Confirm email" off (or custom SMTP). Done 2026-10-21: Site URL `https://thornvaleonline.com`; redirect URLs `https://thornvaleonline.com/**`, `https://www.thornvaleonline.com/**`, `https://thornvale.onrender.com/**`.
-- [ ] New 640 × 800 world following the owner's reference layout, original names; old areas dropped; chunked WorldView.
-- [ ] Ice-region (7.92-style) and classic monsters, items, spells, buff potions, conjure spells; content-test.
+- [x] New 640 × 800 world (14 towns: Thornvale, Westmarch, Elderglen, Stonedeep, Highmoor, Millbrook, Valdrheim, Aurelion, Briarwatch, Corvane, Saltmere, Palmreach, Sunspire, Dunewatch). Owner asked to skip Zao/Yalahar/Darashia/Rookgaard/Liberty Bay equivalents to save time; Zao and Rookgaard were never built, the others (Briarwatch+Emberhold, Dunewatch, Saltmere) were already built and kept for now — owner may ask to remove them later.
+- [x] Ice-region (7.92-style) and classic monsters (35 new), 63 items, 5 spells, 3 buff potions; content-test.
+- [ ] Remaining Tibia-8.0-style spells (~45: waves, beams, exori mort, mass heal, exana pox, utani gran hur, utana vid, exiva, rune conjuring…).
+- [ ] Dark realistic monster models (owner chose this style; sample of 4 in progress, behind `?monsters=dark`).
+- [ ] Owner bugs: can't throw items onto the ground / onto depot lockers; depot lockers need gaps so characters can stand between them and show items for trade.
+- [ ] Owner UI: minimap zoom with mouse wheel; battle list expandable/resizable.
 - [ ] Better spell effects (Effects.ts).
 - [ ] Integrate, test all, push, refresh artifact.
 - [ ] Owner decision: upgrade the thornvale service from Free to a paid instance (Starter is enough for ~50 players) so the server never sleeps; then set `plan:` in render.yaml.
@@ -252,3 +256,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | 4c04878 | Repo renamed to dmplanthireltd-gif/THORNVALE; grand opening date set to 1 January 2027 | 2 | 3 |
 | 2026-10-21 | c93fc10 | Website planned on WordPress.com (superseded by the next row) | 2 | 3 |
 | 2026-10-21 | — | Game moved to /play/ (Vite base '/play/'); marketing website from `site/` served at the root by server.ts; domain thornvaleonline.com on Render | 2 | 3 |
+| 2026-10-21 | — | New 640×800 world (14 towns), 35 monsters, 63 items, 5 spells, buff potions; saves v3 respawn everyone at the Thornvale temple | 3 | 4 |

@@ -9,7 +9,7 @@ import { onEnemyDamaged, updateEnemyAI, type AIContext } from './enemies/EnemyAI
 import type { Ability } from './enemies/enemyDefs';
 import type { Creature } from './entities/Creature';
 import { addToList, DEPOT_SLOTS, Inventory } from './inventory/Inventory';
-import { describeItem, EQUIP_SLOTS, equipSlotFor, itemDef, type Element, type EquipSlot, type ItemDef, type ItemStack } from './inventory/items';
+import { describeItem, EQUIP_SLOTS, equipSlotFor, itemDef, POTION_BUFF_POWER, POTION_BUFF_SECONDS, type Element, type EquipSlot, type ItemDef, type ItemStack } from './inventory/items';
 import { GROUP_COOLDOWN, isSpellId, parseSpellWords, SPELLS, startingSpells, type SpellDef, type SpellId } from './magic/spells';
 import { findPath } from './movement/pathfinding';
 import { buildDialogue, type DialogueState, type DialogueView } from './npc/dialogue';
@@ -18,7 +18,7 @@ import { buyPrice, NPCS } from './npc/npcs';
 import { runAdminCommand } from './admin';
 import { migrateSave, SAVE_VERSION } from './save/migrate';
 import { DEFAULT_OUTFIT, isOutfit, type Outfit } from './player/outfits';
-import { expForLevel, Player } from './player/Player';
+import { BUFF_NAMES, emptyBuffs, expForLevel, Player } from './player/Player';
 import { isVocation, VOCATIONS, type Vocation } from './player/vocations';
 import { QUESTS, QuestLog } from './quests/quests';
 import { buildWorld } from './world/worldGen';
@@ -274,7 +274,15 @@ export class Game implements AIContext {
   }
 
   magicBonus(s: Session): number {
-    return this.equippedDefs(s).reduce((n, d) => n + (d.bonus?.magic ?? 0), 0);
+    const potion = s.player.buffs.mastermind > 0 ? POTION_BUFF_POWER.mastermind : 0;
+    return this.equippedDefs(s).reduce((n, d) => n + (d.bonus?.magic ?? 0), 0) + potion;
+  }
+
+  /** Extra attack from a fighting-style potion (Potion of Fury / of the Hawk). */
+  potionAttack(s: Session, style: 'melee' | 'distance'): number {
+    const b = s.player.buffs;
+    if (style === 'melee') return b.berserk > 0 ? POTION_BUFF_POWER.berserk : 0;
+    return b.bullseye > 0 ? POTION_BUFF_POWER.bullseye : 0;
   }
 
   attackBonus(s: Session): number {
@@ -290,9 +298,9 @@ export class Game implements AIContext {
     if (d.ammoType) {
       const a = s.inventory.equipped('ammo');
       const ad = a ? itemDef(a) : null;
-      return (d.attack ?? 0) + (ad && ad.ammoType === d.ammoType ? ad.attack ?? 0 : 0) + this.attackBonus(s);
+      return (d.attack ?? 0) + (ad && ad.ammoType === d.ammoType ? ad.attack ?? 0 : 0) + this.attackBonus(s) + this.potionAttack(s, 'distance');
     }
-    return (d.attack ?? 0) + this.attackBonus(s);
+    return (d.attack ?? 0) + this.attackBonus(s) + this.potionAttack(s, d.weaponType === 'throwing' ? 'distance' : 'melee');
   }
 
   /** Attack range in tiles (1 = melee). */
@@ -450,14 +458,14 @@ export class Game implements AIContext {
     p.hazardTimer -= dt;
     for (const k of Object.keys(p.spellCooldowns)) p.spellCooldowns[k] -= dt;
     for (const g of ['attack', 'heal', 'support', 'potion'] as const) p.groupCooldowns[g] = Math.max(0, p.groupCooldowns[g] - dt);
-    for (const bName of ['haste', 'magicShield', 'light'] as const) {
+    for (const bName of BUFF_NAMES) {
       if (p.buffs[bName] > 0) {
         p.buffs[bName] -= dt;
         if (p.buffs[bName] <= 0) {
           p.buffs[bName] = 0;
           this.events.emit({ type: 'buff', id: p.id, buff: bName, on: false });
           if (bName === 'haste') this.refreshStats(s);
-          this.msg(s.id, bName === 'haste' ? 'Your haste wears off.' : bName === 'magicShield' ? 'Your magic shield fades.' : 'Your light fades.', 'info');
+          this.msg(s.id, BUFF_FADE[bName], 'info');
         }
       }
     }
@@ -767,7 +775,7 @@ export class Game implements AIContext {
       if (!s) return;
       const w = s.inventory.equipped('weapon');
       const wd = w ? itemDef(w) : null;
-      const atk = (wd?.attack ?? FIST_ATTACK) + this.attackBonus(s);
+      const atk = (wd?.attack ?? FIST_ATTACK) + this.attackBonus(s) + this.potionAttack(s, 'melee');
       const roll = rollMelee(attacker.level, atk, VOCATIONS[attacker.vocation].melee, target.def.armor);
       roll.amount = applyResist(roll.amount, target.def.resist.physical);
       this.applyDamage(target, attacker, roll, 'physical');
@@ -805,15 +813,17 @@ export class Game implements AIContext {
       this.applyDamage(t, p, { amount: applyResist(Math.round(raw * (1 + this.magicBonus(s) / 100)), t.def.resist[el]), result: 'hit' }, el);
       return;
     }
-    let atk = this.attackBonus(s);
+    let atk = this.attackBonus(s) + this.potionAttack(s, 'distance');
     let effect: Effect = 'spear';
     let element: Element | undefined;
     let elementDamage = 0;
     if (wd.weaponType === 'throwing') {
       atk += wd.attack ?? 0;
-      effect = w.id === 'throwing_star' ? 'star' : 'spear';
+      effect = w.id.endsWith('_star') ? 'star' : 'spear';
+      element = wd.element;
+      elementDamage = wd.elementDamage ?? 0;
       // throwing weapons are used up (most land somewhere you cannot reach)
-      if (Math.random() < 0.85) {
+      if (Math.random() < (wd.breakChance ?? 0.85)) {
         w.qty -= 1;
         if (w.qty <= 0) inv.equipment.weapon = null;
         this.events.emit({ type: 'inventoryChanged', to: s.id });
@@ -843,7 +853,9 @@ export class Game implements AIContext {
     }
     this.events.emit({ type: 'attack', attackerId: p.id, targetId: t.id });
     this.events.emit({ type: 'projectile', fromId: p.id, toId: t.id, effect });
-    const roll = rollDistance(p.level, atk, VOCATIONS[p.vocation].distance, t.def.armor, d);
+    // a steady hand (Potion of the Hawk) shoots as if two tiles closer
+    const aimD = p.buffs.bullseye > 0 ? Math.max(1, d - 2) : d;
+    const roll = rollDistance(p.level, atk, VOCATIONS[p.vocation].distance, t.def.armor, aimD);
     roll.amount = applyResist(roll.amount, t.def.resist.physical);
     this.applyDamage(t, p, roll, 'physical');
     if (roll.result === 'hit' && element && elementDamage && !t.dead) {
@@ -1018,7 +1030,7 @@ export class Game implements AIContext {
     p.mana = p.maxMana;
     p.facing = 0;
     p.attackTimer = 0;
-    p.buffs = { haste: 0, magicShield: 0, light: 0 };
+    p.buffs = emptyBuffs();
     this.refreshStats(s);
     this.events.emit({ type: 'playerRespawn', id: p.id });
     this.msg(p.id, `You awaken at the temple of ${home ? (home.name === 'Temple Plaza' ? 'Thornvale' : home.name) : 'Thornvale'}.`, 'info');
@@ -1261,14 +1273,34 @@ export class Game implements AIContext {
         this.applyDamage(t, p, { amount: applyResist(this.spellDamage(s, sp, magicMult), t.def.resist[el]), result: 'hit' }, el);
         return;
       }
+      case 'conjure': {
+        const c = sp.conjure!;
+        const made = itemDef(c.item);
+        if (c.from && s.inventory.count(c.from) <= 0) return fail(`You need ${article(itemDef(c.from).name)} in your backpack.`);
+        const extraWeight = made.weight * c.qty - (c.from ? itemDef(c.from).weight : 0);
+        if (s.inventory.weight() + extraWeight > p.capacity) return fail('You cannot carry any more.');
+        // the source item may free the slot the new items need
+        if (c.from) s.inventory.removeById(c.from, 1);
+        const fits = s.inventory.canFit(c.item, c.qty);
+        if (c.from) s.inventory.add(c.from, 1);
+        if (!fits) return fail('You do not have enough room in your backpack.');
+        spend();
+        if (c.from) s.inventory.removeById(c.from, 1);
+        const left = s.inventory.add(c.item, c.qty);
+        if (left > 0) this.dropBag(p.x, p.y, p.z, [{ id: c.item, qty: left }]);
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'energy' });
+        this.events.emit({ type: 'inventoryChanged', to: pid });
+        this.msg(pid, `You conjure ${c.qty > 1 ? `${c.qty} ${made.name.toLowerCase()}s` : article(made.name)}.`, 'info');
+        return;
+      }
       case 'selfArea': {
         if (this.isProtected(p)) return fail('You may not attack from inside a protection zone.');
         spend();
         const el = sp.element ?? 'energy';
         const r = sp.radius ?? 1;
-        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: r, effect: el === 'physical' ? 'blood' : el });
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: r, effect: el === 'physical' ? (r > 1 ? 'stone' : 'blood') : el });
         for (const e of this.enemies) {
-          if (e.dead || e.z !== p.z || chebyshev(e.x, e.y, p.x, p.y) > r) continue;
+          if (e.dead || e.z !== p.z || (r > 1 ? !inAreaShape(e.x - p.x, e.y - p.y, r) : chebyshev(e.x, e.y, p.x, p.y) > r)) continue;
           if (!this.world.lineOfSight(p.x, p.y, e.x, e.y, p.z)) continue;
           this.applyDamage(e, p, { amount: applyResist(this.spellDamage(s, sp, magicMult), e.def.resist[el]), result: 'hit' }, el);
         }
@@ -1281,7 +1313,7 @@ export class Game implements AIContext {
     const p = s.player;
     if (sp.weaponScale) {
       const w = s.inventory.equipped('weapon');
-      const atk = (w ? itemDef(w).attack ?? FIST_ATTACK : FIST_ATTACK) + this.attackBonus(s);
+      const atk = (w ? itemDef(w).attack ?? FIST_ATTACK : FIST_ATTACK) + this.attackBonus(s) + this.potionAttack(s, 'melee') + this.potionAttack(s, 'distance');
       const voc = VOCATIONS[p.vocation];
       const mult = sp.element === 'physical' ? Math.max(voc.melee, voc.distance) : magicMult;
       return rollFormula(sp.min! + atk * sp.weaponScale, sp.max! + atk * sp.weaponScale * 1.6, sp.perLevel!, p.level, mult);
@@ -1426,6 +1458,18 @@ export class Game implements AIContext {
     if (d.kind === 'consumable') {
       if (d.level && p.level < d.level) return this.msg(pid, `You need level ${d.level} to drink this.`, 'warn');
       if (d.vocations && !d.vocations.includes(p.vocation)) return this.msg(pid, `${VOCATIONS[p.vocation].name}s cannot use this potion.`, 'warn');
+      if (d.buff) {
+        if (p.groupCooldowns.potion > 0) return this.msg(pid, 'You are exhausted.', 'warn');
+        inv.removeFromSlot(slot, 1);
+        const was = p.buffs[d.buff] > 0;
+        p.buffs[d.buff] = POTION_BUFF_SECONDS;
+        p.groupCooldowns.potion = GROUP_COOLDOWN.potion;
+        this.events.emit({ type: 'buff', id: p.id, buff: d.buff, on: true });
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: d.buff === 'berserk' ? 'blood' : d.buff === 'bullseye' ? 'earth' : 'energy' });
+        this.msg(pid, `${BUFF_START[d.buff]}${was ? ' (renewed)' : ''}`, 'info');
+        this.events.emit({ type: 'inventoryChanged', to: pid });
+        return;
+      }
       const healNeeded = d.heal && p.hp < p.maxHp;
       const manaNeeded = d.mana && p.mana < p.maxMana;
       if (!healNeeded && !manaNeeded) return this.msg(pid, d.heal ? 'You are already at full health.' : 'Your mana is already full.', 'warn');
@@ -2121,6 +2165,17 @@ export class Game implements AIContext {
   }
 }
 
+const BUFF_FADE: Record<(typeof BUFF_NAMES)[number], string> = {
+  haste: 'Your haste wears off.', magicShield: 'Your magic shield fades.', light: 'Your light fades.',
+  berserk: 'Your fury subsides.', bullseye: 'Your eagle eye fades.', mastermind: 'Your thoughts lose their clarity.',
+};
+
+const BUFF_START: Record<'berserk' | 'bullseye' | 'mastermind', string> = {
+  berserk: 'Fury burns in your veins: your melee blows hit harder for 10 minutes.',
+  bullseye: 'Your eye grows keen: your shots hit harder and truer for 10 minutes.',
+  mastermind: 'Your mind sharpens: your spells hit harder for 10 minutes.',
+};
+
 function resetPlayerState(p: Player): void {
   p.dead = false;
   p.targetId = null;
@@ -2128,7 +2183,7 @@ function resetPlayerState(p: Player): void {
   p.path = [];
   p.spellCooldowns = {};
   p.groupCooldowns = { attack: 0, heal: 0, support: 0, potion: 0 };
-  p.buffs = { haste: 0, magicShield: 0, light: 0 };
+  p.buffs = emptyBuffs();
   p.attackTimer = 0;
   p.sinceCombat = 99;
 }

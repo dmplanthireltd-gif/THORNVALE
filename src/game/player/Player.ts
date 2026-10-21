@@ -13,6 +13,17 @@ export interface Buffs {
   haste: number;
   magicShield: number;
   light: number;
+  /** Potion buffs: extra melee attack, distance attack, magic damage. */
+  berserk: number;
+  bullseye: number;
+  mastermind: number;
+}
+
+export type BuffName = keyof Buffs;
+export const BUFF_NAMES: BuffName[] = ['haste', 'magicShield', 'light', 'berserk', 'bullseye', 'mastermind'];
+
+export function emptyBuffs(): Buffs {
+  return { haste: 0, magicShield: 0, light: 0, berserk: 0, bullseye: 0, mastermind: 0 };
 }
 
 export type Pending =
@@ -34,7 +45,7 @@ export class Player extends Creature {
   spellCooldowns: Record<string, number> = {};
   /** Shared cooldown groups: attack spells, healing spells. */
   groupCooldowns = { attack: 0, heal: 0, support: 0, potion: 0 };
-  buffs: Buffs = { haste: 0, magicShield: 0, light: 0 };
+  buffs: Buffs = emptyBuffs();
   chaseSuppressed = 0;
   respawnTimer = 0;
   regenAcc = 0;

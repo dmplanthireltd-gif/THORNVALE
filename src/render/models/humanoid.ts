@@ -11,7 +11,8 @@ import { ARMOR_LOOK, makeShield, makeWeapon } from './weapons';
  */
 export type HeadStyle =
   | 'helm' | 'hood' | 'wizardHat' | 'hair' | 'featherHat' | 'hornHelm' | 'orc' | 'shaman'
-  | 'warhelm' | 'elf' | 'troll' | 'ghoul' | 'demon' | 'brute';
+  | 'warhelm' | 'elf' | 'troll' | 'ghoul' | 'demon' | 'brute'
+  | 'minotaur' | 'cyclops' | 'dwarf' | 'barbarian' | 'frostkin' | 'iceWitch' | 'mummy' | 'lizard' | 'amazon' | 'valkyrie' | 'bandit';
 export type TorsoStyle = 'plate' | 'tunic' | 'robe' | 'coat' | 'furVest';
 
 export interface HumanoidSpec {
@@ -266,6 +267,129 @@ export function buildHumanoid(spec: HumanoidSpec): BipedRig {
         head.add(h);
       }
       break;
+    case 'minotaur': {
+      face(0.23);
+      head.add(box(0.26, 0.17, 0.2, skin, 0, -0.08, 0.2)); // muzzle
+      head.add(box(0.2, 0.06, 0.04, mat(0x2a1a14), 0, -0.07, 0.305)); // nostrils
+      head.add(cyl(0.05, 0.05, 0.015, mat(0xe0b03c), 0, -0.15, 0.3, 8).rotateX(Math.PI / 2)); // nose ring
+      head.add(sphere(0.12, headM, 0, 0.2, -0.02, 1.4, 0.5, 1.1)); // shaggy crown
+      const hornM = mat(0xece2c6);
+      for (const sx of [-1, 1]) {
+        const base = cone(0.07, 0.3, hornM, sx * 0.3, 0.16, 0, 6);
+        base.rotation.z = -sx * 1.25;
+        head.add(base);
+        const tip = cone(0.04, 0.18, hornM, sx * 0.42, 0.3, 0, 6);
+        tip.rotation.z = -sx * 0.25;
+        head.add(tip);
+        head.add(sphere(0.06, skin, sx * 0.24, 0.0, -0.02, 1.3, 0.6, 0.9)); // ear
+      }
+      break;
+    }
+    case 'cyclops': {
+      head.add(sphere(0.26, skin, 0, 0, 0, 1, 1, 1));
+      head.add(sphere(0.1, mat(0xf4f0e6), 0, 0.05, 0.21, 1, 1, 0.6));
+      head.add(sphere(0.05, mat(spec.eyeGlow ?? 0x3a2410, spec.eyeGlow ? { emissive: spec.eyeGlow } : {}), 0, 0.05, 0.27));
+      head.add(box(0.34, 0.07, 0.1, skin, 0, 0.16, 0.18)); // heavy brow
+      head.add(box(0.2, 0.05, 0.06, mat(0x3a1a14), 0, -0.13, 0.22)); // mouth
+      head.add(cone(0.03, 0.08, mat(0xf0e6c8), 0.06, -0.12, 0.24, 4));
+      head.add(sphere(0.07, headM, 0, 0.24, -0.04, 1.6, 0.5, 1.2)); // tuft of hair
+      break;
+    }
+    case 'dwarf': {
+      face(0.19);
+      head.add(sphere(0.215, steel, 0, 0.09, -0.01, 1, 0.68, 1.02)); // iron cap
+      head.add(cyl(0.22, 0.22, 0.05, mat(0x6b5a3a), 0, 0.05, 0, 10));
+      head.add(box(0.04, 0.12, 0.04, steel, 0, 0.0, 0.2)); // nasal
+      head.add(box(0.3, 0.3, 0.12, headM, 0, -0.22, 0.12)); // big beard
+      head.add(cone(0.1, 0.18, headM, 0, -0.42, 0.13, 5).rotateX(Math.PI));
+      head.add(box(0.26, 0.06, 0.06, headM, 0, -0.06, 0.19)); // moustache
+      break;
+    }
+    case 'barbarian': {
+      face(0.2);
+      head.add(sphere(0.225, headM, 0, 0.08, -0.05, 1.05, 0.85, 1.05)); // wild mane
+      head.add(box(0.36, 0.26, 0.12, headM, 0, -0.06, -0.16));
+      for (const sx of [-1, 1]) head.add(cone(0.04, 0.3, headM, sx * 0.17, -0.2, 0.02, 5).rotateX(Math.PI)); // braids
+      head.add(box(0.22, 0.18, 0.1, headM, 0, -0.17, 0.15)); // beard
+      head.add(cyl(0.225, 0.225, 0.05, mat(0x8a6a4a), 0, 0.1, 0, 10)); // leather band
+      break;
+    }
+    case 'frostkin': {
+      // a small furry face peering out of a thick parka hood
+      head.add(sphere(0.25, headM, 0, 0.02, -0.03, 1, 1, 1));
+      const trim = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.05, 5, 12), mat(0xf4f4f0));
+      trim.position.set(0, 0, 0.17);
+      head.add(trim); // fur trim round the hood opening
+      head.add(sphere(0.15, skin, 0, -0.01, 0.15, 1, 1, 0.6));
+      head.add(sphere(0.045, eye, 0.06, 0.02, 0.24));
+      head.add(sphere(0.045, eye, -0.06, 0.02, 0.24));
+      head.add(cone(0.04, 0.1, mat(0xe0a030), 0, -0.05, 0.27, 4).rotateX(Math.PI / 2)); // beak-like nose
+      break;
+    }
+    case 'iceWitch': {
+      face(0.19);
+      head.add(sphere(0.21, headM, 0, 0.06, -0.05, 1, 0.82, 1.05)); // white hair
+      head.add(box(0.32, 0.46, 0.08, headM, 0, -0.16, -0.17));
+      const ice = mat(0xbff0ff, { emissive: 0x1c5a78 });
+      for (let i = 0; i < 5; i++) {
+        const a = (i - 2) * 0.42;
+        const c = cone(0.04, i === 2 ? 0.34 : 0.22, ice, Math.sin(a) * 0.17, 0.24, Math.cos(a) * 0.1 - 0.02, 4);
+        c.rotation.z = -Math.sin(a) * 0.4;
+        head.add(c);
+      }
+      head.add(cyl(0.2, 0.2, 0.04, ice, 0, 0.14, 0, 10));
+      break;
+    }
+    case 'mummy': {
+      head.add(sphere(0.2, skin, 0, 0, 0, 1, 1.05, 1));
+      const band = mat(new THREE.Color(spec.skin).multiplyScalar(0.72).getHex());
+      for (let i = 0; i < 4; i++) {
+        const r = cyl(0.205, 0.205, 0.03, band, 0, -0.14 + i * 0.09, 0, 10);
+        r.rotation.z = (i % 2 ? 0.15 : -0.15);
+        head.add(r);
+      }
+      head.add(box(0.2, 0.04, 0.03, mat(spec.eyeGlow ?? 0x1a1010, spec.eyeGlow ? { emissive: spec.eyeGlow } : {}), 0, 0.03, 0.19));
+      break;
+    }
+    case 'lizard': {
+      head.add(sphere(0.19, skin, 0, 0, -0.02, 1, 0.95, 1.1));
+      head.add(box(0.2, 0.13, 0.24, skin, 0, -0.05, 0.22)); // snout
+      head.add(box(0.18, 0.04, 0.22, mat(new THREE.Color(spec.skin).multiplyScalar(1.25).getHex()), 0, -0.12, 0.21)); // pale jaw
+      const yellow = mat(0xf0d040, { emissive: 0x403000 });
+      head.add(sphere(0.045, yellow, 0.12, 0.07, 0.14));
+      head.add(sphere(0.045, yellow, -0.12, 0.07, 0.14));
+      for (let i = 0; i < 4; i++) head.add(cone(0.04, 0.16 - i * 0.02, headM, 0, 0.2 - i * 0.02, 0.08 - i * 0.1, 4).rotateX(-0.4)); // crest
+      break;
+    }
+    case 'amazon': {
+      face(0.19);
+      head.add(sphere(0.21, headM, 0, 0.07, -0.04, 1, 0.8, 1.05));
+      const tail = cone(0.07, 0.42, headM, 0, -0.06, -0.3, 6);
+      tail.rotation.x = -2.6;
+      head.add(tail); // ponytail
+      head.add(cyl(0.215, 0.215, 0.04, mat(0xc0402a), 0, 0.08, 0, 10)); // headband
+      break;
+    }
+    case 'valkyrie': {
+      face(0.19);
+      head.add(box(0.32, 0.36, 0.1, headM, 0, -0.1, -0.15)); // braided hair
+      head.add(cyl(0.21, 0.22, 0.2, steel, 0, 0.1, 0, 10));
+      head.add(sphere(0.21, steel, 0, 0.18, 0, 1, 0.55, 1));
+      for (const sx of [-1, 1]) {
+        const wing = box(0.03, 0.22, 0.26, mat(0xf4f4f0), sx * 0.24, 0.24, -0.05);
+        wing.rotation.z = -sx * 0.5;
+        wing.rotation.x = -0.35;
+        head.add(wing);
+      }
+      break;
+    }
+    case 'bandit': {
+      face(0.2);
+      head.add(sphere(0.218, headM, 0, 0.08, -0.03, 1, 0.75, 1.03)); // bandana
+      head.add(cone(0.06, 0.2, headM, 0, 0.0, -0.25, 4).rotateX(-2.0)); // knot tail
+      head.add(box(0.36, 0.12, 0.08, mat(0x2a221c), 0, -0.1, 0.15)); // face cloth
+      break;
+    }
     case 'shaman':
       face(0.21);
       head.add(cyl(0.22, 0.22, 0.07, headM, 0, 0.1, 0, 10));
@@ -427,7 +551,7 @@ export function applyGear(rig: BipedRig, eq: GearLook): void {
 
 export interface HelmLook {
   color: number;
-  shape: 'cap' | 'coif' | 'helm' | 'horned' | 'circlet' | 'crested';
+  shape: 'cap' | 'coif' | 'helm' | 'horned' | 'circlet' | 'crested' | 'winged';
   trim?: number;
 }
 
@@ -439,13 +563,20 @@ export const HELMETS: Record<string, HelmLook> = {
   elven_circlet: { color: 0xe0c060, shape: 'circlet', trim: 0x7ad08a },
   dragon_helm: { color: 0x3f9a52, shape: 'crested', trim: 0xe0b03c },
   demon_helm: { color: 0x5a1010, shape: 'horned', trim: 0x2a1a14 },
+  fur_cap: { color: 0xd8ccb4, shape: 'cap', trim: 0x8a6a4a },
+  dwarven_helmet: { color: 0xb08a4a, shape: 'helm', trim: 0x5a606a },
+  winged_helmet: { color: 0xd8dde6, shape: 'winged', trim: 0xf0f0f0 },
+  frost_circlet: { color: 0xbfe6f5, shape: 'circlet', trim: 0x6ac8ff },
+  frost_helm: { color: 0xbfe6f5, shape: 'crested', trim: 0x5a8ab0 },
 };
 
 export const LEGS: Record<string, number> = {
+  fur_legs: 0xd8ccb4, dwarven_legs: 0xb08a4a, frost_legs: 0xbfe6f5,
   leather_legs: 0x8a5a32, chain_legs: 0xa9b2bf, plate_legs: 0xd4dae4, elven_leggings: 0x9ad0a0, hydra_legs: 0x2f7a5a, demon_legs: 0x7a1a1a,
 };
 
 export const BOOTS: Record<string, number> = {
+  fur_boots: 0xd8ccb4, glacier_boots: 0x9fd8f0,
   leather_boots: 0x6a4426, traveler_boots: 0x8a6a3e, steel_boots: 0xc9d0da, emberwalk_boots: 0xd0501a, windstride_boots: 0x9fe8ff,
 };
 
@@ -479,6 +610,16 @@ function buildHelmet(h: HelmLook): THREE.Group {
     case 'circlet':
       g.add(cyl(0.215, 0.215, 0.05, m, 0, 0.1, 0, 12));
       g.add(sphere(0.045, t, 0, 0.12, 0.21));
+      break;
+    case 'winged':
+      g.add(cyl(0.21, 0.22, 0.28, m, 0, 0.03, 0, 10));
+      g.add(sphere(0.21, m, 0, 0.16, 0, 1, 0.6, 1));
+      for (const sx of [-1, 1]) {
+        const wing = box(0.03, 0.2, 0.26, t, sx * 0.23, 0.2, -0.04);
+        wing.rotation.z = -sx * 0.5;
+        wing.rotation.x = -0.3;
+        g.add(wing);
+      }
       break;
     case 'crested':
       g.add(cyl(0.21, 0.22, 0.3, m, 0, 0.02, 0, 10));

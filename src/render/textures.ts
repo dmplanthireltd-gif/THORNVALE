@@ -182,6 +182,22 @@ export const groundTex = {
       }
     }
   }, v),
+  snow: (v: number) => make('snow', (ctx, rng) => {
+    noise(ctx, rng, ['#eef2f6', '#f6f9fb', '#e2e8ef', '#dce4ec'], [5, 3, 2, 1]);
+    blobs(ctx, rng, '#ffffff', 3, 1, 3);
+    for (let i = 0; i < 7; i++) px(ctx, rng.int(0, 31), rng.int(0, 31), '#c8d4e0', rng.int(1, 3), 1);
+  }, v),
+  ice: (v: number) => make('ice', (ctx, rng) => {
+    noise(ctx, rng, ['#b4dcee', '#c2e4f2', '#a6d2e8', '#d4eef8'], [5, 3, 2, 1]);
+    for (let i = 0; i < 4; i++) {
+      let x = rng.int(0, 31), y = rng.int(0, 31);
+      for (let k = 0; k < 10; k++) {
+        px(ctx, x, y, '#e8f6fc');
+        x += rng.int(0, 1); y += rng.int(-1, 1);
+      }
+    }
+    for (let i = 0; i < 3; i++) px(ctx, rng.int(0, 31), rng.int(0, 31), '#8cc0dc', rng.int(2, 4), 1);
+  }, v),
 };
 
 // ------------------------------------------------------------------ objects

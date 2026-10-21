@@ -1426,6 +1426,10 @@ export class HUD {
     if (p.buffs.haste > 0) buffs.push('⇶ haste');
     if (p.buffs.magicShield > 0) buffs.push('◈ magic shield');
     if (p.buffs.light > 0) buffs.push('☀ light');
+    const mins = (t: number) => `${Math.ceil(t / 60)}m`;
+    if (p.buffs.berserk > 0) buffs.push(`⚔ fury ${mins(p.buffs.berserk)}`);
+    if (p.buffs.bullseye > 0) buffs.push(`◎ hawk eye ${mins(p.buffs.bullseye)}`);
+    if (p.buffs.mastermind > 0) buffs.push(`✦ clarity ${mins(p.buffs.mastermind)}`);
     if (g.isProtected(p)) buffs.push('⛨ protection zone');
     const bt = buffs.join('  ');
     if (this.buffsEl.textContent !== bt) this.buffsEl.textContent = bt;

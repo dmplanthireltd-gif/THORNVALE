@@ -10,9 +10,10 @@ export type SpellId =
   | 'exori' | 'exori_gran' | 'exori_hur' | 'exori_con' | 'exori_san'
   | 'exori_vis' | 'exori_flam' | 'exori_frigo' | 'exori_tera'
   | 'exevo_gran_mas_vis' | 'exevo_gran_mas_frigo' | 'exevo_mas_san'
-  | 'utani_hur' | 'utamo_vita' | 'utevo_lux';
+  | 'utani_hur' | 'utamo_vita' | 'utevo_lux'
+  | 'exori_mas_grav' | 'exevo_con' | 'exevo_con_ferro' | 'exevo_con_aquila' | 'exevo_lanca';
 
-export type SpellKind = 'heal' | 'healFriend' | 'target' | 'selfArea' | 'buff';
+export type SpellKind = 'heal' | 'healFriend' | 'target' | 'selfArea' | 'buff' | 'conjure';
 export type SpellGroup = 'attack' | 'heal' | 'support';
 
 /**
@@ -46,6 +47,8 @@ export interface SpellDef {
   radius?: number;
   buff?: 'haste' | 'magicShield' | 'light';
   duration?: number;
+  /** Conjuring: creates `qty` of `item` in the backpack, using up one `from` if set. */
+  conjure?: { item: string; qty: number; from?: string };
   /** Gold to learn it from a trainer (0 = known from the start). */
   price: number;
   description: string;
@@ -140,6 +143,29 @@ export const SPELLS: Record<SpellId, SpellDef> = {
   utevo_lux: {
     id: 'utevo_lux', name: 'Light', words: 'utevo lux', kind: 'buff', group: 'support', mana: 20, level: 8, vocations: ALL,
     cooldown: 2, buff: 'light', duration: 300, price: 0, description: 'Lights up dark caves around you.',
+  },
+  // --- northlands update ------------------------------------------------------------
+  exori_mas_grav: {
+    id: 'exori_mas_grav', name: 'Groundshaker', words: 'exori mas grav', kind: 'selfArea', group: 'attack', mana: 160, level: 33, vocations: ['knight'],
+    cooldown: 8, element: 'physical', min: 18, max: 36, perLevel: 1.3, weaponScale: 0.9, radius: 3, price: 1800,
+    description: 'Slams the ground: shakes every enemy within three tiles.',
+  },
+  exevo_con: {
+    id: 'exevo_con', name: 'Conjure Arrows', words: 'exevo con', kind: 'conjure', group: 'support', mana: 70, level: 13, vocations: ['paladin'],
+    cooldown: 2, conjure: { item: 'arrow', qty: 15 }, price: 450, description: 'Conjures 15 arrows into your backpack.',
+  },
+  exevo_con_ferro: {
+    id: 'exevo_con_ferro', name: 'Conjure Piercing Bolts', words: 'exevo con ferro', kind: 'conjure', group: 'support', mana: 140, level: 25, vocations: ['paladin'],
+    cooldown: 2, conjure: { item: 'piercing_bolt', qty: 10 }, price: 1500, description: 'Conjures 10 piercing bolts into your backpack.',
+  },
+  exevo_con_aquila: {
+    id: 'exevo_con_aquila', name: 'Conjure Hawkeye Arrows', words: 'exevo con aquila', kind: 'conjure', group: 'support', mana: 160, level: 35, vocations: ['paladin'],
+    cooldown: 2, conjure: { item: 'hawkeye_arrow', qty: 10 }, price: 2200, description: 'Conjures 10 hawkeye arrows into your backpack.',
+  },
+  exevo_lanca: {
+    id: 'exevo_lanca', name: 'Runebind Spear', words: 'exevo lanca', kind: 'conjure', group: 'support', mana: 300, level: 45, vocations: ['paladin'],
+    cooldown: 2, conjure: { item: 'enchanted_spear', qty: 1, from: 'spear' }, price: 2000,
+    description: 'Binds runes into a spear from your backpack: a runebound spear is rarely lost when thrown.',
   },
 };
 

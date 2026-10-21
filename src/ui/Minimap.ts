@@ -1,18 +1,19 @@
 import type { Controller } from '../client/Controller';
 import { Ground, Obj, WorldMap } from '../game/world/WorldMap';
 
-const GROUND_RGB: Record<number, string> = {
+export const GROUND_RGB: Record<number, string> = {
   [Ground.Grass]: '#3f8a2e', [Ground.Path]: '#a08a62', [Ground.Stone]: '#8a8a88', [Ground.Wood]: '#7a5530', [Ground.Water]: '#2f6ab0',
   [Ground.Dirt]: '#7a6040', [Ground.Crop]: '#8a7a32', [Ground.Sand]: '#d8c88a', [Ground.DarkGrass]: '#2f6a24', [Ground.Lava]: '#e0501a',
   [Ground.Ash]: '#4a4440', [Ground.Swamp]: '#4a5a2a', [Ground.Cave]: '#6a5a4a', [Ground.Jungle]: '#2a6a1e', [Ground.Marble]: '#d0ccc4',
-  [Ground.DeepWater]: '#1f4a8a',
+  [Ground.DeepWater]: '#1f4a8a', [Ground.Snow]: '#eef2f6', [Ground.Ice]: '#b4dcee',
 };
 
-const OBJ_RGB: Partial<Record<number, string>> = {
+export const OBJ_RGB: Partial<Record<number, string>> = {
   [Obj.Tree]: '#1f5a1a', [Obj.Pine]: '#1a4a20', [Obj.JungleTree]: '#164a14', [Obj.Palm]: '#2a7a2a', [Obj.Rock]: '#6a6a6a',
-  [Obj.Wall]: '#5a4a3a', [Obj.StoneWall]: '#6a6460', [Obj.Cliff]: '#5a5048', [Obj.Palisade]: '#6a4a2a', [Obj.Stalagmite]: '#5a5048',
+  [Obj.Wall]: '#5a4a3a', [Obj.StoneWall]: '#6a6460', [Obj.Cliff]: '#77736e', [Obj.Palisade]: '#6a4a2a', [Obj.Stalagmite]: '#5a5048',
   [Obj.StairsUp]: '#ffe040', [Obj.StairsDown]: '#ffe040', [Obj.Ladder]: '#ffe040', [Obj.RopeSpot]: '#ffe040', [Obj.Hole]: '#ffe040',
   [Obj.LooseStone]: '#c8b080', [Obj.FireField]: '#ff7a1a', [Obj.Locker]: '#e0b03c', [Obj.Chest]: '#e0b03c', [Obj.Pillar]: '#9a948c',
+  [Obj.SandWall]: '#e8c040', [Obj.Door]: '#8a6a3a',
 };
 
 const PX = 3;

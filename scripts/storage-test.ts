@@ -3,6 +3,7 @@
  * Supabase's REST API (PostgREST), so it can be tested without a real project.
  *   npx tsx scripts/storage-test.ts
  */
+import { SAVE_VERSION } from '../src/game/save/migrate';
 import { createServer } from 'node:http';
 import { SupabaseStorage } from '../server/storage';
 import { Game } from '../src/game/Game';
@@ -99,7 +100,7 @@ async function main(): Promise<void> {
   await st.saveCharacter('dawid', 'Dawid', g.serialize(s.id));
   check(tables.characters.length === 1, 'saving twice updates the same row (upsert)');
   const ch = await st.getCharacter('dawid');
-  check(ch?.data.player.level === 43 && ch.version === 2, 'character read back with level and save version');
+  check(ch?.data.player.level === 43 && ch.version === SAVE_VERSION, 'character read back with level and save version');
   const t = new Game();
   const s2 = t.addPlayer('Dawid', { vocation: 'knight' });
   check(t.applySave(s2.id, ch!.data) && s2.player.vocation === 'druid' && s2.inventory.count('gold') >= 1234, 'stored save loads into a game');
