@@ -1,13 +1,14 @@
 import { Rng } from '../core/rng';
 import { DIRS8 } from '../core/types';
-import { buildSpawnPlaza } from './spawnPlaza';
+import { buildSpawnPlaza, CITY, type CityBuilding } from './spawnPlaza';
 import { Ground, Obj, WorldMap, type EnemyKind } from './WorldMap';
 
 /**
  * Builds the original village of Thornvale procedurally (deterministic seed).
  *
  *   North : Greywood forest (wolves)
- *   Centre: the spawn plaza (fountain, temple respawn, Captain Aldric; world/spawnPlaza.ts)
+ *   Centre: the market town round the fountain plaza (temple + respawn north, depot hall
+ *           west, bank east, smith, magic shop, outfitter, general store, trainers; world/spawnPlaza.ts)
  *   East  : Miller's farm and barn (rats)
  *   South-west: the old graveyard (skeletons)
  *   West  : Mirror pond
@@ -87,61 +88,38 @@ export function buildVillage(seed = 1337): WorldMap {
   fillRect(3, 22, MAP_W - 4, 23, Ground.Path);
   clearObj(3, 21, MAP_W - 4, 24);
 
-  // --- plaza -----------------------------------------------------------------
-  fillRect(22, 18, 33, 27, Ground.Stone);
-  clearObj(21, 17, 34, 28);
-  m.setObj(25, 20, Obj.Well);
-  m.temple = { x: 28, y: 25, z: 0 };
-  m.playerSpawn = { x: 28, y: 25, z: 0 };
-  m.npcs.push({ key: 'aldric', x: 30, y: 20, z: 0 });
+  // --- the market town: cobbled streets round the fountain plaza -------------
+  // (layout in world/spawnPlaza.ts CITY; the plaza design dresses it afterwards)
+  fillRect(10, 7, 43, 36, Ground.Stone);
+  clearObj(10, 7, 43, 36);
+  m.temple = { ...CITY.spawn, z: 0 };
+  m.playerSpawn = { ...CITY.spawn, z: 0 };
 
   // --- houses ------------------------------------------------------------------
   let houseId = 0;
-  const house = (
-    x: number, y: number, w: number, h: number,
-    door: { x: number; y: number }[], roofColor: number, wallColor: number, name: string,
-  ) => {
+  const house = (b: CityBuilding) => {
+    const { x, y, w, h } = b;
     clearObj(x - 1, y - 1, x + w, y + h);
     for (let yy = y; yy < y + h; yy++) {
       for (let xx = x; xx < x + w; xx++) {
         const border = xx === x || yy === y || xx === x + w - 1 || yy === y + h - 1;
-        m.setGround(xx, yy, Ground.Wood);
+        m.setGround(xx, yy, b.floor ?? Ground.Wood);
         m.setObj(xx, yy, border ? Obj.Wall : Obj.None);
       }
     }
-    for (const d of door) m.setObj(d.x, d.y, Obj.Door);
-    m.houses.push({ id: houseId++, x, y, w, h, z: 0, roofColor, wallColor, name });
+    for (const [dx, dy] of b.doors) m.setObj(dx, dy, Obj.Door);
+    m.houses.push({ id: houseId++, x, y, w, h, z: 0, roofColor: b.roof, wallColor: b.wall, name: b.name, stone: b.stone });
+    for (const [px, py, o] of b.inside ?? []) m.setObj(px, py, o);
+    if (b.npc) m.npcs.push({ key: b.npc.key, x: b.npc.x, y: b.npc.y, z: 0 });
   };
-
-  house(33, 12, 8, 6, [{ x: 36, y: 17 }], 0x8e3b2e, 0xd8cbb0, 'Hall of Learning');
-  house(15, 13, 7, 6, [{ x: 18, y: 18 }], 0x5a6e8c, 0xcfc2a4, "Brunhild's Smithy");
-  house(19, 29, 7, 6, [{ x: 22, y: 29 }], 0x7d5a3a, 0xd4c7aa, "Mirella's Curiosities");
-  house(33, 28, 7, 6, [{ x: 36, y: 28 }], 0x3f6b4a, 0xd2c4a8, "Garrick's Outfitters");
-  house(42, 13, 9, 7, [{ x: 46, y: 19 }], 0x9a4a2c, 0xcbb994, 'Thornvale Depot & Bank');
-  house(44, 34, 8, 6, [{ x: 47, y: 34 }, { x: 48, y: 34 }], 0x6b3a26, 0xa77a52, 'Miller Barn');
-
-  // furniture (blocking props inside)
-  const props: Array<[number, number, Obj]> = [
-    [34, 13, Obj.Table], [39, 13, Obj.Barrel], [39, 16, Obj.Crate], [34, 16, Obj.Barrel],
-    [16, 14, Obj.Table], [20, 14, Obj.Crate],
-    [20, 33, Obj.Barrel], [24, 33, Obj.Crate], [24, 30, Obj.Table],
-    [34, 32, Obj.Table], [38, 29, Obj.Barrel], [38, 32, Obj.Barrel],
-    [43, 14, Obj.Locker], [45, 14, Obj.Locker], [47, 14, Obj.Locker], [49, 14, Obj.Locker], [43, 17, Obj.Counter], [44, 17, Obj.Counter],
-    [45, 38, Obj.Hay], [46, 38, Obj.Hay], [50, 38, Obj.Hay], [50, 35, Obj.Crate],
-  ];
-  for (const [x, y, o] of props) m.setObj(x, y, o);
-  m.npcs.push({ key: 'elias', x: 37, y: 15, z: 0 }, { key: 'brunhild', x: 18, y: 15, z: 0 }, { key: 'mirella', x: 22, y: 31, z: 0 }, { key: 'garrick', x: 36, y: 31, z: 0 }, { key: 'orwin', x: 44, y: 16, z: 0 });
-  for (const [x, y] of [[22, 19], [32, 19], [23, 27], [32, 26]]) m.setObj(x, y, Obj.Lamp);
-
-  // door paths to the roads
-  pathLine(36, 18, 36, 21);
-  pathLine(18, 19, 18, 21);
-  pathLine(22, 28, 22, 24);
-  pathLine(36, 27, 36, 24);
-  pathLine(46, 20, 46, 21);
+  for (const b of Object.values(CITY.buildings)) house(b);
+  // Captain Aldric (quests, general goods) stands at the general store front
+  m.npcs.push({ key: 'aldric', x: CITY.aldric.x, y: CITY.aldric.y, z: 0 });
+  house({ x: 44, y: 34, w: 8, h: 6, doors: [[47, 34], [48, 34]], roof: 0x6b3a26, wall: 0xa77a52, name: 'Miller Barn' });
+  for (const [x, y, o] of [[45, 38, Obj.Hay], [46, 38, Obj.Hay], [50, 38, Obj.Hay], [50, 35, Obj.Crate]] as const) m.setObj(x, y, o);
 
   // --- pond --------------------------------------------------------------------
-  const pcx = 8, pcy = 15;
+  const pcx = 7, pcy = 13;
   for (let y = pcy - 5; y <= pcy + 5; y++) {
     for (let x = pcx - 6; x <= pcx + 6; x++) {
       const d = ((x - pcx) / 4.3) ** 2 + ((y - pcy) / 3.1) ** 2;
@@ -179,7 +157,7 @@ export function buildVillage(seed = 1337): WorldMap {
   m.setObj(11, 34, Obj.DeadTree);
 
   // --- farm --------------------------------------------------------------------
-  const fx0 = 40, fy0 = 25, fx1 = 53, fy1 = 31;
+  const fx0 = 44, fy0 = 25, fx1 = 53, fy1 = 31;
   clearObj(fx0, fy0, fx1, fy1);
   for (let y = fy0; y <= fy1; y++) {
     for (let x = fx0; x <= fx1; x++) {
@@ -238,7 +216,7 @@ export function buildVillage(seed = 1337): WorldMap {
     m.spawns.push({ kind, x, y, z: 0 });
     if (m.getObj(x, y) !== Obj.None && m.getObj(x, y) !== Obj.Wheat) m.setObj(x, y, Obj.None);
   };
-  sp('rat', 44, 27); sp('rat', 49, 29); sp('rat', 51, 27); sp('rat', 46, 36); sp('rat', 42, 30); sp('rat', 48, 37);
+  sp('rat', 47, 27); sp('rat', 49, 29); sp('rat', 51, 27); sp('rat', 46, 36); sp('rat', 46, 30); sp('rat', 48, 37);
   sp('wolf', 11, 5); sp('wolf', 14, 7); sp('wolf', 41, 5); sp('wolf', 44, 7); sp('wolf', 33, 5);
   sp('skeleton', 7, 34); sp('skeleton', 11, 37); sp('skeleton', 14, 34); sp('skeleton', 8, 39);
 
