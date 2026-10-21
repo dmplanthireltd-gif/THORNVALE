@@ -12,6 +12,7 @@
     "scripts/auth-test.ts",
     "scripts/saves.ts",
     "scripts/storage-test.ts",
+    "scripts/store-test.ts",
     "server",
     "src/game",
     "scripts/music",

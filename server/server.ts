@@ -27,6 +27,10 @@ import { setLevel } from '../src/game/admin';
 import { Bots } from './bots';
 import { isVocation } from '../src/game/player/vocations';
 import { openStorage, type Storage } from './storage';
+import { handlePaddleEvent, paddleConfigFromEnv, paddleReady, verifyPaddleSignature } from './payments';
+import {
+  FOUNDER_SALE_FROM, FOUNDER_SALE_UNTIL, LAUNCH_AT, LEGEND_CAP, NO_PERKS, PREMIUM_RESERVED_SHARE, PRODUCTS, type AccountPerks,
+} from '../src/game/premium/premium';
 import { WsConnection } from './ws';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -108,7 +112,16 @@ const pendingSaves = new Map<string, Promise<void>>();
 
 /** Players may fight each other (PVP=0 turns it off). */
 const PVP = process.env.PVP !== '0';
-const game = new Game({ pvp: PVP, testMode: TEST_MODE });
+/**
+ * Premium rules (premium/premium.ts): enforced unless the server is in test mode, where every
+ * character gets everything. PREMIUM=1 / PREMIUM=0 forces it either way.
+ */
+const PREMIUM = process.env.PREMIUM === '1' || (process.env.PREMIUM !== '0' && !TEST_MODE);
+/** Paddle settings (server/payments.ts); the webhook secret only ever lives in the Render dashboard. */
+const PADDLE = paddleConfigFromEnv(process.env);
+/** The store tables exist in storage (set at start-up). */
+let storeTables = false;
+const game = new Game({ pvp: PVP, testMode: TEST_MODE, premium: PREMIUM });
 interface Client {
   addr: string;
   loggingIn?: boolean;
@@ -248,6 +261,7 @@ async function onHello(c: Client, m: Extract<ClientMessage, { t: 'hello' }>): Pr
 async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>, name: string, password: string): Promise<void> {
   const key = name.toLowerCase();
   let owner: string | null = null;
+  let perks: AccountPerks = { ...NO_PERKS };
   if (EMAIL_AUTH) {
     const user = await verifyToken(String(m.token));
     if (!user) {
@@ -262,8 +276,10 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
       c.ws.close(4008);
       return;
     }
-    if (!existing && (await storage.listCharacters(user.id)).length >= MAX_CHARACTERS_PER_ACCOUNT) {
-      send(c, { t: 'error', text: `An account can have at most ${MAX_CHARACTERS_PER_ACCOUNT} characters.` });
+    perks = await perksOf(user.id);
+    const maxChars = MAX_CHARACTERS_PER_ACCOUNT + perks.extraSlots;
+    if (!existing && (await storage.listCharacters(user.id)).length >= maxChars) {
+      send(c, { t: 'error', text: `An account can have at most ${maxChars} characters.` });
       c.ws.close(4009);
       return;
     }
@@ -287,8 +303,12 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
     c.ws.close(4002);
     return;
   }
-  if ([...game.sessions.values()].filter((x) => !x.bot).length >= MAX_PLAYERS) {
-    send(c, { t: 'error', text: 'The world is full. Try again later.' });
+  const online = [...game.sessions.values()].filter((x) => !x.bot).length;
+  // the last places are kept for premium accounts (everyone counts as premium when it is not enforced)
+  const reserved = PREMIUM ? Math.ceil(MAX_PLAYERS * PREMIUM_RESERVED_SHARE) : 0;
+  const premiumNow = !PREMIUM || perks.premiumUntil > Date.now();
+  if (online >= MAX_PLAYERS || (!premiumNow && online >= MAX_PLAYERS - reserved)) {
+    send(c, { t: 'error', text: online >= MAX_PLAYERS ? 'The world is full. Try again later.' : 'The world is full; the last places are kept for premium accounts. Try again later.' });
     c.ws.close(4003);
     return;
   }
@@ -323,6 +343,9 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
   const s = game.addPlayer(name, { intent: c.intent, vocation: isVocation(m.vocation) ? m.vocation : 'knight' });
   c.session = s;
   if (owner) sessionOwner.set(s.id, owner);
+  // premium and founder looks first, so loading the save keeps a premium or founder outfit
+  game.setPerks(s.id, perks, true);
+  perksSeen.set(s.id, JSON.stringify(perks));
   s.admin = ALLOW_ADMIN || ADMINS.has(key);
   // test mode (ALLOW_ADMIN) gives every test command except god mode and /kill; names in ADMINS get everything
   s.testOnly = !ADMINS.has(key);
@@ -390,6 +413,7 @@ function onClose(c: Client): void {
   const s = c.session;
   if (!s) return;
   void saveCharacter(s).then(() => sessionOwner.delete(s.id));
+  perksSeen.delete(s.id);
   game.removePlayer(s.id);
   for (const other of game.sessions.values()) game.msg(other.id, `${s.player.name} has left.`, 'info');
   console.log(`- ${s.player.name} (${game.sessions.size} online)`);
@@ -437,8 +461,165 @@ async function highscores(): Promise<{ updated: string; rows: Array<{ rank: numb
   return { updated: new Date(highscoreCache.at).toISOString(), rows: highscoreCache.rows };
 }
 
+/** An account's perks; none when the store tables are missing (the store is closed then). */
+async function perksOf(owner: string): Promise<AccountPerks> {
+  return storeTables ? storage.getPerks(owner) : { ...NO_PERKS };
+}
+
+/** Last perks applied to each online session, so a refresh only touches what changed. */
+const perksSeen = new Map<number, string>();
+
+/** Re-reads the perks of online accounts (all, or one after a purchase) and applies changes. */
+async function refreshPerks(only?: string): Promise<void> {
+  if (!storeTables) return;
+  const owners = new Map<string, number[]>();
+  for (const [sid, o] of sessionOwner) {
+    if (only && o !== only) continue;
+    if (!game.sessions.has(sid)) continue;
+    owners.set(o, [...(owners.get(o) ?? []), sid]);
+  }
+  for (const [o, sids] of owners) {
+    try {
+      const perks = await storage.getPerks(o);
+      const j = JSON.stringify(perks);
+      for (const sid of sids) {
+        if (perksSeen.get(sid) === j || !game.sessions.has(sid)) continue;
+        perksSeen.set(sid, j);
+        game.setPerks(sid, perks);
+      }
+    } catch (err) {
+      console.error('Refreshing premium failed:', err);
+    }
+  }
+}
+
+/** Founders who picked a name (website and Founders' Stone), cached for a minute. */
+let foundersCache: { at: number; rows: Array<{ name: string; tier: string; no: number }> } | null = null;
+async function founders(): Promise<Array<{ name: string; tier: string; no: number }>> {
+  if (!storeTables) return [];
+  if (!foundersCache || Date.now() - foundersCache.at > 60_000) {
+    try {
+      foundersCache = { at: Date.now(), rows: await storage.listFounders() };
+    } catch (err) {
+      console.error('Loading founders failed:', err);
+      if (!foundersCache) return [];
+    }
+  }
+  return foundersCache.rows;
+}
+
+/** Updates the names carved on the Founders' Stone (Legends who picked a name). */
+async function carveFoundersStone(): Promise<void> {
+  const rows = await founders();
+  game.foundersStone = rows.filter((r) => r.tier === 'legend' && r.no > 0).map((r) => ({ no: r.no, name: r.name }));
+}
+
+/** Reads a request body up to `limit` bytes (null when it is larger). */
+async function readBody(req: IncomingMessage, limit: number): Promise<string | null> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const ch of req) {
+    size += (ch as Buffer).length;
+    if (size > limit) return null;
+    chunks.push(ch as Buffer);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function handleStore(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
+  const now = Date.now();
+  if (url.pathname === '/api/store/config') {
+    const open = paddleReady(PADDLE) && storeTables && EMAIL_AUTH;
+    let legendLeft = LEGEND_CAP;
+    try {
+      if (storeTables) legendLeft = Math.max(0, LEGEND_CAP - (await storage.legendCount()));
+    } catch (err) {
+      console.error('Counting Legend packs failed:', err);
+    }
+    json(res, 200, {
+      open, env: PADDLE.env, clientToken: open ? PADDLE.clientToken : '', prices: open ? PADDLE.prices : {},
+      products: Object.values(PRODUCTS), now, launchAt: LAUNCH_AT,
+      founderSale: { from: FOUNDER_SALE_FROM, until: FOUNDER_SALE_UNTIL, open: now >= FOUNDER_SALE_FROM && now < FOUNDER_SALE_UNTIL },
+      premiumOpen: now >= LAUNCH_AT, legendLeft,
+    });
+    return true;
+  }
+  if (url.pathname === '/api/founders') {
+    json(res, 200, { rows: await founders() });
+    return true;
+  }
+  if (url.pathname === '/api/store/me' || url.pathname === '/api/store/founder-name') {
+    if (!EMAIL_AUTH) return json(res, 404, { error: 'Email login is not enabled on this server.' }), true;
+    const user = await verifyToken(String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, ''));
+    if (!user) return json(res, 401, { error: 'Not logged in.' }), true;
+    try {
+      const perks = await perksOf(user.id);
+      const characters = await storage.listCharacters(user.id);
+      if (url.pathname === '/api/store/me') {
+        json(res, 200, {
+          account: user.id, email: user.email, premiumUntil: perks.premiumUntil, premiumActive: perks.premiumUntil > now && now >= LAUNCH_AT,
+          founderTier: perks.founderTier, founderNo: perks.founderNo, extraSlots: perks.extraSlots, founderName: perks.founderName, characters,
+        });
+        return true;
+      }
+      if (req.method !== 'POST') return json(res, 405, { error: 'Use POST.' }), true;
+      if (!perks.founderTier) return json(res, 403, { error: 'Only founders can choose a founder name.' }), true;
+      const raw = await readBody(req, 4096);
+      let name = '';
+      try {
+        name = String((JSON.parse(raw ?? '{}') as { name?: unknown }).name ?? '').trim();
+      } catch {
+        return json(res, 400, { error: 'Bad request.' }), true;
+      }
+      const mine = characters.find((ch) => ch.name.toLowerCase() === name.toLowerCase());
+      if (!mine) return json(res, 400, { error: 'Pick one of your own characters.' }), true;
+      await storage.setFounderName(user.id, mine.name);
+      foundersCache = null;
+      void carveFoundersStone();
+      json(res, 200, { ok: true, name: mine.name });
+    } catch (err) {
+      console.error('Store request failed:', err);
+      json(res, 500, { error: 'The store could not load your account right now.' });
+    }
+    return true;
+  }
+  if (url.pathname === '/api/pay/webhook') {
+    if (req.method !== 'POST') return json(res, 405, { error: 'Use POST.' }), true;
+    if (!PADDLE.webhookSecret) return json(res, 404, { error: 'Payments are not set up.' }), true;
+    const raw = await readBody(req, 1_000_000);
+    if (raw === null) return json(res, 413, { error: 'Too large.' }), true;
+    const sig = req.headers['paddle-signature'];
+    if (!verifyPaddleSignature(raw, Array.isArray(sig) ? sig[0] : sig, PADDLE.webhookSecret)) {
+      console.warn('Payment webhook: bad signature, ignored.');
+      return json(res, 401, { error: 'Bad signature.' }), true;
+    }
+    // without the tables a payment cannot be recorded: answer an error so Paddle tries again later
+    if (!storeTables) return json(res, 503, { error: 'Store tables missing.' }), true;
+    try {
+      const r = await handlePaddleEvent(JSON.parse(raw), PADDLE, storage);
+      if (r.kind === 'granted') {
+        console.log(`Payment: ${r.product} for account ${r.owner.slice(0, 8)}… (${r.txn})`);
+        foundersCache = null;
+        void refreshPerks(r.owner).then(carveFoundersStone);
+      } else if (r.kind === 'revoked') {
+        console.log(`Payment ${r.how}: ${r.txn}`);
+        void refreshPerks();
+      } else if (r.kind === 'ignored') console.log(`Payment webhook ignored: ${r.why}`);
+      json(res, 200, { ok: true });
+    } catch (err) {
+      console.error('Payment webhook failed (Paddle will retry):', err);
+      json(res, 500, { error: 'Try again later.' });
+    }
+    return true;
+  }
+  return false;
+}
+
 async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   if (req.method === 'OPTIONS') return json(res, 204, null);
+  if (url.pathname.startsWith('/api/store/') || url.pathname === '/api/founders' || url.pathname === '/api/pay/webhook') {
+    if (await handleStore(req, res, url)) return;
+  }
   if (url.pathname === '/api/auth-config') {
     // the publishable key is meant for browsers; the secret key never leaves the server
     return json(res, 200, EMAIL_AUTH ? { mode: 'email', url: SUPABASE_URL, key: SUPABASE_PUBLISHABLE_KEY, maxCharacters: MAX_CHARACTERS_PER_ACCOUNT } : { mode: 'local' });
@@ -482,7 +663,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): P
     const user = await verifyToken(token);
     if (!user) return json(res, 401, { error: 'Not logged in.' });
     try {
-      return json(res, 200, { email: user.email, characters: await storage.listCharacters(user.id) });
+      const perks = await perksOf(user.id);
+      return json(res, 200, { email: user.email, characters: await storage.listCharacters(user.id), maxCharacters: MAX_CHARACTERS_PER_ACCOUNT + perks.extraSlots });
     } catch (err) {
       console.error('Listing characters failed:', err);
       return json(res, 500, { error: 'Could not load your characters.' });
@@ -612,6 +794,10 @@ setInterval(() => {
   }
 }, TICK * 1000);
 
+// purchases made in the browser reach characters that are already online
+setInterval(() => void refreshPerks(), 60_000);
+setInterval(() => void carveFoundersStone(), 5 * 60_000);
+
 setInterval(() => {
   for (const s of game.sessions.values()) void saveCharacter(s);
   storage?.flush().catch((err) => console.error('Flushing saves failed:', err));
@@ -639,10 +825,14 @@ const market = await storage.loadMarket().catch((err) => {
 });
 if (market) game.market.load(market.offers, market.deliveries);
 else game.market.enabled = false;
+storeTables = await storage.storeReady().catch(() => false);
+await carveFoundersStone();
 console.log(`Login: ${EMAIL_AUTH ? 'email (Supabase Auth)' : 'character name + password'}`);
 console.log(market ? `Market: open (${market.offers.length} offers, ${market.deliveries.length} deliveries waiting)` : 'Market: closed (no market tables in storage yet)');
 console.log(`Saves: ${storage.kind === 'supabase' ? 'Supabase database' : `files in ${dirname(DATA_FILE)}`} (save format v${SAVE_VERSION})`);
 console.log(`PvP: ${PVP ? 'on' : 'off'}`);
+console.log(`Premium: ${PREMIUM ? 'enforced (free heartland, premium regions)' : 'open to everyone (test mode)'}`);
+console.log(`Store: ${!storeTables ? 'closed (no store tables in storage yet)' : !EMAIL_AUTH ? 'closed (needs email login)' : paddleReady(PADDLE) ? `open (Paddle ${PADDLE.env}, ${Object.keys(PADDLE.prices).length} prices)` : 'closed (Paddle not set up yet)'}`);
 if (START_LEVEL > 1) console.log(`Test server: characters start at level ${START_LEVEL}`);
 console.log(`Test mode: ${TEST_MODE ? 'on (everyone: test commands except /god and /kill)' : 'off'}`);
 if (storage.kind !== 'supabase' && process.env.RENDER) {

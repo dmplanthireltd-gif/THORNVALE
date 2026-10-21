@@ -354,7 +354,7 @@ export class OnlineLogin {
     let b = this.fresh(true);
     el('p', 'gate-hint', b, 'Gathering your heroes…');
     if (!(await this.ensureFresh())) return this.renderSignIn('Your login expired. Please log in again.');
-    let data: { email: string; characters: Hero[] };
+    let data: { email: string; characters: Hero[]; maxCharacters?: number };
     try {
       const res = await fetch(`${httpBase(this.h.serverUrl)}/api/characters`, { headers: { Authorization: `Bearer ${this.session!.access_token}` } });
       if (res.status === 401) {
@@ -368,7 +368,8 @@ export class OnlineLogin {
       button(b, 'Try again', () => void this.renderCharacters(), 'gate-iron');
       return;
     }
-    const max = this.config?.maxCharacters ?? 5;
+    // founder packs add character slots to an account, so the server's per-account number wins
+    const max = data.maxCharacters ?? this.config?.maxCharacters ?? 5;
     const heroes = data.characters;
     if (!heroes.some((c) => c.name === this.selected)) this.selected = heroes[0]?.name ?? '';
     b = this.fresh(true);

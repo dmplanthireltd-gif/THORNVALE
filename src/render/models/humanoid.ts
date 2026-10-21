@@ -3,6 +3,7 @@ import { PALETTE, type Outfit } from '../../game/player/outfits';
 import { ITEMS } from '../../game/inventory/items';
 import { buildArmour, buildBoot, buildHelm, buildLegArmour } from './gear3d';
 import { gearLook } from './gearLooks';
+import { CLOAK_LOOK, type CloakId } from '../../game/premium/premium';
 import { box, collectMaterials, cone, cyl, group, mat, matCache, sphere, type Mat } from './parts';
 import type { BipedRig } from './rigs';
 import { ARMOR_LOOK, makeShield, makeWeapon } from './weapons';
@@ -15,8 +16,9 @@ import { ARMOR_LOOK, makeShield, makeWeapon } from './weapons';
 export type HeadStyle =
   | 'helm' | 'hood' | 'wizardHat' | 'hair' | 'featherHat' | 'hornHelm' | 'orc' | 'shaman'
   | 'warhelm' | 'elf' | 'troll' | 'ghoul' | 'demon' | 'brute'
-  | 'minotaur' | 'cyclops' | 'dwarf' | 'barbarian' | 'frostkin' | 'iceWitch' | 'mummy' | 'lizard' | 'amazon' | 'valkyrie' | 'bandit';
-export type TorsoStyle = 'plate' | 'tunic' | 'robe' | 'coat' | 'furVest';
+  | 'minotaur' | 'cyclops' | 'dwarf' | 'barbarian' | 'frostkin' | 'iceWitch' | 'mummy' | 'lizard' | 'amazon' | 'valkyrie' | 'bandit'
+  | 'greathelm' | 'cowl' | 'wardenHelm';
+export type TorsoStyle = 'plate' | 'tunic' | 'robe' | 'coat' | 'furVest' | 'warplate' | 'vestment' | 'tabard';
 
 export interface HumanoidSpec {
   skin: number;
@@ -27,6 +29,8 @@ export interface HumanoidSpec {
   legsColor: number;
   feetColor: number;
   cape?: number | null;
+  /** Cape length (default 0.58); long capes read as rank from above. */
+  capeLength?: number;
   quiver?: boolean;
   bareArms?: boolean;
   bulk?: number;
@@ -48,6 +52,12 @@ export function outfitSpec(o: Outfit): HumanoidSpec {
     case 'citizen': return { ...base, head: 'hair', torso: 'tunic' };
     case 'noble': return { ...base, head: 'featherHat', torso: 'coat', cape: c(o.legs) };
     case 'barbarian': return { ...base, head: 'hornHelm', torso: 'furVest', bareArms: true, bulk: 1.08 };
+    // premium: a heavy field commander in dark iron with a spiked crown helm
+    case 'warlord': return { ...base, head: 'greathelm', torso: 'warplate', cape: c(o.legs), capeLength: 0.72, bulk: 1.12 };
+    // premium: a hooded seer in floor-length vestments, face lost in shadow
+    case 'mystic': return { ...base, head: 'cowl', torso: 'vestment' };
+    // founder: a stately guardian, crested helm and a long tabard over bright plate
+    case 'warden': return { ...base, head: 'wardenHelm', torso: 'tabard', cape: c(o.legs), capeLength: 0.86, bulk: 1.05 };
   }
 }
 
@@ -72,7 +82,13 @@ export function buildHumanoid(spec: HumanoidSpec): BipedRig {
   root.add(body);
 
   // legs
-  const robe = spec.torso === 'robe';
+  const robe = spec.torso === 'robe' || spec.torso === 'vestment';
+  const armoured = spec.torso === 'plate' || spec.torso === 'warplate' || spec.torso === 'tabard';
+  const gold = mat(0xe0b03c);
+  const iron = mat(0x4f545d);
+  // outermost front/back of the torso, so cloaks and clasps sit clear of tabards and armour
+  let front = 0.2;
+  let back = -0.2;
   const mkLeg = (x: number) => group(x, 0.62, 0,
     box(0.17 * bulk, 0.38, 0.2 * bulk, robe ? dark : legsM, 0, -0.18, 0),
     box(0.2 * bulk, 0.2, 0.3, feetM, 0, -0.52, 0.04),
@@ -113,8 +129,73 @@ export function buildHumanoid(spec: HumanoidSpec): BipedRig {
       torso.add(box(tw * 0.3, 0.42, 0.35, skin, 0, 0.29, 0.005));
       torso.add(box(tw + 0.06, 0.26, 0.38, legsM, 0, -0.04, 0)); // kilt
       break;
+    case 'warplate': {
+      // dark iron cuirass; the colour lives on the sash, tassets and pauldron rims so any palette reads
+      torso.add(box(tw, 0.54, 0.36, iron, 0, 0.27, 0));
+      torso.add(box(tw * 0.62, 0.3, 0.04, steel, 0, 0.34, 0.185)); // raised chest plate
+      torso.add(cyl(0.15, 0.19, 0.1, iron, 0, 0.56, 0, 8)); // gorget
+      const sash = box(0.11, 0.66, 0.45, legsM, 0, 0.27, 0);
+      sash.rotation.z = 0.62;
+      torso.add(sash); // commander's sash, deep enough to stay over worn armour
+      for (let i = 0; i < 2; i++) torso.add(box(tw + 0.08 - i * 0.04, 0.13, 0.4 - i * 0.02, bodyM, 0, -0.02 - i * 0.12, 0)); // tassets
+      torso.add(box(tw + 0.09, 0.025, 0.41, dark, 0, -0.085, 0));
+      for (const s of [-1, 1]) {
+        // layered pauldrons stand out past the silhouette from above
+        torso.add(box(0.24, 0.1, 0.34, iron, s * (tw / 2 + 0.06), 0.52, 0));
+        torso.add(box(0.22, 0.08, 0.31, steel, s * (tw / 2 + 0.07), 0.44, 0));
+        torso.add(box(0.25, 0.03, 0.35, bodyM, s * (tw / 2 + 0.06), 0.575, 0));
+        torso.add(cone(0.035, 0.12, steel, s * (tw / 2 + 0.08), 0.62, 0, 4));
+      }
+      front = 0.23;
+      back = -0.23;
+      break;
+    }
+    case 'vestment': {
+      torso.add(box(tw * 0.92, 0.52, 0.32, bodyM, 0, 0.27, 0));
+      torso.add(cyl(0.26 * bulk, 0.42 * bulk, 0.74, bodyM, 0, -0.33, 0, 8)); // floor-length skirt
+      torso.add(cyl(0.425 * bulk, 0.425 * bulk, 0.07, legsM, 0, -0.66, 0, 8)); // hem band
+      torso.add(cyl(0.15, 0.33 * bulk, 0.3, legsM, 0, 0.44, 0, 8)); // sloped shoulder mantle: a coloured ring round the hood from above
+      torso.add(cyl(0.335 * bulk, 0.335 * bulk, 0.035, feetM, 0, 0.3, 0, 8)); // mantle edge
+      torso.add(cyl(0.27 * bulk, 0.29 * bulk, 0.06, feetM, 0, 0.05, 0, 8)); // cord belt
+      const charmM = mat(0xcfe8ff, { emissive: 0x2a4a6a });
+      torso.add(box(0.015, 0.2, 0.015, dark, 0, 0.26, 0.19)); // talisman cord
+      const disc = cyl(0.075, 0.075, 0.025, feetM, 0, 0.13, 0.2, 8);
+      disc.rotation.x = Math.PI / 2;
+      torso.add(disc);
+      torso.add(sphere(0.03, charmM, 0, 0.13, 0.215)); // glowing eye stone
+      for (const s of [-1, 1]) torso.add(box(0.03, 0.22, 0.03, feetM, s * 0.1, -0.08, 0.28)); // cord tassels
+      front = 0.24;
+      back = -0.24;
+      break;
+    }
+    case 'tabard': {
+      // bright plate under a long tabard with a gold crest: reads as rank in any colour
+      torso.add(box(tw, 0.52, 0.34, steel, 0, 0.27, 0));
+      torso.add(cyl(0.16, 0.2, 0.08, gold, 0, 0.56, 0, 10)); // gold collar
+      for (const z of [0.225, -0.225]) {
+        const sz = Math.sign(z);
+        torso.add(box(tw * 0.66, 0.84, 0.035, bodyM, 0, 0.06, z)); // tabard panel, knee length
+        torso.add(box(tw * 0.66 + 0.02, 0.05, 0.04, gold, 0, -0.36, z + sz * 0.002)); // gold hem
+        torso.add(box(0.07, 0.84, 0.04, legsM, 0, 0.06, z + sz * 0.004)); // centre stripe
+      }
+      const crest = box(0.15, 0.15, 0.03, gold, 0, 0.32, 0.25);
+      crest.rotation.z = Math.PI / 4;
+      torso.add(crest);
+      const crestIn = box(0.07, 0.07, 0.03, feetM, 0, 0.32, 0.262);
+      crestIn.rotation.z = Math.PI / 4;
+      torso.add(crestIn);
+      for (const s of [-1, 1]) {
+        torso.add(sphere(0.15, steel, s * (tw / 2 + 0.03), 0.5, 0, 1.2, 0.72, 1.2)); // rounded pauldrons
+        torso.add(cyl(0.18, 0.18, 0.03, gold, s * (tw / 2 + 0.03), 0.47, 0, 10)); // gold rims
+      }
+      torso.add(box(tw + 0.03, 0.07, 0.48, belt, 0, 0.04, 0)); // belt over the tabard
+      torso.add(box(0.09, 0.07, 0.03, gold, 0, 0.04, 0.245));
+      front = 0.25;
+      back = -0.25;
+      break;
+    }
   }
-  if (spec.torso !== 'furVest' && spec.torso !== 'robe') torso.add(box(tw + 0.03, 0.08, 0.37, belt, 0, 0.04, 0));
+  if (spec.torso !== 'furVest' && !robe) torso.add(box(tw + 0.03, 0.08, 0.37, belt, 0, 0.04, 0));
   if (spec.torso === 'furVest') torso.add(box(tw + 0.07, 0.07, 0.4, belt, 0, 0.09, 0));
 
   // shoulder plates (show the worn body armour)
@@ -127,10 +208,17 @@ export function buildHumanoid(spec: HumanoidSpec): BipedRig {
 
   let cape: THREE.Object3D | null = null;
   if (spec.cape !== undefined && spec.cape !== null) {
-    cape = group(0, 0.55, -0.18, box(0.44 * bulk, 0.58, 0.035, mat(spec.cape), 0, -0.29, 0));
+    const len = spec.capeLength ?? 0.58;
+    // heavy torsos have deeper backs; hang the cape clear of them
+    cape = group(0, 0.55, back < -0.2 ? back - 0.01 : -0.18, box(0.44 * bulk, len, 0.035, mat(spec.cape), 0, -len / 2, 0));
     cape.rotation.x = 0.12;
     torso.add(cape);
   }
+  // remembered so applyGear can swap a founder cloak in and give the outfit cape back later
+  torso.userData.ownCape = cape;
+  torso.userData.bulk = bulk;
+  torso.userData.front = front;
+  torso.userData.back = back;
   if (spec.quiver) {
     const q = group(0.12, 0.36, -0.2,
       cyl(0.07, 0.06, 0.48, mat(0x6a4426), 0, 0, 0, 7),
@@ -393,6 +481,62 @@ export function buildHumanoid(spec: HumanoidSpec): BipedRig {
       head.add(box(0.36, 0.12, 0.08, mat(0x2a221c), 0, -0.1, 0.15)); // face cloth
       break;
     }
+    case 'greathelm': {
+      // dark iron great helm with a crown of spikes and a horsehair tail: a commander, not a footman
+      head.add(cyl(0.215, 0.235, 0.34, iron, 0, 0, 0, 10));
+      head.add(sphere(0.215, iron, 0, 0.16, 0, 1, 0.55, 1));
+      head.add(box(0.32, 0.045, 0.05, eye, 0, 0.04, 0.215)); // eye slit
+      head.add(box(0.045, 0.14, 0.05, steel, 0, -0.06, 0.225)); // nasal bar
+      head.add(cyl(0.24, 0.24, 0.06, headM, 0, 0.13, 0, 10)); // coloured crown band
+      for (let i = 0; i < 5; i++) {
+        const a = (i - 2) * 0.62;
+        const sp = cone(0.035, 0.15, steel, Math.sin(a) * 0.2, 0.22, Math.cos(a) * 0.2 - 0.01, 4);
+        sp.rotation.x = Math.cos(a) * 0.25;
+        sp.rotation.z = -Math.sin(a) * 0.25;
+        head.add(sp);
+      }
+      head.add(box(0.09, 0.08, 0.26, headM, 0, 0.27, -0.12)); // plume root
+      head.add(box(0.11, 0.36, 0.06, headM, 0, 0.06, -0.27)); // horsehair tail down the back
+      for (const s of [-1, 1]) head.add(box(0.05, 0.16, 0.2, iron, s * 0.225, -0.13, 0.05)); // cheek guards
+      break;
+    }
+    case 'cowl': {
+      // deep seer's cowl: the face sinks into shadow and only two pale eyes show
+      face(0.18);
+      const rim = mat(new THREE.Color(spec.headColor).multiplyScalar(0.7).getHex());
+      head.add(sphere(0.245, headM, 0, 0.05, -0.04, 1, 1.06, 1.1));
+      const lip = new THREE.Mesh(new THREE.TorusGeometry(0.155, 0.045, 5, 12), rim);
+      lip.position.set(0, 0.02, 0.18);
+      head.add(lip); // hood opening
+      head.add(box(0.24, 0.13, 0.04, mat(0x120e16), 0, 0.06, 0.19)); // shadow over the brow
+      const glow = mat(0xcfe8ff, { emissive: 0x6a9ac8 });
+      head.add(box(0.05, 0.03, 0.02, glow, 0.065, 0.04, 0.215));
+      head.add(box(0.05, 0.03, 0.02, glow, -0.065, 0.04, 0.215));
+      const peak = cone(0.15, 0.34, headM, 0, 0.32, -0.04, 6);
+      peak.rotation.x = 0.55; // peak curls forward, unlike the ranger hood's tail or the mage's hat
+      head.add(peak);
+      head.add(box(0.38, 0.3, 0.08, headM, 0, -0.14, -0.17)); // drape over the nape
+      head.add(sphere(0.035, mat(spec.feetColor, { emissive: new THREE.Color(spec.feetColor).multiplyScalar(0.3).getHex() }), 0, 0.2, 0.2)); // brow jewel
+      break;
+    }
+    case 'wardenHelm': {
+      // bright great helm with a gold T-visor, a tall crest fan and swept gold wings
+      head.add(cyl(0.21, 0.22, 0.32, steel, 0, 0, 0, 10));
+      head.add(sphere(0.21, steel, 0, 0.15, 0, 1, 0.62, 1));
+      head.add(box(0.3, 0.04, 0.05, eye, 0, 0.03, 0.2)); // visor slit
+      head.add(box(0.05, 0.17, 0.05, gold, 0, -0.04, 0.212)); // gold nasal
+      head.add(cyl(0.225, 0.225, 0.05, gold, 0, 0.12, 0, 10)); // gold brow band
+      head.add(box(0.06, 0.05, 0.42, gold, 0, 0.27, -0.03)); // crest ridge
+      head.add(box(0.045, 0.24, 0.5, headM, 0, 0.4, -0.06)); // crest fan
+      for (const s of [-1, 1]) {
+        const wing = box(0.03, 0.18, 0.3, gold, s * 0.23, 0.2, -0.08);
+        wing.rotation.z = -s * 0.45;
+        wing.rotation.y = s * 0.25;
+        wing.rotation.x = -0.35;
+        head.add(wing);
+      }
+      break;
+    }
     case 'shaman':
       face(0.21);
       head.add(cyl(0.22, 0.22, 0.07, headM, 0, 0.1, 0, 10));
@@ -408,8 +552,8 @@ export function buildHumanoid(spec: HumanoidSpec): BipedRig {
   }
 
   // arms
-  const sleeve = spec.bareArms ? skin : spec.torso === 'plate' ? steel : bodyM;
-  const handM = spec.torso === 'plate' ? mat(0x5d6674) : skin;
+  const sleeve = spec.bareArms ? skin : spec.torso === 'warplate' ? iron : armoured ? steel : bodyM;
+  const handM = armoured ? mat(0x5d6674) : skin;
   const mkArm = (x: number) => group(x * bulk, 1.1, 0,
     box(0.14, 0.32, 0.15, sleeve, 0, -0.16, 0),
     box(0.14, 0.14, 0.15, handM, 0, -0.38, 0),
@@ -457,7 +601,7 @@ export function buildHumanoid(spec: HumanoidSpec): BipedRig {
 
   const rig: BipedRig = {
     type: 'biped', root, body, torso, head, armL, armR, legL, legR, cape,
-    materials: [], hitbox, height: (spec.head === 'wizardHat' ? 1.95 : 1.75) + 0.62 * (ls - 1), restArm: -0.55,
+    materials: [], hitbox, height: (spec.head === 'wizardHat' ? 1.95 : spec.head === 'wardenHelm' || spec.head === 'cowl' ? 1.85 : 1.75) + 0.62 * (ls - 1), restArm: -0.55,
     gear: { weaponMount, shieldMount, pads, padMat, skin, extras: [] }, wings,
   };
   pads.visible = false;
@@ -478,6 +622,8 @@ export interface GearLook {
   head: string | null;
   legs: string | null;
   feet: string | null;
+  /** Founder cloak (CloakId); shown over any armour, even with gear hidden. */
+  cloak?: string | null;
 }
 
 /** Dresses a rig in its equipment: held items, helmet, armour plates, greaves and boots. */
@@ -543,6 +689,21 @@ export function applyGear(rig: BipedRig, eq: GearLook): void {
     if (bootLook) for (const o of buildBoot(bootLook, M, side)) attach(leg, o);
   }
 
+  // founder cloak: replaces the outfit cape while worn and takes over its sway (CreatureView animates rig.cape)
+  const own = rig.torso.userData.ownCape as THREE.Object3D | null | undefined;
+  const cl = eq.cloak && eq.cloak in CLOAK_LOOK ? CLOAK_LOOK[eq.cloak as CloakId] : undefined;
+  if (own !== undefined) {
+    if (own) own.visible = !cl;
+    rig.cape = own;
+  }
+  if (cl) {
+    // any worn body armour now has plates, so the cloak always sits clear of it
+    const cloak = buildCloak(rig, cl.main, cl.trim, !!armor);
+    attach(rig.torso, cloak.mantle);
+    attach(rig.torso, cloak.pivot);
+    rig.cape = cloak.pivot;
+  }
+
   rig.root.traverse((o) => {
     if ((o as THREE.Mesh).isMesh && o !== rig.hitbox) {
       o.castShadow = true;
@@ -550,6 +711,40 @@ export function applyGear(rig: BipedRig, eq: GearLook): void {
     }
   });
   refreshMaterials(rig);
+}
+
+/**
+ * A long founder cloak: a mantle over the shoulders (what the tilted top-down camera
+ * mostly sees) plus a back panel down to the calves with a trim hem and a clasp.
+ */
+function buildCloak(rig: BipedRig, main: number, trim: number, breastplate: boolean): { mantle: THREE.Group; pivot: THREE.Group } {
+  const bulk = (rig.torso.userData.bulk as number | undefined) ?? 1;
+  // clear the deepest back surface: outfit torso, or a worn breastplate (z -0.215)
+  const back = Math.min((rig.torso.userData.back as number | undefined) ?? -0.2, breastplate ? -0.22 : -0.2) - 0.02;
+  const front = Math.max((rig.torso.userData.front as number | undefined) ?? 0.2, breastplate ? 0.22 : 0.2);
+  const mainM = mat(main);
+  const trimM = mat(trim);
+  const w = 0.62 * bulk;
+  const len = 1.02;
+  const pivot = group(0, 0.6, back,
+    box(w, len, 0.04, mainM, 0, -len / 2, 0),
+    box(w + 0.02, 0.07, 0.05, trimM, 0, -len + 0.03, 0), // hem stripe
+    box(0.06, len - 0.1, 0.05, trimM, w / 2 - 0.02, -len / 2 + 0.03, 0), // edge trims
+    box(0.06, len - 0.1, 0.05, trimM, -w / 2 + 0.02, -len / 2 + 0.03, 0),
+  );
+  pivot.rotation.x = 0.12;
+  // shoulder mantle over the pauldrons, open at the front, pinned by a clasp at the collar
+  const mw = 0.72 * bulk;
+  const depth = front - back;
+  const mantle = group(0, 0, 0,
+    box(mw, 0.08, depth * 0.62, mainM, 0, 0.62, back + depth * 0.31),
+    box(mw + 0.02, 0.03, 0.04, trimM, 0, 0.6, back + depth * 0.62),
+    box(0.06, 0.06, 0.05, trimM, 0.12, 0.6, front - 0.02), // clasp halves
+    box(0.06, 0.06, 0.05, trimM, -0.12, 0.6, front - 0.02),
+    box(0.26, 0.025, 0.03, trimM, 0, 0.6, front),
+  );
+  for (const s of [-1, 1]) mantle.add(box(0.07, 0.18, depth * 0.6, mainM, s * (mw / 2 - 0.02), 0.52, back + depth * 0.32)); // drape over each shoulder
+  return { mantle, pivot };
 }
 
 export interface HelmLook {

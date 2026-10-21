@@ -2,7 +2,7 @@
  * Outfit data (render-agnostic). An outfit is a type plus four colour parts,
  * each an index into the shared palette — compact enough to send over a network.
  */
-export type OutfitType = 'knight' | 'ranger' | 'mage' | 'citizen' | 'noble' | 'barbarian';
+export type OutfitType = 'knight' | 'ranger' | 'mage' | 'citizen' | 'noble' | 'barbarian' | 'warlord' | 'mystic' | 'warden';
 export type OutfitPart = 'head' | 'body' | 'legs' | 'feet';
 
 export interface Outfit {
@@ -20,6 +20,11 @@ export const OUTFIT_TYPES: Array<{ id: OutfitType; name: string }> = [
   { id: 'citizen', name: 'Citizen' },
   { id: 'noble', name: 'Noble' },
   { id: 'barbarian', name: 'Barbarian' },
+  // premium accounts only (premium/premium.ts PREMIUM_OUTFITS)
+  { id: 'warlord', name: 'Warlord' },
+  { id: 'mystic', name: 'Mystic' },
+  // founder packs Warden and Legend only (FOUNDER_OUTFITS)
+  { id: 'warden', name: 'Warden' },
 ];
 
 export const OUTFIT_PARTS: Array<{ id: OutfitPart; name: string }> = [

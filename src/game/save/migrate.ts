@@ -15,7 +15,7 @@ import { isVocation } from '../player/vocations';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -57,6 +57,8 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   7: (d) => ({ ...d, gathering: { ...((d.gathering ?? {}) as Record<string, unknown>), mining: 0, smithing: 0 }, version: 8 }),
   // v8 → v9: fletching, crafting, cooking and firemaking; everyone starts at level 1 in each (every other skill is kept)
   8: (d) => ({ ...d, gathering: { ...((d.gathering ?? {}) as Record<string, unknown>), fletching: 0, crafting: 0, cooking: 0, firemaking: 0 }, version: 9 }),
+  // v9 → v10: founder cloak and title shown by default (premium itself lives on the account, not in the save)
+  9: (d) => ({ ...d, cosmetics: { hideCloak: false, hideTitle: false }, version: 10 }),
 };
 
 export interface MigrationResult {

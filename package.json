@@ -17,7 +17,8 @@
     "saves:check": "tsx scripts/saves.ts check",
     "test:storage": "tsx scripts/storage-test.ts",
     "test:auth": "tsx scripts/auth-test.ts",
-    "test:bosses": "tsx scripts/boss-test.ts"
+    "test:bosses": "tsx scripts/boss-test.ts",
+    "test:store": "tsx scripts/store-test.ts"
   },
   "dependencies": {
     "three": "^0.170.0"

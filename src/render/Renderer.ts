@@ -170,7 +170,8 @@ export class Renderer {
     const eq = s.inventory.equipment;
     const show = s.player.showGear;
     const id = (k: keyof typeof eq) => (show ? eq[k]?.id ?? null : null);
-    applyGear(rig, { weapon: id('weapon'), shield: id('shield'), armor: id('armor'), head: id('head'), legs: id('legs'), feet: id('feet') });
+    // the founder cloak is a look, not gear: it shows even with "show gear" off
+    applyGear(rig, { weapon: id('weapon'), shield: id('shield'), armor: id('armor'), head: id('head'), legs: id('legs'), feet: id('feet'), cloak: s.player.cloak || null });
   }
 
   private ensureView(c: Creature): CreatureView {
@@ -756,6 +757,7 @@ export class Renderer {
       if (tree) return `A ${tree.name}${tree.level > 1 ? ` (woodcutting ${tree.level})` : ''}${h.usable ? ' — click to chop' : ''}`;
       if (o === Obj.Stump) return 'A tree stump. It will grow back.';
       if (o === Obj.MarketBoard) return 'Market board — buy from and sell to other players';
+      if (o === Obj.FoundersStone) return "The Founders' Stone — the names of Thornvale's Legends";
       const ore = oreAt(o);
       if (ore) return `A ${ore.name}${ore.level > 1 ? ` (mining ${ore.level})` : ''}${h.usable ? ' — click to mine' : ''}`;
       if (o === Obj.DepletedRock) return 'A mined-out rock. The ore will come back.';
@@ -842,6 +844,8 @@ export class Renderer {
           player: c === p, npc: c.kind === 'npc', other: c.kind === 'player' && c !== p, targeted: p.targetId === c.id, skull: c instanceof Player ? g.skullOf(c) : 0 as const, party: c instanceof Player ? g.partyFlag(p.id, c.id) : 0 as const,
           // bosses: gold crown and their title under the name
           boss: c instanceof Enemy && c.def.boss ? (c.def.title ?? '') : undefined,
+          // founders: their title under the name
+          title: c instanceof Player ? c.title : '',
         };
         this.overlay.setLabel(c.id, anchor, c.name, c.hp / c.maxHp, opts);
       }

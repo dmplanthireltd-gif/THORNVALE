@@ -12,6 +12,29 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path';
 import type { SaveData } from '../src/game/Game';
 import { cleanDelivery, cleanOffer, type MarketDelivery, type MarketOffer } from '../src/game/market/market';
+import {
+  bestTier, FOUNDER_TIERS, isFounderTier, NO_PERKS, PRODUCTS, type AccountPerks, type FounderTier, type ProductId,
+} from '../src/game/premium/premium';
+
+/** A payment to record and grant (server/payments.ts). */
+export interface PurchaseGrant {
+  provider: string;
+  /** Provider transaction id: each is granted once. */
+  txn: string;
+  owner: string;
+  product: ProductId;
+  /** When the premium days start (opening day for founder packs bought before it). */
+  start: number;
+  amountMinor: number | null;
+  currency: string | null;
+  raw?: unknown;
+}
+
+export interface Founder {
+  name: string;
+  tier: FounderTier;
+  no: number;
+}
 
 export interface Account {
   /** Name as typed at creation (for display). */
@@ -64,6 +87,29 @@ export interface Storage {
   /** Inserts or updates deliveries (by id). */
   putMarketDeliveries(deliveries: MarketDelivery[]): Promise<void>;
   deleteMarketDeliveries(ids: string[]): Promise<void>;
+  /**
+   * Premium store (tables account_perks, purchases). False when this storage has no
+   * store tables yet: the store then stays closed and nobody has premium.
+   */
+  storeReady(): Promise<boolean>;
+  /** An account's premium time and founder pack (NO_PERKS when it never bought anything). */
+  getPerks(owner: string): Promise<AccountPerks>;
+  /** Records a payment and adds what it bought, in one step; the same transaction twice is ignored. */
+  grantPurchase(g: PurchaseGrant): Promise<'granted' | 'duplicate'>;
+  /** Takes a payment back (refund: days and tier; chargeback: days, account flagged). */
+  revokePurchase(provider: string, txn: string, kind: 'refund' | 'chargeback'): Promise<'revoked' | 'already' | 'unknown'>;
+  /** Name shown on the Founders page and the Founders' Stone. */
+  setFounderName(owner: string, name: string): Promise<void>;
+  /** Founders who picked a name, Legends first by number. */
+  listFounders(): Promise<Founder[]>;
+  /** Legend packs handed out so far. */
+  legendCount(): Promise<number>;
+}
+
+const DAY_MS = 86_400_000;
+
+function sortFounders(rows: Founder[]): Founder[] {
+  return rows.sort((a, b) => FOUNDER_TIERS[b.tier].rank - FOUNDER_TIERS[a.tier].rank || (a.no || 1e9) - (b.no || 1e9) || a.name.localeCompare(b.name));
 }
 
 // ------------------------------------------------------------------ files
@@ -74,6 +120,7 @@ export class FileStorage implements Storage {
   private accounts: Record<string, Account>;
   private backups: Array<{ key: string; data: unknown; version: number; reason: string; at: number }>;
   private market: { offers: Record<string, MarketOffer>; deliveries: Record<string, MarketDelivery> };
+  private store: { perks: Record<string, AccountPerks>; purchases: Record<string, FilePurchase> };
   private dirty = false;
 
   constructor(
@@ -81,12 +128,15 @@ export class FileStorage implements Storage {
     private readonly accountFile = join(dirname(charFile), 'accounts.json'),
     private readonly backupFile = join(dirname(charFile), 'backups.json'),
     private readonly marketFile = join(dirname(charFile), 'market.json'),
+    private readonly storeFile = join(dirname(charFile), 'store.json'),
   ) {
     this.chars = FileStorage.read(charFile, {});
     this.accounts = FileStorage.read(accountFile, {});
     this.backups = FileStorage.read(backupFile, []);
     const m = FileStorage.read<{ offers?: Record<string, MarketOffer>; deliveries?: Record<string, MarketDelivery> }>(marketFile, {});
     this.market = { offers: m.offers ?? {}, deliveries: m.deliveries ?? {} };
+    const st = FileStorage.read<{ perks?: Record<string, AccountPerks>; purchases?: Record<string, FilePurchase> }>(storeFile, {});
+    this.store = { perks: st.perks ?? {}, purchases: st.purchases ?? {} };
   }
 
   private static read<T>(file: string, fallback: T): T {
@@ -204,6 +254,85 @@ export class FileStorage implements Storage {
     for (const id of ids) delete this.market.deliveries[id];
     FileStorage.write(this.marketFile, this.market);
   }
+
+  // the store file is written on every change, like the market: payments must never wait for a flush
+
+  async storeReady(): Promise<boolean> {
+    return true;
+  }
+
+  async getPerks(owner: string): Promise<AccountPerks> {
+    const p = this.store.perks[owner];
+    return p ? { ...NO_PERKS, ...p } : { ...NO_PERKS };
+  }
+
+  async grantPurchase(g: PurchaseGrant): Promise<'granted' | 'duplicate'> {
+    const key = `${g.provider}:${g.txn}`;
+    if (this.store.purchases[key]) return 'duplicate';
+    const prod = PRODUCTS[g.product];
+    this.store.purchases[key] = {
+      owner: g.owner, product: g.product, days: prod.days, tier: prod.tier ?? null, amountMinor: g.amountMinor, currency: g.currency,
+      status: 'completed', created: Date.now(),
+    };
+    const cur = await this.getPerks(g.owner);
+    const tier = bestTier(cur.founderTier, prod.tier ?? null);
+    let no = cur.founderNo;
+    if (tier === 'legend' && !no) no = Math.max(0, ...Object.values(this.store.perks).map((p) => p.founderNo || 0)) + 1;
+    this.store.perks[g.owner] = {
+      ...cur,
+      premiumUntil: Math.max(cur.premiumUntil, g.start) + prod.days * DAY_MS,
+      founderTier: tier, founderNo: no, extraSlots: tier ? FOUNDER_TIERS[tier].extraSlots : 0,
+    };
+    FileStorage.write(this.storeFile, this.store);
+    return 'granted';
+  }
+
+  async revokePurchase(provider: string, txn: string, kind: 'refund' | 'chargeback'): Promise<'revoked' | 'already' | 'unknown'> {
+    const pur = this.store.purchases[`${provider}:${txn}`];
+    if (!pur) return 'unknown';
+    if (pur.status !== 'completed') return 'already';
+    pur.status = kind === 'chargeback' ? 'chargeback' : 'refunded';
+    const cur = await this.getPerks(pur.owner);
+    const next: AccountPerks = { ...cur, premiumUntil: cur.premiumUntil - pur.days * DAY_MS };
+    if (kind === 'chargeback') next.flagged = true;
+    else {
+      let tier: FounderTier | null = null;
+      for (const p of Object.values(this.store.purchases)) if (p.owner === pur.owner && p.status === 'completed' && p.tier) tier = bestTier(tier, p.tier);
+      next.founderTier = tier;
+      next.extraSlots = tier ? FOUNDER_TIERS[tier].extraSlots : 0;
+    }
+    this.store.perks[pur.owner] = next;
+    FileStorage.write(this.storeFile, this.store);
+    return 'revoked';
+  }
+
+  async setFounderName(owner: string, name: string): Promise<void> {
+    const cur = await this.getPerks(owner);
+    this.store.perks[owner] = { ...cur, founderName: name };
+    FileStorage.write(this.storeFile, this.store);
+  }
+
+  async listFounders(): Promise<Founder[]> {
+    return sortFounders(Object.values(this.store.perks)
+      .filter((p) => p.founderTier && p.founderName)
+      .map((p) => ({ name: p.founderName, tier: p.founderTier!, no: p.founderTier === 'legend' ? p.founderNo : 0 })));
+  }
+
+  async legendCount(): Promise<number> {
+    return Object.values(this.store.perks).filter((p) => p.founderNo > 0).length;
+  }
+}
+
+/** A purchase in the local store file. */
+interface FilePurchase {
+  owner: string;
+  product: ProductId;
+  days: number;
+  tier: FounderTier | null;
+  amountMinor: number | null;
+  currency: string | null;
+  status: 'completed' | 'refunded' | 'chargeback';
+  created: number;
 }
 
 // ------------------------------------------------------------------ Supabase (Postgres via its REST API)
@@ -371,6 +500,72 @@ export class SupabaseStorage implements Storage {
     if (!ids.length) return;
     await this.req('DELETE', `market_deliveries?id=${encodeURIComponent(SupabaseStorage.idList(ids))}`, undefined, 'return=minimal');
   }
+
+  // ---------------------------------------------------------------- premium store (account_perks, purchases)
+
+  async storeReady(): Promise<boolean> {
+    try {
+      await this.req('GET', 'account_perks?select=owner_id&limit=1');
+      await this.req('GET', 'purchases?select=id&limit=1');
+      return true;
+    } catch (err) {
+      console.warn(`Store tables not found (${String((err as Error).message).slice(0, 120)}). The store stays closed until the migration is applied.`);
+      return false;
+    }
+  }
+
+  private static uuid(id: string): string {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('not an account id');
+    return id.toLowerCase();
+  }
+
+  async getPerks(owner: string): Promise<AccountPerks> {
+    const rows = (await this.req('GET', `account_perks?owner_id=eq.${SupabaseStorage.uuid(owner)}&select=*`)) as Array<Record<string, unknown>>;
+    return perksFromRow(rows?.[0]);
+  }
+
+  async grantPurchase(g: PurchaseGrant): Promise<'granted' | 'duplicate'> {
+    const prod = PRODUCTS[g.product];
+    const r = await this.req('POST', 'rpc/thornvale_grant_purchase', {
+      p_provider: g.provider, p_txn: g.txn, p_owner: SupabaseStorage.uuid(g.owner), p_product: g.product, p_days: prod.days,
+      p_start: SupabaseStorage.iso(g.start), p_tier: prod.tier ?? null, p_amount_minor: g.amountMinor, p_currency: g.currency, p_raw: g.raw ?? null,
+    });
+    return r === 'duplicate' ? 'duplicate' : 'granted';
+  }
+
+  async revokePurchase(provider: string, txn: string, kind: 'refund' | 'chargeback'): Promise<'revoked' | 'already' | 'unknown'> {
+    const r = await this.req('POST', 'rpc/thornvale_revoke_purchase', { p_provider: provider, p_txn: txn, p_kind: kind });
+    return r === 'revoked' || r === 'already' ? r : 'unknown';
+  }
+
+  async setFounderName(owner: string, name: string): Promise<void> {
+    await this.req('PATCH', `account_perks?owner_id=eq.${SupabaseStorage.uuid(owner)}`, { founder_name: name, updated_at: new Date().toISOString() }, 'return=minimal');
+  }
+
+  async listFounders(): Promise<Founder[]> {
+    const rows = (await this.req('GET', 'account_perks?founder_tier=not.is.null&founder_name=not.is.null&select=founder_name,founder_tier,founder_no&limit=5000')) as Array<Record<string, unknown>>;
+    return sortFounders(rows.filter((r) => isFounderTier(r.founder_tier) && typeof r.founder_name === 'string' && r.founder_name)
+      .map((r) => ({ name: String(r.founder_name), tier: r.founder_tier as FounderTier, no: r.founder_tier === 'legend' ? Number(r.founder_no) || 0 : 0 })));
+  }
+
+  async legendCount(): Promise<number> {
+    const rows = (await this.req('GET', 'account_perks?founder_no=not.is.null&select=founder_no&order=founder_no.desc&limit=1')) as Array<Record<string, unknown>>;
+    return Number(rows?.[0]?.founder_no) || 0;
+  }
+}
+
+/** Turns an account_perks row into AccountPerks. */
+function perksFromRow(r: Record<string, unknown> | undefined): AccountPerks {
+  if (!r) return { ...NO_PERKS };
+  const tier = isFounderTier(r.founder_tier) ? r.founder_tier : null;
+  return {
+    premiumUntil: r.premium_until ? Date.parse(String(r.premium_until)) || 0 : 0,
+    founderTier: tier,
+    founderNo: Number(r.founder_no) || 0,
+    extraSlots: Math.max(0, Number(r.extra_slots) || 0),
+    founderName: typeof r.founder_name === 'string' ? r.founder_name : '',
+    flagged: r.flagged === true,
+  };
 }
 
 /** Picks Supabase when configured, files otherwise. */

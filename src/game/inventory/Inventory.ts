@@ -3,7 +3,10 @@ import { EQUIP_SLOTS, isItem, itemDef, type EquipSlot, type ItemStack } from './
 /** Slots you always have (belt pouches); a backpack adds its own slots on top. */
 export const POCKET_SLOTS = 8;
 export const MAX_SLOTS = POCKET_SLOTS + 36;
+/** Depot slots a free account can fill (premium: PREMIUM_DEPOT_SLOTS in premium/premium.ts). */
 export const DEPOT_SLOTS = 60;
+/** Length of every depot list: room for a premium depot, so nothing is ever cut off when premium ends. */
+export const DEPOT_MAX_SLOTS = 120;
 
 export type Equipment = Record<EquipSlot, ItemStack | null>;
 
@@ -151,6 +154,37 @@ export class Inventory {
 }
 
 /** Plain list storage (depot lockers). */
+/**
+ * Like addToList, but new slots are only taken while fewer than `cap` slots are in
+ * use. Topping up an existing stack is always allowed, and items already above the
+ * cap stay where they are (a depot that shrank when premium ended keeps everything).
+ */
+export function addToCapped(list: (ItemStack | null)[], id: string, qty: number, cap: number): number {
+  const d = itemDef(id);
+  let left = qty;
+  if (d.stackable) {
+    for (const s of list) {
+      if (left <= 0) break;
+      if (s && s.id === id && s.qty < d.maxStack) {
+        const take = Math.min(d.maxStack - s.qty, left);
+        s.qty += take;
+        left -= take;
+      }
+    }
+  }
+  let used = 0;
+  for (const s of list) if (s) used++;
+  for (let i = 0; i < list.length && left > 0 && used < cap; i++) {
+    if (!list[i]) {
+      const take = d.stackable ? Math.min(d.maxStack, left) : 1;
+      list[i] = { id, qty: take };
+      left -= take;
+      used++;
+    }
+  }
+  return left;
+}
+
 export function addToList(list: (ItemStack | null)[], id: string, qty: number): number {
   const d = itemDef(id);
   let left = qty;

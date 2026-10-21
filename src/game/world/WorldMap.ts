@@ -98,6 +98,8 @@ export enum Obj {
   Stove = 58,
   /** Tanning rack for hides (crafting; one in every smithy). */
   TanningRack = 59,
+  /** Stone on the Thornvale temple plaza carrying the names of the Legend founders (premium/premium.ts). */
+  FoundersStone = 60,
 }
 
 const SOLID = new Set<number>([
@@ -106,7 +108,7 @@ const SOLID = new Set<number>([
   Obj.Cliff, Obj.Palisade, Obj.Campfire, Obj.Chest, Obj.Locker, Obj.Palm, Obj.Pillar,
   Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall, Obj.MagicWall, Obj.MarketBoard, Obj.Stump,
   Obj.CopperRock, Obj.TinRock, Obj.IronRock, Obj.CoalRock, Obj.SilverRock, Obj.GoldRock, Obj.StarsteelRock, Obj.DarkstoneRock, Obj.DepletedRock,
-  Obj.Furnace, Obj.Anvil, Obj.Stove, Obj.TanningRack,
+  Obj.Furnace, Obj.Anvil, Obj.Stove, Obj.TanningRack, Obj.FoundersStone,
 ]);
 
 /** Objects that stop arrows and spells. Trees and fences do not. */

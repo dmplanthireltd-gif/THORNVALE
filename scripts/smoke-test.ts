@@ -31,6 +31,10 @@ import type { MirrorExtras } from '../src/game/net/protocol';
 import { FISH_ITEMS } from '../src/game/gathering/fishing';
 import { ENEMIES } from '../src/game/enemies/enemyDefs';
 import { FOODS } from '../src/game/production/cooking';
+import { TOWNS } from '../src/game/world/townList';
+import {
+  extendPremium, FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, FREE_TOWNS, LAUNCH_AT, NO_PERKS, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS, PRODUCTS,
+} from '../src/game/premium/premium';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -1671,6 +1675,139 @@ console.log('Mining and blacksmithing');
   check(t3.g.applySave(t3.pid, v7) && t3.s.gathering.mining === 0 && t3.s.gathering.woodcutting === 4321 && t3.s.inventory.count('starsteel_pickaxe') === 1, 'a migrated v7 character loads with its items and skills');
 }
 
+console.log('Premium accounts and founder packs');
+{
+  const DAY = 86_400_000;
+  let clock = Date.UTC(2027, 2, 1);
+  const g = new Game({ premium: true, now: () => clock });
+  const w = g.world;
+  const town = (k: string) => TOWNS.find((t) => t.key === k)!;
+  check(FREE_TOWNS.every((k) => !g.premiumLand(town(k).x, town(k).y)), 'the six heartland towns are free land');
+  check(TOWNS.filter((t) => !(FREE_TOWNS as readonly string[]).includes(t.key)).every((t) => g.premiumLand(t.x, t.y)), 'the other eight towns are premium land');
+  const fern = w.destinations.fernwick, cyc = w.destinations.cyclops_isle, gull = w.destinations.gull_isle;
+  check(!g.premiumLand(fern.x, fern.y) && !g.premiumLand(cyc.x, cyc.y) && g.premiumLand(gull.x, gull.y), 'islands reached by a free town\'s ferry are free, a premium town\'s ferry island is premium');
+  let crossing = 0;
+  for (const [k, l] of w.links) {
+    const [x, y] = k.split(',').map(Number);
+    if (g.premiumLand(x, y) !== g.premiumLand(l.to.x, l.to.y)) crossing++;
+  }
+  check(crossing === 0, `no stairs, ladder or hole leads from free to premium land (${crossing} found)`);
+
+  const a = g.addPlayer('Freebie', { intent: new BufferedIntent() });
+  const b = g.addPlayer('Patron', { intent: new BufferedIntent() });
+  g.setPerks(b.id, { ...NO_PERKS, premiumUntil: clock + 30 * DAY }, true);
+  check(!g.isPremium(a) && g.isPremium(b), 'premium follows the account perks when the server enforces it');
+  check(g.depotCap(a) === FREE_DEPOT_SLOTS && g.depotCap(b) === PREMIUM_DEPOT_SLOTS && g.offerCap(a) === FREE_MARKET_OFFERS && g.offerCap(b) === PREMIUM_MARKET_OFFERS, 'free: 60 depot slots and 20 offers, premium: 120 and 40');
+  check(new Game().isPremium(solo().s) && new Game().depotCap(solo().s) === PREMIUM_DEPOT_SLOTS, 'offline (premium not enforced) everything is open');
+
+  // depot: free accounts fill 60 slots; extra items from premium times stay
+  a.depotOpen = { x: a.player.x, y: a.player.y, z: a.player.z };
+  for (let i = 0; i < 60; i++) a.depot[i] = { id: 'short_sword', qty: 1 };
+  a.inventory.add('iron_helmet', 1);
+  const helmSlot = a.inventory.slots.findIndex((x) => x?.id === 'iron_helmet');
+  g.depositItem(a.id, helmSlot);
+  check(a.inventory.count('iron_helmet') === 1 && a.depot.filter(Boolean).length === 60, 'a free depot holds 60 slots');
+  g.setPerks(a.id, { ...NO_PERKS, premiumUntil: clock + DAY });
+  g.depositItem(a.id, a.inventory.slots.findIndex((x) => x?.id === 'iron_helmet'));
+  check(a.inventory.count('iron_helmet') === 0 && a.depot.filter(Boolean).length === 61 && a.depot.length === 120, 'with premium the same depot takes more');
+  clock += 2 * DAY;
+  run(g, 1.2);
+  check(!g.isPremium(a) && a.depot.filter(Boolean).length === 61, 'when premium ends every depot item stays');
+  g.withdrawItem(a.id, 0);
+  a.inventory.add('iron_helmet', 1);
+  g.depositItem(a.id, a.inventory.slots.findIndex((x) => x?.id === 'iron_helmet'));
+  check(a.depot.filter(Boolean).length === 60 && a.inventory.count('iron_helmet') === 1, 'taking out works, new items wait until the depot is under 60');
+  a.depotOpen = null;
+
+  // ships: premium needed to sail beyond the heartland
+  const hask = g.npcs.find((n) => n.key === 'hask')!;
+  const ask = (s: Session, dest: string) => {
+    s.player.placeAt(hask.x + 1, hask.y, hask.z);
+    s.inventory.add('gold', 1000);
+    s.dialogue = { npcId: hask.id, npcKey: hask.key, npcName: hask.name, page: 'root', text: '' };
+    g.dialogueAction(s.id, `travel:${dest}`);
+  };
+  ask(a, 'valdrheim');
+  check(!g.premiumLand(a.player.x, a.player.y) && /premium/i.test(a.dialogue?.text ?? ''), 'a free player cannot sail to Valdrheim');
+  ask(a, 'westmarch');
+  check(chebyshev(a.player.x, a.player.y, w.destinations.westmarch.x, w.destinations.westmarch.y) <= 3, 'a free player can sail between heartland ports');
+  ask(b, 'valdrheim');
+  check(g.premiumLand(b.player.x, b.player.y), 'a premium player sails to Valdrheim');
+
+  // standing on premium land without premium: brought to a free temple, nothing lost
+  a.player.placeAt(b.player.x + 2, b.player.y, b.player.z);
+  const carried = a.inventory.count('gold');
+  run(g, 1.5);
+  check(!g.premiumLand(a.player.x, a.player.y) && a.inventory.count('gold') === carried, 'a free player on premium land is brought to a free temple with everything');
+  const msgs: string[] = [];
+  g.events.on((e: GameEvent) => { if (e.type === 'message' && e.to === b.id) msgs.push(e.text); });
+  clock = b.perks.premiumUntil + 1000;
+  run(g, 1.5);
+  check(!g.premiumLand(b.player.x, b.player.y) && msgs.some((m) => m.includes('premium time has ended')), 'when premium runs out abroad, the player is told and walked home');
+
+  // regeneration out of combat
+  g.setPerks(b.id, { ...NO_PERKS, premiumUntil: clock + 10 * DAY });
+  for (const s of [a, b]) {
+    s.player.level = 100;
+    g.refreshStats(s);
+    s.player.hp = 1;
+    s.player.sinceCombat = 100;
+    s.player.regenAcc = 0;
+  }
+  run(g, 3.01);
+  check(b.player.hp > a.player.hp * 1.3, `premium regenerates faster out of combat (${Math.round(a.player.hp)} vs ${Math.round(b.player.hp)})`);
+
+  // outfits
+  check(!g.setOutfit(a.id, { ...a.player.outfit, type: 'warlord' }) && g.setOutfit(b.id, { ...b.player.outfit, type: 'warlord' }), 'premium outfits need premium');
+  check(!g.setOutfit(b.id, { ...b.player.outfit, type: 'warden' }), 'the Warden outfit needs a Warden or Legend pack');
+  clock = b.perks.premiumUntil + 1000;
+  run(g, 1.2);
+  check(b.player.outfit.type === 'knight', 'a premium outfit switches to a free one when premium ends');
+
+  // founder looks
+  g.setPerks(b.id, { ...NO_PERKS, premiumUntil: clock + 365 * DAY, founderTier: 'legend', founderNo: 27 });
+  check(b.player.title === 'Legend #027' && b.player.cloak === 'crimson' && b.player.premium, 'a Legend founder gets the numbered title, the crimson cloak and the crown');
+  check(g.setOutfit(b.id, { ...b.player.outfit, type: 'warden' }), 'Legend founders may wear the Warden outfit');
+  executeCommand(g, b.id, { c: 'cosmetics', cloak: false });
+  check(b.player.cloak === '' && b.player.title === 'Legend #027', 'the cloak can be hidden');
+  const saved = g.serialize(b.id);
+  check(saved.version === SAVE_VERSION && SAVE_VERSION === 10 && saved.cosmetics?.hideCloak === true, 'save v10 keeps the cloak switch');
+  const g2 = new Game({ premium: true, now: () => clock });
+  const c2 = g2.addPlayer('Patron', { intent: new BufferedIntent() });
+  g2.setPerks(c2.id, { ...NO_PERKS, premiumUntil: clock + DAY, founderTier: 'legend', founderNo: 27 }, true);
+  check(g2.applySave(c2.id, saved) && c2.player.cloak === '' && c2.player.title === 'Legend #027' && c2.player.outfit.type === 'warden', 'perks set before loading keep the founder outfit and switches');
+  const v8 = { ...JSON.parse(JSON.stringify(saved)), version: 8 } as Record<string, unknown>;
+  delete v8.cosmetics;
+  const m8 = migrateSave(v8);
+  check(typeof m8 !== 'string' && m8.data.version === SAVE_VERSION && m8.data.cosmetics?.hideCloak === false && m8.data.cosmetics?.hideTitle === false, 'an older save migrates to v10 with the founder looks shown');
+
+  // online: other players see the looks, you see your premium state
+  const mirror = new Game({ simulate: false });
+  mirror.localId = a.id;
+  applySnapshot(mirror, buildSnapshot(g, a) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>, { depot: null, trade: null } as unknown as MirrorExtras);
+  const mb = mirror.getPlayer(b.id)!;
+  const ma = mirror.session(a.id)!;
+  check(mb.title === 'Legend #027' && mb.premium && mb.cloak === '', 'snapshots carry title, crown and cloak to other players');
+  check(ma.premiumNet?.enforced === true && ma.premiumNet.on === false && mirror.premiumView(a.id)?.depotCap === FREE_DEPOT_SLOTS, 'your own client knows your premium state and depot size');
+
+  // the Founders' Stone
+  const stoneAt = (() => { for (let dy = -8; dy <= 8; dy++) for (let dx = -8; dx <= 8; dx++) if (w.getObj(w.temple.x + dx, w.temple.y + dy, 0) === Obj.FoundersStone) return { x: w.temple.x + dx, y: w.temple.y + dy }; return null; })();
+  check(!!stoneAt && w.isSafe(stoneAt.x, stoneAt.y, 0), 'the Founders\' Stone stands on the Thornvale temple plaza');
+  g.foundersStone = [{ no: 1, name: 'Ouriolis' }];
+  const seen: string[] = [];
+  g.events.on((e: GameEvent) => { if (e.type === 'message' && e.to === a.id) seen.push(e.text); });
+  a.player.placeAt(stoneAt!.x, stoneAt!.y + 1, 0);
+  executeCommand(g, a.id, { c: 'useTile', x: stoneAt!.x, y: stoneAt!.y });
+  run(g, 1);
+  check(seen.some((t) => t.includes('#001 Ouriolis')), 'using the stone reads out the Legend names');
+
+  // premium time maths
+  const pre = Date.UTC(2026, 11, 5);
+  check(extendPremium(0, PRODUCTS.founder_warden, pre) === LAUNCH_AT + 180 * DAY, 'founder premium bought in December starts on opening day');
+  check(extendPremium(0, PRODUCTS.premium_30, LAUNCH_AT + DAY) === LAUNCH_AT + 31 * DAY, 'premium bought after opening starts at once');
+  check(extendPremium(LAUNCH_AT + 60 * DAY, PRODUCTS.premium_90, LAUNCH_AT + DAY) === LAUNCH_AT + 150 * DAY, 'more premium adds on top of what is left');
+}
+
 console.log('Walking speed grows with level');
 {
   const { g, s } = solo('knight');
@@ -1914,12 +2051,12 @@ console.log('Fletching, crafting, cooking and firemaking');
 
   // ---- save, load and migration
   const data = g.serialize(pid);
-  check(SAVE_VERSION === 9 && data.version === 9 && (['fletching', 'crafting', 'cooking', 'firemaking'] as const).every((k) => data.gathering?.[k] === s.gathering[k]), 'saves carry fletching, crafting, cooking and firemaking (save v9)');
+  check(SAVE_VERSION >= 9 && data.version === SAVE_VERSION && (['fletching', 'crafting', 'cooking', 'firemaking'] as const).every((k) => data.gathering?.[k] === s.gathering[k]), 'saves carry fletching, crafting, cooking and firemaking (save v9)');
   const t2 = solo('knight');
   check(t2.g.applySave(t2.pid, data) && t2.s.gathering.crafting === s.gathering.crafting && t2.s.gathering.fletching === s.gathering.fletching && t2.s.inventory.count('longbow') === 1, 'the new skills survive save and load');
   const v8 = JSON.parse(JSON.stringify({ ...data, version: 8, gathering: { woodcutting: 4321, fishing: 777, mining: 55, smithing: 99 } })) as Record<string, unknown>;
   const mig = migrateSave(v8);
-  check(typeof mig !== 'string' && mig.from === 8 && mig.data.version === 9 && mig.data.gathering?.fletching === 0 && mig.data.gathering?.crafting === 0 && mig.data.gathering?.cooking === 0 && mig.data.gathering?.firemaking === 0
+  check(typeof mig !== 'string' && mig.from === 8 && mig.data.version === SAVE_VERSION && mig.data.gathering?.fletching === 0 && mig.data.gathering?.crafting === 0 && mig.data.gathering?.cooking === 0 && mig.data.gathering?.firemaking === 0
     && mig.data.gathering?.woodcutting === 4321 && mig.data.gathering?.fishing === 777 && mig.data.gathering?.mining === 55 && mig.data.gathering?.smithing === 99, 'a v8 save migrates: the four new skills 0, every other skill kept');
   const t3 = solo('knight');
   check(t3.g.applySave(t3.pid, v8) && t3.s.gathering.cooking === 0 && t3.s.gathering.smithing === 99 && t3.s.inventory.count('longbow') === 1, 'a migrated v8 character loads with its items and skills');

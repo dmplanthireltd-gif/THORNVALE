@@ -10,6 +10,7 @@ import { findRaid, RAIDS, WORLD_BOSSES } from './bosses/bosses';
 import { bossTitle } from './bosses/WorldEvents';
 import { ENEMIES } from './enemies/enemyDefs';
 import type { EnemyKind } from './world/WorldMap';
+import { isFounderTier } from './premium/premium';
 
 /**
  * Test / game-master commands, typed in chat with a leading "/".
@@ -34,6 +35,8 @@ export const ADMIN_HELP = [
   '/boss name — a boss right next to you, for 30 minutes (game masters only)',
   '/events — world boss, raid and dungeon boss timers (game masters only)',
   '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing, fletching, crafting, cooking, firemaking); also /fishing N, /mining N, /smithing N, /fletching N, /crafting N, /cooking N, /firemaking N',
+  '/premium N — give yourself N days of premium for this session (0 = none; game masters only, never saved)',
+  '/founder wayfarer|warden|legend|none [number] — try a founder pack\'s looks for this session (game masters only, never saved)',
 ];
 
 /** Boss kinds by name, title or id ("hrimgaard", "rime wyrm", "boss_rime_wyrm", "mountain"). */
@@ -187,6 +190,24 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       game.events.emit({ type: 'adminNotice', title: 'Warning from the Admin', text, to: target.id });
       game.msg(target.id, `Warning from the Admin: ${text}`, 'warn');
       return say(`Warning sent to ${target.player.name}.`);
+    }
+    case 'premium': {
+      // session-only: the account's real premium lives in the database and comes back at the next login
+      if (s.testOnly) return say('/premium is for game masters only.', 'warn');
+      const days = Math.max(0, Math.min(3650, num(rest[0], 30)));
+      game.setPerks(pid, { ...s.perks, premiumUntil: days > 0 ? game.now() + days * 86_400_000 : 0 });
+      return say(days > 0 ? `Premium for ${days} day${days === 1 ? '' : 's'} (this session only).` : 'Premium removed (this session only).');
+    }
+    case 'founder': {
+      if (s.testOnly) return say('/founder is for game masters only.', 'warn');
+      const t = (rest[0] ?? '').toLowerCase();
+      if (t === 'none') {
+        game.setPerks(pid, { ...s.perks, founderTier: null, founderNo: 0 });
+        return say('Founder looks removed (this session only).');
+      }
+      if (!isFounderTier(t)) return say('Usage: /founder wayfarer|warden|legend|none [number]', 'warn');
+      game.setPerks(pid, { ...s.perks, founderTier: t, founderNo: t === 'legend' ? Math.max(1, Math.min(999, num(rest[1], 1))) : 0 });
+      return say(`Founder looks: ${t} (this session only).`);
     }
     case 'god':
       if (s.testOnly) return say('God mode is not available in test mode.', 'warn');

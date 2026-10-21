@@ -55,6 +55,7 @@ function generate(seed: number): WorldMap {
   towns.finish();
   placeMarketBoards(m);
   placeSmithies(m);
+  placeFoundersStone(m);
   settleSpawns(m);
   ensureConnected(m);
   // ore rocks last, once every area is joined up (deep mines are only reachable after
@@ -219,6 +220,33 @@ function placeMarketBoards(m: WorldMap): void {
   for (const h of m.houses) {
     if (h.z !== 0 || !/depot/i.test(h.name)) continue;
     placeAgainstWall(m, h, Obj.MarketBoard);
+  }
+}
+
+/**
+ * The Founders' Stone (names of the Legend founders, premium/premium.ts) stands on
+ * the Thornvale temple plaza, two tiles behind the altar, on an open tile that is
+ * not the respawn point and keeps the plaza walkable around it.
+ */
+function placeFoundersStone(m: WorldMap): void {
+  const t = m.temple;
+  let altar: { x: number; y: number } | null = null;
+  for (let dy = -8; dy <= 8 && !altar; dy++) for (let dx = -8; dx <= 8; dx++) {
+    if (m.getObj(t.x + dx, t.y + dy, 0) === Obj.Altar) { altar = { x: t.x + dx, y: t.y + dy }; break; }
+  }
+  const c = altar ?? t;
+  const tries: Array<[number, number]> = [[0, -2], [-2, -2], [2, -2], [0, -3], [-3, 0], [3, 0], [0, 3]];
+  for (const [dx, dy] of tries) {
+    const x = c.x + dx, y = c.y + dy;
+    if (m.getObj(x, y, 0) !== Obj.None || !m.isWalkable(x, y, 0) || m.linkAt(x, y, 0)) continue;
+    if ((x === t.x && y === t.y) || (x === m.playerSpawn.x && y === m.playerSpawn.y)) continue;
+    if (m.npcs.some((n) => n.z === 0 && Math.abs(n.x - x) <= 1 && Math.abs(n.y - y) <= 1)) continue;
+    // every neighbour stays open, so nobody is ever boxed in by it
+    let open = true;
+    for (let ny = -1; ny <= 1; ny++) for (let nx = -1; nx <= 1; nx++) if ((nx || ny) && !m.isWalkable(x + nx, y + ny, 0)) open = false;
+    if (!open) continue;
+    m.setObj(x, y, Obj.FoundersStone, 0);
+    return;
   }
 }
 

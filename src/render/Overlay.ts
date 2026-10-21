@@ -13,10 +13,11 @@ interface FloatText {
 interface Label {
   el: HTMLDivElement;
   name: HTMLSpanElement;
+  /** Title line under the name (boss title or founder title); created on first use so most plates stay three elements. */
+  title: HTMLDivElement | null;
   skull: HTMLSpanElement;
-  /** Bosses: crown before the name and the title underneath (created on first use). */
+  /** Bosses: crown before the name (created on first use). */
   crown?: HTMLSpanElement;
-  title?: HTMLDivElement;
   bar: HTMLDivElement;
   fill: HTMLDivElement;
 }
@@ -54,7 +55,7 @@ export class Overlay {
     return { x: (v.x * 0.5 + 0.5) * this.w, y: (-v.y * 0.5 + 0.5) * this.h, visible: Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2 };
   }
 
-  setLabel(id: number, anchor: THREE.Vector3 | null, name: string, hpFrac: number, opts: { player?: boolean; npc?: boolean; other?: boolean; targeted?: boolean; skull?: 0 | 1 | 2; party?: 0 | 1 | 2 | 3; boss?: string } = {}): void {
+  setLabel(id: number, anchor: THREE.Vector3 | null, name: string, hpFrac: number, opts: { player?: boolean; npc?: boolean; other?: boolean; targeted?: boolean; skull?: 0 | 1 | 2; party?: 0 | 1 | 2 | 3; boss?: string; title?: string } = {}): void {
     let l = this.labels.get(id);
     if (!l) {
       const el = document.createElement('div');
@@ -74,7 +75,7 @@ export class Overlay {
       head.append(sk, nm);
       el.append(head, bar);
       this.root.appendChild(el);
-      l = { el, name: nm, skull: sk, bar, fill };
+      l = { el, name: nm, title: null, skull: sk, bar, fill };
       this.labels.set(id, l);
     }
     if (!anchor) {
@@ -91,6 +92,18 @@ export class Overlay {
     const col = opts.npc ? '#9fd3ff' : hpColor(hpFrac);
     l.el.classList.toggle('other-player', !!opts.other);
     if (l.name.textContent !== name) l.name.textContent = name;
+    // title sits between the name and the bar; DOM is only touched when it changes
+    const title = opts.boss ?? opts.title ?? '';
+    if (title && !l.title) {
+      l.title = document.createElement('div');
+      l.title.className = 'np-title';
+      l.el.insertBefore(l.title, l.bar);
+    }
+    if (l.title) {
+      if (l.title.textContent !== title) l.title.textContent = title;
+      const hide = title ? '' : 'none';
+      if (l.title.style.display !== hide) l.title.style.display = hide;
+    }
     l.name.style.color = col;
     l.fill.style.width = `${Math.max(0, Math.min(1, hpFrac)) * 100}%`;
     l.fill.style.background = col;
@@ -109,10 +122,6 @@ export class Overlay {
       l.crown.className = 'np-crown';
       l.crown.textContent = '♛';
       l.name.before(l.crown);
-      l.title = document.createElement('div');
-      l.title.className = 'np-title';
-      l.title.textContent = opts.boss;
-      l.bar.before(l.title);
       l.el.classList.add('boss');
     }
   }

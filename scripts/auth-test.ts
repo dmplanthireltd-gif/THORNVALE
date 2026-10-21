@@ -53,6 +53,10 @@ async function main(): Promise<void> {
     }
     const list = (await (await fetch('http://localhost:8131/api/characters', { headers: { Authorization: 'Bearer tok-ann' } })).json()) as { email: string; characters: Array<{ name: string }> };
     check(list.email === 'ann@example.com' && list.characters.some((c) => c.name === 'Annabel'), 'the account lists its character');
+    check((list as { maxCharacters?: number }).maxCharacters === 5, 'the account screen gets its character limit (5 without founder slots)');
+    const me = (await (await fetch('http://localhost:8131/api/store/me', { headers: { Authorization: 'Bearer tok-ann' } })).json()) as { account: string; founderTier: unknown; premiumActive: boolean; characters: unknown[] };
+    check(me.account === '11111111-1111-1111-1111-111111111111' && me.founderTier === null && me.premiumActive === false && me.characters.length === 1, 'the store page sees the logged-in account (no store tables yet: no premium)');
+    check((await fetch('http://localhost:8131/api/store/me', { headers: { Authorization: 'Bearer tok-nobody' } })).status === 401, 'the store page needs a valid login');
     a.close();
     await sleep(500);
 

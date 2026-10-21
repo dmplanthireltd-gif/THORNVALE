@@ -7,6 +7,7 @@ import { describeItem, equipSlotFor, ITEMS, itemDef, runeGroup, runeIsAimed, typ
 import { GROUP_COOLDOWN, isSpellId, SPELL_LIST, SPELLS, type CooldownGroup, type SpellDef, type SpellId } from '../game/magic/spells';
 import { NPCS } from '../game/npc/npcs';
 import { OUTFIT_PARTS, OUTFIT_TYPES, PALETTE, PALETTE_COLS, PALETTE_ROWS, type Outfit, type OutfitPart } from '../game/player/outfits';
+import { PREMIUM_DEPOT_SLOTS } from '../game/premium/premium';
 import { Enemy } from '../game/enemies/Enemy';
 import { expForLevel, type FightMode } from '../game/player/Player';
 import { VOCATIONS } from '../game/player/vocations';
@@ -1338,9 +1339,16 @@ export class HUD {
     w.root.hidden = false;
     const b = w.body;
     b.replaceChildren();
-    el('p', 'hint', b, 'Your personal depot is shared by every locker in the world. Click an item to take it; right-click (or Ctrl-click) backpack items to store them.');
+    // premium depots hold more; items above a free depot's size stay after premium ends
+    const pv = this.ctl.game.premiumView(this.ctl.pid);
+    const cap = pv?.depotCap ?? DEPOT_SLOTS;
+    let last = -1;
+    depot.forEach((x, i) => { if (x) last = i; });
+    const used = depot.filter(Boolean).length;
+    el('p', 'hint', b, `Your personal depot is shared by every locker in the world. Click an item to take it; right-click (or Ctrl-click) backpack items to store them. ${used} of ${cap} slots used${cap < PREMIUM_DEPOT_SLOTS ? ` (premium: ${PREMIUM_DEPOT_SLOTS})` : ''}.`);
+    if (used > cap) el('p', 'hint warn', b, 'Your depot holds more than a free account may fill. Everything stays; new items fit once it is back under the limit.');
     const grid = el('div', 'bag-grid depot-grid', b);
-    for (let i = 0; i < DEPOT_SLOTS; i++) {
+    for (let i = 0; i < Math.min(depot.length, Math.max(cap, last + 1)); i++) {
       const d = el('div', 'slot', grid);
       paintSlot(d, depot[i] ?? null);
       d.addEventListener('mousedown', (ev) => {
@@ -1717,12 +1725,15 @@ export class HUD {
     }
     this.preview.set(o);
     const types = el('div', 'outfit-types', top);
+    const g = this.ctl.game;
     for (const t of OUTFIT_TYPES) {
-      const bb = button(types, t.name, () => {
+      const lock = g.outfitLock(this.s, t.id);
+      const bb = button(types, lock ? `${t.name} (${t.id === 'warden' ? 'founder' : 'premium'})` : t.name, () => {
         o.type = t.id;
         this.renderOutfit();
-      }, `btn small${o.type === t.id ? ' on' : ''}`);
+      }, `btn small${o.type === t.id ? ' on' : ''}${lock ? ' locked' : ''}`);
       bb.setAttribute('aria-pressed', String(o.type === t.id));
+      if (lock) bb.title = lock;
     }
     const parts = el('div', 'outfit-parts', b);
     for (const p of OUTFIT_PARTS) {
@@ -1744,11 +1755,31 @@ export class HUD {
         this.renderOutfit();
       });
     }
+    // founder looks: cloak and title can be switched off per character
+    const tier = g.premiumView(this.ctl.pid)?.tier ?? null;
+    if (tier) {
+      const fr = el('div', 'dev-row', b);
+      el('span', 'dev-label', fr, 'Founder');
+      const cos = this.s.cosmetics;
+      button(fr, cos.hideCloak ? 'Cloak: hidden' : 'Cloak: shown', () => {
+        this.ctl.send({ c: 'cosmetics', cloak: cos.hideCloak });
+        cos.hideCloak = !cos.hideCloak;
+        this.renderOutfit();
+      }, `btn small${cos.hideCloak ? '' : ' on'}`);
+      button(fr, cos.hideTitle ? 'Title: hidden' : 'Title: shown', () => {
+        this.ctl.send({ c: 'cosmetics', title: cos.hideTitle });
+        cos.hideTitle = !cos.hideTitle;
+        this.renderOutfit();
+      }, `btn small${cos.hideTitle ? '' : ' on'}`);
+    }
+    const lock = g.outfitLock(this.s, o.type);
+    if (lock) el('p', 'hint warn', b, `${lock} See thornvaleonline.com/store/`);
     const row = el('div', 'trade-actions', b);
-    button(row, 'Apply', () => {
+    const apply = button(row, 'Apply', () => {
       this.ctl.send({ c: 'outfit', outfit: { ...o } });
       this.closeWin('outfit');
     }, 'btn');
+    apply.disabled = !!lock;
     button(row, 'Cancel', () => this.closeWin('outfit'), 'btn');
   }
 
@@ -2046,7 +2077,9 @@ export class HUD {
     const pl = g.getPlayer(c.id);
     const lines: Array<[string, string]> = [];
     if (pl) {
+      if (pl.title) lines.push(['Title', pl.title]);
       lines.push(['Level', String(pl.level)], ['Vocation', VOCATIONS[pl.vocation].name], ['Health', `${Math.round((pl.hp / pl.maxHp) * 100)}%`]);
+      if (pl.premium) lines.push(['Account', '♛ Premium']);
       const sk = g.skullOf(pl);
       if (sk) lines.push(['Skull', sk === 2 ? 'red' : 'white']);
       const pf = g.partyFlag(this.ctl.pid, pl.id);
@@ -2150,6 +2183,9 @@ export class HUD {
     if (p.buffs.mastermind > 0) buffs.push(`✦ clarity ${mins(p.buffs.mastermind)}`);
     if (g.isProtected(p)) buffs.push('⛨ protection zone');
     if (p.pzLock > 0) buffs.push(`⚠ PZ-locked ${Math.ceil(p.pzLock)}s`);
+    const prem = g.premiumView(this.ctl.pid);
+    if (prem && prem.until > Date.now()) buffs.push(`♛ premium ${Math.ceil((prem.until - Date.now()) / 86_400_000)}d`);
+    else if (prem?.enforced) buffs.push('free account');
     const mySkull = g.skullOf(p);
     if (mySkull === 2) buffs.push('☠ red skull');
     else if (mySkull === 1) buffs.push('☠ white skull');

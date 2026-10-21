@@ -95,6 +95,12 @@ export class Player extends Creature {
   illusion: string | null = null;
   /** Town whose temple is home. */
   home = 'thornvale';
+  /** Founder cloak worn over armour ('' = none). Looks only; set by Game.refreshPerks. */
+  cloak: '' | 'ember' | 'gold' | 'crimson' = '';
+  /** Founder title under the name ('' = none), e.g. "Legend #027". */
+  title = '';
+  /** Premium account (crown in the Inspect window). */
+  premium = false;
   // ---- PvP (see Game: pvp rules). Times are wall-clock ms so they survive restarts.
   /** Secure mode: refuses attacks on unmarked players and spares them from your area attacks. */
   secure = true;

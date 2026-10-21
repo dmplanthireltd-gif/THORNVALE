@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { hash2 } from '../game/core/rng';
 import { Ground, Obj, WorldMap, type House } from '../game/world/WorldMap';
 import { oreAt } from '../game/gathering/mining';
+import { buildFoundersStone } from './models/foundersStone';
 import { mat, toonGradient, type Mat } from './models/parts';
 import { groundTex, objTex } from './textures';
 
@@ -587,6 +588,9 @@ export class WorldView {
           case Obj.TanningRack:
             this.buildTanningRack(fv, x, y);
             break;
+          case Obj.FoundersStone:
+            this.buildFoundersStone(fv, x, y);
+            break;
           case Obj.CopperRock:
           case Obj.TinRock:
           case Obj.IronRock:
@@ -808,6 +812,13 @@ export class WorldView {
     g.add(glowDisc);
     fv.group.add(g);
     fv.litFires.set(ti, g);
+  }
+
+  /** The carved memorial to the founders in the Thornvale temple. */
+  private buildFoundersStone(fv: FloorView, x: number, y: number): void {
+    const g = buildFoundersStone((c, o) => fv.m(c, o), objTex.rock());
+    g.position.set(x, 0, y);
+    this.add(fv, g);
   }
 
   /** Shows a tree as a stump (canopy gone, trunk cut short) or restores it. */

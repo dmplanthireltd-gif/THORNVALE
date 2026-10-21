@@ -8,8 +8,12 @@ import { Enemy } from './enemies/Enemy';
 import { onEnemyDamaged, updateEnemyAI, type AIContext } from './enemies/EnemyAI';
 import type { Ability } from './enemies/enemyDefs';
 import type { Creature } from './entities/Creature';
-import { addToList, DEPOT_SLOTS, Inventory } from './inventory/Inventory';
+import { addToCapped, addToList, DEPOT_MAX_SLOTS, Inventory } from './inventory/Inventory';
 import { activeSets, type ActiveSet } from './inventory/sets';
+import {
+  FOUNDER_OUTFITS, FOUNDER_TIERS, founderTitle, FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, NO_PERKS, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS,
+  PREMIUM_OUTFITS, PREMIUM_REGEN, PREMIUM_WARN_MS, PremiumZone, type AccountPerks, type FounderTier,
+} from './premium/premium';
 import { describeItem, EQUIP_SLOTS, equipSlotFor, isItem, itemDef, POTION_BUFF_POWER, POTION_BUFF_SECONDS, runeGroup, type Bonus, type Element, type EquipSlot, type FieldKind, type ItemDef, type ItemStack } from './inventory/items';
 import { ENEMIES } from './enemies/enemyDefs';
 import { beamTiles, exivaText, facingDir, GROUP_COOLDOWN, isSpellId, parseSpellWords, SPELLS, startingSpells, waveTiles, type SpellDef, type SpellId } from './magic/spells';
@@ -23,7 +27,7 @@ import {
   TREASURE_CHANCE, TREASURE_ITEMS,
 } from './gathering/fishing';
 import {
-  emptyChange, MARKET_CLAIMS_KEPT, MARKET_MAX_OFFERS, MARKET_MAX_PRICE, MARKET_OFFER_MS, MarketBook, marketFee, marketId,
+  emptyChange, MARKET_CLAIMS_KEPT, MARKET_MAX_PRICE, MARKET_OFFER_MS, MarketBook, marketFee, marketId,
   type MarketChange, type MarketDelivery, type MarketOffer, type MarketView,
 } from './market/market';
 import {
@@ -38,7 +42,7 @@ import { runAdminCommand } from './admin';
 import { GM_BOSS_LIFETIME, SUMMON_LIFETIME, type WorldMark } from './bosses/bosses';
 import { WorldEvents } from './bosses/WorldEvents';
 import { migrateSave, SAVE_VERSION } from './save/migrate';
-import { DEFAULT_OUTFIT, isOutfit, type Outfit } from './player/outfits';
+import { DEFAULT_OUTFIT, isOutfit, type Outfit, type OutfitType } from './player/outfits';
 import { BUFF_NAMES, emptyBuffs, expForLevel, FIGHT_MODE, Player, type FightMode } from './player/Player';
 import { isVocation, VOCATIONS, type Vocation } from './player/vocations';
 import { QUESTS, QuestLog } from './quests/quests';
@@ -146,6 +150,33 @@ export interface Session {
   marketClaimed: string[];
   /** Character names on the friends list (save v6+). */
   friends: string[];
+  /** The account's premium time and founder pack (set by the server at login; offline: none). */
+  perks: AccountPerks;
+  /** Per character: founder cloak / title switched off (save v9+). */
+  cosmetics: Cosmetics;
+  /** Online mirror: premium state as last sent by the server. */
+  premiumNet?: PremiumView;
+  /** Premium was active at the last check (to notice it running out). */
+  premiumWas?: boolean;
+}
+
+export interface Cosmetics {
+  hideCloak: boolean;
+  hideTitle: boolean;
+}
+
+/** What the HUD shows about premium (also sent to the player's own client). */
+export interface PremiumView {
+  /** Premium rules apply on this server (off offline and in test mode: everything is open). */
+  enforced: boolean;
+  /** Premium features are on for this character right now. */
+  on: boolean;
+  /** Paid premium until (ms, 0 = none). */
+  until: number;
+  tier: FounderTier | null;
+  no: number;
+  depotCap: number;
+  offerCap: number;
 }
 
 export interface CharacterData {
@@ -188,6 +219,8 @@ export interface SaveData {
   market?: { claimed?: string[] };
   /** Friends list: character names (save v6+). */
   friends?: string[];
+  /** Founder cloak / title switched off (save v9+). */
+  cosmetics?: { hideCloak?: boolean; hideTitle?: boolean };
 }
 
 export interface GameOptions {
@@ -199,9 +232,23 @@ export interface GameOptions {
   now?: () => number;
   /** Server test mode (TEST_MODE): everyone may start raids and world bosses with /raid and /worldboss. */
   testMode?: boolean;
+  /**
+   * Premium rules are enforced (server: on unless TEST_MODE, or env PREMIUM). Off = every
+   * character gets the premium regions, depot and market limits and outfits.
+   */
+  premium?: boolean;
 }
 
 export const BAG_LIFETIME = 180;
+
+/** A premium or founder outfit falls back to this free one when it may no longer be worn. */
+const OUTFIT_FALLBACK: Partial<Record<OutfitType, OutfitType>> = { warlord: 'knight', mystic: 'mage', warden: 'knight' };
+
+/** "3 Mar 2027" (UTC; premium end dates are whole UK-winter days). */
+function shortDate(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
 /** PvP: players below this level can neither attack nor be attacked by players. */
 /** Lowest level that may attack or be attacked by players (owner: PvP from level 1). */
 export const PVP_MIN_LEVEL = 1;
@@ -285,6 +332,12 @@ export class Game implements AIContext {
   netFriends: ReturnType<Game['friendsView']> | null = null;
   /** Online mirror: party relation per player id (1 member, 2 invited me, 3 I invited). */
   netPartyFlags = new Map<number, 1 | 2 | 3>();
+  /** Premium rules apply (GameOptions.premium). */
+  readonly premiumEnforced: boolean;
+  /** Names carved on the Founders' Stone (Legend founders, numbered), set by the server. */
+  foundersStone: Array<{ no: number; name: string }> = [];
+  private zone: PremiumZone | null = null;
+  private premiumTimer = 0;
   private nextId = 1;
   /** Server test mode: /raid and /worldboss for everyone. */
   readonly testMode: boolean;
@@ -303,6 +356,7 @@ export class Game implements AIContext {
     // a mirror drops raid monsters, summons and world bosses when the server says they left
     if (!this.simulate) this.events.on((e) => { if (e.type === 'despawn') this.removeEnemyNow(e.id); });
     this.now = opts.now ?? (() => Date.now());
+    this.premiumEnforced = opts.premium ?? false;
     this.world = buildWorld();
     // NPCs and monsters always take the first ids, so a server and its clients agree on them
     for (const n of this.world.npcs) {
@@ -327,7 +381,8 @@ export class Game implements AIContext {
     player.name = name;
     const session: Session = {
       id, player, inventory: new Inventory(), quests: new QuestLog(), dialogue: null,
-      intent: opts.intent ?? new BufferedIntent(), depot: new Array(DEPOT_SLOTS).fill(null), depotOpen: null, friends: [],
+      intent: opts.intent ?? new BufferedIntent(), depot: new Array(DEPOT_MAX_SLOTS).fill(null), depotOpen: null, friends: [],
+      perks: { ...NO_PERKS }, cosmetics: { hideCloak: false, hideTitle: false },
       bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
       skills: startSkills(), gathering: emptySkillXp(), craftOpen: null, marketOpen: null, marketClaimed: [],
     };
@@ -697,6 +752,11 @@ export class Game implements AIContext {
     this.updateFishSpots(dt);
     this.worldEvents.update(dt);
     this.flushDespawns();
+    this.premiumTimer -= dt;
+    if (this.premiumTimer <= 0) {
+      this.premiumTimer = 1;
+      for (const s of this.sessions.values()) this.checkPremium(s);
+    }
     this.marketTimer -= dt;
     if (this.marketTimer <= 0) {
       this.marketTimer = 10;
@@ -773,8 +833,10 @@ export class Game implements AIContext {
     if (p.regenAcc >= 1) {
       p.regenAcc -= 1;
       const ooc = p.sinceCombat > 6;
-      p.hp = Math.min(p.maxHp, p.hp + (ooc ? 3 + Math.floor(p.level / 4) : 1) + p.hpRegen);
-      p.mana = Math.min(p.maxMana, p.mana + (ooc ? 4 + Math.floor(p.level / 3) : 2) + p.manaRegen);
+      // premium: faster out of combat only, never during a fight or while PZ-locked
+      const k = ooc && p.pzLock <= 0 && this.premiumRegen(s) ? PREMIUM_REGEN : 1;
+      p.hp = Math.min(p.maxHp, p.hp + (ooc ? Math.floor((3 + Math.floor(p.level / 4)) * k) : 1) + p.hpRegen);
+      p.mana = Math.min(p.maxMana, p.mana + (ooc ? Math.floor((4 + Math.floor(p.level / 3)) * k) : 2) + p.manaRegen);
     }
 
     let budget = dt;
@@ -2639,7 +2701,12 @@ export class Game implements AIContext {
 
   private respawnPlayer(s: Session): void {
     const p = s.player;
-    const home = this.world.regions.find((r) => r.temple && (r.name === p.home || (p.home === 'Thornvale' && r.name === 'Temple Plaza')));
+    let home = this.world.regions.find((r) => r.temple && (r.name === p.home || (p.home === 'Thornvale' && r.name === 'Temple Plaza')));
+    // without premium you wake in Thornvale instead of a temple on premium land
+    if (home?.temple && !this.isPremium(s) && this.premiumLand(home.temple.x, home.temple.y)) {
+      home = undefined;
+      p.home = 'Thornvale';
+    }
     const t = home?.temple ?? this.world.temple;
     const f = this.freeTileNear(t.x, t.y, t.z);
     p.placeAt(f.x, f.y, f.z);
@@ -2787,7 +2854,7 @@ export class Game implements AIContext {
       return !!s && PICKAXES.some((pk) => s.inventory.has(pk.item));
     }
     if (stationAt(o)) return true;
-    return o === Obj.Ladder || o === Obj.RopeSpot || o === Obj.LooseStone || o === Obj.Locker || o === Obj.Chest || o === Obj.MarketBoard;
+    return o === Obj.Ladder || o === Obj.RopeSpot || o === Obj.LooseStone || o === Obj.Locker || o === Obj.Chest || o === Obj.MarketBoard || o === Obj.FoundersStone;
   }
 
   private useTileNow(s: Session, x: number, y: number, z: number): void {
@@ -2825,6 +2892,9 @@ export class Game implements AIContext {
         return;
       case Obj.MarketBoard:
         this.openMarket(s, x, y, z);
+        return;
+      case Obj.FoundersStone:
+        this.readFoundersStone(s);
         return;
       case Obj.Tree:
       case Obj.Pine:
@@ -3590,10 +3660,169 @@ export class Game implements AIContext {
 
   setOutfit(pid: number, o: Outfit): boolean {
     const p = this.getPlayer(pid);
-    if (!p || !isOutfit(o)) return false;
+    const s = this.sessions.get(pid);
+    if (!p || !s || !isOutfit(o)) return false;
+    const lock = this.outfitLock(s, o.type);
+    if (lock) {
+      this.msg(pid, lock, 'warn');
+      return false;
+    }
     p.outfit = { ...o };
     this.events.emit({ type: 'outfitChanged', id: pid });
     return true;
+  }
+
+  // ================================================================ premium and founders
+
+  /**
+   * Premium features are on for this character. Always true when the server does not
+   * enforce premium (offline, test mode) and for test bots; an online mirror uses what
+   * the server sent.
+   */
+  isPremium(s: Session): boolean {
+    if (!this.simulate) return s.premiumNet?.on ?? true;
+    if (!this.premiumEnforced || s.bot) return true;
+    return s.perks.premiumUntil > this.now();
+  }
+
+  /** Bought premium is running (the crown in the Inspect window, faster regeneration offline). */
+  private paidPremium(s: Session): boolean {
+    return s.perks.premiumUntil > this.now();
+  }
+
+  private premiumRegen(s: Session): boolean {
+    return this.premiumEnforced ? this.isPremium(s) : this.paidPremium(s);
+  }
+
+  /** True on premium land: every island beyond the heartland (premium/premium.ts). */
+  premiumLand(x: number, y: number): boolean {
+    if (!this.zone) this.zone = PremiumZone.build(this.world);
+    return this.zone.premiumAt(x, y);
+  }
+
+  /** Depot slots this character may fill. */
+  depotCap(s: Session): number {
+    return this.isPremium(s) ? PREMIUM_DEPOT_SLOTS : FREE_DEPOT_SLOTS;
+  }
+
+  /** Market offers this character may have at once. */
+  offerCap(s: Session): number {
+    return this.isPremium(s) ? PREMIUM_MARKET_OFFERS : FREE_MARKET_OFFERS;
+  }
+
+  private founderTierOf(s: Session): FounderTier | null {
+    return this.simulate ? s.perks.founderTier : s.premiumNet?.tier ?? null;
+  }
+
+  /** Why this outfit cannot be worn right now (null = it can). */
+  outfitLock(s: Session, type: OutfitType): string | null {
+    if ((PREMIUM_OUTFITS as readonly string[]).includes(type) && !this.isPremium(s)) return 'That outfit is for premium accounts.';
+    if ((FOUNDER_OUTFITS as readonly string[]).includes(type)) {
+      const t = this.founderTierOf(s);
+      if (!t || !FOUNDER_TIERS[t].wardenOutfit) return 'The Warden outfit belongs to Warden and Legend founders.';
+    }
+    return null;
+  }
+
+  /** What the HUD shows about premium. */
+  premiumView(pid: number): PremiumView | null {
+    const s = this.sessions.get(pid);
+    if (!s) return null;
+    if (!this.simulate) return s.premiumNet ?? null;
+    return {
+      enforced: this.premiumEnforced, on: this.isPremium(s), until: s.perks.premiumUntil, tier: s.perks.founderTier, no: s.perks.founderNo,
+      depotCap: this.depotCap(s), offerCap: this.offerCap(s),
+    };
+  }
+
+  /**
+   * The account's premium time and founder pack (server: at login, before the save is
+   * applied, and whenever a purchase or refund comes in).
+   */
+  setPerks(pid: number, perks: AccountPerks, login = false): void {
+    const s = this.sessions.get(pid);
+    if (!s) return;
+    const wasOn = this.isPremium(s);
+    const oldTier = s.perks.founderTier;
+    s.perks = { ...perks };
+    this.refreshPerks(s);
+    const on = this.isPremium(s);
+    const left = perks.premiumUntil - this.now();
+    if (login) {
+      if (this.premiumEnforced && left > 0 && left < PREMIUM_WARN_MS) this.msg(pid, `Your premium time ends in ${Math.ceil(left / 86_400_000)} day${left > 86_400_000 ? 's' : ''}.`, 'warn');
+      return;
+    }
+    if (perks.founderTier && perks.founderTier !== oldTier) this.msg(pid, `Thank you, founder! Your ${FOUNDER_TIERS[perks.founderTier].name} pack is ready.`, 'level');
+    else if (left > 0 && (!wasOn || !this.premiumEnforced)) this.msg(pid, `Premium is active until ${shortDate(perks.premiumUntil)}. Thank you for supporting Thornvale!`, 'level');
+    else if (this.premiumEnforced && wasOn && !on) this.checkPremium(s);
+  }
+
+  /** Founder cloak and title (unless switched off), premium crown, and the outfit if it is no longer allowed. */
+  refreshPerks(s: Session, emit = true): void {
+    const p = s.player;
+    const tier = s.perks.founderTier;
+    const cloak = tier && !s.cosmetics.hideCloak ? FOUNDER_TIERS[tier].cloak : '';
+    const title = tier && !s.cosmetics.hideTitle ? founderTitle(tier, s.perks.founderNo) : '';
+    const premium = this.paidPremium(s);
+    let changed = cloak !== p.cloak || title !== p.title || premium !== p.premium;
+    p.cloak = cloak;
+    p.title = title;
+    p.premium = premium;
+    // a premium or founder outfit switches to a free one; it can be picked again when premium returns
+    if (this.outfitLock(s, p.outfit.type)) {
+      p.outfit = { ...p.outfit, type: OUTFIT_FALLBACK[p.outfit.type] ?? 'citizen' };
+      changed = true;
+    }
+    s.premiumWas = this.isPremium(s);
+    if (changed && emit) this.events.emit({ type: 'outfitChanged', id: p.id });
+  }
+
+  /** Shows or hides the founder cloak and title for this character (saved). */
+  setCosmetics(pid: number, show: { cloak?: boolean; title?: boolean }): void {
+    const s = this.sessions.get(pid);
+    if (!s) return;
+    if (typeof show.cloak === 'boolean') s.cosmetics.hideCloak = !show.cloak;
+    if (typeof show.title === 'boolean') s.cosmetics.hideTitle = !show.title;
+    s.wantsSave = true;
+    this.refreshPerks(s);
+  }
+
+  /**
+   * Once a second: notices premium running out, and walks a character without premium
+   * off premium land to a free temple. Nothing is taken away.
+   */
+  private checkPremium(s: Session): void {
+    if (!this.premiumEnforced || s.bot) return;
+    const on = this.isPremium(s);
+    if (s.premiumWas && !on) {
+      this.msg(s.id, 'Your premium time has ended. Everything you own is safe: the premium regions, the larger depot and premium outfits wait for your return.', 'warn');
+      this.refreshPerks(s);
+    }
+    s.premiumWas = on;
+    const p = s.player;
+    if (on || p.dead || !this.premiumLand(p.x, p.y)) return;
+    let home = this.world.regions.find((r) => r.temple && (r.name === p.home || (p.home === 'Thornvale' && r.name === 'Temple Plaza')));
+    if (!home?.temple || this.premiumLand(home.temple.x, home.temple.y)) {
+      home = undefined;
+      p.home = 'Thornvale';
+    }
+    const t = home?.temple ?? this.world.temple;
+    this.teleport(p, t.x, t.y, t.z);
+    const town = home ? (home.name === 'Temple Plaza' ? 'Thornvale' : home.name) : 'Thornvale';
+    this.msg(s.id, `Only premium adventurers may stay beyond the heartland. You were brought to the temple of ${town}, with everything you carry.`, 'warn');
+  }
+
+  /** The Founders' Stone in the Thornvale temple: the names of the Legend founders. */
+  private readFoundersStone(s: Session): void {
+    const names = this.foundersStone;
+    if (!names.length) {
+      this.msg(s.id, "The Founders' Stone is still smooth. The names of Thornvale's first Legends will be carved here.", 'info');
+      return;
+    }
+    this.msg(s.id, `The Founders' Stone honours the ${names.length} Legend${names.length > 1 ? 's' : ''} of Thornvale:`, 'info');
+    for (let i = 0; i < names.length; i += 20) {
+      this.msg(s.id, names.slice(i, i + 20).map((n) => `#${String(n.no).padStart(3, '0')} ${n.name}`).join(' · '), 'info');
+    }
   }
 
   private pickupBag(s: Session, b: GroundBag): void {
@@ -3640,8 +3869,8 @@ export class Game implements AIContext {
     if (!s || !s.depotOpen) return;
     const st = s.inventory.slots[slot];
     if (!st) return;
-    const left = addToList(s.depot, st.id, st.qty);
-    if (left === st.qty) return this.msg(pid, 'Your depot is full.', 'warn');
+    const left = addToCapped(s.depot, st.id, st.qty, this.depotCap(s));
+    if (left === st.qty) return this.msg(pid, this.isPremium(s) ? 'Your depot is full.' : `Your depot is full (${FREE_DEPOT_SLOTS} slots; premium has ${PREMIUM_DEPOT_SLOTS}).`, 'warn');
     s.inventory.removeFromSlot(slot, st.qty - left);
     s.wantsSave = true;
     this.events.emit({ type: 'inventoryChanged', to: pid });
@@ -3748,7 +3977,8 @@ export class Game implements AIContext {
     if (!(n >= 1) || n > st.qty) return fail(`You only have ${st.qty} there.`);
     if (!(each >= 1) || each > MARKET_MAX_PRICE) return fail(`Prices go from 1 to ${MARKET_MAX_PRICE.toLocaleString('en')} gold a piece.`);
     const me = this.marketKey(s);
-    if (this.market.offersBy(me).length >= MARKET_MAX_OFFERS) return fail(`You can have at most ${MARKET_MAX_OFFERS} offers at once.`);
+    const offerCap = this.offerCap(s);
+    if (this.market.offersBy(me).length >= offerCap) return fail(`You can have at most ${offerCap} offers at once${offerCap < PREMIUM_MARKET_OFFERS ? ` (premium: ${PREMIUM_MARKET_OFFERS})` : ''}.`);
     const fee = marketFee(each * n);
     if (!this.payFromBank(s, fee)) return fail(`The listing fee is ${fee} gold, and you do not have that much.`);
     st.qty -= n;
@@ -3778,9 +4008,9 @@ export class Game implements AIContext {
     const cost = o.price * n;
     if (s.bank + s.inventory.count('gold') < cost) return fail(`That costs ${cost} gold, more than you have in the bank and your backpack.`);
     const room = s.depot.map((x) => (x ? { ...x } : null));
-    if (addToList(room, o.item, n) > 0) return fail('Your depot has no room for that.');
+    if (addToCapped(room, o.item, n, this.depotCap(s)) > 0) return fail('Your depot has no room for that.');
     this.payFromBank(s, cost);
-    addToList(s.depot, o.item, n);
+    addToCapped(s.depot, o.item, n, this.depotCap(s));
     o.qty -= n;
     const c = emptyChange();
     c.save.push(pid);
@@ -3814,8 +4044,8 @@ export class Game implements AIContext {
     if (!o || o.seller !== this.marketKey(s)) return fail('That offer is gone.');
     if (isItem(o.item)) {
       const room = s.depot.map((x) => (x ? { ...x } : null));
-      if (addToList(room, o.item, o.qty) > 0) return fail('Make room in your depot first.');
-      addToList(s.depot, o.item, o.qty);
+      if (addToCapped(room, o.item, o.qty, this.depotCap(s)) > 0) return fail('Make room in your depot first.');
+      addToCapped(s.depot, o.item, o.qty, this.depotCap(s));
     } else {
       s.lostItems.push({ id: o.item, qty: o.qty });
     }
@@ -3855,7 +4085,7 @@ export class Game implements AIContext {
           s.lostItems.push({ ...it });
           continue;
         }
-        const rest = addToList(s.depot, it.id, it.qty);
+        const rest = addToCapped(s.depot, it.id, it.qty, this.depotCap(s));
         if (it.qty - rest > 0) got.push({ id: it.id, qty: it.qty - rest });
         if (rest > 0) left.push({ id: it.id, qty: rest });
       }
@@ -4202,6 +4432,11 @@ export class Game implements AIContext {
         const tr = npc?.travel?.find((x) => x.key === arg);
         const dest = tr ? this.world.destinations[tr.key] : undefined;
         if (!tr || !dest) break;
+        if (!this.isPremium(s) && this.premiumLand(dest.x, dest.y)) {
+          d.text = `${tr.name} lies beyond the heartland. Only premium adventurers may sail there.`;
+          this.msg(pid, `Premium is needed to travel to ${tr.name}. See thornvaleonline.com/store/`, 'warn');
+          break;
+        }
         if (inv.count('gold') < tr.price) { d.text = 'Passage costs more than you have.'; break; }
         inv.removeById('gold', tr.price);
         this.events.emit({ type: 'inventoryChanged', to: pid });
@@ -4255,6 +4490,7 @@ export class Game implements AIContext {
       gathering: { ...s.gathering },
       market: { claimed: [...s.marketClaimed] },
       friends: [...s.friends],
+      cosmetics: { hideCloak: s.cosmetics.hideCloak, hideTitle: s.cosmetics.hideTitle },
     };
   }
 
@@ -4276,8 +4512,8 @@ export class Game implements AIContext {
     p.exp = Math.max(expForLevel(p.level), Math.floor(data.player.exp));
     s.inventory.load(data.inventory);
     s.quests.load(data.quests);
-    s.depot = new Array(DEPOT_SLOTS).fill(null);
-    (data.depot ?? []).slice(0, DEPOT_SLOTS).forEach((x, i) => { if (x && typeof x.id === 'string') { try { itemDef(x.id); s.depot[i] = { id: x.id, qty: Math.max(1, Math.floor(x.qty)) }; } catch { /* drop */ } } });
+    s.depot = new Array(DEPOT_MAX_SLOTS).fill(null);
+    (data.depot ?? []).slice(0, DEPOT_MAX_SLOTS).forEach((x, i) => { if (x && typeof x.id === 'string') { try { itemDef(x.id); s.depot[i] = { id: x.id, qty: Math.max(1, Math.floor(x.qty)) }; } catch { /* drop */ } } });
     s.bank = Math.max(0, Math.floor(data.bank ?? 0));
     s.spells = new Set(startingSpells());
     for (const id of data.spells ?? []) if (isSpellId(id)) s.spells.add(id);
@@ -4311,8 +4547,10 @@ export class Game implements AIContext {
     this.events.emit({ type: 'teleport', id: pid });
     s.lostItems = data.lostItems ?? [];
     s.friends = Array.isArray(data.friends) ? data.friends.filter((n): n is string => typeof n === 'string').slice(0, 100) : [];
+    s.cosmetics = { hideCloak: data.cosmetics?.hideCloak === true, hideTitle: data.cosmetics?.hideTitle === true };
+    this.refreshPerks(s);
     for (const it of m.restored) {
-      const left = addToList(s.depot, it.id, it.qty);
+      const left = addToCapped(s.depot, it.id, it.qty, this.depotCap(s));
       if (left > 0) s.lostItems.push({ id: it.id, qty: left });
       else this.msg(pid, `${describeStack(it)} from an older version of the game is waiting in your depot.`, 'loot');
     }
@@ -4339,7 +4577,7 @@ export class Game implements AIContext {
     s.inventory = new Inventory();
     giveStarterKit(s.inventory, vocation);
     s.quests.reset();
-    s.depot = new Array(DEPOT_SLOTS).fill(null);
+    s.depot = new Array(DEPOT_MAX_SLOTS).fill(null);
     s.bank = 0;
     s.spells = new Set(startingSpells());
     s.chests = new Set();

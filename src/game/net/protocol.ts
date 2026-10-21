@@ -1,6 +1,6 @@
 import { chebyshev } from '../core/types';
 import type { GameEvent } from '../core/events';
-import { BufferedIntent, type Game, type Session, type PartyView, type TradeView } from '../Game';
+import { BufferedIntent, type Game, type Session, type PartyView, type PremiumView, type TradeView } from '../Game';
 import type { Inventory } from '../inventory/Inventory';
 import { EQUIP_SLOTS, isItem, type EquipSlot, type ItemStack } from '../inventory/items';
 import { isSpellId, type SpellId } from '../magic/spells';
@@ -13,7 +13,7 @@ import { ENEMIES } from '../enemies/enemyDefs';
 import type { EnemyKind } from '../world/WorldMap';
 import { COMBAT_SKILLS, parseSkills } from '../player/skills';
 import { isOutfit, type Outfit } from '../player/outfits';
-import { emptyBuffs, FIGHT_MODE, type Buffs, type FightMode } from '../player/Player';
+import { emptyBuffs, FIGHT_MODE, type Buffs, type FightMode, type Player } from '../player/Player';
 import { isVocation, type Vocation } from '../player/vocations';
 import type { QuestLog } from '../quests/quests';
 
@@ -23,7 +23,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 17;
+export const PROTOCOL_VERSION = 18;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -83,7 +83,9 @@ export type Command =
   | { c: 'marketClose' }
   /** Production station (furnace, anvil): make `count` of a recipe; count 0 stops the batch. */
   | { c: 'craft'; recipe: string; count: number }
-  | { c: 'craftClose' };
+  | { c: 'craftClose' }
+  /** Founder looks: show (true) or hide the cloak / title. */
+  | { c: 'cosmetics'; cloak?: boolean; title?: boolean };
 
 export type ClientMessage =
   | { t: 'hello'; v: number; name: string; password?: string; token?: string; outfit?: Outfit; vocation?: Vocation }
@@ -114,6 +116,10 @@ export interface CreatureSnap {
   ill?: string;
   /** Monsters spawned while the server runs (raids, world bosses, summons): their kind, so the client can add them. */
   ek?: string;
+  /** Founder cloak ('' = none), founder title ('' = none), premium account (crown). */
+  ck?: string;
+  tt?: string;
+  pr?: 0 | 1;
 }
 
 export interface SelfSnap {
@@ -149,6 +155,10 @@ export interface SelfSnap {
   /** Market window contents; only sent when it changed (null = closed, absent = unchanged). */
   mk?: MarketView | null;
   friends?: ReturnType<Game['friendsView']>;
+  /** Premium state (sent only when changed). */
+  pm?: PremiumView;
+  /** Founder look switches of this character: [show cloak, show title] (sent only when changed). */
+  cos?: [0 | 1, 0 | 1];
 }
 
 export type ServerMessage =
@@ -198,13 +208,16 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     const p = o.player;
     const eq: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(o.inventory.equipment)) eq[k] = v?.id ?? null;
-    const look = JSON.stringify([p.name, p.level, p.vocation, p.outfit, eq, p.showGear, p.illusion ?? '']);
+    const look = JSON.stringify([p.name, p.level, p.vocation, p.outfit, eq, p.showGear, p.illusion ?? '', p.cloak, p.title, p.premium]);
     const full = looks.get(p.id) !== look;
     if (full) looks.set(p.id, look);
     c.push({
       id: p.id, k: 'p', x: p.x, y: p.y, z: p.z, fx: p.fromX, fy: p.fromY, mt: r3(p.moveT), md: r3(p.moveDur), f: r3(p.facing),
       hp: Math.ceil(p.hp), mhp: p.maxHp, d: p.dead ? 1 : 0,
-      ...(full ? { name: p.name, lvl: p.level, voc: p.vocation, o: p.outfit, eq, sg: p.showGear ? 1 as const : 0 as const, ill: p.illusion ?? '' } : {}),
+      ...(full ? {
+        name: p.name, lvl: p.level, voc: p.vocation, o: p.outfit, eq, sg: p.showGear ? 1 as const : 0 as const, ill: p.illusion ?? '',
+        ck: p.cloak, tt: p.title, pr: p.premium ? 1 as const : 0 as const,
+      } : {}),
       buffs: {
         haste: p.buffs.haste > 0 || p.buffs.strongHaste > 0 ? 1 : 0, magicShield: p.buffs.magicShield > 0 ? 1 : 0, light: p.buffs.light > 0 ? 1 : 0,
         invisible: p.buffs.invisible > 0 ? 1 : 0,
@@ -236,6 +249,8 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     skills: onlyChanged(s, 'skills', Object.fromEntries(COMBAT_SKILLS.map((k) => [k, [s.skills[k].level, Math.floor(s.skills[k].tries)]]))),
     gx: onlyChanged(s, 'gx', Object.fromEntries(NONCOMBAT_IDS.map((k) => [k, Math.floor(s.gathering[k])]))), friends: onlyChanged(s, 'friends', game.friendsView(me.id)),
     cw: onlyChanged(s, 'cw', game.craftView(s.id)),
+    pm: onlyChanged(s, 'pm', game.premiumView(s.id) ?? undefined),
+    cos: onlyChanged(s, 'cos', [s.cosmetics.hideCloak ? 0 : 1, s.cosmetics.hideTitle ? 0 : 1] as [0 | 1, 0 | 1]),
   };
   // the market list is only sent when something in it (or in your depot or bank) changed
   const mkKey = s.marketOpen ? `${game.market.version}|${s.bank}|${JSON.stringify(s.depot)}` : 'closed';
@@ -342,6 +357,7 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'marketClose': game.closeMarket(pid); break;
     case 'craft': if (typeof m.recipe === 'string' && num(m.count)) game.commandCraft(pid, m.recipe.slice(0, 64), Math.floor(m.count)); break;
     case 'craftClose': game.closeCraft(pid); break;
+    case 'cosmetics': game.setCosmetics(pid, { cloak: typeof m.cloak === 'boolean' ? m.cloak : undefined, title: typeof m.title === 'boolean' ? m.title : undefined }); break;
   }
 }
 
@@ -385,6 +401,17 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
         p.buffs.magicShield = c.buffs.magicShield ? Math.max(p.buffs.magicShield, 1) : 0;
         p.buffs.light = c.buffs.light ? Math.max(p.buffs.light, 1) : 0;
         p.buffs.invisible = c.buffs.invisible ? Math.max(p.buffs.invisible, 1) : 0;
+      }
+      if (c.ck !== undefined || c.tt !== undefined || c.pr !== undefined) {
+        const ck = (c.ck === 'ember' || c.ck === 'gold' || c.ck === 'crimson' ? c.ck : '') as Player['cloak'];
+        const tt = typeof c.tt === 'string' ? c.tt.slice(0, 40) : '';
+        const pr = c.pr === 1;
+        if (ck !== p.cloak || tt !== p.title || pr !== p.premium) {
+          p.cloak = ck;
+          p.title = tt;
+          p.premium = pr;
+          ev.emit({ type: 'outfitChanged', id: p.id });
+        }
       }
       if (c.ill !== undefined) {
         const ill = c.ill || null;
@@ -475,6 +502,11 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   // the Skills panel redraws itself when these change
   if (me.skills) s.skills = parseSkills(Object.fromEntries(Object.entries(me.skills).map(([k, v]) => [k, { level: v[0], tries: v[1] }])));
   if (me.gx) for (const k of NONCOMBAT_IDS) if (typeof me.gx[k] === 'number') s.gathering[k] = me.gx[k]!;
+  if (me.pm) {
+    s.premiumNet = me.pm;
+    ev.emit({ type: 'depotChanged', to: me.id });
+  }
+  if (me.cos) s.cosmetics = { hideCloak: me.cos[0] === 0, hideTitle: me.cos[1] === 0 };
   if (snap.st) game.syncStumps(snap.st, p.x, p.y, p.z, VIEW_RADIUS + 4);
   const spellsBefore = [...s.spells].sort().join();
   const spellsAfter = me.spells ? [...me.spells].sort().join() : spellsBefore;
