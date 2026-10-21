@@ -1449,9 +1449,10 @@ console.log('Follow and friends');
   }
   g.teleport(a.player, at![0], at![1], 0);
   g.teleport(b.player, at![0] + 2, at![1], 0);
+  a.player.god = b.player.god = true; // monsters nearby must not end the walk
   executeCommand(g, a.id, { c: 'follow', id: b.id });
   g.teleport(b.player, at![0] + 10, at![1], 0);
-  for (let i = 0; i < 120; i++) g.update(0.05);
+  for (let i = 0; i < 260; i++) g.update(0.05); // level 1 walks ~1.8 tiles/s
   check(chebyshev(a.player.x, a.player.y, b.player.x, b.player.y) <= 1, 'follow walks after the other player');
   executeCommand(g, a.id, { c: 'friendRequest', id: b.id });
   check(g.friendsView(b.id).requests.some((r) => r.id === a.id), 'friend request arrives');

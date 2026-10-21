@@ -102,6 +102,7 @@ export class Renderer {
     const p = this.me;
     this.cam = new CameraController(p.x, p.y);
     this.worldView = new WorldView(ctl.game.world, this.scene, (x, y, z) => ctl.game.stumpOrigin(x, y, z));
+    this.worldView.isRuneField = (x, y, z) => this.ctl.game.fieldAt(x, y, z) !== null;
     this.effects = new Effects(this.scene);
     this.blood = new Blood(this.scene, (z) => this.worldView.floorOffset(z));
     this.overlay = new Overlay(container, this.cam.camera);

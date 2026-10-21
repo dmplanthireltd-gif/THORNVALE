@@ -160,6 +160,8 @@ export class WorldView {
   private waterTex: THREE.Texture[] = [];
   private flameMats: Mat[] = [];
   currentZ = 0;
+  /** Fields laid by runes: they are drawn by the animated field sprites, not as static flames. */
+  isRuneField: (x: number, y: number, z: number) => boolean = () => false;
 
   /**
    * `stumpOf` tells which tree a stump tile was (felled trees grow back), so a
@@ -544,6 +546,7 @@ export class WorldView {
             for (let i = 0; i < 4; i++) deadBranch.add(compose(x + Math.cos(i * 1.6) * 0.2, 0.05, y + Math.sin(i * 1.6) * 0.2, i * 1.6, 0.6, 0.6, 0.6, Math.PI / 2, 0));
             break;
           case Obj.FireField:
+            if (this.isRuneField(x, y, z)) break;
             for (let i = 0; i < 4; i++) flames.add(compose(x + (hash2(x, y, i) - 0.5) * 0.6, 0, y + (hash2(x, y, i + 9) - 0.5) * 0.6, 0, 0.9, 0.7 + hash2(x, y, i + 3) * 0.8, 0.9));
             break;
           case Obj.Well:
