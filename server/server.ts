@@ -36,9 +36,14 @@ const DATA_FILE = resolve(process.env.DATA_FILE ?? join(HERE, 'data', 'character
 const TICK = 1 / 20;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS ?? 50);
 /** Test commands (/level, /item, …): ALLOW_ADMIN=1 for everyone, or ADMINS="Name One,Name Two". */
-const ALLOW_ADMIN = process.env.ALLOW_ADMIN === '1';
+/**
+ * Test mode: everyone gets the test commands except /god and /kill. ON by default during the testing
+ * phase so it works without touching the Render dashboard; set TEST_MODE=0 to switch it off.
+ */
+const TEST_MODE = process.env.TEST_MODE !== '0';
+const ALLOW_ADMIN = process.env.ALLOW_ADMIN === '1' || TEST_MODE;
 /** Test servers: every character is raised to at least this level when it logs in (1 = off). */
-const START_LEVEL = Math.max(1, Math.min(1000, Math.floor(Number(process.env.START_LEVEL ?? 1)) || 1));
+const START_LEVEL = Math.max(1, Math.min(1000, Math.floor(Number(process.env.START_LEVEL ?? (TEST_MODE ? 20 : 1))) || 1));
 /** Email login with password recovery (Supabase Auth). Without it, players log in with name + password. */
 const SUPABASE_URL = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
 const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? '';
@@ -592,6 +597,7 @@ console.log(market ? `Market: open (${market.offers.length} offers, ${market.del
 console.log(`Saves: ${storage.kind === 'supabase' ? 'Supabase database' : `files in ${dirname(DATA_FILE)}`} (save format v${SAVE_VERSION})`);
 console.log(`PvP: ${PVP ? 'on' : 'off'}`);
 if (START_LEVEL > 1) console.log(`Test server: characters start at level ${START_LEVEL}`);
+console.log(`Test mode: ${TEST_MODE ? 'on (everyone: test commands except /god and /kill)' : 'off'}`);
 if (storage.kind !== 'supabase' && process.env.RENDER) {
   console.warn('WARNING: running on Render without SUPABASE_URL / SUPABASE_SERVICE_KEY — characters are lost on every restart.');
 }

@@ -28,6 +28,9 @@ services:
       - key: PVP
         value: "1"
       # testing: every character is raised to at least this level at login ("1" = off)
+      # testing phase: "1" = everyone gets the test commands (not /god or /kill); "0" before the grand opening
+      - key: TEST_MODE
+        value: "1"
       - key: START_LEVEL
         value: "20"
       # Supabase keeps accounts and characters safe across restarts and updates.
