@@ -75,9 +75,10 @@ scripts/              ← smoke-test, net-test, storage-test, auth-test, content
 
 | Thing | Value |
 |---|---|
-| GitHub repo | `dmplanthireltd-gif/thornvale` (shown as THORNVALE), branch `main` |
+| GitHub repo | `dmplanthireltd-gif/THORNVALE` (renamed from `thornvale`; old URL redirects), branch `main` |
 | Live game | https://thornvale.onrender.com (health: `/status`) |
 | Render workspace | **Pro** workspace plan ($25/mo, since 2026-10-21): more bandwidth (25 GB), 15 custom domains, 1,000 build minutes/mo, team members |
+| Grand opening | **1 January 2027, 00:00 UK time** (Europe/London) |
 | Render service | `thornvale`, instance type **Free** (`plan: free` in render.yaml), Frankfurt, auto-deploys on push to `main` |
 | Supabase project | `thornvale`, ref `gvknnzdhxwmqimaoiref`, region eu-central-1, org `thornvale` |
 | Supabase URL | https://gvknnzdhxwmqimaoiref.supabase.co |
@@ -229,7 +230,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Later: custom SMTP for recovery mails; more map/game polish.
 - [ ] Marketing website (mockups approved on the "Thornvale Website" design canvas): home page at `/`, game moved to `/play`, live player count from `/status`, news. Same Render service, no new dependencies. Update §4 when the routes change.
 - [ ] New sign-in and character screens (email + password, up to 5 characters per account, "Play offline" kept) replacing the current start screen.
-- [ ] Grand opening: set the opening date, countdown on site and title screen, "create account and claim your names early" sign-up, square social post.
+- [ ] Grand opening on **1 January 2027, 00:00 UK time**: countdown on site and title screen, "create account and claim your names early" sign-up, square social post.
 
 ---
 
@@ -241,5 +242,5 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10 | 7de245b | Supabase saves, account login, save migrations + backups | 2 | 3 |
 | 2026-10 | 55d38a3 | Email accounts with password recovery (Supabase Auth) | 2 | 3 |
 | 2026-10-21 | 5bc8b26 | BIBLE.md + CLAUDE.md added | 2 | 3 |
+| Grand opening | **1 January 2027, 00:00 UK time** (Europe/London) |
 | 2026-10-21 | 6a2ea6d | Open Work: marketing website, new sign-in/character screens, grand opening (design stage, no code yet) | 2 | 3 |
-| 2026-10-21 | — | Render workspace upgraded to Pro (service still Free instance) | 2 | 3 |
