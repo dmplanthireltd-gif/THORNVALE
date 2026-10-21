@@ -20,7 +20,7 @@ import { Ground, Obj, type WorldMap } from './WorldMap';
 export type PlazaStyle = 0 | 1 | 2 | 3 | 4 | 5;
 
 /** Which spawn plaza design is built. 1 classic, 2 temple court, 3 garden, 4 market, 5 ashen (gothic). */
-export const SPAWN_PLAZA_STYLE: PlazaStyle = 1;
+export const SPAWN_PLAZA_STYLE: PlazaStyle = 2;
 
 let preview: PlazaStyle | null = null;
 
@@ -84,8 +84,6 @@ export function offsetPlaza(p: SpawnPlaza, ox: number, oy: number): SpawnPlaza {
 const X0 = 21, Y0 = 18, X1 = 34, Y1 = 27;
 /** Fountain centre: the old crossroads (roads at x 27–28 and y 22–23). */
 const CX = 27.5, CY = 22.5;
-/** The temple shrine stays where it always was. */
-export const PLAZA_ALTAR = { x: 31, y: 25 };
 
 const S = Math.PI;
 const FACE = { S: 0, N: S, E: S / 2, W: -S / 2 };
@@ -140,17 +138,15 @@ function templeCourt(): Layout {
     fountain: P('fountain_statue', CX, CY),
     solid: [
       ...cols.map(([x, y]) => P('column', x, y, y === 18 ? FACE.S : FACE.N)),
-      // gilded braziers either side of the altar
-      P('brazier_gold', 30, 25), P('brazier_gold', 32, 25),
+      // gilded braziers on the processional way between the temple and the fountain
+      P('brazier_gold', 25, 20), P('brazier_gold', 30, 20), P('brazier_gold', 25, 25), P('brazier_gold', 30, 25),
       // guardian statues at the side entrances
-      P('statue_guard', 21, 20, FACE.E), P('statue_guard', 21, 25, FACE.E), P('statue_guard', 34, 20, FACE.W), P('statue_guard', 34, 25, FACE.W),
+      P('statue_guard', 21, 20, FACE.E), P('statue_guard', 21, 25, FACE.E), P('statue_guard', 34, 20, FACE.W),
     ],
     open: [
       // banners hang from the columns that flank the north and south gates
       P('banner_column', 26, 18, FACE.S, 0), P('banner_column', 29, 18, FACE.S, 0),
       P('banner_column', 26, 27, FACE.N, 1), P('banner_column', 29, 27, FACE.N, 1),
-      // the altar dais
-      P('dais', PLAZA_ALTAR.x, PLAZA_ALTAR.y),
     ],
     founders: { x: 33, y: 24 },
   };
@@ -242,6 +238,51 @@ function ashen(): Layout {
   };
 }
 
+// ------------------------------------------------------------------ the city around the plaza
+
+/**
+ * The themed outsides of the spawn city (same for every design): signs, the bell
+ * tower, the forge yard, the magic tower, the store front, training dummies, the
+ * market board pavilion. Solid ones block their tile (only where it was empty or a
+ * wall they stand on); `board` puts a working market board under the pavilion.
+ * Sign emblems (`v`): 0 bell, 1 chest, 2 coin, 3 sword & hammer, 4 star, 5 sack,
+ * 6 bow, 7 crossed swords, 8 notice, 9 anchor.
+ */
+const SIGN = { bell: 0, chest: 1, coin: 2, smith: 3, star: 4, sack: 5, bow: 6, swords: 7, notice: 8, anchor: 9 };
+
+function cityProps(): { solid: PlazaProp[]; open: PlazaProp[]; board: { x: number; y: number } } {
+  return {
+    solid: [
+      // temple: bell tower on its north-east corner, pews, candles
+      P('bell_tower', 32, 11), P('pew', 24, 15), P('pew', 25, 15), P('pew', 30, 15), P('pew', 31, 15), P('candles', 31, 12), P('candles', 24, 12),
+      // depot hall sign by its plaza doors
+      P('signpost', 21, 21, 0, SIGN.chest),
+      // bank: sign and portico column at its door
+      P('signpost', 34, 25, 0, SIGN.coin), P('column', 34, 27, FACE.W),
+      P('scales', 38, 26),
+      // magic tower: the tower itself, crystals by the door, potion shelves inside
+      P('mage_tower', 40, 13), P('crystals', 37, 18, 0, 0), P('crystals', 39, 18, 0, 1), P('potion_shelf', 36, 16), P('potion_shelf', 40, 16),
+      // outfitter: sign, mannequins, fabric bolts
+      P('signpost', 21, 14, 0, SIGN.bow), P('mannequin', 21, 13, 0, 0), P('fabric', 21, 12), P('mannequin', 15, 16, 0, 1), P('fabric', 18, 13),
+      // smithy forge yard in front of its door
+      P('chimney', 31, 32), P('anvil_coals', 32, 29), P('signpost', 35, 29, 0, SIGN.smith), P('weapon_rack', 36, 29), P('armour_stand', 37, 29), P('armour_stand', 38, 29, 0, 1),
+      // general store front
+      P('crates', 19, 28), P('barrels', 20, 28), P('sacks', 23, 28), P('signpost', 24, 28, 0, SIGN.sack),
+      // trainers' hall: dummies inside and out
+      P('dummy', 19, 38), P('dummy', 24, 38), P('dummy', 24, 40), P('dummy', 26, 38), P('dummy', 26, 40), P('signpost', 24, 36, 0, SIGN.swords),
+      // the way to the harbour
+      P('signpost', 4, 21, 0, SIGN.anchor),
+    ],
+    open: [
+      P('holy_light', 28, 16), P('wall_banner', 24, 17, 0, 0), P('wall_banner', 31, 17, 0, 0), P('wall_sign', 25.5, 17, 0, SIGN.bell),
+      P('wall_sign', 37, 17, 0, SIGN.star),
+      P('awning', 21, 29), P('ring', 21.5, 39),
+      P('pavilion', 25, 29),
+    ],
+    board: { x: 25, y: 29 },
+  };
+}
+
 const LAYOUTS: Record<Exclude<PlazaStyle, 0>, () => Layout> = { 1: classic, 2: templeCourt, 3: garden, 4: market, 5: ashen };
 
 /**
@@ -259,7 +300,12 @@ export function buildSpawnPlaza(m: WorldMap, style: PlazaStyle = activePlazaStyl
   }
   for (const [x, y] of L.basin) m.setObj(x, y, Obj.Fountain);
   for (const p of L.solid) for (const [x, y] of p.tiles ?? [[Math.round(p.x), Math.round(p.y)]]) if (inPlaza(x, y)) m.setObj(x, y, Obj.PlazaDecor);
-  m.setObj(PLAZA_ALTAR.x, PLAZA_ALTAR.y, Obj.Altar);
-  const props = [L.fountain, ...L.solid.map(({ tiles: _t, ...p }) => p), ...L.open];
+  const C = cityProps();
+  for (const p of C.solid) {
+    const x = Math.round(p.x), y = Math.round(p.y);
+    if (m.getObj(x, y) === Obj.None) m.setObj(x, y, Obj.PlazaDecor);
+  }
+  m.setObj(C.board.x, C.board.y, Obj.MarketBoard);
+  const props = [L.fountain, ...L.solid.map(({ tiles: _t, ...p }) => p), ...L.open, ...C.solid, ...C.open];
   m.plaza = { style, x0: X0, y0: Y0, x1: X1, y1: Y1, cx: CX, cy: CY, founders: L.founders, props };
 }

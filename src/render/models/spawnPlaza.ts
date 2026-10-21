@@ -937,6 +937,285 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
     }
   };
 
+  // ................................................................ the city around the plaza
+  const smoke: Emitter[] = [];
+  const beams: Array<{ x: number; z: number }> = [];
+  const flagsAt: Array<{ p: V3; c: number; s: number }> = [];
+  const GOLD = 0xe6c25a, IRON = 0x34343a, WOOD = 0x7a5232, DKWOOD = 0x4e3420;
+  /** Emblems drawn on a board facing +z, centred on the origin, about 0.5 across. */
+  const emblem = (v: number) => {
+    const o = { flat: true };
+    switch (v) {
+      case 0: // bell
+        S.cone(0.17, 0.3, GOLD, [0, 0.0, 0.02], o, 8);
+        S.box(0.4, 0.05, 0.03, GOLD, [0, -0.15, 0.02], o);
+        S.sph(0.05, 0xb8862a, [0, -0.2, 0.03], o, 0);
+        S.box(0.05, 0.08, 0.03, GOLD, [0, 0.18, 0.02], o);
+        break;
+      case 1: // chest
+        S.box(0.42, 0.24, 0.04, 0x8a5a2a, [0, -0.07, 0.02], o);
+        S.box(0.42, 0.12, 0.04, 0xa06a32, [0, 0.11, 0.02], o);
+        S.box(0.44, 0.03, 0.05, GOLD, [0, 0.04, 0.03], o);
+        S.box(0.08, 0.1, 0.05, GOLD, [0, -0.02, 0.04], o);
+        for (const sx of [-0.18, 0.18]) S.box(0.03, 0.38, 0.05, GOLD, [sx, -0.01, 0.03], o);
+        break;
+      case 2: // gold coin
+        S.add(new THREE.CylinderGeometry(0.22, 0.22, 0.05, 16).rotateX(Math.PI / 2), 0xd8a832, [0, 0, 0.03], o);
+        S.add(new THREE.CylinderGeometry(0.16, 0.16, 0.06, 16).rotateX(Math.PI / 2), 0xf2d270, [0, 0, 0.035], o);
+        S.box(0.08, 0.08, 0.07, 0xb8862a, [0, 0, 0.04], { r: [0, 0, Math.PI / 4], flat: true });
+        break;
+      case 3: // crossed sword and hammer
+        S.push([0, 0, 0.03], [0, 0, Math.PI / 4]);
+        S.box(0.05, 0.5, 0.03, 0xd8dce4, [0, 0.03, 0], o);
+        S.box(0.18, 0.04, 0.04, GOLD, [0, -0.17, 0], o);
+        S.box(0.04, 0.1, 0.04, 0x6a4a2a, [0, -0.24, 0], o);
+        S.pop();
+        S.push([0, 0, 0.035], [0, 0, -Math.PI / 4]);
+        S.box(0.04, 0.48, 0.03, 0x8a5a2a, [0, -0.02, 0], o);
+        S.box(0.2, 0.1, 0.05, 0x6a6e78, [0, 0.2, 0], o);
+        S.pop();
+        break;
+      case 4: { // star
+        const pts: [number, number][] = [];
+        for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + (i / 10) * Math.PI * 2; const r = i % 2 ? 0.1 : 0.24; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+        S.poly(pts, 0xc8a8ff, [0, 0, 0.03], { glow: true });
+        break;
+      }
+      case 5: // sack of goods
+        S.sph(0.17, 0xc8b48a, [0, -0.06, 0.03], { s: [1, 1, 0.3], flat: true }, 1);
+        S.box(0.1, 0.1, 0.04, 0xb8a47a, [0, 0.14, 0.03], o);
+        S.box(0.16, 0.03, 0.05, 0x8a2a20, [0, 0.1, 0.04], o);
+        break;
+      case 6: // bow and arrow
+        S.add(new THREE.TorusGeometry(0.22, 0.025, 4, 12, Math.PI), 0x8a5a2a, [0, 0, 0.03], { r: [0, 0, -Math.PI / 2], flat: true });
+        S.box(0.012, 0.44, 0.02, 0xeae0c8, [0, 0, 0.03], o);
+        S.box(0.4, 0.025, 0.03, 0xd8dce4, [0.06, 0, 0.04], o);
+        S.cone(0.05, 0.1, 0xd8dce4, [0.29, 0, 0.04], { r: [0, 0, -Math.PI / 2], flat: true }, 4);
+        break;
+      case 7: // crossed swords
+        for (const sg of [-1, 1]) {
+          S.push([0, 0, 0.03], [0, 0, sg * Math.PI / 4]);
+          S.box(0.045, 0.5, 0.03, 0xd8dce4, [0, 0.03, 0], o);
+          S.box(0.16, 0.04, 0.04, GOLD, [0, -0.16, 0], o);
+          S.pop();
+        }
+        break;
+      case 8: // notices
+        S.box(0.18, 0.22, 0.02, 0xf2ead2, [-0.1, 0.05, 0.03], { r: [0, 0, 0.1], flat: true });
+        S.box(0.18, 0.2, 0.02, 0xe8dcb8, [0.12, -0.04, 0.03], { r: [0, 0, -0.12], flat: true });
+        S.box(0.04, 0.04, 0.03, 0xc83a2a, [-0.1, 0.15, 0.04], o);
+        break;
+      default: // anchor
+        S.box(0.05, 0.42, 0.03, 0x2a3a5a, [0, 0, 0.03], o);
+        S.box(0.24, 0.04, 0.03, 0x2a3a5a, [0, 0.14, 0.03], o);
+        S.add(new THREE.TorusGeometry(0.17, 0.03, 4, 12, Math.PI), 0x2a3a5a, [0, -0.1, 0.03], { r: [0, 0, Math.PI], flat: true });
+        S.add(new THREE.TorusGeometry(0.05, 0.02, 4, 8), 0x2a3a5a, [0, 0.24, 0.03], o);
+        break;
+    }
+  };
+  const signBoard = (v: number) => {
+    S.box(0.66, 0.66, 0.06, 0x3a2414, [0, 0, 0]);
+    S.box(0.58, 0.58, 0.04, v === 9 ? 0xd8d0b8 : 0x6a4426, [0, 0, 0.02], { grit: 0.05 });
+    for (const [x, y] of [[-0.3, 0.3], [0.3, 0.3], [-0.3, -0.3], [0.3, -0.3]] as const) S.box(0.09, 0.09, 0.05, GOLD, [x, y, 0.03], { flat: true });
+    emblem(v);
+  };
+  const signpost = (v: number) => {
+    S.box(0.3, 0.1, 0.3, 0x77716a, [0, 0.05, 0]);
+    S.cyl(0.05, 0.06, 2.0, DKWOOD, [0, 1.0, -0.15], {}, 6);
+    S.box(0.8, 0.05, 0.06, DKWOOD, [0, 2.0, -0.15]);
+    for (const sx of [-0.25, 0.25]) S.box(0.015, 0.14, 0.015, IRON, [sx, 1.92, -0.12]);
+    S.push([0, 1.5, -0.1], [-0.35, 0, 0]);
+    signBoard(v);
+    S.pop();
+  };
+  const wallSign = (v: number) => {
+    S.box(0.05, 0.05, 0.5, IRON, [0, 1.62, 0.3]);
+    S.push([0, 1.25, 0.62], [-0.3, 0, 0]);
+    signBoard(v);
+    S.pop();
+  };
+  const wallBanner = () => {
+    S.box(0.06, 0.06, 0.4, GOLD, [0, 1.75, 0.25], { flat: true });
+    S.box(0.5, 1.3, 0.03, 0xf0ead8, [0, 1.05, 0.47], { grit: 0.04 });
+    S.poly([[-0.25, 0], [0.25, 0], [0, -0.25]], 0xf0ead8, [0, 0.4, 0.47]);
+    S.box(0.5, 0.05, 0.035, GOLD, [0, 1.66, 0.48], { flat: true });
+    S.box(0.18, 0.18, 0.04, GOLD, [0, 1.15, 0.49], { r: [0, 0, Math.PI / 4], flat: true });
+    S.box(0.08, 0.08, 0.045, 0x3c5a8c, [0, 1.15, 0.5], { r: [0, 0, Math.PI / 4], flat: true });
+  };
+  const bellTower = () => {
+    const st = 0xe6dfcc, tr = 0xc8bfa8;
+    S.box(1.1, 4.2, 1.1, st, [0, 2.1, 0], { grit: 0.08 });
+    for (const y of [1.0, 2.2, 3.4]) S.box(1.16, 0.08, 1.16, tr, [0, y, 0]);
+    S.box(0.22, 0.5, 0.04, 0x2a3048, [0, 2.8, 0.56]);
+    // open belfry
+    for (const [x, z] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]] as const) S.box(0.18, 1.0, 0.18, st, [x, 4.7, z]);
+    S.box(1.2, 0.12, 1.2, tr, [0, 4.25, 0]);
+    S.box(1.25, 0.14, 1.25, tr, [0, 5.24, 0]);
+    S.cone(0.3, 0.42, 0xd8a832, [0, 4.75, 0], { flat: true }, 10);
+    S.sph(0.06, 0xd8a832, [0, 4.5, 0], { flat: true }, 0);
+    S.cone(0.95, 1.4, 0x3c5a8c, [0, 6.0, 0], { r: [0, Math.PI / 4, 0] }, 4);
+    S.sph(0.1, GOLD, [0, 6.75, 0], { flat: true }, 0);
+    S.cyl(0.025, 0.025, 0.9, IRON, [0, 7.1, 0], {}, 4);
+    flagsAt.push({ p: [pz.x0 * 0 + 0, 7.45, 0], c: 0xf0ead8, s: 0.5 });
+  };
+  const holyLight = (p: PlazaProp) => {
+    S.add(new THREE.RingGeometry(0.32, 0.46, 20).rotateX(-Math.PI / 2), 0xffe6a0, [p.x, 0.035, p.y], { glow: true });
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      S.box(0.06, 0.01, 0.14, 0xffe6a0, [p.x + Math.cos(a) * 0.56, 0.035, p.y + Math.sin(a) * 0.56], { glow: true, r: [0, -a + Math.PI / 2, 0] });
+    }
+    beams.push({ x: p.x, z: p.y });
+  };
+  const pew = () => {
+    S.box(0.9, 0.06, 0.36, WOOD, [0, 0.36, 0]);
+    S.box(0.9, 0.4, 0.06, WOOD, [0, 0.55, -0.17]);
+    for (const sx of [-0.4, 0.4]) S.box(0.06, 0.36, 0.36, DKWOOD, [sx, 0.18, 0]);
+  };
+  const candles = () => {
+    S.box(0.5, 0.7, 0.3, 0xc8bfa8, [0, 0.35, 0]);
+    for (let i = 0; i < 5; i++) {
+      const x = -0.18 + i * 0.09, h = 0.12 + (i % 2) * 0.08;
+      S.cyl(0.025, 0.025, h, 0xf2ead2, [x, 0.7 + h / 2, 0], {}, 5);
+      S.cone(0.025, 0.07, 0xffc860, [x, 0.74 + h, 0], { glow: true }, 4);
+    }
+  };
+  const scales = () => {
+    S.box(0.36, 0.04, 0.24, GOLD, [0, 0.82, 0], { flat: true });
+    S.cyl(0.025, 0.025, 0.5, GOLD, [0, 1.07, 0], {}, 5);
+    S.box(0.5, 0.025, 0.025, GOLD, [0, 1.3, 0], { flat: true });
+    for (const sx of [-0.22, 0.22]) {
+      S.cyl(0.005, 0.005, 0.22, 0x9a7a3a, [sx, 1.19, 0], {}, 3);
+      S.cyl(0.1, 0.06, 0.04, GOLD, [sx, 1.07, 0], { flat: true }, 10);
+    }
+    S.cyl(0.07, 0.07, 0.05, 0xf2d270, [0.12, 0.87, 0.05], { flat: true }, 8);
+  };
+  const mageTower = () => {
+    const st = 0xb8b0c8, dk = 0x8a80a0;
+    S.cyl(0.62, 0.7, 5.6, st, [0, 2.8, 0], { grit: 0.1 }, 12);
+    for (const y of [1.9, 3.6, 5.2]) S.cyl(0.68, 0.68, 0.1, dk, [0, y, 0], {}, 12);
+    // glowing coloured windows all round
+    const wc = [0x9a6aff, 0x5ac8ff, 0xff7ad8, 0x6affb8];
+    for (let row = 0; row < 3; row++) for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + row * 0.4 + Math.PI / 2;
+      S.box(0.18, 0.36, 0.05, wc[(i + row) % 4], [Math.cos(a) * 0.66, 1.3 + row * 1.7, Math.sin(a) * 0.66], { glow: true, r: [0, -a + Math.PI / 2, 0] });
+    }
+    S.cyl(0.8, 0.8, 0.14, dk, [0, 5.66, 0], {}, 12);
+    S.cone(0.85, 2.1, 0x4a2a7a, [0, 6.78, 0], {}, 12);
+    // floating crystal and runes at the top
+    S.add(new THREE.OctahedronGeometry(0.22, 0), 0x9ae8ff, [0, 8.2, 0], { glow: true, s: [1, 1.6, 1] });
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      S.box(0.14, 0.14, 0.03, 0xc8a8ff, [Math.cos(a) * 0.5, 7.7, Math.sin(a) * 0.5], { glow: true, r: [0, -a, Math.PI / 4] });
+    }
+  };
+  const crystals = (v: number) => {
+    const c = v ? 0x7ad8ff : 0xb88aff;
+    S.box(0.4, 0.14, 0.4, 0x6a6278, [0, 0.07, 0]);
+    S.add(new THREE.OctahedronGeometry(0.16, 0), c, [0, 0.42, 0], { glow: true, s: [1, 2.1, 1] });
+    S.add(new THREE.OctahedronGeometry(0.1, 0), c, [0.14, 0.3, 0.08], { glow: true, s: [1, 1.8, 1], r: [0, 0, -0.4] });
+    S.add(new THREE.OctahedronGeometry(0.09, 0), c, [-0.13, 0.28, -0.04], { glow: true, s: [1, 1.7, 1], r: [0, 0, 0.4] });
+  };
+  const potionShelf = () => {
+    S.box(0.8, 1.2, 0.28, DKWOOD, [0, 0.6, -0.2]);
+    const pc = [0xd83a3a, 0x3a6ad8, 0x8a3ad8, 0x3ad87a];
+    for (const y of [0.45, 0.85]) {
+      S.box(0.78, 0.04, 0.3, WOOD, [0, y - 0.02, -0.08]);
+      for (let i = 0; i < 5; i++) {
+        S.sph(0.06, pc[(i + Math.round(y * 10)) % 4], [-0.3 + i * 0.15, y + 0.06, -0.05], { glow: true }, 0);
+        S.cyl(0.02, 0.02, 0.06, 0xd8d0c0, [-0.3 + i * 0.15, y + 0.14, -0.05], {}, 4);
+      }
+    }
+  };
+  const mannequin = (v: number) => {
+    const c = v ? 0x3f6b4a : 0x8a3a2a;
+    S.box(0.3, 0.06, 0.3, DKWOOD, [0, 0.03, 0]);
+    S.cyl(0.03, 0.03, 0.8, DKWOOD, [0, 0.45, 0], {}, 5);
+    S.cyl(0.2, 0.15, 0.55, c, [0, 1.1, 0], {}, 8);
+    S.box(0.5, 0.12, 0.2, c, [0, 1.32, 0]);
+    S.sph(0.1, 0xd8c8a8, [0, 1.5, 0], {}, 1);
+    S.box(0.2, 0.06, 0.04, 0xd8b04a, [0, 1.2, 0.17], { flat: true });
+  };
+  const fabric = () => {
+    const cs = [0x8a2a2a, 0x2a5a8a, 0x3f6b4a, 0xc8a84a, 0x6a3a7a];
+    S.box(0.8, 0.08, 0.5, DKWOOD, [0, 0.3, 0]);
+    for (const sx of [-0.35, 0.35]) S.box(0.06, 0.3, 0.45, DKWOOD, [sx, 0.15, 0]);
+    for (let i = 0; i < 5; i++) S.add(new THREE.CylinderGeometry(0.075, 0.075, 0.44, 8).rotateX(Math.PI / 2), cs[i], [-0.3 + i * 0.15, 0.42, 0], {});
+    for (let i = 0; i < 3; i++) S.add(new THREE.CylinderGeometry(0.075, 0.075, 0.44, 8).rotateX(Math.PI / 2), cs[(i + 2) % 5], [-0.15 + i * 0.15, 0.55, 0], {});
+  };
+  const chimney = () => {
+    S.box(0.75, 4.0, 0.75, 0x6a5a50, [0, 2.0, 0], { grit: 0.12 });
+    S.box(0.86, 0.16, 0.86, 0x4a3e38, [0, 4.0, 0]);
+    S.box(0.5, 0.05, 0.5, 0xff6a20, [0, 4.09, 0], { glow: true });
+    smoke.push({ p: [0, 4.15, 0], v: [0.15, 0.7, 0.05], jitter: 0.35, rate: 1 });
+  };
+  const anvilCoals = () => {
+    // a stone forge hearth with glowing coals and an anvil beside it
+    S.box(0.5, 0.42, 0.5, 0x6a6058, [-0.18, 0.21, -0.1]);
+    S.box(0.4, 0.05, 0.4, 0x2a1a14, [-0.18, 0.44, -0.1]);
+    for (let i = 0; i < 6; i++) S.sph(0.06, i % 2 ? 0xff5a18 : 0xffa030, [-0.32 + (i % 3) * 0.13, 0.48, -0.2 + Math.floor(i / 3) * 0.17], { glow: true }, 0);
+    flame(-0.18, 0.46, -0.1, 0.7);
+    embers.push({ p: [-0.18, 0.6, -0.1], v: [0, 0.6, 0], jitter: 0.3, rate: 1, ember: true });
+    S.box(0.14, 0.3, 0.14, 0x3a2a1e, [0.24, 0.15, 0.2]);
+    S.box(0.36, 0.1, 0.16, 0x4a4a52, [0.24, 0.35, 0.2]);
+    S.cone(0.06, 0.16, 0x4a4a52, [0.47, 0.36, 0.2], { r: [0, 0, -Math.PI / 2] }, 4);
+    S.box(0.05, 0.24, 0.04, 0x6a4a2a, [0.2, 0.5, 0.2], { r: [0, 0, 0.6] });
+    S.box(0.12, 0.06, 0.08, 0x5a5a62, [0.14, 0.6, 0.2], { r: [0, 0, 0.6] });
+  };
+  const weaponRack = () => {
+    S.box(0.86, 0.06, 0.2, DKWOOD, [0, 1.1, -0.15]);
+    S.box(0.86, 0.06, 0.2, DKWOOD, [0, 0.25, -0.15]);
+    for (const sx of [-0.4, 0.4]) S.box(0.06, 1.2, 0.06, DKWOOD, [sx, 0.6, -0.15]);
+    for (let i = 0; i < 4; i++) {
+      const x = -0.27 + i * 0.18;
+      S.box(0.04, 0.8, 0.02, 0xd0d4dc, [x, 0.75, -0.08]);
+      S.box(0.14, 0.03, 0.04, i % 2 ? GOLD : 0x6a6e78, [x, 0.34, -0.08], { flat: true });
+      if (i === 1) S.box(0.18, 0.14, 0.04, 0x8a8e98, [x, 1.15, -0.06]);
+    }
+  };
+  const armourStand = (v: number) => {
+    const m = v ? 0x8a8e98 : 0xb0b4bc;
+    S.box(0.34, 0.06, 0.34, DKWOOD, [0, 0.03, 0]);
+    S.cyl(0.03, 0.03, 0.8, DKWOOD, [0, 0.45, 0], {}, 5);
+    S.cyl(0.22, 0.17, 0.55, m, [0, 1.1, 0], {}, 8);
+    S.sph(0.12, m, [-0.25, 1.33, 0], { s: [1, 0.7, 1] }, 1);
+    S.sph(0.12, m, [0.25, 1.33, 0], { s: [1, 0.7, 1] }, 1);
+    S.sph(0.14, m, [0, 1.55, 0], {}, 1);
+    S.box(0.18, 0.04, 0.05, 0x2a2a30, [0, 1.56, 0.12]);
+    if (!v) S.box(0.36, 0.42, 0.05, 0x8a3a2a, [0.35, 0.6, 0.1], { r: [0, -0.4, 0] });
+  };
+  const dummy = () => {
+    S.box(0.3, 0.08, 0.3, DKWOOD, [0, 0.04, 0]);
+    S.cyl(0.04, 0.04, 1.4, DKWOOD, [0, 0.7, 0], {}, 5);
+    S.cyl(0.2, 0.18, 0.55, 0xc8b48a, [0, 1.05, 0], {}, 8);
+    S.box(0.8, 0.07, 0.07, DKWOOD, [0, 1.2, 0]);
+    S.sph(0.15, 0xc8b48a, [0, 1.48, 0], {}, 1);
+    S.add(new THREE.RingGeometry(0.06, 0.11, 10), 0xc83a2a, [0, 1.1, 0.19], { flat: true });
+    S.box(0.6, 0.03, 0.03, 0x8a6a40, [0, 0.9, 0.0], { r: [0, 0, 0.2] });
+  };
+  const ringRug = (p: PlazaProp) => {
+    S.add(new THREE.RingGeometry(1.0, 1.15, 20).rotateX(-Math.PI / 2), 0xc8a84a, [p.x, 0.03, p.y], { flat: true });
+    S.add(new THREE.CircleGeometry(1.0, 20).rotateX(-Math.PI / 2), 0x9a6a3a, [p.x, 0.028, p.y], { flat: true });
+  };
+  const awning = () => {
+    const red = 0xb83a2a, wh = 0xf0e6d0;
+    for (let i = 0; i < 6; i++) S.box(0.42, 0.04, 0.95, i % 2 ? wh : red, [-1.05 + i * 0.42, 1.55, 0.4], { r: [0.35, 0, 0] });
+    for (let i = 0; i < 6; i++) S.poly([[-0.21, 0], [0.21, 0], [0, -0.16]], i % 2 ? wh : red, [-1.05 + i * 0.42, 1.38, 0.86]);
+    for (const sx of [-1.25, 1.25]) S.cyl(0.035, 0.035, 1.4, DKWOOD, [sx, 0.7, 0.85], {}, 5);
+  };
+  const pavilion = () => {
+    for (const [x, z] of [[-0.45, -0.4], [0.45, -0.4], [-0.45, 0.4], [0.45, 0.4]] as const) S.cyl(0.05, 0.06, 1.9, DKWOOD, [x, 0.95, z], {}, 6);
+    S.box(1.25, 0.08, 1.1, DKWOOD, [0, 1.9, 0]);
+    for (const sg of [-1, 1]) S.box(1.35, 0.06, 0.72, 0x8e3b2e, [0, 2.12, sg * 0.3], { r: [sg * 0.55, 0, 0] });
+    S.box(1.4, 0.08, 0.08, 0x4a2f1b, [0, 2.32, 0]);
+    // the notice board itself (the market board object) gets a header plank and a sign
+    S.box(1.0, 0.16, 0.05, 0x5a3a20, [0, 1.62, 0.38]);
+    S.push([0, 2.5, 0.25], [-0.35, 0, 0]);
+    S.push([0, 0, 0], [0, 0, 0], [0.7, 0.7, 0.7]);
+    signBoard(8);
+    S.pop();
+    S.pop();
+  };
+
   for (const p of pz.props) {
     switch (p.k) {
       case 'fountain_tiered': case 'fountain_statue': case 'fountain_pond': case 'fountain_well': case 'fountain_gargoyle':
@@ -968,7 +1247,32 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
       case 'banner_pole': at(p, bannerPole); break;
       case 'tree_caged': at(p, treeCaged); break;
       case 'railing_spiked': at(p, railing); break;
+      case 'signpost': at(p, () => signpost(p.v ?? 0)); break;
+      case 'wall_sign': at(p, () => wallSign(p.v ?? 0)); break;
+      case 'wall_banner': at(p, wallBanner); break;
+      case 'bell_tower': at(p, bellTower); for (const f of flagsAt) if (f.p[0] === 0 && f.p[2] === 0) { f.p = [p.x, f.p[1], p.y]; } break;
+      case 'holy_light': holyLight(p); break;
+      case 'pew': at(p, pew); break;
+      case 'candles': at(p, candles); break;
+      case 'scales': at(p, scales); break;
+      case 'mage_tower': at(p, mageTower); break;
+      case 'crystals': at(p, () => crystals(p.v ?? 0)); break;
+      case 'potion_shelf': at(p, potionShelf); break;
+      case 'mannequin': at(p, () => mannequin(p.v ?? 0)); break;
+      case 'fabric': at(p, fabric); break;
+      case 'chimney': at(p, chimney); break;
+      case 'anvil_coals': at(p, anvilCoals); break;
+      case 'weapon_rack': at(p, weaponRack); break;
+      case 'armour_stand': at(p, () => armourStand(p.v ?? 0)); break;
+      case 'dummy': at(p, dummy); break;
+      case 'ring': ringRug(p); break;
+      case 'awning': at(p, awning); break;
+      case 'pavilion': at(p, pavilion); break;
       default: break;
+    }
+    for (const e of smoke) if (!(e as { placed?: boolean }).placed) {
+      e.p = [e.p[0] + p.x, e.p[1], e.p[2] + p.y];
+      (e as { placed?: boolean }).placed = true;
     }
     // embers are pushed in prop-local coordinates: move them to the prop's tile
     for (const e of embers) if (!(e as { placed?: boolean }).placed) {
@@ -995,6 +1299,26 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   if (spray) group.add(spray.mesh);
   const sparks = embers.length ? new Particles(embers, embers.length * 6, 0xffa040, 0.025, -0.4, 1.3) : null;
   if (sparks) group.add(sparks.mesh);
+  const fumes = smoke.length ? new Particles(smoke, smoke.length * 28, 0x8a8480, 0.13, -0.15, 3.2) : null;
+  if (fumes) group.add(fumes.mesh);
+  // shafts of holy light over the spawn point
+  const beamMat = new THREE.MeshBasicMaterial({ color: 0xffe6a0, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  for (const b of beams) {
+    const me = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 4.5, 16, 1, true), beamMat);
+    me.position.set(b.x, 2.25, b.z);
+    me.renderOrder = 3;
+    group.add(me);
+  }
+  // waving flags
+  const flagMeshes: Array<{ geo: THREE.BufferGeometry; base: Float32Array }> = [];
+  for (const f of flagsAt) {
+    const geo = new THREE.PlaneGeometry(1.0 * f.s * 2, 0.6 * f.s * 2, 8, 2).translate(f.s, 0, 0);
+    const me = new THREE.Mesh(geo, M(f.c));
+    (me.material as THREE.Material).side = THREE.DoubleSide;
+    me.position.set(f.p[0], f.p[1], f.p[2]);
+    group.add(me);
+    flagMeshes.push({ geo, base: Float32Array.from(geo.attributes.position.array as Float32Array) });
+  }
 
   let time = 0;
   return {
@@ -1009,6 +1333,16 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
       }
       spray?.update(dt, 0.3);
       sparks?.update(dt, -1);
+      fumes?.update(dt, -1);
+      beamMat.opacity = 0.18 + Math.sin(time * 1.6) * 0.06;
+      for (const f of flagMeshes) {
+        const pos = f.geo.attributes.position as THREE.BufferAttribute;
+        for (let i = 0; i < pos.count; i++) {
+          const x = f.base[i * 3];
+          pos.setZ(i, Math.sin(time * 5 - x * 4) * 0.12 * x);
+        }
+        pos.needsUpdate = true;
+      }
     },
   };
 }
