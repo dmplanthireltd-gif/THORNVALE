@@ -293,8 +293,8 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Later: custom SMTP for recovery mails; more map/game polish.
 - [x] Website at thornvaleonline.com from `site/`, game at `/play/` (2026-10-21).
 - [x] Website pages: guide, highscores, FAQ, rules, privacy (2026-10-21).
-- [x] Website graphics: hero trailer (`site/media/trailer.webm|mp4`, ~13 s loop of in-game stills), world-card and news pictures, share image `og-image.jpg` (2026-10-21).
-- [ ] Website: replace the still-image trailer with a real gameplay clip recorded on a PC with a graphics card (the cloud sandbox renders ~0.25 fps); more news posts. Keep guide/FAQ in step with gameplay changes.
+- [x] Website graphics: hero trailer (`site/media/trailer.webm|mp4`, 29 s of real gameplay recorded in the owner's Mac Chrome via canvas capture, offline test character), world-card and news pictures, share image `og-image.jpg` (2026-10-21).
+- [ ] Website: more news posts; refresh the trailer after big visual changes (e.g. the graphics overhaul). Keep guide/FAQ in step with gameplay changes.
 - [ ] Owner: set up email forwarding support@thornvaleonline.com → owner's Gmail (WordPress.com → Domains → thornvaleonline.com → Email → Email forwarding).
 - [ ] New sign-in and character screens (email + password, up to 5 characters per account, "Play offline" kept) replacing the current start screen.
 - [ ] Grand opening on **1 January 2027, 00:00 UK time**: countdown on site and title screen, "create account and claim your names early" sign-up, square social post.
@@ -331,3 +331,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Fishing skill: fishing rod, fish in water within 3 tiles (small fish, trout, pike, salmon, ice fish, swordfish by level and water kind), rare old boot/treasure, fished-out spots, Skills panel row, `/fishing N`; captains sell rods, traders and captains buy fish | 7 | 12 |
 | 2026-10-21 | — | Movable/resizable side panels (grip bar, bottom-edge resize, side bar width), resizable chat area, action bar can float on top of the game view (`src/ui/panels.ts`, layout in localStorage, Reset layout in Help); test server: `ALLOW_ADMIN=1` | — | — |
 | 2026-10-21 | — | Test mode: with `ALLOW_ADMIN=1` everyone gets the test commands except `/god` and `/kill` (`Session.testOnly`); `ADMINS` names keep everything | — | — |
+| 2026-10-21 | — | Website: hero trailer replaced with real gameplay footage (29 s, WebM + MP4) | — | — |
