@@ -44,7 +44,7 @@ BIBLE.md              ← this file
 CLAUDE.md             ← short pointer + checklist for Claude Code
 README.md             ← player/host-facing docs
 render.yaml           ← Render Blueprint
-site/                 ← marketing website (plain HTML/CSS/JS, no build): served at / — index, news/, guide/, highscores/, faq/, rules/, privacy/, 404, robots, sitemap; site.js = live status, countdown, highscores table
+site/                 ← marketing website (plain HTML/CSS/JS, no build; media/ = trailer, pictures, share image): served at / — index, news/, guide/, highscores/, faq/, rules/, privacy/, 404, robots, sitemap; site.js = live status, countdown, highscores table
 supabase/schema.sql   ← database tables (keep in sync with migrations)
 supabase/migrations/  ← one SQL file per schema change (applied by hand / Supabase MCP, then listed in §5)
 server/
@@ -289,7 +289,8 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Later: custom SMTP for recovery mails; more map/game polish.
 - [x] Website at thornvaleonline.com from `site/`, game at `/play/` (2026-10-21).
 - [x] Website pages: guide, highscores, FAQ, rules, privacy (2026-10-21).
-- [ ] Website: hero trailer video and world-card screenshots (in progress), more news posts. Keep guide/FAQ in step with gameplay changes (PvP, parties, spells).
+- [x] Website graphics: hero trailer (`site/media/trailer.webm|mp4`, ~13 s loop of in-game stills), world-card and news pictures, share image `og-image.jpg` (2026-10-21).
+- [ ] Website: replace the still-image trailer with a real gameplay clip recorded on a PC with a graphics card (the cloud sandbox renders ~0.25 fps); more news posts. Keep guide/FAQ in step with gameplay changes.
 - [ ] Owner: set up email forwarding support@thornvaleonline.com → owner's Gmail (WordPress.com → Domains → thornvaleonline.com → Email → Email forwarding).
 - [ ] New sign-in and character screens (email + password, up to 5 characters per account, "Play offline" kept) replacing the current start screen.
 - [ ] Grand opening on **1 January 2027, 00:00 UK time**: countdown on site and title screen, "create account and claim your names early" sign-up, square social post.
@@ -321,3 +322,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Website: guide, highscores (/api/highscores), FAQ, rules, privacy pages; byte-range file serving | 4 | 9 |
 | 2026-10-21 | — | Classic skills (fist/club/sword/axe/distance/shielding/magic level, trained by use, Skills panel, `/skill`), woodcutting (trees → logs, stumps regrow, levels 1–99), player market (market board in every depot, escrow, 1% fee, deliveries to offline sellers; new tables `market_offers`, `market_deliveries`). Old characters get skills that keep their damage | 5 | 10 |
 | 2026-10-21 | — | Follow (right-click any creature), Inspect window (level, vocation, health, skull, party, worn equipment), friends list with requests/accept/online status (saved: save v6 `friends`), bigger name tags (14 px) | 6 | 11 |
+| 2026-10-21 | — | Website graphics: hero trailer video, world-card/news pictures, share image and social tags on every page | 6 | 11 |
