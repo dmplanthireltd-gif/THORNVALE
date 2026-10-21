@@ -599,6 +599,9 @@ select.text-input { flex: 1; }
 .battle-row.targeted { border-color: var(--accent); }
 
 /* settings window */
+/* the drag grip spans the whole row in grid panels (menu), instead of taking the first button's cell */
+.panel-grip { grid-column: 1 / -1; }
+
 .settings-win { width: min(380px, calc(100vw - 24px)); }
 .set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; }
 .set-row .vol-slider { flex: 1; min-width: 120px; width: auto; }
