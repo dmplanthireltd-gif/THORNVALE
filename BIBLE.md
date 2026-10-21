@@ -242,5 +242,6 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10 | 7de245b | Supabase saves, account login, save migrations + backups | 2 | 3 |
 | 2026-10 | 55d38a3 | Email accounts with password recovery (Supabase Auth) | 2 | 3 |
 | 2026-10-21 | 5bc8b26 | BIBLE.md + CLAUDE.md added | 2 | 3 |
-| Grand opening | **1 January 2027, 00:00 UK time** (Europe/London) |
 | 2026-10-21 | 6a2ea6d | Open Work: marketing website, new sign-in/character screens, grand opening (design stage, no code yet) | 2 | 3 |
+| 2026-10-21 | 965a3d6 | Render workspace upgraded to Pro (service still Free instance) | 2 | 3 |
+| 2026-10-21 | 4c04878 | Repo renamed to dmplanthireltd-gif/THORNVALE; grand opening date set to 1 January 2027 | 2 | 3 |
