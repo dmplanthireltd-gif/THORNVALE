@@ -46,7 +46,12 @@ const MAX_PLAYERS = Number(process.env.MAX_PLAYERS ?? 50);
  * phase so it works without touching the Render dashboard; set TEST_MODE=0 to switch it off.
  */
 const TEST_MODE = process.env.TEST_MODE !== '0';
-const ALLOW_ADMIN = process.env.ALLOW_ADMIN === '1' || TEST_MODE;
+/**
+ * Test commands for EVERY player: off since 2026-10-21 (owner's call), only game masters (OWNER_CHARACTERS
+ * + ADMINS) have commands. PUBLIC_TEST_COMMANDS=1 turns them back on for everyone. The old ALLOW_ADMIN
+ * variable is ignored on purpose (it is still "1" on Render).
+ */
+const ALLOW_ADMIN = process.env.PUBLIC_TEST_COMMANDS === '1';
 /** Test servers: every character is raised to at least this level when it logs in (1 = off). */
 const START_LEVEL = Math.max(1, Math.min(1000, Math.floor(Number(process.env.START_LEVEL ?? (TEST_MODE ? 20 : 1))) || 1));
 /** Computer-controlled adventurers walking around (test servers). BOTS=0 turns them off. */
@@ -58,7 +63,7 @@ const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? process
 const EMAIL_AUTH = !!(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
 const MAX_CHARACTERS_PER_ACCOUNT = Number(process.env.MAX_CHARACTERS ?? 5);
 /** Game masters: the owner's characters (always) plus any names in the ADMINS env var. */
-const OWNER_CHARACTERS = ['ouriolis'];
+const OWNER_CHARACTERS = ['ouriolis', 'dawid'];
 const ADMINS = new Set([...OWNER_CHARACTERS, ...(process.env.ADMINS ?? '').split(',')].map((n) => n.trim().toLowerCase()).filter(Boolean));
 /** Game masters' accounts always have premium (shown with the premium tick), whatever the store says. */
 const STAFF_PREMIUM_UNTIL = Date.UTC(2100, 0, 1);
@@ -883,7 +888,7 @@ console.log(`PvP: ${PVP ? 'on' : 'off'}`);
 console.log(`Premium: ${PREMIUM ? 'enforced (free heartland, premium regions)' : 'open to everyone (test mode)'}`);
 console.log(`Store: ${!storeTables ? 'closed (no store tables in storage yet)' : !EMAIL_AUTH ? 'closed (needs email login)' : paddleReady(PADDLE) ? `open (Paddle ${PADDLE.env}, ${Object.keys(PADDLE.prices).length} prices)` : 'closed (Paddle not set up yet)'}`);
 if (START_LEVEL > 1) console.log(`Test server: characters start at level ${START_LEVEL}`);
-console.log(`Test mode: ${TEST_MODE ? 'on (everyone: test commands except /god and /kill)' : 'off'}`);
+console.log(`Test mode: ${TEST_MODE ? 'on' : 'off'}; test commands: ${ALLOW_ADMIN ? 'everyone (not /god or /kill)' : 'game masters only'}`);
 if (storage.kind !== 'supabase' && process.env.RENDER) {
   console.warn('WARNING: running on Render without SUPABASE_URL / SUPABASE_SERVICE_KEY — characters are lost on every restart.');
 }
