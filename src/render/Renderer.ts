@@ -19,6 +19,7 @@ import { buildEnemy, buildNpc, ENEMY_SCALE, type BipedRig, type Rig } from './mo
 import { Overlay } from './Overlay';
 import { PixelPass } from './PixelPass';
 import { WorldView } from './WorldView';
+import { Blood } from './Blood';
 import { Obj, WorldMap, type EnemyKind } from '../game/world/WorldMap';
 
 export type PickResult =
@@ -58,6 +59,7 @@ export class Renderer {
   private hover: PickResult = null;
   private time = 0;
   private lastPz = Number.NaN;
+  private blood!: Blood;
   private sky = new THREE.Color(0x2a4f6e);
   private dark = new THREE.Color(0x000000);
 
@@ -90,6 +92,7 @@ export class Renderer {
     this.cam = new CameraController(p.x, p.y);
     this.worldView = new WorldView(ctl.game.world, this.scene);
     this.effects = new Effects(this.scene);
+    this.blood = new Blood(this.scene, (z) => this.worldView.floorOffset(z));
     this.overlay = new Overlay(container, this.cam.camera);
     for (const b of ctl.game.bags) this.addBag(b);
 
@@ -338,6 +341,16 @@ export class Renderer {
     return v.labelAnchor(new THREE.Vector3());
   }
 
+  /** Leaves a splat on the floor under someone who was hit (bigger hits, more blood). */
+  private bleed(id: number, color: number, amount: number): void {
+    const c = this.ctl.game.getCreature(id);
+    if (!c) return;
+    const chance = Math.min(1, 0.45 + amount / 60);
+    if (Math.random() > chance) return;
+    const v = c.visualPos();
+    this.blood.add(v.x, v.y, c.z, color, 0.7 + Math.min(0.6, amount / 90));
+  }
+
   private bloodFor(id: number): number {
     const e = this.ctl.game.getEnemy(id);
     return (e && BLOOD[e.enemyKind]) ?? 0xb3221b;
@@ -362,8 +375,15 @@ export class Renderer {
         if (e.result === 'hit') {
           v.onHurt();
           const el: Element = e.element;
-          if (el === 'physical') this.effects.burst(pos, this.bloodFor(e.targetId), 10, 2.4);
-          else this.effects.impact(pos, el as Effect);
+          if (el === 'physical') {
+            const col = this.bloodFor(e.targetId);
+            this.effects.burst(pos, col, 16 + Math.min(14, Math.floor(e.amount / 8)), 2.8);
+            this.effects.burst(pos, col, 6, 1.2, 9, 0.11);
+            this.bleed(e.targetId, col, e.amount);
+          } else {
+            this.effects.impact(pos, el as Effect);
+            if (e.amount > 0 && Math.random() < 0.5) this.bleed(e.targetId, this.bloodFor(e.targetId), e.amount * 0.6);
+          }
           const cls = `dmg el-${el}${e.targetId === me ? ' taken' : ''}`;
           if (e.amount > 0) this.float(e.targetId, String(e.amount), cls);
           if (e.manaShield) this.float(e.targetId, String(e.manaShield), 'mana', 1.1, 0.25);
@@ -444,7 +464,15 @@ export class Renderer {
         if (!v) break;
         v.onDeath();
         const pos = this.chest(e.id);
-        this.effects.burst(pos, this.bloodFor(e.id), 22, 2.8);
+        this.effects.burst(pos, this.bloodFor(e.id), 34, 3.2);
+        {
+          const c = this.ctl.game.getCreature(e.id);
+          if (c) {
+            const col = this.bloodFor(e.id);
+            this.blood.add(c.x, c.y, c.z, col, 1.7, true);
+            for (let i = 0; i < 3; i++) this.blood.add(c.x + (Math.random() - 0.5) * 1.2, c.y + (Math.random() - 0.5) * 1.2, c.z, col, 0.7);
+          }
+        }
         this.effects.burst(pos.setY(v.yOffset + 0.15), 0x8a7a62, 12, 1.4, 2, 0.1);
         break;
       }
@@ -642,6 +670,7 @@ export class Renderer {
   private updateLighting(pz: number): void {
     if (pz === this.lastPz) return;
     this.lastPz = pz;
+    this.blood?.refresh();
     const under = pz < 0;
     (this.scene.background as THREE.Color).copy(under ? this.dark : this.sky);
     this.hemi.intensity = under ? 0.18 : 1.15;
@@ -779,6 +808,7 @@ export class Renderer {
     this.torch.position.set(vp.x, 2.2, vp.y + 0.3);
 
     this.effects.update(dt);
+    this.blood.update(dt);
     this.overlay.update(dt);
     if (this.cam.pixelMode) {
       const a = this.cam.artSize();

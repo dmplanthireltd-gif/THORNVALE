@@ -300,3 +300,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Classic spell list: 54 spells (waves, beams, mass heal, cure poison, invisibility, find person, magic rope, levitate, challenge, illusion, rune conjuring from blank runes), 22 new items (blank rune + 21 runes), rune fields and magic walls, poison condition | 4 | 8 |
 | 2026-10-21 | — | Adventure music (3 original pieces synthesized live: road / town / underground, Music on/off + volume); PvP from level 1 | 4 | 8 |
 | 2026-10-21 | — | Bigger/longer speech text; party system (invite/join/leave/pass leader via right-click, Party panel, no friendly fire) with shared experience (+20%, same floor within 30 tiles, lowest level ≥ 2/3 of highest; leader switches it on/off) | 4 | 9 |
+| 2026-10-21 | — | More blood on hits; blood splats and death pools stay on the floor (dry darker, vanish after 3 min) — `src/render/Blood.ts`, render-only | 4 | 9 |
