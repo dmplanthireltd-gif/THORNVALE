@@ -1775,7 +1775,7 @@ console.log('Premium accounts and founder packs');
   executeCommand(g, b.id, { c: 'cosmetics', cloak: false });
   check(b.player.cloak === '' && b.player.title === 'Legend #027', 'the cloak can be hidden');
   const saved = g.serialize(b.id);
-  check(saved.version === SAVE_VERSION && SAVE_VERSION === 10 && saved.cosmetics?.hideCloak === true, 'save v10 keeps the cloak switch');
+  check(saved.version === SAVE_VERSION && SAVE_VERSION >= 10 && saved.cosmetics?.hideCloak === true, 'save v10 keeps the cloak switch');
   const g2 = new Game({ premium: true, now: () => clock });
   const c2 = g2.addPlayer('Patron', { intent: new BufferedIntent() });
   g2.setPerks(c2.id, { ...NO_PERKS, premiumUntil: clock + DAY, founderTier: 'legend', founderNo: 27 }, true);
@@ -1810,8 +1810,9 @@ console.log('Premium accounts and founder packs');
   check(extendPremium(0, PRODUCTS.founder_warden, pre) === LAUNCH_AT + 180 * DAY, 'founder premium bought in December starts on opening day');
   check(extendPremium(0, PRODUCTS.premium_30, LAUNCH_AT + DAY) === LAUNCH_AT + 31 * DAY, 'premium bought after opening starts at once');
   check(extendPremium(LAUNCH_AT + 60 * DAY, PRODUCTS.premium_90, LAUNCH_AT + DAY) === LAUNCH_AT + 150 * DAY, 'more premium adds on top of what is left');
+}
 
-console.log("Tutorial: Wayfarer's Isle (save v10)");
+console.log("Tutorial: Wayfarer's Isle (save v11)");
 {
   const g = new Game();
   const w = g.world;
@@ -1829,6 +1830,7 @@ console.log("Tutorial: Wayfarer's Isle (save v10)");
   const fromTemple = (() => { const c = w.clone(); for (const k of Object.keys(c.destinations)) if (k === ISLE_DEST) delete c.destinations[k]; return floodFill3D(c); })();
   check(!fromTemple.at(ISLE_START.x, ISLE_START.y, 0), 'the island cannot be walked to from the mainland');
   check(TUTORIAL_STEPS.length === 12 && TUTORIAL_LAST === 12, 'twelve tutorial steps');
+  check(!new Game({ premium: true }).premiumLand(ISLE_START.x, ISLE_START.y), 'the tutorial island is free land (no premium needed)');
 
   // ---- a new character walks the whole island
   const intent = new BufferedIntent();
@@ -2027,18 +2029,18 @@ console.log("Tutorial: Wayfarer's Isle (save v10)");
     check(sk.s.inventory.count('cheese') === 2, 'skipping at step 1 keeps the two cheeses (no extra)');
   }
 
-  // ---- migration v9 → v10 and loading
+  // ---- migration v10 → v11 and loading
   {
     const old = solo('knight');
     old.s.inventory.add('iron_sword', 1);
     old.s.bank = 777;
-    const v9 = JSON.parse(JSON.stringify({ ...old.g.serialize(old.pid), version: 9 })) as Record<string, unknown>;
+    const v9 = JSON.parse(JSON.stringify({ ...old.g.serialize(old.pid), version: 10 })) as Record<string, unknown>;
     delete v9.tutorial;
     const m = migrateSave(v9);
-    check(typeof m !== 'string' && m.from === 9 && m.data.version === SAVE_VERSION && SAVE_VERSION === 10 && m.data.tutorial?.state === 'done', 'a v9 save migrates to v10 as tutorial done');
+    check(typeof m !== 'string' && m.from === 10 && m.data.version === SAVE_VERSION && SAVE_VERSION === 11 && m.data.tutorial?.state === 'done', 'a v10 save migrates to v11 as tutorial done');
     const t3 = solo('knight');
     const x0 = old.s.player.x, y0 = old.s.player.y;
-    check(t3.g.applySave(t3.pid, v9) && t3.s.tutorial.state === 'done' && t3.s.player.x === x0 && t3.s.player.y === y0 && t3.s.bank === 777 && t3.s.inventory.count('iron_sword') === 1, 'a migrated v9 character keeps its place, items and bank');
+    check(t3.g.applySave(t3.pid, v9) && t3.s.tutorial.state === 'done' && t3.s.player.x === x0 && t3.s.player.y === y0 && t3.s.bank === 777 && t3.s.inventory.count('iron_sword') === 1, 'a migrated v10 character keeps its place, items and bank');
     // a finished character saved on the island (e.g. by a test command) is moved off it
     const odd = { ...old.g.serialize(old.pid), player: { ...old.g.serialize(old.pid).player, x: ISLE_START.x, y: ISLE_START.y, z: 0 } };
     const t4 = solo('knight');
