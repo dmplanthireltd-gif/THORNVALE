@@ -53,7 +53,9 @@ const SUPABASE_URL = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
 const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? '';
 const EMAIL_AUTH = !!(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
 const MAX_CHARACTERS_PER_ACCOUNT = Number(process.env.MAX_CHARACTERS ?? 5);
-const ADMINS = new Set((process.env.ADMINS ?? '').split(',').map((n) => n.trim().toLowerCase()).filter(Boolean));
+/** Game masters: the owner's characters (always) plus any names in the ADMINS env var. */
+const OWNER_CHARACTERS = ['ouriolis'];
+const ADMINS = new Set([...OWNER_CHARACTERS, ...(process.env.ADMINS ?? '').split(',')].map((n) => n.trim().toLowerCase()).filter(Boolean));
 
 // ------------------------------------------------------------------ storage and accounts
 
