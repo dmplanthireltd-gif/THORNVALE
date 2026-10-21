@@ -1,5 +1,6 @@
 import type { WeaponType } from '../inventory/items';
 import type { Vocation } from './vocations';
+import { NONCOMBAT_SKILLS, type NonCombatSkill } from '../gathering/skills';
 
 /**
  * Combat skills in the classic style: every swing trains the skill of the
@@ -17,9 +18,11 @@ import type { Vocation } from './vocations';
 export type CombatSkill = 'fist' | 'club' | 'sword' | 'axe' | 'distance' | 'shielding' | 'magic';
 export const COMBAT_SKILLS: CombatSkill[] = ['fist', 'club', 'sword', 'axe', 'distance', 'shielding', 'magic'];
 
-export const SKILL_NAMES: Record<CombatSkill | 'woodcutting' | 'fishing', string> = {
+/** Display names of every skill: combat here, non-combat from the registry in gathering/skills.ts. */
+export const SKILL_NAMES: Record<CombatSkill | NonCombatSkill, string> = {
   fist: 'Fist Fighting', club: 'Club Fighting', sword: 'Sword Fighting', axe: 'Axe Fighting', distance: 'Distance Fighting',
-  shielding: 'Shielding', magic: 'Magic Level', woodcutting: 'Woodcutting', fishing: 'Fishing',
+  shielding: 'Shielding', magic: 'Magic Level',
+  ...(Object.fromEntries(NONCOMBAT_SKILLS.map((d) => [d.id, d.name])) as Record<NonCombatSkill, string>),
 };
 
 export interface SkillProgress {

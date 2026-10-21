@@ -3,6 +3,7 @@ import { ITEMS, type ItemDef } from './inventory/items';
 import { SPELL_LIST } from './magic/spells';
 import { expForLevel } from './player/Player';
 import { gatherXpForLevel, WC_MAX_LEVEL } from './gathering/woodcutting';
+import { findNonCombatSkill, NONCOMBAT_IDS, skillDef, type NonCombatSkill } from './gathering/skills';
 import { COMBAT_SKILLS, legacySkills, MAGIC_START, SKILL_MAX, SKILL_NAMES, SKILL_START, type CombatSkill } from './player/skills';
 import { isVocation, VOCATIONS } from './player/vocations';
 
@@ -24,14 +25,19 @@ export const ADMIN_HELP = [
   '/kill — kill your current target (full admins only, not in test mode)',
   '/goto place — teleport to a place (e.g. /goto caldera) or /goto x y z',
   '/vocation name — change vocation',
-  '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing); also /fishing N',
+  '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing); also /fishing N, /mining N, /smithing N',
 ];
 
 /** Short names accepted by /skill. */
-const SKILL_ALIASES: Record<string, CombatSkill | 'woodcutting' | 'fishing'> = {
+const SKILL_ALIASES: Record<string, CombatSkill> = {
   fist: 'fist', club: 'club', sword: 'sword', axe: 'axe', distance: 'distance', dist: 'distance', shielding: 'shielding', shield: 'shielding',
-  magic: 'magic', ml: 'magic', mlvl: 'magic', woodcutting: 'woodcutting', wc: 'woodcutting', wood: 'woodcutting', fishing: 'fishing', fish: 'fishing',
+  magic: 'magic', ml: 'magic', mlvl: 'magic',
 };
+
+/** A combat skill or a non-combat skill (gathering/skills.ts) by name or alias. */
+function findSkill(q: string): CombatSkill | NonCombatSkill | null {
+  return SKILL_ALIASES[q.toLowerCase()] ?? findNonCombatSkill(q);
+}
 
 export function findItem(query: string): ItemDef | null | ItemDef[] {
   const q = query.trim().toLowerCase();
@@ -210,21 +216,25 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
     }
     case 'fishing':
     case 'woodcutting':
+    case 'mining':
+    case 'smithing':
     case 'skill':
     case 'skills': {
       // "/fishing 30" is short for "/skill fishing 30"
-      if (cmd === 'fishing' || cmd === 'woodcutting') rest.unshift(cmd);
-      const which = SKILL_ALIASES[(rest[0] ?? '').toLowerCase()];
-      if (!which) return say(`Skills: ${[...COMBAT_SKILLS, 'woodcutting', 'fishing'].join(', ')}. Example: /skill sword 50`, 'warn');
-      if (which === 'woodcutting' || which === 'fishing') {
+      if (cmd !== 'skill' && cmd !== 'skills') rest.unshift(cmd);
+      const which = findSkill(rest[0] ?? '');
+      if (!which) return say(`Skills: ${[...COMBAT_SKILLS, ...NONCOMBAT_IDS].join(', ')}. Example: /skill sword 50`, 'warn');
+      if ((NONCOMBAT_IDS as string[]).includes(which)) {
+        const id = which as NonCombatSkill;
         const lvl = Math.max(1, Math.min(WC_MAX_LEVEL, num(rest[1], 1)));
-        s[which] = gatherXpForLevel(lvl);
-        say(`${which === 'fishing' ? 'Fishing' : 'Woodcutting'} is now level ${lvl}.`);
+        s.gathering[id] = gatherXpForLevel(lvl);
+        say(`${skillDef(id).name} is now level ${lvl}.`);
       } else {
-        const min = which === 'magic' ? MAGIC_START : SKILL_START;
+        const k = which as CombatSkill;
+        const min = k === 'magic' ? MAGIC_START : SKILL_START;
         const lvl = Math.max(min, Math.min(SKILL_MAX, num(rest[1], min)));
-        s.skills[which] = { level: lvl, tries: 0 };
-        say(`${SKILL_NAMES[which]} is now ${lvl}.`);
+        s.skills[k] = { level: lvl, tries: 0 };
+        say(`${SKILL_NAMES[k]} is now ${lvl}.`);
       }
       game.events.emit({ type: 'skillUp', skill: which, level: 0, to: pid });
       game.refreshStats(s);

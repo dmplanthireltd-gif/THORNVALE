@@ -568,11 +568,15 @@ export const HELMETS: Record<string, HelmLook> = {
   winged_helmet: { color: 0xd8dde6, shape: 'winged', trim: 0xf0f0f0 },
   frost_circlet: { color: 0xbfe6f5, shape: 'circlet', trim: 0x6ac8ff },
   frost_helm: { color: 0xbfe6f5, shape: 'crested', trim: 0x5a8ab0 },
+  steel_helmet: { color: 0xc9d0da, shape: 'helm', trim: 0x4a4e56 },
+  starsteel_helm: { color: 0x5a8ad8, shape: 'crested', trim: 0xc9d0da },
+  darkstone_helm: { color: 0x4a2a5a, shape: 'horned', trim: 0x8a6aa0 },
 };
 
 export const LEGS: Record<string, number> = {
   fur_legs: 0xd8ccb4, dwarven_legs: 0xb08a4a, frost_legs: 0xbfe6f5,
   leather_legs: 0x8a5a32, chain_legs: 0xa9b2bf, plate_legs: 0xd4dae4, elven_leggings: 0x9ad0a0, hydra_legs: 0x2f7a5a, demon_legs: 0x7a1a1a,
+  iron_legs: 0x9aa0aa, starsteel_legs: 0x5a8ad8, darkstone_legs: 0x4a2a5a,
 };
 
 export const BOOTS: Record<string, number> = {

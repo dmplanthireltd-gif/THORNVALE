@@ -25,6 +25,9 @@ import { rollMelee } from '../src/game/combat/combat';
 import { gatherLevelForXp, gatherXpForLevel, TREES } from '../src/game/gathering/woodcutting';
 import { biteChance, FISH, FISH_ITEMS, FISH_RANGE, fishFor, isColdWater, isFishingWater } from '../src/game/gathering/fishing';
 import { MARKET_OFFER_MS, type MarketChange } from '../src/game/market/market';
+import { mineChance, ORES, oreAt, rollGem } from '../src/game/gathering/mining';
+import { recipeById, recipeChance } from '../src/game/production/recipes';
+import type { MirrorExtras } from '../src/game/net/protocol';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -1049,20 +1052,20 @@ console.log('\nSkills (classic: trained by use)');
   g.say(pid, '/skill axe 55');
   g.say(pid, '/skill ml 7');
   g.say(pid, '/skill wc 30');
-  check(s.skills.axe.level === 55 && s.skills.magic.level === 7 && gatherLevelForXp(s.woodcutting) === 30, '/skill sets combat skills, magic level and woodcutting');
+  check(s.skills.axe.level === 55 && s.skills.magic.level === 7 && gatherLevelForXp(s.gathering.woodcutting) === 30, '/skill sets combat skills, magic level and woodcutting');
   g.say(pid, '/help');
   check(msgs.some((t) => t.startsWith('/skill')), '/help lists /skill');
 
   // save, load and the snapshot (own player only)
   const data = g.serialize(pid);
   const t2 = solo('knight');
-  check(t2.g.applySave(t2.pid, data) && t2.s.skills.axe.level === 55 && t2.s.skills.sword.level === s.skills.sword.level && t2.s.skills.sword.tries === s.skills.sword.tries && t2.s.woodcutting === s.woodcutting, 'skills and woodcutting survive save and load');
+  check(t2.g.applySave(t2.pid, data) && t2.s.skills.axe.level === 55 && t2.s.skills.sword.level === s.skills.sword.level && t2.s.skills.sword.tries === s.skills.sword.tries && t2.s.gathering.woodcutting === s.gathering.woodcutting, 'skills and woodcutting survive save and load');
   const snap = buildSnapshot(g, s);
   const mirror = new Game({ simulate: false });
   if (snap.t === 'snap') {
     applySnapshot(mirror, snap);
     const ms = mirror.session(pid)!;
-    check(ms.skills.axe.level === 55 && ms.skills.magic.level === 7 && ms.woodcutting === s.woodcutting, 'skills reach the client in the snapshot');
+    check(ms.skills.axe.level === 55 && ms.skills.magic.level === 7 && ms.gathering.woodcutting === s.gathering.woodcutting, 'skills reach the client in the snapshot');
     const other = snap.c.find((c) => c.id === pid) as unknown as Record<string, unknown>;
     check(other && !('skills' in other), 'skills are only sent for your own character');
   }
@@ -1085,7 +1088,7 @@ console.log('Skills migration (save v4 → v5)');
   check(typeof m1 !== 'string' && m1.from === 4 && m1.data.version === SAVE_VERSION, 'a v4 save migrates');
   const k1 = solo('knight');
   k1.g.applySave(k1.pid, old('knight', 1));
-  check(k1.s.skills.sword.level === 10 && k1.s.skills.magic.level === 0 && k1.s.woodcutting === 0, 'level 1: starting skills');
+  check(k1.s.skills.sword.level === 10 && k1.s.skills.magic.level === 0 && k1.s.gathering.woodcutting === 0, 'level 1: starting skills');
   for (const [voc, lvl] of [['knight', 100], ['paladin', 80], ['sorcerer', 60], ['druid', 120], ['knight', 8]] as Array<[Vocation, number]>) {
     const t = solo(voc);
     t.g.applySave(t.pid, old(voc, lvl));
@@ -1131,7 +1134,7 @@ console.log('Woodcutting');
   g.events.on((e) => { if (e.type === 'chop' && e.id === pid) chops.push(e.got); });
   executeCommand(g, pid, { c: 'useTile', x: t.x, y: t.y });
   run(g, 120, () => s.inventory.count('logs') > 0);
-  check(s.inventory.count('logs') === 1 && s.woodcutting === TREES[Obj.Tree]!.xp, `chopping gives logs and woodcutting experience (${chops.length} chops, ${s.woodcutting} xp)`);
+  check(s.inventory.count('logs') === 1 && s.gathering.woodcutting === TREES[Obj.Tree]!.xp, `chopping gives logs and woodcutting experience (${chops.length} chops, ${s.gathering.woodcutting} xp)`);
   check(w.getObj(t.x, t.y, 0) === Obj.Stump && !w.isWalkable(t.x, t.y, 0) && g.stumpOrigin(t.x, t.y, 0) === Obj.Tree && p.chop === null, 'the tree falls and leaves a stump');
   // the stump is synced to clients near it
   const snap = buildSnapshot(g, s);
@@ -1163,10 +1166,10 @@ console.log('Woodcutting');
   executeCommand(g, pid, { c: 'useTile', x: pine.x, y: pine.y });
   run(g, 0.5);
   check(msgs.some((m) => m === 'You need woodcutting level 15 to chop a pine.') && p.chop === null, 'pines need woodcutting level 15');
-  s.woodcutting = gatherXpForLevel(15);
+  s.gathering.woodcutting = gatherXpForLevel(15);
   executeCommand(g, pid, { c: 'useTile', x: pine.x, y: pine.y });
   run(g, 200, () => s.inventory.count('pine_logs') > 0);
-  check(s.inventory.count('pine_logs') >= 1 && s.woodcutting === gatherXpForLevel(15) + TREES[Obj.Pine]!.xp, 'at level 15 pines give pine logs');
+  check(s.inventory.count('pine_logs') >= 1 && s.gathering.woodcutting === gatherXpForLevel(15) + TREES[Obj.Pine]!.xp, 'at level 15 pines give pine logs');
   check(TREES[Obj.JungleTree]!.level === 35 && TREES[Obj.Palm]!.level === 25 && TREES[Obj.JungleTree]!.log === 'teak_logs', 'teak (35) and palm (25) tiers');
   // attacking stops chopping
   executeCommand(g, pid, { c: 'useTile', x: pine.x, y: pine.y });
@@ -1239,12 +1242,12 @@ console.log('Fishing');
   run(g, 0.2);
   check(p.fish !== null && p.x === sh.x && p.y === sh.y, 'fishing starts without walking');
   run(g, 200, () => caught() > 0);
-  check(s.inventory.count('fish') === 1 && s.fishing >= FISH[0].xp && casts.length > 0, `fishing gives fish and fishing experience (${casts.length} casts, ${s.fishing} xp)`);
+  check(s.inventory.count('fish') === 1 && s.gathering.fishing >= FISH[0].xp && casts.length > 0, `fishing gives fish and fishing experience (${casts.length} casts, ${s.gathering.fishing} xp)`);
   check(p.fish !== null, 'you keep fishing after a catch');
   // level gate: many casts at level 1 in deep water never land anything better than small fish
   g.teleport(p, dp.x, dp.y, 0);
   clearFoes();
-  s.fishing = 0;
+  s.gathering.fishing = 0;
   for (const id of FISH_ITEMS) s.inventory.removeById(id, s.inventory.count(id));
   s.inventory.removeById('old_boot', s.inventory.count('old_boot'));
   p.capacity = 1e6;
@@ -1252,7 +1255,7 @@ console.log('Fishing');
   run(g, 240, () => s.inventory.count('fish') >= 6);
   check(s.inventory.count('fish') >= 1 && FISH_ITEMS.slice(1).every((id) => s.inventory.count(id) === 0), `no swordfish (or any better fish) at level 1 (${s.inventory.count('fish')} small fish)`);
   // at level 50 in deep water swordfish bite
-  s.fishing = gatherXpForLevel(50);
+  s.gathering.fishing = gatherXpForLevel(50);
   for (const id of FISH_ITEMS) s.inventory.removeById(id, s.inventory.count(id));
   g.teleport(p, dp.x, dp.y, 0);
   clearFoes();
@@ -1300,20 +1303,20 @@ console.log('Fishing');
   g.say(pid, '/fishing 42');
   check(g.fishingLevel(s) === 42, '/fishing N sets fishing');
   const data = g.serialize(pid);
-  check(data.version === SAVE_VERSION && SAVE_VERSION === 7 && data.gathering?.fishing === s.fishing, 'saves carry fishing experience (save v7)');
+  check(data.version === SAVE_VERSION && SAVE_VERSION >= 7 && data.gathering?.fishing === s.gathering.fishing, 'saves carry fishing experience (save v7)');
   const t2 = solo('knight');
-  check(t2.g.applySave(t2.pid, data) && t2.s.fishing === s.fishing && t2.s.woodcutting === s.woodcutting, 'fishing survives save and load');
+  check(t2.g.applySave(t2.pid, data) && t2.s.gathering.fishing === s.gathering.fishing && t2.s.gathering.woodcutting === s.gathering.woodcutting, 'fishing survives save and load');
   const v6 = JSON.parse(JSON.stringify({ ...data, version: 6, gathering: { woodcutting: 1234 } })) as Record<string, unknown>;
   const mig = migrateSave(v6);
-  check(typeof mig !== 'string' && mig.from === 6 && mig.data.version === 7 && mig.data.gathering?.fishing === 0 && mig.data.gathering?.woodcutting === 1234, 'a v6 save migrates: fishing 0, woodcutting kept');
+  check(typeof mig !== 'string' && mig.from === 6 && mig.data.version === SAVE_VERSION && mig.data.gathering?.fishing === 0 && mig.data.gathering?.woodcutting === 1234, 'a v6 save migrates: fishing 0, woodcutting kept');
   const t3 = solo('knight');
-  check(t3.g.applySave(t3.pid, v6) && t3.s.fishing === 0 && t3.s.woodcutting === 1234 && t3.s.inventory.count('fishing_rod') === s.inventory.count('fishing_rod'), 'a migrated v6 character loads with its items and woodcutting');
+  check(t3.g.applySave(t3.pid, v6) && t3.s.gathering.fishing === 0 && t3.s.gathering.woodcutting === 1234 && t3.s.inventory.count('fishing_rod') === s.inventory.count('fishing_rod'), 'a migrated v6 character loads with its items and woodcutting');
   const snap = buildSnapshot(g, s);
   const mirror = new Game({ simulate: false });
   if (snap.t === 'snap') {
-    check(snap.self.fx === Math.floor(s.fishing), 'the snapshot carries fishing (fx)');
+    check(snap.self.gx?.fishing === Math.floor(s.gathering.fishing), 'the snapshot carries fishing (gx)');
     applySnapshot(mirror, snap);
-    check(mirror.session(pid)!.fishing === Math.floor(s.fishing), 'clients get fishing experience');
+    check(mirror.session(pid)!.gathering.fishing === Math.floor(s.gathering.fishing), 'clients get fishing experience');
   }
   // harbour captains buy the catch
   const captain = g.npcs.find((n) => NPCS[n.key]?.role === 'Ship captain')!;
@@ -1490,6 +1493,178 @@ console.log('Game master warnings');
   gm.testOnly = false;
   g.say(gm.id, '/warn Oscar, This is a warning from the Admin for corrupt behaviour.');
   check(got.length === 1 && got[0].includes('corrupt behaviour') && got[0].startsWith('Warning from the Admin'), 'a game master warning pops up for that player');
+}
+
+console.log('Mining and blacksmithing');
+{
+  const { g, s, pid } = solo('knight');
+  const p = s.player;
+  const w = g.world;
+  p.god = true;
+  s.admin = true;
+  const msgs: string[] = [];
+  g.events.on((e) => { if (e.type === 'message' && e.to === pid) msgs.push(e.text); });
+  g.localId = pid;
+  /** An object of this kind with a free tile beside it (z any). */
+  const findObj = (o: Obj, zs = [0, -1, -2, -3]): { x: number; y: number; z: number; sx: number; sy: number } | null => {
+    for (const z of zs) for (let y = 2; y < w.height - 2; y++) for (let x = 2; x < w.width - 2; x++) {
+      if (w.getObj(x, y, z) !== o) continue;
+      for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
+        if (w.isWalkable(x + dx, y + dy, z) && !w.linkAt(x + dx, y + dy, z) && !g.isOccupied(x + dx, y + dy, z)) return { x, y, z, sx: x + dx, sy: y + dy };
+      }
+    }
+    return null;
+  };
+  const go = (t: { z: number; sx: number; sy: number }) => {
+    g.teleport(p, t.sx, t.sy, t.z);
+    for (const e of g.enemies) if (!e.dead && e.z === t.z && Math.abs(e.x - p.x) < 14 && Math.abs(e.y - p.y) < 14) { e.dead = true; e.respawnTimer = 1e9; }
+  };
+  const copper = findObj(Obj.CopperRock, [0])!;
+  check(!!copper, 'copper rocks exist on the surface');
+  go(copper);
+  executeCommand(g, pid, { c: 'useTile', x: copper.x, y: copper.y });
+  run(g, 0.5);
+  check(msgs.some((m) => m.startsWith('You need a pickaxe')) && p.mine === null, 'no pickaxe, no mining');
+  check(!g.isUsable(copper.x, copper.y, copper.z), 'without a pickaxe an ore rock is not usable');
+  s.inventory.add('bronze_pickaxe', 1);
+  check(g.isUsable(copper.x, copper.y, copper.z), 'with a pickaxe ore rocks can be used (mined)');
+  const swings: GameEvent[] = [];
+  g.events.on((e) => { if (e.type === 'mine' && e.id === pid) swings.push(e); });
+  executeCommand(g, pid, { c: 'useTile', x: copper.x, y: copper.y });
+  run(g, 120, () => s.inventory.count('copper_ore') > 0);
+  const copperDef = ORES.find((o) => o.obj === Obj.CopperRock)!;
+  check(s.inventory.count('copper_ore') === 1 && s.gathering.mining === copperDef.xp, `mining gives ore and mining experience (${swings.length} swings, ${s.gathering.mining} xp)`);
+  check(w.getObj(copper.x, copper.y, copper.z) === Obj.DepletedRock && !w.isWalkable(copper.x, copper.y, copper.z) && g.stumpOrigin(copper.x, copper.y, copper.z) === Obj.CopperRock && p.mine === null, 'the rock is mined out (rubble) and mining stops');
+  const snap = buildSnapshot(g, s);
+  const mirror = new Game({ simulate: false });
+  if (snap.t === 'snap') {
+    check(!!snap.st?.includes(`${copper.x},${copper.y},${copper.z}`), 'the snapshot lists mined-out rocks nearby');
+    applySnapshot(mirror, snap);
+    check(mirror.world.getObj(copper.x, copper.y, copper.z) === Obj.DepletedRock && mirror.stumpOrigin(copper.x, copper.y, copper.z) === Obj.CopperRock, 'clients show the rubble');
+    check(snap.self.gx?.mining === Math.floor(s.gathering.mining) && mirror.session(pid)!.gathering.mining === Math.floor(s.gathering.mining), 'clients get mining experience (gx)');
+  }
+  executeCommand(g, pid, { c: 'useTile', x: copper.x, y: copper.y });
+  run(g, 0.3);
+  check(msgs.some((m) => m.startsWith('There is no ore left')), 'rubble cannot be mined');
+  run(g, copperDef.respawn[1] + 1, () => w.getObj(copper.x, copper.y, copper.z) === Obj.CopperRock);
+  check(w.getObj(copper.x, copper.y, copper.z) === Obj.CopperRock, 'the rock fills with ore again');
+  const snap2 = buildSnapshot(g, s);
+  if (snap2.t === 'snap') {
+    applySnapshot(mirror, snap2);
+    check(mirror.world.getObj(copper.x, copper.y, copper.z) === Obj.CopperRock, 'clients see it refill');
+  }
+  // walking stops mining
+  executeCommand(g, pid, { c: 'useTile', x: copper.x, y: copper.y });
+  run(g, 0.3);
+  check(p.mine !== null, 'mining again');
+  executeCommand(g, pid, { c: 'moveTo', x: p.x + (p.x - copper.x || 1) * 3, y: p.y + (p.y - copper.y) * 3 });
+  run(g, 0.3);
+  check(p.mine === null, 'walking away stops mining');
+  // level gates
+  const iron = findObj(Obj.IronRock)!;
+  go(iron);
+  msgs.length = 0;
+  executeCommand(g, pid, { c: 'useTile', x: iron.x, y: iron.y });
+  run(g, 0.5);
+  check(msgs.includes('You need mining level 15 to mine a iron rock.') || msgs.some((m) => m.startsWith('You need mining level 15')), 'iron needs mining level 15');
+  check(p.mine === null, 'and nothing is mined below it');
+  g.say(pid, '/mining 15');
+  check(g.miningLevel(s) === 15, '/mining N sets mining');
+  executeCommand(g, pid, { c: 'useTile', x: iron.x, y: iron.y });
+  run(g, 200, () => s.inventory.count('iron_ore') > 0);
+  check(s.inventory.count('iron_ore') >= 1, 'at mining 15 iron rocks give iron ore');
+  // pickaxes have their own level
+  s.inventory.removeById('bronze_pickaxe', 9);
+  s.inventory.add('starsteel_pickaxe', 1);
+  g.say(pid, '/skill mining 1');
+  check(g.miningLevel(s) === 1 && g.bestPickaxe(s) === null, '/skill mining N works; a starsteel pickaxe needs mining 45');
+  s.inventory.add('bronze_pickaxe', 1);
+  g.say(pid, '/skill mining 45');
+  check(g.bestPickaxe(s)?.item === 'starsteel_pickaxe', 'the best usable pickaxe is used');
+  check(mineChance(30, ORES[2], 4) > mineChance(30, ORES[2], 1) && mineChance(60, ORES[2], 1) > mineChance(20, ORES[2], 1), 'better pickaxes and higher levels mine faster');
+  check(ORES.map((o) => o.level).join() === '1,1,15,30,40,50,60,75', 'ore levels 1, 1, 15, 30, 40, 50, 60, 75');
+  check(rollGem(() => 0) === 'small_sapphire' && rollGem(() => 0.999) === 'small_diamond', 'gems can come out of rocks');
+  check(oreAt(Obj.DarkstoneRock)?.ore === 'darkstone_ore' && oreAt(Obj.Rock) === null, 'plain boulders hold no ore');
+
+  // ---- smelting at a furnace
+  const furnace = findObj(Obj.Furnace, [0])!;
+  check(!!furnace, 'furnaces exist in smithies');
+  go(furnace);
+  executeCommand(g, pid, { c: 'useTile', x: furnace.x, y: furnace.y });
+  run(g, 0.5);
+  const fv = g.craftView(pid);
+  check(fv?.station === 'furnace' && fv.recipes.some((r) => r.id === 'smelt:bronze_bar'), 'using a furnace opens the smelting window');
+  const extras: MirrorExtras = { depot: null, trade: null, market: null, craft: null };
+  const snap3 = buildSnapshot(g, s);
+  if (snap3.t === 'snap') {
+    check(snap3.self.cw?.station === 'furnace', 'the snapshot carries the station window (cw)');
+    const m2 = new Game({ simulate: false });
+    applySnapshot(m2, snap3, extras);
+    check(extras.craft?.station === 'furnace' && extras.craft.recipes.length > 5, 'clients get the station window');
+    const again = buildSnapshot(g, s);
+    check(again.t === 'snap' && again.self.cw === undefined, 'an unchanged window is not sent again');
+  }
+  s.inventory.removeById('copper_ore', 99);
+  s.inventory.add('copper_ore', 3);
+  s.inventory.add('tin_ore', 3);
+  const smithXp0 = s.gathering.smithing;
+  executeCommand(g, pid, { c: 'craft', recipe: 'smelt:bronze_bar', count: 3 });
+  check(p.craft?.left === 3, 'Make 3 starts a batch');
+  run(g, 20, () => p.craft === null);
+  check(s.inventory.count('bronze_bar') === 3 && s.inventory.count('copper_ore') === 0 && s.inventory.count('tin_ore') === 0, 'smelting uses copper and tin and gives bronze bars');
+  check(s.gathering.smithing === smithXp0 + 3 * recipeById('smelt:bronze_bar')!.xp, 'smelting gives blacksmithing experience');
+  s.inventory.add('iron_ore', 2);
+  s.inventory.add('coal', 4);
+  msgs.length = 0;
+  executeCommand(g, pid, { c: 'craft', recipe: 'smelt:steel_bar', count: 1 });
+  check(p.craft === null && msgs.some((m) => m.startsWith('You need blacksmithing level 30')), 'steel needs blacksmithing level 30');
+  check(recipeChance(recipeById('smelt:iron_bar')!, 15) === 0.5 && recipeChance(recipeById('smelt:iron_bar')!, 40) === 1, 'iron smelting can fail at low level');
+  executeCommand(g, pid, { c: 'craftClose' });
+  check(g.craftView(pid) === null, 'the window closes');
+
+  // ---- smithing at an anvil
+  const anvil = findObj(Obj.Anvil, [0])!;
+  check(!!anvil && chebyshev(anvil.x, anvil.y, furnace.x, furnace.y) <= 6, 'every furnace has an anvil nearby');
+  go(anvil);
+  msgs.length = 0;
+  executeCommand(g, pid, { c: 'useTile', x: anvil.x, y: anvil.y });
+  run(g, 0.5);
+  check(g.craftView(pid)?.station === 'anvil' && msgs.some((m) => m.includes("smith's hammer")), 'the anvil opens and asks for a hammer');
+  executeCommand(g, pid, { c: 'craft', recipe: 'smith:short_sword', count: 1 });
+  check(p.craft === null, 'no hammer, no smithing');
+  s.inventory.add('smithing_hammer', 1);
+  const swords0 = s.inventory.count('short_sword');
+  const xp1 = s.gathering.smithing;
+  g.say(pid, '/smithing 10');
+  check(g.skillLevel(s, 'smithing') === 10, '/smithing N sets blacksmithing');
+  const xp10 = s.gathering.smithing;
+  executeCommand(g, pid, { c: 'craft', recipe: 'smith:short_sword', count: 1 });
+  run(g, 10, () => p.craft === null);
+  check(s.inventory.count('short_sword') === swords0 + 1 && s.inventory.count('bronze_bar') === 1, 'smithing two bronze bars makes a short sword');
+  check(s.gathering.smithing === xp10 + recipeById('smith:short_sword')!.xp && xp10 > xp1, 'smithing gives blacksmithing experience');
+  s.inventory.add('iron_bar', 4);
+  msgs.length = 0;
+  executeCommand(g, pid, { c: 'craft', recipe: 'smith:iron_sword', count: 1 });
+  check(p.craft === null && s.inventory.count('iron_bar') === 4 && msgs.some((m) => m.startsWith('You need blacksmithing level 21')), 'iron swords need blacksmithing 21');
+  // making many, interrupted by walking
+  s.inventory.add('bronze_bar', 4);
+  executeCommand(g, pid, { c: 'craft', recipe: 'smith:bronze_dagger', count: 5 });
+  run(g, 3, () => s.inventory.count('bronze_dagger') >= 1);
+  check(s.inventory.count('bronze_dagger') === 1 && p.craft?.left === 4, 'Make X goes on one item at a time');
+  executeCommand(g, pid, { c: 'moveTo', x: p.x + (p.x - anvil.x || 1) * 3, y: p.y + (p.y - anvil.y) * 3 });
+  run(g, 3);
+  check(p.craft === null && g.craftView(pid) === null && s.inventory.count('bronze_dagger') === 1, 'walking away stops the work and closes the window');
+
+  // ---- save, load and migration
+  const data = g.serialize(pid);
+  check(SAVE_VERSION === 8 && data.version === 8 && data.gathering?.mining === s.gathering.mining && data.gathering?.smithing === s.gathering.smithing, 'saves carry mining and blacksmithing (save v8)');
+  const t2 = solo('knight');
+  check(t2.g.applySave(t2.pid, data) && t2.s.gathering.mining === s.gathering.mining && t2.s.gathering.smithing === s.gathering.smithing && t2.s.inventory.count('bronze_dagger') === 1, 'mining and blacksmithing survive save and load');
+  const v7 = JSON.parse(JSON.stringify({ ...data, version: 7, gathering: { woodcutting: 4321, fishing: 777 } })) as Record<string, unknown>;
+  const mig = migrateSave(v7);
+  check(typeof mig !== 'string' && mig.from === 7 && mig.data.version === 8 && mig.data.gathering?.mining === 0 && mig.data.gathering?.smithing === 0 && mig.data.gathering?.woodcutting === 4321 && mig.data.gathering?.fishing === 777, 'a v7 save migrates: mining and blacksmithing 0, woodcutting and fishing kept');
+  const t3 = solo('knight');
+  check(t3.g.applySave(t3.pid, v7) && t3.s.gathering.mining === 0 && t3.s.gathering.woodcutting === 4321 && t3.s.inventory.count('starsteel_pickaxe') === 1, 'a migrated v7 character loads with its items and skills');
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);

@@ -22,6 +22,9 @@ import { Overlay } from './Overlay';
 import { PixelPass } from './PixelPass';
 import { WorldView } from './WorldView';
 import { Blood } from './Blood';
+import { playSkillFx } from './skillFx';
+import { oreAt } from '../game/gathering/mining';
+import { stationAt } from '../game/production/recipes';
 import { Obj, WorldMap, type EnemyKind } from '../game/world/WorldMap';
 
 export type PickResult =
@@ -522,6 +525,14 @@ export class Renderer {
         }
         break;
       }
+      case 'mine':
+      case 'craft':
+        // mining and blacksmithing visuals live in skillFx.ts
+        playSkillFx({
+          effects: this.effects, world: this.ctl.game.world, floorOffset: (z) => this.worldView.floorOffset(z),
+          near: (x, y) => chebyshev(x, y, this.me.x, this.me.y) <= VIEW_RANGE + 2, swing: (id) => this.visibleView(id)?.onAttack(),
+        }, e);
+        break;
       case 'levelUp': {
         const v = this.visibleView(e.id);
         if (!v) break;
@@ -688,6 +699,11 @@ export class Renderer {
       if (tree) return `A ${tree.name}${tree.level > 1 ? ` (woodcutting ${tree.level})` : ''}${h.usable ? ' — click to chop' : ''}`;
       if (o === Obj.Stump) return 'A tree stump. It will grow back.';
       if (o === Obj.MarketBoard) return 'Market board — buy from and sell to other players';
+      const ore = oreAt(o);
+      if (ore) return `A ${ore.name}${ore.level > 1 ? ` (mining ${ore.level})` : ''}${h.usable ? ' — click to mine' : ''}`;
+      if (o === Obj.DepletedRock) return 'A mined-out rock. The ore will come back.';
+      const st = stationAt(o);
+      if (st) return st.id === 'furnace' ? 'A furnace — smelt ore into bars' : "An anvil — smith bars into gear (needs a smith's hammer)";
       if (h.usable && isFishingWater(g.world, h.x, h.y, this.me.z)) return 'Water — click to fish';
       return '';
     }

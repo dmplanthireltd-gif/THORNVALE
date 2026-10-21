@@ -476,6 +476,11 @@ select.text-input { flex: 1; }
 .market-pick { grid-template-columns: repeat(auto-fill, 50px); justify-content: start; max-height: 240px; overflow-y: auto; }
 .market-form { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: rgba(0, 0, 0, 0.2); }
 .num-input.qty { width: 64px; }
+/* station window (furnace, anvil) */
+.craft-win { width: 460px; }
+.craft-list { max-height: 360px; }
+.craft-making { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 6px; background: rgba(79, 191, 90, 0.15); color: #7dff8a; font: 700 12px var(--pixel); }
+.shop-row.locked { opacity: 0.5; }
 .friend-row { display: flex; align-items: center; gap: 6px; padding: 4px; background: rgba(0,0,0,0.25); margin-bottom: 2px; }
 .friend-row .friend-name { flex: 1; font: 700 12px var(--pixel); color: #9a948c; }
 .friend-row.online .friend-name { color: #7dff8a; }

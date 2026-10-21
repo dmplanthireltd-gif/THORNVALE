@@ -12,6 +12,8 @@ import { VOCATIONS } from '../game/player/vocations';
 import { COMBAT_SKILLS, SKILL_NAMES, skillProgress, triesForNext } from '../game/player/skills';
 import { gatherLevelForXp, gatherProgress, gatherXpForLevel, WC_MAX_LEVEL } from '../game/gathering/woodcutting';
 import { marketFee, MARKET_MAX_PRICE, type MarketView } from '../game/market/market';
+import { NONCOMBAT_SKILLS } from '../game/gathering/skills';
+import { MAX_BATCH, type CraftView } from '../game/production/recipes';
 import { Obj } from '../game/world/WorldMap';
 import { QUESTS } from '../game/quests/quests';
 import { hpColor } from '../render/Overlay';
@@ -113,7 +115,9 @@ export class HUD {
   private battleTimer = 0;
   private worldMap!: WorldMapView;
   private lastRegion = '';
-  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev' | 'inspect' | 'friends', Win> = {} as never;
+  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'craft' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev' | 'inspect' | 'friends', Win> = {} as never;
+  /** Station window state that survives redraws: chosen tab (metal) and the "Make X" amount. */
+  private cw = { tab: '', qty: 10, station: '' };
   private skillsEl!: HTMLDivElement;
   private skillsKey = '';
   private skillsTimer = 0;
@@ -190,6 +194,7 @@ export class HUD {
         this.renderHotbar();
         if (this.wins.dialog.open) this.renderDialog();
         if (this.wins.trade.open) this.renderTrade();
+        if (this.wins.craft.open) this.renderCraft();
         break;
       case 'equipmentChanged':
         if (e.id === me) this.renderInventory();
@@ -214,6 +219,9 @@ export class HUD {
       case 'marketChanged':
         if (e.to === me) this.renderMarket();
         break;
+      case 'craftChanged':
+        if (e.to === me) this.renderCraft();
+        break;
       case 'skillUp':
         if (e.to === me) this.skillsKey = '';
         break;
@@ -229,7 +237,8 @@ export class HUD {
       case 'tileChanged': {
         // felled and regrowing trees do not change the map enough to redraw a whole floor
         const o = this.ctl.game.world.getObj(e.x, e.y, e.z);
-        if (o !== Obj.Stump && o !== Obj.Tree && o !== Obj.Pine && o !== Obj.Palm && o !== Obj.JungleTree) this.minimap.invalidate(e.z);
+        // (nor do mined-out and refilled ore rocks)
+        if (o !== Obj.Stump && o !== Obj.Tree && o !== Obj.Pine && o !== Obj.Palm && o !== Obj.JungleTree && o !== Obj.DepletedRock && !(o >= Obj.CopperRock && o <= Obj.DarkstoneRock)) this.minimap.invalidate(e.z);
         break;
       }
       case 'gameLoaded':
@@ -1064,6 +1073,7 @@ export class HUD {
     this.makeWin('depot', 'Depot', 'depot-win');
     this.makeWin('trade', 'Trade', 'trade-win');
     this.makeWin('market', 'Market', 'market-win');
+    this.makeWin('craft', 'Smithing', 'craft-win');
     this.makeWin('outfit', 'Outfit', 'outfit-win');
     this.makeWin('spells', 'Spellbook', 'spells-win');
     this.makeWin('quests', 'Quest Log', 'quests-win');
@@ -1096,6 +1106,7 @@ export class HUD {
     if (key === 'depot' && this.ctl.depot()) this.ctl.send({ c: 'closeDepot' });
     if (key === 'trade' && this.ctl.trade()) this.ctl.send({ c: 'tradeCancel' });
     if (key === 'market' && this.ctl.market()) this.ctl.send({ c: 'marketClose' });
+    if (key === 'craft' && this.ctl.craft()) this.ctl.send({ c: 'craftClose' });
     if (key === 'outfit') {
       this.preview?.dispose();
       this.preview = null;
@@ -1135,7 +1146,7 @@ export class HUD {
       this.root.classList.remove('assigning');
       return true;
     }
-    for (const k of ['dev', 'help', 'outfit', 'spells', 'quests', 'market', 'trade', 'depot', 'dialog'] as const) {
+    for (const k of ['dev', 'help', 'outfit', 'spells', 'quests', 'craft', 'market', 'trade', 'depot', 'dialog'] as const) {
       if (this.wins[k].open) {
         this.closeWin(k);
         return true;
@@ -1282,7 +1293,7 @@ export class HUD {
   private renderSkills(): void {
     const s = this.s;
     const voc = s.player.vocation;
-    const key = `${voc}|${JSON.stringify(s.skills)}|${Math.floor(s.woodcutting)}|${Math.floor(s.fishing)}`;
+    const key = `${voc}|${JSON.stringify(s.skills)}|${NONCOMBAT_SKILLS.map((d) => Math.floor(s.gathering[d.id])).join(',')}`;
     if (key === this.skillsKey) return;
     this.skillsKey = key;
     const box = this.skillsEl;
@@ -1303,13 +1314,105 @@ export class HUD {
       const how = k === 'magic' ? 'mana to spend' : k === 'shielding' ? 'blows to block' : 'attacks';
       row(SKILL_NAMES[k], p.level, skillProgress(k, p, voc), `${SKILL_NAMES[k]} ${p.level} — ${pct}% to the next level (${fmtGold(Math.max(0, Math.ceil(need - p.tries)))} more ${how})`);
     }
-    el('div', 'skill-head', box, 'Gathering');
-    const wl = gatherLevelForXp(s.woodcutting);
-    const left = wl >= WC_MAX_LEVEL ? 0 : gatherXpForLevel(wl + 1) - s.woodcutting;
-    row(SKILL_NAMES.woodcutting, wl, gatherProgress(s.woodcutting), `Woodcutting ${wl} — ${fmtGold(Math.floor(s.woodcutting))} xp${wl < WC_MAX_LEVEL ? `, ${fmtGold(Math.ceil(left))} to level ${wl + 1}` : ' (maximum)'}. Chop trees with an axe.`);
-    const fl = gatherLevelForXp(s.fishing);
-    const fleft = fl >= WC_MAX_LEVEL ? 0 : gatherXpForLevel(fl + 1) - s.fishing;
-    row(SKILL_NAMES.fishing, fl, gatherProgress(s.fishing), `Fishing ${fl} — ${fmtGold(Math.floor(s.fishing))} xp${fl < WC_MAX_LEVEL ? `, ${fmtGold(Math.ceil(fleft))} to level ${fl + 1}` : ' (maximum)'}. Click water near you with a fishing rod.`);
+    // gathering and production skills come from the registry (gathering/skills.ts)
+    for (const [kind, head] of [['gathering', 'Gathering'], ['production', 'Production']] as const) {
+      el('div', 'skill-head', box, head);
+      for (const d of NONCOMBAT_SKILLS) {
+        if (d.kind !== kind) continue;
+        const xp = s.gathering[d.id];
+        const lv = gatherLevelForXp(xp);
+        const left = lv >= WC_MAX_LEVEL ? 0 : gatherXpForLevel(lv + 1) - xp;
+        row(d.name, lv, gatherProgress(xp), `${d.name} ${lv} — ${fmtGold(Math.floor(xp))} xp${lv < WC_MAX_LEVEL ? `, ${fmtGold(Math.ceil(left))} to level ${lv + 1}` : ' (maximum)'}. ${d.hint}`);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- production stations (furnace, anvil)
+
+  private renderCraft(): void {
+    const w = this.wins.craft;
+    const view = this.ctl.craft();
+    if (!view) {
+      w.open = false;
+      w.root.hidden = true;
+      return;
+    }
+    if (!w.open) {
+      w.open = true;
+      w.root.hidden = false;
+      w.root.style.zIndex = String(++this.zTop);
+    }
+    // don't redraw under someone typing an amount
+    const a = document.activeElement;
+    if (a instanceof HTMLInputElement && w.root.contains(a)) return;
+    this.drawCraft(view);
+  }
+
+  private drawCraft(view: CraftView): void {
+    const w = this.wins.craft;
+    const b = w.body;
+    const st = this.cw;
+    b.replaceChildren();
+    const title = w.root.querySelector('.win-title');
+    if (title) title.textContent = view.title;
+    const groups = [...new Set(view.recipes.map((r) => r.group))];
+    if (st.station !== view.station || !groups.includes(st.tab)) {
+      // open on the best metal you can work right now
+      st.station = view.station;
+      const usable = view.recipes.filter((r) => r.level <= view.level);
+      st.tab = (usable.find((r) => r.can > 0) ? [...usable].reverse().find((r) => r.can > 0)!.group : usable[usable.length - 1]?.group) ?? groups[0];
+    }
+    const name = SKILL_NAMES[view.skill];
+    el('div', 'shop-gold', b, `${name} level ${view.level}.${view.station === 'anvil' ? " Smithing needs a smith's hammer in your backpack." : ''} Walking away stops the work.`);
+    if (view.making) {
+      const r = view.recipes.find((x) => x.id === view.making!.recipe);
+      const row = el('div', 'craft-making', b);
+      el('span', '', row, `Making ${r ? itemDef(r.output.id).name.toLowerCase() : '…'} — ${view.making.left} left`);
+      button(row, 'Stop', () => this.ctl.send({ c: 'craft', recipe: '', count: 0 }), 'btn small');
+    }
+    if (groups.length > 1) {
+      const tabs = el('div', 'market-tabs', b);
+      for (const g of groups) {
+        button(tabs, g, () => {
+          st.tab = g;
+          this.drawCraft(view);
+        }, `btn small${st.tab === g ? ' on' : ''}`);
+      }
+    }
+    const amount = el('div', 'bank-row', b);
+    el('span', 'hint', amount, 'Make X:');
+    const qi = el('input', 'num-input qty', amount);
+    qi.type = 'number';
+    qi.min = '1';
+    qi.max = String(MAX_BATCH);
+    qi.value = String(st.qty);
+    qi.addEventListener('keydown', (e) => e.stopPropagation());
+    qi.addEventListener('input', () => { st.qty = Math.max(1, Math.min(MAX_BATCH, Math.floor(Number(qi.value) || 1))); });
+    qi.addEventListener('blur', () => this.renderCraft());
+    const list = el('div', 'market-list craft-list', b);
+    for (const r of view.recipes) {
+      if (r.group !== st.tab) continue;
+      const d = itemDef(r.output.id);
+      const locked = r.level > view.level;
+      const row = el('div', `shop-row${locked ? ' locked' : ''}`, list);
+      const ic = el('div', 'slot mini', row);
+      paintSlot(ic, { id: r.output.id, qty: r.output.qty });
+      ic.title = describeItem(d);
+      const info = el('div', 'shop-info', row);
+      el('div', 'shop-name', info, `${r.output.qty > 1 ? `${r.output.qty}× ` : ''}${d.name}`);
+      const needs = r.inputs.map((it) => `${it.qty} ${itemDef(it.id).name.toLowerCase()} (${it.have})`).join(' + ');
+      el('div', 'shop-desc', info, `Level ${r.level} · ${needs} · ${r.xp} xp${r.chance < 100 ? ` · ${r.chance}% success` : ''}${r.hasTool ? '' : ` · needs ${itemDef(r.tool!).name.toLowerCase()}`}`);
+      const btns = el('div', 'shop-btns', row);
+      const make = (label: string, n: () => number) => {
+        const bt = button(btns, label, () => this.ctl.send({ c: 'craft', recipe: r.id, count: n() }), 'btn small');
+        bt.disabled = locked || r.can <= 0;
+        if (locked) bt.title = `Needs ${name.toLowerCase()} level ${r.level}`;
+      };
+      make('1', () => 1);
+      make('5', () => 5);
+      make('X', () => st.qty);
+      make('All', () => Math.max(1, Math.min(MAX_BATCH, r.can)));
+    }
   }
 
   // ---------------------------------------------------------------- market
@@ -1774,6 +1877,8 @@ export class HUD {
       ['Click a tree (with an axe)', 'Chop it: logs and woodcutting experience (higher trees need higher woodcutting)'],
       ['Click water within 3 tiles (with a fishing rod)', 'Fish: catches to eat or sell and fishing experience (better fish need higher fishing; ice fish near snow, swordfish in deep sea)'],
       ['Market board (in depots)', 'Buy from and sell to other players; gold goes to the bank, items to the depot'],
+      ['Click an ore rock (with a pickaxe)', 'Mine it: ore, sometimes a gem, and mining experience (copper and tin near towns, rarer ore deeper underground)'],
+      ['Furnace / anvil (in every smithy)', "Furnace: smelt ore into bars. Anvil (with a smith's hammer): smith bars into weapons, armour, pickaxes and arrowheads. Make 1, 5, X or All; walking stops it"],
     ];
     for (const [k, v] of rows) {
       el('div', 'help-key', grid, k);

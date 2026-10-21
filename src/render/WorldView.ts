@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../game/core/rng';
 import { Ground, Obj, WorldMap, type House } from '../game/world/WorldMap';
+import { oreAt } from '../game/gathering/mining';
 import { mat, toonGradient, type Mat } from './models/parts';
 import { groundTex, objTex } from './textures';
 
@@ -89,6 +90,10 @@ class FloorView {
   trunkLayers: TrunkLayer[] = [];
   /** Tiles currently drawn as stumps. */
   stumps = new Set<number>();
+  /** Ore rocks by tile (rock + coloured veins), so a mined-out rock can turn to rubble and back. */
+  oreLayers: TrunkLayer[] = [];
+  /** Tiles currently drawn as mined-out rubble. */
+  rubble = new Set<number>();
   roofs: RoofView[] = [];
   features = new Map<number, Feature>();
   dim = 1;
@@ -114,9 +119,12 @@ const tmpQ = new THREE.Quaternion();
 const tmpE = new THREE.Euler();
 const tmpS = new THREE.Vector3();
 const tmpP = new THREE.Vector3();
+const tmpC = new THREE.Color();
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 /** A trunk cut down to a stump: short and a little wider. */
 const STUMP_SCALE = new THREE.Matrix4().makeScale(1.35, 0.24, 1.35);
+/** A mined-out ore rock: a low, wide heap of grey rubble. */
+const RUBBLE_SCALE = new THREE.Matrix4().makeScale(1.25, 0.38, 1.25);
 
 function compose(x: number, y: number, z: number, rotY = 0, sx = 1, sy = 1, sz = 1, rotX = 0, rotZ = 0): THREE.Matrix4 {
   tmpQ.setFromEuler(tmpE.set(rotX, rotY, rotZ));
@@ -278,6 +286,10 @@ export class WorldView {
     // living trees get their own trunk batch, indexed by tile, so they can be felled
     const treeTrunks = B(trunkGeo, trunkMat);
     const stumpTiles: number[] = [];
+    // ore rocks (mining): a boulder plus a few coloured veins, both indexed by tile
+    const oreRock = B(new THREE.DodecahedronGeometry(0.44, 0), M(0xffffff, objTex.rock()));
+    const oreVein = B(new THREE.OctahedronGeometry(0.1, 0), M(0xffffff, null, 0x161210), false);
+    const rubbleTiles: number[] = [];
     const canopyLow = B(new THREE.IcosahedronGeometry(0.72, 0), leafMat);
     const canopyHigh = B(new THREE.IcosahedronGeometry(0.5, 0), leafMat);
     const pine1 = B(new THREE.ConeGeometry(0.78, 1.25, 7), leafMat);
@@ -346,6 +358,12 @@ export class WorldView {
           if (tree === null) continue;
           o = tree;
           stumpTiles.push(ti);
+        }
+        if (o === Obj.DepletedRock) {
+          const ore = this.stumpOf(x, y, z);
+          if (ore === null) continue;
+          o = ore;
+          rubbleTiles.push(ti);
         }
         const h = hash2(x, y, 3);
         const rot = hash2(x, y, 5) * Math.PI * 2;
@@ -547,6 +565,30 @@ export class WorldView {
           case Obj.MarketBoard:
             this.buildMarketBoard(fv, x, y);
             break;
+          case Obj.Furnace:
+            this.buildFurnace(fv, x, y);
+            break;
+          case Obj.Anvil:
+            this.buildAnvil(fv, x, y);
+            break;
+          case Obj.CopperRock:
+          case Obj.TinRock:
+          case Obj.IronRock:
+          case Obj.CoalRock:
+          case Obj.SilverRock:
+          case Obj.GoldRock:
+          case Obj.StarsteelRock:
+          case Obj.DarkstoneRock: {
+            const ore = oreAt(o)!;
+            oreRock.add(compose(x, 0.24, y, rot, 1.05 + h * 0.2, 0.85 + h * 0.2, 1), c.setHex(0x8a847c).multiplyScalar(0.85 + h * 0.25), ti);
+            const vein = new THREE.Color(ore.color);
+            for (let i = 0; i < 4; i++) {
+              const a = rot + i * 1.7;
+              const r = 0.3 + hash2(x, y, 60 + i) * 0.08;
+              oreVein.add(compose(x + Math.cos(a) * r, 0.25 + hash2(x, y, 70 + i) * 0.35, y + Math.sin(a) * r, a, 1, 0.7 + hash2(x, y, 80 + i) * 0.6, 1), vein, ti);
+            }
+            break;
+          }
           default:
             break;
         }
@@ -589,6 +631,81 @@ export class WorldView {
       fv.fadeLayers.push({ mesh: im, byTile, original: b.matrices, proxyMat });
     }
     for (const ti of stumpTiles) this.setStump(fv, ti, true);
+    for (const b of [oreRock, oreVein]) {
+      const im = b.build();
+      if (!im) continue;
+      fv.group.add(im);
+      const byTile = new Map<number, number[]>();
+      b.tiles.forEach((t, i) => {
+        const list = byTile.get(t);
+        if (list) list.push(i);
+        else byTile.set(t, [i]);
+      });
+      fv.oreLayers.push({ mesh: im, byTile, original: b.matrices });
+    }
+    for (const ti of rubbleTiles) this.setRubble(fv, ti, true);
+  }
+
+  /** Shows an ore rock as mined-out rubble (veins gone, boulder flattened) or full again. */
+  private setRubble(fv: FloorView, ti: number, on: boolean): void {
+    if (on === fv.rubble.has(ti)) return;
+    if (on) fv.rubble.add(ti);
+    else fv.rubble.delete(ti);
+    const m = new THREE.Matrix4();
+    fv.oreLayers.forEach((L, li) => {
+      for (const i of L.byTile.get(ti) ?? []) {
+        // layer 0 is the boulder (flattened), the others are veins (hidden)
+        L.mesh.setMatrixAt(i, !on ? L.original[i] : li === 0 ? m.copy(L.original[i]).multiply(RUBBLE_SCALE) : ZERO);
+        L.mesh.instanceMatrix.needsUpdate = true;
+        if (li === 0 && L.mesh.instanceColor) {
+          L.mesh.getColorAt(i, tmpC);
+          L.mesh.setColorAt(i, on ? tmpC.multiplyScalar(0.7) : tmpC.multiplyScalar(1 / 0.7));
+          L.mesh.instanceColor.needsUpdate = true;
+        }
+      }
+    });
+  }
+
+  /** A stone smelting furnace with a glowing mouth and a chimney (blacksmithing). */
+  private buildFurnace(fv: FloorView, x: number, y: number): void {
+    const g = new THREE.Group();
+    g.position.set(x, 0, y);
+    const stone = fv.m(0x8a7a6a, { map: objTex.rock() });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.86, 1.05, 0.8), stone);
+    body.position.y = 0.52;
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.12, 0.88), fv.m(0x5a5048));
+    top.position.y = 1.1;
+    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.8, 0.32), stone);
+    chimney.position.set(0.18, 1.55, -0.16);
+    const fire = fv.m(0xff8a2a, { emissive: 0xff5a10 });
+    this.flameMats.push(fire);
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.34, 0.05), fire);
+    mouth.position.set(0, 0.38, 0.41);
+    const coals = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.18), fv.m(0x2a1a14, { emissive: 0x6a1a00 }));
+    coals.position.set(0, 0.2, 0.36);
+    g.add(body, top, chimney, mouth, coals);
+    this.add(fv, g);
+  }
+
+  /** An iron anvil on a wooden block (blacksmithing). */
+  private buildAnvil(fv: FloorView, x: number, y: number): void {
+    const g = new THREE.Group();
+    g.position.set(x, 0, y);
+    const block = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.42, 8), fv.m(0x6a4428, { map: objTex.logs() }));
+    block.position.y = 0.21;
+    const iron = fv.m(0x3d4048);
+    const waist = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.2), iron);
+    waist.position.y = 0.5;
+    const face = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.14, 0.26), fv.m(0x55595f));
+    face.position.y = 0.66;
+    const horn = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 6), iron);
+    horn.rotation.z = Math.PI / 2;
+    horn.position.set(0.44, 0.66, 0);
+    const hammer = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.3), fv.m(0x5b3d24));
+    hammer.position.set(-0.12, 0.75, 0.04);
+    hammer.rotation.y = 0.5;
+    g.add(block, waist, face, horn, hammer);
+    this.add(fv, g);
   }
 
   /** Shows a tree as a stump (canopy gone, trunk cut short) or restores it. */
@@ -850,6 +967,8 @@ export class WorldView {
     const o = this.world.getObj(x, y, z);
     // woodcutting: a tree was felled or grew back
     if (o === Obj.Stump || o === Obj.Tree || o === Obj.Pine || o === Obj.JungleTree || o === Obj.Palm) this.setStump(fv, ti, o === Obj.Stump);
+    // mining: an ore rock was mined out or filled again
+    if (o === Obj.DepletedRock || oreAt(o)) this.setRubble(fv, ti, o === Obj.DepletedRock);
     const f = fv.features.get(ti);
     if (!f) return;
     if (f.looseStone) f.looseStone.visible = o === Obj.LooseStone;

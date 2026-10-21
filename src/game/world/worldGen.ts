@@ -3,7 +3,8 @@ import { buildAreas } from './areas';
 import { Gen, SOFT } from './genKit';
 import { buildAllTowns } from './townSites';
 import { Biome, computeGeography, fbm } from './terrain';
-import { FLOOR_MAX, FLOOR_MIN, Ground, Obj, SOLID_OBJ, UNWALKABLE_GROUND, WorldMap } from './WorldMap';
+import { placeOreRocks } from './mines';
+import { FLOOR_MAX, FLOOR_MIN, Ground, Obj, SOLID_OBJ, UNWALKABLE_GROUND, WorldMap, type House } from './WorldMap';
 
 /**
  * The world of Thornvale: a 640×800 archipelago across seven floors.
@@ -53,6 +54,13 @@ function generate(seed: number): WorldMap {
   T('areas');
   towns.finish();
   placeMarketBoards(m);
+  placeSmithies(m);
+  settleSpawns(m);
+  ensureConnected(m);
+  // ore rocks last, once every area is joined up (deep mines are only reachable after
+  // ensureConnected); a rock never cuts a path, and spawns standing on one move off it
+  const reach = floodFill3D(m);
+  placeOreRocks(m, (x, y, z) => reach.at(x, y, z));
   settleSpawns(m);
   ensureConnected(m);
   T('connect');
@@ -208,65 +216,88 @@ function carveRivers(g: Gen): void {
  * stair and door can still be reached from the entrance.
  */
 function placeMarketBoards(m: WorldMap): void {
-  const isWallish = (o: Obj) => o === Obj.Wall || o === Obj.StoneWall || o === Obj.SandWall;
-  const busy = new Set([Obj.Door, Obj.Locker, Obj.StairsUp, Obj.StairsDown, Obj.Ladder]);
   for (const h of m.houses) {
     if (h.z !== 0 || !/depot/i.test(h.name)) continue;
-    const x0 = h.x + 1, y0 = h.y + 1, x1 = h.x + h.w - 2, y1 = h.y + h.h - 2;
-    const inside = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
-    const npcAt = (x: number, y: number) => m.npcs.some((n) => n.z === 0 && n.x === x && n.y === y);
-    // the entrance: a walkable inside tile next to a door in the outer wall
-    let start: { x: number; y: number } | null = null;
-    for (let y = h.y; y < h.y + h.h && !start; y++) for (let x = h.x; x < h.x + h.w && !start; x++) {
-      if (m.getObj(x, y, 0) !== Obj.Door) continue;
-      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) if (inside(x + dx, y + dy) && m.isWalkable(x + dx, y + dy, 0)) { start = { x: x + dx, y: y + dy }; break; }
-    }
-    if (!start) continue;
-    const reachable = (): Set<number> => {
-      const seen = new Set<number>([m.idx(start!.x, start!.y)]);
-      const q = [start!];
-      while (q.length) {
-        const c = q.pop()!;
-        for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
-          const x = c.x + dx, y = c.y + dy;
-          if (!inside(x, y) || !m.isWalkable(x, y, 0) || npcAt(x, y)) continue;
-          const k = m.idx(x, y);
-          if (seen.has(k)) continue;
-          seen.add(k);
-          q.push({ x, y });
-        }
-      }
-      return seen;
-    };
-    // things that must stay reachable: lockers, NPCs, stairs and counters need a free neighbour
-    const needs: Array<{ x: number; y: number }> = [];
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-      const o = m.getObj(x, y, 0);
-      if (o === Obj.Locker || o === Obj.Counter || npcAt(x, y)) needs.push({ x, y });
-      if (o === Obj.StairsUp || o === Obj.StairsDown || o === Obj.Ladder) needs.push({ x, y });
-    }
-    const before = reachable();
-    const ok = (seen: Set<number>) => needs.every((t) => [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]].some(([dx, dy]) => seen.has(m.idx(t.x + dx, t.y + dy))));
-    if (!ok(before)) continue;
-    let placed = false;
-    for (let y = y0; y <= y1 && !placed; y++) for (let x = x0; x <= x1 && !placed; x++) {
-      if (m.getObj(x, y, 0) !== Obj.None || !m.isWalkable(x, y, 0) || npcAt(x, y) || m.linkAt(x, y, 0)) continue;
-      if (x === start.x && y === start.y) continue;
-      // against a wall, not crowding doors, lockers, stairs or counters
-      if (![[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dx, dy]) => isWallish(m.getObj(x + dx, y + dy, 0)))) continue;
-      let crowded = false;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        const o = m.getObj(x + dx, y + dy, 0);
-        const orth = dx === 0 || dy === 0;
-        if ((orth && (busy.has(o) || npcAt(x + dx, y + dy))) || o === Obj.Door || o === Obj.StairsUp || o === Obj.StairsDown || o === Obj.Ladder) crowded = true;
-      }
-      if (crowded) continue;
-      m.setObj(x, y, Obj.MarketBoard, 0);
-      const after = reachable();
-      if (after.size === before.size - 1 && ok(after)) placed = true;
-      else m.setObj(x, y, Obj.None, 0);
-    }
+    placeAgainstWall(m, h, Obj.MarketBoard);
   }
+}
+
+/** A furnace and, beside it, an anvil in every smithy (blacksmithing). */
+function placeSmithies(m: WorldMap): void {
+  for (const h of m.houses) {
+    if (h.z !== 0 || !/smithy/i.test(h.name)) continue;
+    const f = placeAgainstWall(m, h, Obj.Furnace);
+    if (f) placeAgainstWall(m, h, Obj.Anvil, f);
+  }
+}
+
+/**
+ * Puts `obj` on a free inside tile of a house, against a wall, where it crowds no
+ * door, locker, stair or NPC and the whole room stays reachable from the entrance.
+ * With `near`, the closest such tile to it wins. Returns where it went, or null.
+ */
+function placeAgainstWall(m: WorldMap, h: House, obj: Obj, near?: { x: number; y: number }): { x: number; y: number } | null {
+  const isWallish = (o: Obj) => o === Obj.Wall || o === Obj.StoneWall || o === Obj.SandWall;
+  const busy = new Set([Obj.Door, Obj.Locker, Obj.StairsUp, Obj.StairsDown, Obj.Ladder]);
+  const x0 = h.x + 1, y0 = h.y + 1, x1 = h.x + h.w - 2, y1 = h.y + h.h - 2;
+  const inside = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+  const npcAt = (x: number, y: number) => m.npcs.some((n) => n.z === 0 && n.x === x && n.y === y);
+  // the entrance: a walkable inside tile next to a door in the outer wall
+  let start: { x: number; y: number } | null = null;
+  for (let y = h.y; y < h.y + h.h && !start; y++) for (let x = h.x; x < h.x + h.w && !start; x++) {
+    if (m.getObj(x, y, 0) !== Obj.Door) continue;
+    for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) if (inside(x + dx, y + dy) && m.isWalkable(x + dx, y + dy, 0)) { start = { x: x + dx, y: y + dy }; break; }
+  }
+  if (!start) return null;
+  const reachable = (): Set<number> => {
+    const seen = new Set<number>([m.idx(start!.x, start!.y)]);
+    const q = [start!];
+    while (q.length) {
+      const c = q.pop()!;
+      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+        const x = c.x + dx, y = c.y + dy;
+        if (!inside(x, y) || !m.isWalkable(x, y, 0) || npcAt(x, y)) continue;
+        const k = m.idx(x, y);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        q.push({ x, y });
+      }
+    }
+    return seen;
+  };
+  // things that must stay reachable: lockers, NPCs, stairs, counters and stations need a free neighbour
+  const needs: Array<{ x: number; y: number }> = [];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const o = m.getObj(x, y, 0);
+    if (o === Obj.Locker || o === Obj.Counter || o === Obj.MarketBoard || o === Obj.Furnace || o === Obj.Anvil || npcAt(x, y)) needs.push({ x, y });
+    if (o === Obj.StairsUp || o === Obj.StairsDown || o === Obj.Ladder) needs.push({ x, y });
+  }
+  const before = reachable();
+  const ok = (seen: Set<number>) => needs.every((t) => [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]].some(([dx, dy]) => seen.has(m.idx(t.x + dx, t.y + dy))));
+  if (!ok(before)) return null;
+  const spots: Array<{ x: number; y: number }> = [];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) spots.push({ x, y });
+  if (near) spots.sort((a, b) => Math.max(Math.abs(a.x - near.x), Math.abs(a.y - near.y)) - Math.max(Math.abs(b.x - near.x), Math.abs(b.y - near.y)));
+  for (const { x, y } of spots) {
+    if (m.getObj(x, y, 0) !== Obj.None || !m.isWalkable(x, y, 0) || npcAt(x, y) || m.linkAt(x, y, 0)) continue;
+    if (x === start.x && y === start.y) continue;
+    // against a wall, not crowding doors, lockers, stairs or counters
+    if (![[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dx, dy]) => isWallish(m.getObj(x + dx, y + dy, 0)))) continue;
+    let crowded = false;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const o = m.getObj(x + dx, y + dy, 0);
+      const orth = dx === 0 || dy === 0;
+      if ((orth && (busy.has(o) || npcAt(x + dx, y + dy))) || o === Obj.Door || o === Obj.StairsUp || o === Obj.StairsDown || o === Obj.Ladder) crowded = true;
+    }
+    if (crowded) continue;
+    m.setObj(x, y, obj, 0);
+    const after = reachable();
+    // stations are used from a tile beside them, so one must be free
+    const usable = obj === Obj.MarketBoard || [[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dx, dy]) => after.has(m.idx(x + dx, y + dy)));
+    if (after.size === before.size - 1 && ok(after) && usable) return { x, y };
+    m.setObj(x, y, Obj.None, 0);
+  }
+  return null;
 }
 
 function settleSpawns(m: WorldMap): void {

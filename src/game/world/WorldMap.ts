@@ -80,6 +80,20 @@ export enum Obj {
   MarketBoard = 45,
   /** A felled tree (woodcutting); it grows back into the tree it was. */
   Stump = 46,
+  // mining: ore rocks (gathering/mining.ts) and the rubble a mined-out rock leaves
+  CopperRock = 47,
+  TinRock = 48,
+  IronRock = 49,
+  CoalRock = 50,
+  SilverRock = 51,
+  GoldRock = 52,
+  StarsteelRock = 53,
+  DarkstoneRock = 54,
+  /** A mined-out ore rock; it fills with ore again later (temporary, `Game.stumps`). */
+  DepletedRock = 55,
+  // blacksmithing stations (production/smithing.ts), in every smithy
+  Furnace = 56,
+  Anvil = 57,
 }
 
 const SOLID = new Set<number>([
@@ -87,6 +101,8 @@ const SOLID = new Set<number>([
   Obj.Grave, Obj.Well, Obj.Barrel, Obj.Crate, Obj.Table, Obj.Hay, Obj.Lamp,
   Obj.Cliff, Obj.Palisade, Obj.Campfire, Obj.Chest, Obj.Locker, Obj.Palm, Obj.Pillar,
   Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall, Obj.MagicWall, Obj.MarketBoard, Obj.Stump,
+  Obj.CopperRock, Obj.TinRock, Obj.IronRock, Obj.CoalRock, Obj.SilverRock, Obj.GoldRock, Obj.StarsteelRock, Obj.DarkstoneRock, Obj.DepletedRock,
+  Obj.Furnace, Obj.Anvil,
 ]);
 
 /** Objects that stop arrows and spells. Trees and fences do not. */

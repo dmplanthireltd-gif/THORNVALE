@@ -13,6 +13,9 @@ import { describeItem, EQUIP_SLOTS, equipSlotFor, isItem, itemDef, POTION_BUFF_P
 import { ENEMIES } from './enemies/enemyDefs';
 import { beamTiles, exivaText, facingDir, GROUP_COOLDOWN, isSpellId, parseSpellWords, SPELLS, startingSpells, waveTiles, type SpellDef, type SpellId } from './magic/spells';
 import { CHOP_INTERVAL, chopChance, gatherLevelForXp, treeAt } from './gathering/woodcutting';
+import { emptySkillXp, parseSkillXp, skillDef, SKILL_XP_CAP, type NonCombatSkill } from './gathering/skills';
+import { GEM_CHANCE, MINE_INTERVAL, mineChance, oreAt, PICKAXES, rollGem, type PickaxeDef } from './gathering/mining';
+import { MAX_BATCH, recipeById, recipeChance, recipesAt, stationAt, STATIONS, type CraftView, type Station } from './production/recipes';
 import {
   biteChance, FISH_INTERVAL, FISH_RANGE, fishFor, FISHING_ROD, isFishingWater, JUNK_CHANCE, rollFish, SPOT_RECOVER_SECONDS, SPOT_WARY_AFTER, spotKey,
   TREASURE_CHANCE, TREASURE_ITEMS,
@@ -126,10 +129,13 @@ export interface Session {
   lostItems: ItemStack[];
   /** Combat skills (fist … magic level). */
   skills: Skills;
-  /** Woodcutting experience (level 1–99 from the curve in gathering/woodcutting.ts). */
-  woodcutting: number;
-  /** Fishing experience (same 1–99 curve; save v7+). */
-  fishing: number;
+  /**
+   * Non-combat skills (gathering/skills.ts): total experience per skill, levels 1–99
+   * on the curve in gathering/woodcutting.ts. Saved as `gathering`.
+   */
+  gathering: Record<NonCombatSkill, number>;
+  /** Production station window in use (furnace, anvil), if any. */
+  craftOpen: { station: Station; x: number; y: number; z: number } | null;
   /** Market board the player is using, if any. */
   marketOpen: { x: number; y: number; z: number } | null;
   /** Ids of market deliveries this character already received (saved; makes hand-outs idempotent). */
@@ -172,8 +178,8 @@ export interface SaveData {
   pvp?: { secure?: boolean; whiteSkullUntil?: number; redSkullUntil?: number; unjustKills?: number[] };
   /** Combat skills (save v5+): level and tries towards the next level. */
   skills?: Partial<Record<CombatSkill, { level: number; tries: number }>>;
-  /** Gathering skills (save v5+): total experience. */
-  gathering?: { woodcutting?: number; fishing?: number };
+  /** Non-combat skills (save v5+): total experience per skill (fishing v7+, mining and smithing v8+). */
+  gathering?: Partial<Record<NonCombatSkill, number>>;
   /** Market deliveries already received (save v5+). */
   market?: { claimed?: string[] };
   /** Friends list: character names (save v6+). */
@@ -244,7 +250,10 @@ export class Game implements AIContext {
   private openHoles = new Map<string, number>();
   /** Rune fields and magic walls: "x,y,z" → field. */
   private fields = new Map<string, TempField>();
-  /** Felled trees: key → the tree that grows back and seconds left (mirror games: until the server says otherwise). */
+  /**
+   * Felled trees and mined-out rocks: key → the tree or ore rock that comes back and
+   * seconds left (mirror games: until the server says otherwise). Not saved.
+   */
   private stumps = new Map<string, { obj: Obj; left: number }>();
   /** Fishing spots (3×3 tiles) fished recently: catches there, and seconds until one is forgotten. Not saved. */
   private fishSpots = new Map<string, { n: number; t: number }>();
@@ -297,7 +306,7 @@ export class Game implements AIContext {
       id, player, inventory: new Inventory(), quests: new QuestLog(), dialogue: null,
       intent: opts.intent ?? new BufferedIntent(), depot: new Array(DEPOT_SLOTS).fill(null), depotOpen: null, friends: [],
       bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
-      skills: startSkills(), woodcutting: 0, fishing: 0, marketOpen: null, marketClaimed: [],
+      skills: startSkills(), gathering: emptySkillXp(), craftOpen: null, marketOpen: null, marketClaimed: [],
     };
     if (opts.starter !== false) giveStarterKit(session.inventory, voc);
     this.sessions.set(id, session);
@@ -623,10 +632,10 @@ export class Game implements AIContext {
     if (s) {
       if (s.depotOpen) this.closeDepot(s.id);
       if (s.marketOpen) this.closeMarket(s.id);
+      if (s.craftOpen) this.closeCraft(s.id);
       this.closeDialogue(s.id);
     }
-    p.chop = null;
-    p.fish = null;
+    stopWork(p);
     this.cancelTrade(p.id, 'moved away');
     this.events.emit({ type: 'teleport', id: p.id });
   }
@@ -655,6 +664,7 @@ export class Game implements AIContext {
     }
     for (const s of this.sessions.values()) {
       if (s.marketOpen && (s.player.dead || s.player.z !== s.marketOpen.z || chebyshev(s.player.x, s.player.y, s.marketOpen.x, s.marketOpen.y) > MARKET_RANGE)) this.closeMarket(s.id);
+      if (s.craftOpen && (s.player.dead || s.player.z !== s.craftOpen.z || chebyshev(s.player.x, s.player.y, s.craftOpen.x, s.craftOpen.y) > 1)) this.closeCraft(s.id);
       if (s.dialogue) {
         const n = this.npcs.find((x) => x.id === s.dialogue!.npcId);
         if (!n || s.player.dead || this.dist(n, s.player) > 3) this.closeDialogue(s.id);
@@ -738,6 +748,8 @@ export class Game implements AIContext {
     this.updatePending(s);
     this.updateChop(s, dt);
     this.updateFish(s, dt);
+    this.updateMine(s, dt);
+    this.updateCraft(s, dt);
     this.updatePlayerCombat(s);
   }
 
@@ -1126,9 +1138,29 @@ export class Game implements AIContext {
 
   // ================================================================ woodcutting
 
+  // ================================================================ non-combat skills (shared)
+
+  /** Level (1–99) of a non-combat skill. */
+  skillLevel(s: Session, id: NonCombatSkill): number {
+    return gatherLevelForXp(s.gathering[id]);
+  }
+
+  /** Adds experience to a non-combat skill and announces new levels (the one path every trade skill uses). */
+  gainSkill(s: Session, id: NonCombatSkill, xp: number, atId: number): void {
+    const before = this.skillLevel(s, id);
+    s.gathering[id] = Math.min(SKILL_XP_CAP, s.gathering[id] + Math.max(0, xp));
+    this.events.emit({ type: 'xp', amount: xp, atId, to: s.id, skill: id });
+    const after = this.skillLevel(s, id);
+    if (after > before) {
+      this.msg(s.id, `You advanced to ${skillDef(id).name.toLowerCase()} level ${after}.`, 'level');
+      this.events.emit({ type: 'skillUp', skill: id, level: after, to: s.id });
+      s.wantsSave = true;
+    }
+  }
+
   /** Woodcutting level (1–99). */
   woodcuttingLevel(s: Session): number {
-    return gatherLevelForXp(s.woodcutting);
+    return this.skillLevel(s, 'woodcutting');
   }
 
   /** The strongest axe the player carries (held or in the backpack) and is high enough level to use. */
@@ -1159,7 +1191,7 @@ export class Game implements AIContext {
     if (!s.inventory.canFit(tree.log, 1)) return this.msg(s.id, 'Your backpack is full.', 'warn');
     if (s.inventory.weight() + log.weight > p.capacity) return this.msg(s.id, 'You cannot carry any more.', 'warn');
     p.targetId = null;
-    p.fish = null;
+    stopWork(p, 'chop');
     p.faceTowards(x, y);
     if (!p.chop || p.chop.x !== x || p.chop.y !== y) this.msg(s.id, `You swing your axe at the ${tree.name}.`, 'info');
     p.chop = { x, y, z, timer: CHOP_INTERVAL / 2 };
@@ -1213,22 +1245,14 @@ export class Game implements AIContext {
 
   /** Adds woodcutting experience and announces new levels. */
   gainWoodcutting(s: Session, xp: number, atId: number): void {
-    const before = this.woodcuttingLevel(s);
-    s.woodcutting = Math.min(200_000_000, s.woodcutting + Math.max(0, xp));
-    this.events.emit({ type: 'xp', amount: xp, atId, to: s.id, skill: 'woodcutting' });
-    const after = this.woodcuttingLevel(s);
-    if (after > before) {
-      this.msg(s.id, `You advanced to woodcutting level ${after}.`, 'level');
-      this.events.emit({ type: 'skillUp', skill: 'woodcutting', level: after, to: s.id });
-      s.wantsSave = true;
-    }
+    this.gainSkill(s, 'woodcutting', xp, atId);
   }
 
   // ================================================================ fishing
 
   /** Fishing level (1–99, same curve as woodcutting). */
   fishingLevel(s: Session): number {
-    return gatherLevelForXp(s.fishing);
+    return this.skillLevel(s, 'fishing');
   }
 
   /** Whether the player carries a fishing rod (backpack or hands). */
@@ -1248,7 +1272,7 @@ export class Game implements AIContext {
     if (!this.canReachWater(p, x, y, z)) return this.msg(s.id, `The water is too far away. Stand within ${FISH_RANGE} tiles of it.`, 'warn');
     if (!s.inventory.canFit('fish', 1) && s.inventory.freeSlots() === 0) return this.msg(s.id, 'Your backpack is full.', 'warn');
     p.targetId = null;
-    p.chop = null;
+    stopWork(p, 'fish');
     p.faceTowards(x, y);
     if (!p.fish || p.fish.x !== x || p.fish.y !== y) this.msg(s.id, 'You cast your line into the water.', 'info');
     p.fish = { x, y, z, timer: FISH_INTERVAL / 2 };
@@ -1322,15 +1346,7 @@ export class Game implements AIContext {
 
   /** Adds fishing experience and announces new levels. */
   gainFishing(s: Session, xp: number, atId: number): void {
-    const before = this.fishingLevel(s);
-    s.fishing = Math.min(200_000_000, s.fishing + Math.max(0, xp));
-    this.events.emit({ type: 'xp', amount: xp, atId, to: s.id, skill: 'fishing' });
-    const after = this.fishingLevel(s);
-    if (after > before) {
-      this.msg(s.id, `You advanced to fishing level ${after}.`, 'level');
-      this.events.emit({ type: 'skillUp', skill: 'fishing', level: after, to: s.id });
-      s.wantsSave = true;
-    }
+    this.gainSkill(s, 'fishing', xp, atId);
   }
 
   /** Fished-out spots slowly recover: one catch forgotten every SPOT_RECOVER_SECONDS. */
@@ -1342,6 +1358,218 @@ export class Game implements AIContext {
       sp.t += SPOT_RECOVER_SECONDS;
       if (sp.n <= 0) this.fishSpots.delete(k);
     }
+  }
+
+  // ================================================================ mining
+
+  /** Mining level (1–99). */
+  miningLevel(s: Session): number {
+    return this.skillLevel(s, 'mining');
+  }
+
+  /** The best pickaxe the player carries and has the mining level for. */
+  bestPickaxe(s: Session): PickaxeDef | null {
+    const lvl = this.miningLevel(s);
+    let best: PickaxeDef | null = null;
+    for (const pk of PICKAXES) if (pk.level <= lvl && s.inventory.has(pk.item) && (!best || pk.tier > best.tier)) best = pk;
+    return best;
+  }
+
+  private startMine(s: Session, x: number, y: number, z: number): void {
+    const p = s.player;
+    const ore = oreAt(this.world.getObj(x, y, z));
+    if (!ore) return;
+    const lvl = this.miningLevel(s);
+    if (lvl < ore.level) return this.msg(s.id, `You need mining level ${ore.level} to mine a ${ore.name}.`, 'warn');
+    if (!this.bestPickaxe(s)) {
+      const any = PICKAXES.some((pk) => s.inventory.has(pk.item));
+      return this.msg(s.id, any ? 'Your pickaxe needs a higher mining level. A bronze pickaxe will do.' : 'You need a pickaxe to mine. Smiths and outfitters sell them.', 'warn');
+    }
+    const d = itemDef(ore.ore);
+    if (!s.inventory.canFit(ore.ore, 1)) return this.msg(s.id, 'Your backpack is full.', 'warn');
+    if (s.inventory.weight() + d.weight > p.capacity) return this.msg(s.id, 'You cannot carry any more.', 'warn');
+    p.targetId = null;
+    stopWork(p, 'mine');
+    p.faceTowards(x, y);
+    if (!p.mine || p.mine.x !== x || p.mine.y !== y) this.msg(s.id, `You swing your pickaxe at the ${ore.name}.`, 'info');
+    p.mine = { x, y, z, timer: MINE_INTERVAL / 2 };
+  }
+
+  /** One swing every MINE_INTERVAL while you stand by the rock; walking or attacking stops it. */
+  private updateMine(s: Session, dt: number): void {
+    const p = s.player;
+    const m = p.mine;
+    if (!m) return;
+    if (p.dead || p.moving || p.path.length || p.pending || p.targetId !== null || p.z !== m.z || chebyshev(p.x, p.y, m.x, m.y) > 1) {
+      p.mine = null;
+      return;
+    }
+    const ore = oreAt(this.world.getObj(m.x, m.y, m.z));
+    if (!ore) {
+      // someone else mined it out
+      p.mine = null;
+      return;
+    }
+    m.timer -= dt;
+    if (m.timer > 0) return;
+    m.timer += MINE_INTERVAL;
+    p.faceTowards(m.x, m.y);
+    const pick = this.bestPickaxe(s);
+    if (!pick) {
+      p.mine = null;
+      return this.msg(s.id, 'You need a pickaxe to mine.', 'warn');
+    }
+    const got = Math.random() < mineChance(this.miningLevel(s), ore, pick.tier);
+    let depleted = false;
+    if (got) {
+      const d = itemDef(ore.ore);
+      if (!s.inventory.canFit(ore.ore, 1) || s.inventory.weight() + d.weight > p.capacity) {
+        p.mine = null;
+        this.events.emit({ type: 'mine', id: p.id, x: m.x, y: m.y, z: m.z, got: false, depleted: false });
+        return this.msg(s.id, s.inventory.canFit(ore.ore, 1) ? 'You cannot carry any more ore.' : 'Your backpack is full.', 'warn');
+      }
+      s.inventory.add(ore.ore, 1);
+      this.msg(s.id, `You mine some ${d.name.toLowerCase()}.`, 'loot');
+      if (Math.random() < GEM_CHANCE) {
+        const gem = rollGem();
+        if (s.inventory.canFit(gem, 1)) {
+          s.inventory.add(gem, 1);
+          this.msg(s.id, `You find ${article(itemDef(gem).name)} in the rock!`, 'loot');
+        }
+      }
+      this.events.emit({ type: 'inventoryChanged', to: s.id });
+      this.gainSkill(s, 'mining', ore.xp, p.id);
+      depleted = Math.random() < ore.deplete;
+    }
+    this.events.emit({ type: 'mine', id: p.id, x: m.x, y: m.y, z: m.z, got, depleted });
+    if (depleted) {
+      this.depleteRock(m.x, m.y, m.z);
+      p.mine = null;
+    }
+  }
+
+  /** Turns an ore rock into rubble that fills with ore again later. */
+  depleteRock(x: number, y: number, z: number): void {
+    const o = this.world.getObj(x, y, z);
+    const ore = oreAt(o);
+    if (!ore) return;
+    const [a, b] = ore.respawn;
+    this.stumps.set(WorldMap.key(x, y, z), { obj: o, left: a + Math.random() * (b - a) });
+    this.world.setObj(x, y, Obj.DepletedRock, z);
+    this.events.emit({ type: 'tileChanged', x, y, z });
+  }
+
+  // ================================================================ production (furnace, anvil)
+
+  private openCraft(s: Session, station: Station, x: number, y: number, z: number): void {
+    s.craftOpen = { station, x, y, z };
+    s.player.faceTowards(x, y);
+    this.events.emit({ type: 'craftChanged', to: s.id });
+  }
+
+  /** Closes the station window (and stops whatever was being made there). */
+  closeCraft(pid: number): void {
+    const s = this.sessions.get(pid);
+    if (!s || !s.craftOpen) return;
+    s.craftOpen = null;
+    s.player.craft = null;
+    this.events.emit({ type: 'craftChanged', to: pid });
+  }
+
+  /** How many times the player could make a recipe with what they carry right now. */
+  private craftable(s: Session, recipeId: string): number {
+    const r = recipeById(recipeId);
+    if (!r || this.skillLevel(s, r.skill) < r.level) return 0;
+    if (r.tool && !s.inventory.has(r.tool)) return 0;
+    let n = Infinity;
+    for (const it of r.inputs) n = Math.min(n, Math.floor(s.inventory.count(it.id) / it.qty));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /** What the station window shows this player (null while it is closed). */
+  craftView(pid: number): CraftView | null {
+    const s = this.sessions.get(pid);
+    if (!s || !s.craftOpen) return null;
+    const st = STATIONS[s.craftOpen.station];
+    const level = this.skillLevel(s, st.skill);
+    const c = s.player.craft;
+    return {
+      station: st.id, title: st.title, skill: st.skill, level,
+      making: c ? { recipe: c.recipe, left: c.left } : null,
+      recipes: recipesAt(st.id).map((r) => ({
+        id: r.id, group: r.group, level: r.level, xp: r.xp,
+        inputs: r.inputs.map((it) => ({ id: it.id, qty: it.qty, have: s.inventory.count(it.id) })),
+        output: { ...r.output }, tool: r.tool, hasTool: !r.tool || s.inventory.has(r.tool),
+        chance: Math.round(recipeChance(r, level) * 100), can: this.craftable(s, r.id),
+      })),
+    };
+  }
+
+  /** "Make N": starts a batch at the open station (count 0 stops the current one). */
+  commandCraft(pid: number, recipeId: string, count: number): void {
+    const s = this.sessions.get(pid);
+    if (!s || s.player.dead) return;
+    const p = s.player;
+    const open = s.craftOpen;
+    if (count <= 0) {
+      if (p.craft) {
+        p.craft = null;
+        this.events.emit({ type: 'craftChanged', to: pid });
+      }
+      return;
+    }
+    const r = recipeById(recipeId);
+    if (!open || !r || r.station !== open.station) return;
+    if (p.z !== open.z || chebyshev(p.x, p.y, open.x, open.y) > 1) return this.closeCraft(pid);
+    const st = STATIONS[r.station];
+    const out = itemDef(r.output.id);
+    if (this.skillLevel(s, r.skill) < r.level) return this.msg(pid, `You need ${skillDef(r.skill).name.toLowerCase()} level ${r.level} to make ${out.name.toLowerCase()}.`, 'warn');
+    if (r.tool && !s.inventory.has(r.tool)) return this.msg(pid, `You need ${article(itemDef(r.tool).name)} for that. Smiths sell them.`, 'warn');
+    if (this.craftable(s, r.id) <= 0) return this.msg(pid, `You need ${r.inputs.map((it) => `${it.qty} ${itemDef(it.id).name.toLowerCase()}`).join(' and ')}.`, 'warn');
+    p.targetId = null;
+    p.path = [];
+    p.pending = null;
+    stopWork(p);
+    p.faceTowards(open.x, open.y);
+    p.craft = { recipe: r.id, left: Math.max(1, Math.min(MAX_BATCH, Math.floor(count))), timer: st.interval, x: open.x, y: open.y, z: open.z };
+    this.events.emit({ type: 'craftChanged', to: pid });
+  }
+
+  /** Makes one item every station interval; walking, attacking or running out of materials stops it. */
+  private updateCraft(s: Session, dt: number): void {
+    const p = s.player;
+    const c = p.craft;
+    if (!c) return;
+    const done = (why?: string, kind: MessageKind = 'info') => {
+      p.craft = null;
+      if (why) this.msg(s.id, why, kind);
+      this.events.emit({ type: 'craftChanged', to: s.id });
+    };
+    if (p.dead || p.moving || p.path.length || p.pending || p.targetId !== null || p.z !== c.z || chebyshev(p.x, p.y, c.x, c.y) > 1) return done();
+    const r = recipeById(c.recipe);
+    const st = r ? STATIONS[r.station] : null;
+    if (!r || !st || this.world.getObj(c.x, c.y, c.z) !== st.obj) return done();
+    c.timer -= dt;
+    if (c.timer > 0) return;
+    c.timer += st.interval;
+    p.faceTowards(c.x, c.y);
+    if (this.craftable(s, r.id) <= 0) return done(`You have run out of ${r.inputs.map((it) => itemDef(it.id).name.toLowerCase()).join(' or ')}.`, 'warn');
+    const out = itemDef(r.output.id);
+    for (const it of r.inputs) s.inventory.removeById(it.id, it.qty);
+    const made = Math.random() < recipeChance(r, this.skillLevel(s, r.skill));
+    if (made) {
+      const left = s.inventory.add(r.output.id, r.output.qty);
+      if (left > 0) this.dropBag(p.x, p.y, p.z, [{ id: r.output.id, qty: left }]);
+      this.msg(s.id, `You make ${r.output.qty > 1 ? `${r.output.qty} ${out.name.toLowerCase()}` : article(out.name)}${left > 0 ? ' (it falls to the floor, your backpack is full)' : ''}.`, 'loot');
+      this.gainSkill(s, r.skill, r.xp, p.id);
+    } else {
+      this.msg(s.id, r.station === 'furnace' ? `The ${r.inputs.map((it) => itemDef(it.id).name.toLowerCase()).join(' and ')} is too impure and the bar crumbles.` : `You ruin the ${out.name.toLowerCase()}.`, 'warn');
+    }
+    this.events.emit({ type: 'inventoryChanged', to: s.id });
+    this.events.emit({ type: 'craft', id: p.id, x: c.x, y: c.y, z: c.z, station: r.station, made });
+    c.left -= 1;
+    if (c.left <= 0) return done();
+    this.events.emit({ type: 'craftChanged', to: s.id });
   }
 
   /** Turns a tree into a stump that grows back later. */
@@ -1411,12 +1639,12 @@ export class Game implements AIContext {
     this.msg(p.id, 'You are cured of poison.', 'info');
   }
 
-  /** The tree a stump will grow back into (null when the tile is no stump). */
+  /** The tree a stump grows back into, or the ore rock rubble fills back into (null otherwise). */
   stumpOrigin(x: number, y: number, z: number): Obj | null {
     return this.stumps.get(WorldMap.key(x, y, z))?.obj ?? null;
   }
 
-  /** Felled trees near a spot (snapshot: only what a player can see). */
+  /** Felled trees and mined-out rocks near a spot (snapshot: only what a player can see). */
   stumpsNear(x: number, y: number, z: number, radius: number): string[] {
     const out: string[] = [];
     for (const k of this.stumps.keys()) {
@@ -1444,9 +1672,10 @@ export class Game implements AIContext {
       if (this.stumps.has(k)) continue;
       const [sx, sy, sz] = k.split(',').map(Number);
       const o = this.world.getObj(sx, sy, sz);
-      if (!treeAt(o)) continue;
+      const empty = treeAt(o) ? Obj.Stump : oreAt(o) ? Obj.DepletedRock : null;
+      if (empty === null) continue;
       this.stumps.set(k, { obj: o, left: Infinity });
-      this.world.setObj(sx, sy, Obj.Stump, sz);
+      this.world.setObj(sx, sy, empty, sz);
       this.events.emit({ type: 'tileChanged', x: sx, y: sy, z: sz });
     }
   }
@@ -2208,6 +2437,12 @@ export class Game implements AIContext {
       const s = this.session(this.localId);
       return !!s && this.hasRod(s) && this.canReachWater(s.player, x, y, z);
     }
+    if (oreAt(o)) {
+      // ore rocks are "usable" (mine) for whoever carries a pickaxe
+      const s = this.session(this.localId);
+      return !!s && PICKAXES.some((pk) => s.inventory.has(pk.item));
+    }
+    if (stationAt(o)) return true;
     return o === Obj.Ladder || o === Obj.RopeSpot || o === Obj.LooseStone || o === Obj.Locker || o === Obj.Chest || o === Obj.MarketBoard;
   }
 
@@ -2255,6 +2490,26 @@ export class Game implements AIContext {
         return;
       case Obj.Stump:
         this.msg(s.id, 'Only a stump is left. It will grow back.', 'info');
+        return;
+      case Obj.CopperRock:
+      case Obj.TinRock:
+      case Obj.IronRock:
+      case Obj.CoalRock:
+      case Obj.SilverRock:
+      case Obj.GoldRock:
+      case Obj.StarsteelRock:
+      case Obj.DarkstoneRock:
+        this.startMine(s, x, y, z);
+        return;
+      case Obj.DepletedRock:
+        this.msg(s.id, 'There is no ore left in this rock. It will fill again.', 'info');
+        return;
+      case Obj.Furnace:
+        this.openCraft(s, 'furnace', x, y, z);
+        return;
+      case Obj.Anvil:
+        if (!s.inventory.has('smithing_hammer')) this.msg(s.id, "You need a smith's hammer to work the anvil. Smiths sell them.", 'info');
+        this.openCraft(s, 'anvil', x, y, z);
         return;
       case Obj.Chest: {
         const c = this.world.chests.find((ch) => ch.x === x && ch.y === y && ch.z === z);
@@ -3630,7 +3885,7 @@ export class Game implements AIContext {
       lostItems: s.lostItems.map((x) => ({ ...x })),
       pvp: { secure: p.secure, whiteSkullUntil: p.whiteSkullUntil, redSkullUntil: p.redSkullUntil, unjustKills: [...p.unjustKills] },
       skills: Object.fromEntries(Object.entries(s.skills).map(([k, v]) => [k, { level: v.level, tries: v.tries }])),
-      gathering: { woodcutting: s.woodcutting, fishing: s.fishing },
+      gathering: { ...s.gathering },
       market: { claimed: [...s.marketClaimed] },
       friends: [...s.friends],
     };
@@ -3679,10 +3934,8 @@ export class Game implements AIContext {
     p.unjustKills = Array.isArray(pv.unjustKills) ? pv.unjustKills.filter((t) => typeof t === 'number' && Number.isFinite(t)).slice(-20) : [];
     // saves before v5 are given skills by the migration; this only fills gaps
     s.skills = data.skills ? parseSkills(data.skills) : legacySkills(p.vocation, p.level);
-    const wc = Number(data.gathering?.woodcutting);
-    s.woodcutting = Number.isFinite(wc) && wc > 0 ? Math.min(200_000_000, wc) : 0;
-    const fx = Number(data.gathering?.fishing);
-    s.fishing = Number.isFinite(fx) && fx > 0 ? Math.min(200_000_000, fx) : 0;
+    s.gathering = parseSkillXp(data.gathering);
+    s.craftOpen = null;
     s.marketClaimed = Array.isArray(data.market?.claimed) ? data.market!.claimed!.filter((x) => typeof x === 'string').slice(-MARKET_CLAIMS_KEPT) : [];
     s.marketOpen = null;
     this.refreshStats(s);
@@ -3724,8 +3977,8 @@ export class Game implements AIContext {
     s.spells = new Set(startingSpells());
     s.chests = new Set();
     s.skills = startSkills();
-    s.woodcutting = 0;
-    s.fishing = 0;
+    s.gathering = emptySkillXp();
+    s.craftOpen = null;
     s.marketOpen = null;
     this.refreshStats(s);
     p.hp = p.maxHp;
@@ -3797,8 +4050,15 @@ function resetPlayerState(p: Player): void {
   p.whiteSkullUntil = 0;
   p.redSkullUntil = 0;
   p.unjustKills = [];
-  p.chop = null;
-  p.fish = null;
+  stopWork(p);
+}
+
+/** Stops every gathering or production activity (except `keep`). */
+function stopWork(p: Player, keep?: 'chop' | 'fish' | 'mine' | 'craft'): void {
+  if (keep !== 'chop') p.chop = null;
+  if (keep !== 'fish') p.fish = null;
+  if (keep !== 'mine') p.mine = null;
+  if (keep !== 'craft') p.craft = null;
 }
 
 /** Each vocation starts with gear it can actually use. */

@@ -2,6 +2,7 @@ import type { GameEvent } from '../game/core/events';
 import { BufferedIntent, Game, type Session, type TradeView } from '../game/Game';
 import type { ItemStack } from '../game/inventory/items';
 import type { MarketView } from '../game/market/market';
+import type { CraftView } from '../game/production/recipes';
 import {
   applySnapshot, executeCommand, PROTOCOL_VERSION, type ClientMessage, type Command, type MirrorExtras, type ServerMessage,
 } from '../game/net/protocol';
@@ -27,6 +28,8 @@ export interface Controller {
   trade(): TradeView | null;
   /** The market window's contents while a market board is in use. */
   market(): MarketView | null;
+  /** The station window (furnace, anvil) while one is in use. */
+  craft(): CraftView | null;
   update(dt: number): void;
   /** Saves the character now; returns false when nowhere to save. */
   save(): boolean;
@@ -116,6 +119,10 @@ export class LocalController implements Controller {
     return this.game.marketView(this.pid);
   }
 
+  craft(): CraftView | null {
+    return this.game.craftView(this.pid);
+  }
+
   save(): boolean {
     const s = this.game.session(this.pid);
     if (!s || s.player.dead) return false;
@@ -152,7 +159,7 @@ export class NetController implements Controller {
   readonly game: Game;
   pid = -1;
   onDisconnect: ((why: string) => void) | null = null;
-  private extras: MirrorExtras = { depot: null, trade: null, market: null };
+  private extras: MirrorExtras = { depot: null, trade: null, market: null, craft: null };
   private held = { dx: 0, dy: 0 };
   private closed = false;
 
@@ -272,6 +279,10 @@ export class NetController implements Controller {
 
   market(): MarketView | null {
     return this.extras.market ?? null;
+  }
+
+  craft(): CraftView | null {
+    return this.extras.craft ?? null;
   }
 
   save(): boolean {

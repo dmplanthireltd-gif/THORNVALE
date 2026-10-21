@@ -24,6 +24,12 @@ import { applySnapshot, buildSnapshot } from '../src/game/net/protocol';
 import { expForLevel } from '../src/game/player/Player';
 import type { Vocation } from '../src/game/player/vocations';
 import type { EnemyKind } from '../src/game/world/WorldMap';
+import { ORES, ORE_ITEMS, PICKAXES, MINING_GEMS, oreAt } from '../src/game/gathering/mining';
+import { BAR_ITEMS, BARS, SMITHING_HAMMER, SMITHING_RECIPES, SMELTING_RECIPES } from '../src/game/production/smithing';
+import { RECIPES, stationAt } from '../src/game/production/recipes';
+import { NONCOMBAT_SKILLS, PLANNED_SKILLS } from '../src/game/gathering/skills';
+import { MINE_SPOTS } from '../src/game/world/mines';
+import { floodFill3D } from '../src/game/world/worldGen';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -786,6 +792,105 @@ console.log('Fishing');
   check(!!NPCS.aldric.buys?.includes('swordfish') && !!NPCS.zuri.sells?.some((e) => e.id === FISHING_ROD), 'general traders buy fish; Zuri sells rods');
   check(ITEMS.old_boot?.kind === 'material' && bought.has('old_boot') && !!MATERIAL_SHAPE.old_boot, 'the old boot exists, has an icon and a buyer');
   check(TREASURE_ITEMS.every((id) => !!ITEMS[id] && ITEMS[id].rarity !== 'legendary'), 'treasure catches are existing loot items');
+}
+
+
+// ---------------------------------------------------------------- mining & blacksmithing content
+console.log('Mining and blacksmithing');
+{
+  // every item the two skills brought: ores, bars, tools, arrowheads and the gear only the anvil makes
+  const SKILL_ITEMS = [...new Set([
+    ...ORE_ITEMS, ...BAR_ITEMS, ...PICKAXES.map((p) => p.item), SMITHING_HAMMER, ...RECIPES.map((r) => r.output.id),
+  ])].filter((id) => !['iron_ore', 'hatchet', 'chain_helmet', 'bolt', 'short_sword', 'chain_legs', 'chain_armor', 'battle_axe', 'iron_mace', 'iron_helmet',
+    'iron_sword', 'iron_shield', 'plate_armor', 'barbarian_axe', 'morning_star', 'piercing_bolt', 'bastard_sword', 'plate_legs'].includes(id));
+  const missing = SKILL_ITEMS.filter((id) => !ITEMS[id]);
+  check(missing.length === 0, `${SKILL_ITEMS.length} new mining/smithing items exist${missing.length ? ` (missing ${missing.join(' ')})` : ''}`);
+  const bought = new Set(Object.values(NPCS).flatMap((n) => n.buys ?? []));
+  const sold = new Set(Object.values(NPCS).flatMap((n) => (n.sells ?? []).map((e) => e.id)));
+  const noIcon = SKILL_ITEMS.filter((id) => ITEMS[id] && (!ITEMS[id].icon || !ITEMS[id].tint || (ITEMS[id].kind === 'material' && !MATERIAL_SHAPE[id])));
+  check(noIcon.length === 0, `every new item has an icon${noIcon.length ? ` (${noIcon.join(' ')})` : ''}`);
+  const useless = SKILL_ITEMS.filter((id) => {
+    const d = ITEMS[id];
+    if (!d) return false;
+    const usedIn = RECIPES.some((r) => r.inputs.some((i) => i.id === id) || r.tool === id);
+    return !(bought.has(id) || equipSlotFor(d) || d.kind === 'tool' || usedIn);
+  });
+  check(useless.length === 0, `every new item has a buyer or a use${useless.length ? ` (${useless.join(' ')})` : ''}`);
+  const unsold = [...ORE_ITEMS, ...BAR_ITEMS].filter((id) => !bought.has(id));
+  check(unsold.length === 0, `traders buy every ore and bar${unsold.length ? ` (${unsold.join(' ')})` : ''}`);
+  const smiths = Object.values(NPCS).filter((n) => n.role === 'Weapon & armour smith');
+  check(smiths.length >= 14 && smiths.every((n) => [...ORE_ITEMS, ...BAR_ITEMS].every((id) => n.buys?.includes(id)) && n.sells?.some((e) => e.id === SMITHING_HAMMER) && n.sells?.some((e) => e.id === 'bronze_pickaxe')), `every smith (${smiths.length}) buys ores and bars and sells hammers and pickaxes`);
+  check(sold.has('bronze_pickaxe') && sold.has(SMITHING_HAMMER), 'pickaxes and hammers are on sale');
+  check(ORES.every((o) => ITEMS[o.ore]?.kind === 'material' && ITEMS[o.ore].value > 0) && ORE_ITEMS.length === 8, 'eight ores, each an existing material with a price');
+  check(ORES.every((o, i) => i === 0 || o.level >= ORES[i - 1].level), 'rarer ores need higher levels');
+  check(MINING_GEMS.every(([id]) => !!ITEMS[id]), 'mining gems are existing items');
+  check(PICKAXES.every((p, i) => ITEMS[p.item]?.tool === 'mining' && !equipSlotFor(ITEMS[p.item]) && (i === 0 || p.tier > PICKAXES[i - 1].tier)), 'pickaxes are tools in rising tiers');
+  check(ITEMS[SMITHING_HAMMER]?.tool === 'hammer', "the smith's hammer is a tool");
+  const badRecipe = RECIPES.filter((r) => !ITEMS[r.output.id] || r.inputs.some((i) => !ITEMS[i.id]) || (r.tool && !ITEMS[r.tool]) || !(r.xp > 0) || r.level < 1 || r.level > 99);
+  check(badRecipe.length === 0, `every recipe names real items, gives xp and has a level 1–99${badRecipe.length ? ` (${badRecipe.map((r) => r.id).join(' ')})` : ''}`);
+  check(new Set(RECIPES.map((r) => r.id)).size === RECIPES.length, 'recipe ids are unique');
+  check(BARS.every((b) => SMELTING_RECIPES.some((r) => r.output.id === b.bar)) && BARS.every((b) => b.ores.every(([id]) => ORE_ITEMS.includes(id))), 'every bar is smelted from mined ores');
+  check(['bronze', 'iron', 'steel', 'starsteel', 'darkstone'].every((m) => SMITHING_RECIPES.filter((r) => r.group.toLowerCase() === m).length >= 9), 'every metal tier has at least nine anvil recipes');
+  const pieces = ['dagger', 'sword', 'axe', 'mace', 'helm', 'plate', 'legs', 'shield', 'pickaxe', 'arrowheads'];
+  check(pieces.every((p) => SMITHING_RECIPES.some((r) => r.output.id.includes(p) || ITEMS[r.output.id].name.toLowerCase().includes(p))), 'the anvil makes daggers, swords, axes, maces, helmets, armour, legs, shields, pickaxes and arrowheads');
+  // no gold loop: whatever an NPC sells, a recipe made from it must not sell back for more
+  const cheapest = new Map<string, number>();
+  for (const n of Object.values(NPCS)) for (const e of n.sells ?? []) cheapest.set(e.id, Math.min(cheapest.get(e.id) ?? Infinity, e.price));
+  const loops = RECIPES.filter((r) => r.inputs.every((i) => cheapest.has(i.id)) && r.inputs.reduce((n, i) => n + cheapest.get(i.id)! * i.qty, 0) < ITEMS[r.output.id].value * r.output.qty);
+  check(SMITHING_RECIPES.every((r) => r.tool === SMITHING_HAMMER) && loops.length === 0, `smithing needs a hammer and shop goods never turn into more gold${loops.length ? ` (${loops.map((r) => r.id).join(' ')})` : ''}`);
+  check([...ORE_ITEMS, ...BAR_ITEMS].every((id) => !cheapest.has(id)), 'ores and bars come only from mining and smelting');
+  check(NONCOMBAT_SKILLS.some((d) => d.id === 'mining' && d.kind === 'gathering') && NONCOMBAT_SKILLS.some((d) => d.id === 'smithing' && d.kind === 'production'), 'mining (gathering) and blacksmithing (production) are in the skill list');
+  check(NONCOMBAT_SKILLS.every((d) => !!ITEMS[d.icon]) && PLANNED_SKILLS.length === 6, 'every skill has an icon; six more are planned');
+  // the world: rocks in every mine, all of them reachable, a furnace and an anvil in every smithy
+  const g = new Game();
+  const w = g.world;
+  const reach = floodFill3D(w);
+  const counts = new Map<Obj, number>();
+  const unreachable: string[] = [];
+  for (const z of [0, -1, -2, -3, -4]) for (let y = 0; y < w.height; y++) for (let x = 0; x < w.width; x++) {
+    const o = w.getObj(x, y, z);
+    if (!oreAt(o)) continue;
+    counts.set(o, (counts.get(o) ?? 0) + 1);
+    if (![[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]].some(([dx, dy]) => reach.at(x + dx, y + dy, z))) unreachable.push(`${x},${y},${z}`);
+  }
+  check(ORES.every((o) => (counts.get(o.obj) ?? 0) >= 5), `every ore can be found (${ORES.map((o) => `${o.ore} ${counts.get(o.obj) ?? 0}`).join(', ')})`);
+  check(unreachable.length === 0, `every ore rock can be reached${unreachable.length ? ` (${unreachable.length}: ${unreachable.slice(0, 5).join(' ')})` : ''}`);
+  const sd = MINE_SPOTS.find((m) => m.name === 'Stonedeep Mines')!;
+  let sdRocks = 0;
+  for (let y = sd.box[1]; y <= sd.box[3]; y++) for (let x = sd.box[0]; x <= sd.box[2]; x++) if (oreAt(w.getObj(x, y, -1))) sdRocks++;
+  check(sdRocks >= 30, `the Stonedeep mines are full of ore (${sdRocks} rocks)`);
+  // every mine gets at least half its rocks (a mine only reachable late in world generation once got none)
+  const thin = MINE_SPOTS.filter((sp) => {
+    let n = 0;
+    for (let y = sp.box[1]; y <= sp.box[3]; y++) for (let x = sp.box[0]; x <= sp.box[2]; x++) if (oreAt(w.getObj(x, y, sp.z))) n++;
+    return n * 2 < sp.count;
+  });
+  check(thin.length === 0, `every mine has its ore rocks${thin.length ? ` (too few: ${thin.map((sp) => sp.name).join(', ')})` : ''}`);
+  // the rarest ores never lie on the surface
+  let surfaceRare = 0;
+  for (let y = 0; y < w.height; y++) for (let x = 0; x < w.width; x++) { const o = w.getObj(x, y, 0); if (o === Obj.StarsteelRock || o === Obj.DarkstoneRock) surfaceRare++; }
+  check(surfaceRare === 0, 'starsteel and darkstone are only found underground');
+  let nearThornvale = 0;
+  for (let y = 270; y < 360; y++) for (let x = 130; x < 280; x++) { const o = w.getObj(x, y, 0); if (o === Obj.CopperRock || o === Obj.TinRock) nearThornvale++; }
+  check(nearThornvale >= 10, `copper and tin near Thornvale (${nearThornvale})`);
+  const smithies = w.houses.filter((h) => h.z === 0 && /smithy/i.test(h.name));
+  const has = (h: typeof smithies[number], o: Obj) => { for (let y = h.y; y < h.y + h.h; y++) for (let x = h.x; x < h.x + h.w; x++) if (w.getObj(x, y, 0) === o) return true; return false; };
+  const bare = smithies.filter((h) => !has(h, Obj.Furnace) || !has(h, Obj.Anvil));
+  check(smithies.length >= 14 && bare.length === 0, `every smithy (${smithies.length}) has a furnace and an anvil${bare.length ? ` (missing: ${bare.map((h) => h.name).join(', ')})` : ''}`);
+  check(smithies.some((h) => /durgan/i.test(h.name) && has(h, Obj.Furnace)), 'Stonedeep has a furnace');
+  check(stationAt(Obj.Furnace)?.id === 'furnace' && stationAt(Obj.Anvil)?.id === 'anvil', 'furnaces and anvils are stations');
+  try {
+    const { LOOKS, SHIELDS, ARMOR_LOOK } = await import('../src/render/models/weapons');
+    const { HELMETS, LEGS } = await import('../src/render/models/humanoid');
+    const lookless = SKILL_ITEMS.filter((id) => {
+      const d = ITEMS[id];
+      if (!d) return false;
+      return (d.kind === 'weapon' && !LOOKS[id]) || (d.kind === 'shield' && !SHIELDS[id]) || (d.kind === 'armor' && !ARMOR_LOOK[id]) || (d.kind === 'helmet' && !HELMETS[id]) || (d.kind === 'legs' && !LEGS[id]);
+    });
+    check(lookless.length === 0, `every new smithed wearable has a look${lookless.length ? ` (${lookless.join(' ')})` : ''}`);
+  } catch (err) {
+    console.log(`  skip looks: ${(err as Error).message}`);
+  }
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll content checks passed.');

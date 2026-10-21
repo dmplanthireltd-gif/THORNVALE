@@ -63,6 +63,19 @@ export const LOOKS: Record<string, Look> = {
   rod_of_thorns: { c: 0x7ad04a, t: 0x5a3a20, g: 0x2a6a10 },
   rod_of_glaciers: { c: 0xe0faff, t: 0x3a5a8a, g: 0x3a80b0 },
   rod_of_wilds: { c: 0x40e070, t: 0x3a2a14, g: 0x10803a },
+  // smithed at an anvil (blacksmithing)
+  bronze_dagger: { c: 0xc8843a, t: 0x6a4426, s: 0.5 },
+  iron_dagger: { c: 0x9aa0aa, t: 0x5a3a20, s: 0.52 },
+  steel_dagger: { c: 0xd8dde6, t: 0x4a4e56, s: 0.55 },
+  starsteel_dagger: { c: 0x6a9ae8, t: 0x2a3a6a, g: 0x0a1a40, s: 0.58 },
+  darkstone_dagger: { c: 0x4a2a5a, t: 0x1a1020, g: 0x200a30, s: 0.6 },
+  bronze_mace: { c: 0xc8843a, t: 0x7a5530, s: 0.8 },
+  starsteel_sword: { c: 0x6a9ae8, t: 0xc9d0da, g: 0x0a1a40, s: 1.05 },
+  starsteel_axe: { c: 0x6a9ae8, t: 0x4a4e56, g: 0x0a1a40, s: 1.05 },
+  starsteel_mace: { c: 0x5a8ad8, t: 0xc9d0da, g: 0x0a1a40, s: 1.05 },
+  darkstone_sword: { c: 0x4a2a5a, t: 0x8a6aa0, g: 0x200a30, s: 1.12 },
+  darkstone_axe: { c: 0x4a2a5a, t: 0x2a2028, g: 0x200a30, s: 1.12 },
+  darkstone_mace: { c: 0x3a2048, t: 0x8a6aa0, g: 0x200a30, s: 1.12 },
 };
 
 const wood = () => mat(0x7a5530);
@@ -213,6 +226,10 @@ export const SHIELDS: Record<string, { face: number; rim: number; shape: 'round'
   scarab_shield: { face: 0x2a8a6a, rim: 0xd0a030, shape: 'kite', boss: 0x40c0a0 },
   frostscale_shield: { face: 0xbfe6f5, rim: 0x5a8ab0, shape: 'kite', boss: 0x9fe6ff, glow: 0x0a2a3a },
   storm_tome: { face: 0x2a3a8a, rim: 0x8ad8ff, shape: 'book', glow: 0x102050 },
+  bronze_shield: { face: 0xc8843a, rim: 0x7a5530, shape: 'round', boss: 0xe0a860 },
+  steel_shield: { face: 0xb8c0cc, rim: 0x4a4e56, shape: 'kite', boss: 0xd8dde6 },
+  starsteel_shield: { face: 0x5a8ad8, rim: 0xc9d0da, shape: 'kite', boss: 0x9ac0ff, glow: 0x0a1a40 },
+  darkstone_shield: { face: 0x3a2048, rim: 0x8a6aa0, shape: 'tower', boss: 0x6a3a7a, glow: 0x200a30 },
 };
 
 export function makeShield(id: string | null): THREE.Group | null {
@@ -271,4 +288,7 @@ export const ARMOR_LOOK: Record<string, { color: number; size: number; plate?: b
   lizardscale_armor: { color: 0x5a9a4a, size: 0.14, plate: true },
   glacier_robe: { color: 0x8ac8e8, size: 0.12 },
   frost_plate: { color: 0xbfe6f5, size: 0.17, plate: true },
+  steel_plate: { color: 0xc9d0da, size: 0.16, plate: true },
+  starsteel_plate: { color: 0x5a8ad8, size: 0.17, plate: true },
+  darkstone_plate: { color: 0x4a2a5a, size: 0.18, plate: true },
 };

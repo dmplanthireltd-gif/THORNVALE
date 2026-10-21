@@ -109,7 +109,7 @@ export interface ItemDef {
   heal?: number;
   mana?: number;
   rune?: RuneEffect;
-  tool?: 'rope' | 'shovel' | 'fishing';
+  tool?: 'rope' | 'shovel' | 'fishing' | 'mining' | 'hammer';
   /** Buff potions: which timed buff drinking it grants. */
   buff?: PotionBuff;
   /** Throwing weapons: chance a throw uses one up (default 0.85). */
@@ -384,6 +384,59 @@ const defs: ItemDef[] = [
   def({ id: 'ice_fish', name: 'Ice Fish', kind: 'consumable', weight: 8, value: 35, heal: 120, tint: '#bfe6f5', icon: '◆', rarity: 'uncommon', note: 'Nearly see-through; lives under the northern ice. Fishing 40.' }),
   def({ id: 'swordfish', name: 'Swordfish', kind: 'consumable', weight: 14, value: 60, heal: 180, tint: '#5a7ab0', icon: '◆', rarity: 'uncommon', note: 'A fighter of the deep sea. Fishing 50.' }),
   def({ id: 'old_boot', name: 'Old Boot', kind: 'material', weight: 6, value: 1, tint: '#6a5038', note: 'Soggy, smelly, and somebody\'s loss.' }),
+
+  // --- mining: ores (iron_ore is the old loot item above), pickaxes -------------------------
+  def({ id: 'copper_ore', name: 'Copper Ore', kind: 'material', weight: 10, value: 3, tint: '#c8743a', note: 'Smelt with tin ore into bronze. Mining 1.' }),
+  def({ id: 'tin_ore', name: 'Tin Ore', kind: 'material', weight: 10, value: 3, tint: '#b8bcc4', note: 'Smelt with copper ore into bronze. Mining 1.' }),
+  def({ id: 'coal', name: 'Coal', kind: 'material', weight: 8, value: 10, tint: '#2a2a30', note: 'Feeds the furnace for steel and finer metals. Mining 30.' }),
+  def({ id: 'silver_ore', name: 'Silver Ore', kind: 'material', weight: 10, value: 45, tint: '#e4e8f0', note: 'Mining 40.' }),
+  def({ id: 'gold_ore', name: 'Gold Ore', kind: 'material', weight: 12, value: 90, tint: '#f0c030', note: 'Mining 50.' }),
+  def({ id: 'starsteel_ore', name: 'Starsteel Ore', kind: 'material', weight: 12, value: 120, tint: '#5a8ad8', rarity: 'uncommon', note: 'Blue-veined ore said to fall from the night sky. Mining 60.' }),
+  def({ id: 'darkstone_ore', name: 'Darkstone Ore', kind: 'material', weight: 14, value: 300, tint: '#6a3a7a', rarity: 'rare', note: 'Heavy, cold and nearly black. Found only in the deepest rock. Mining 75.' }),
+  def({ id: 'bronze_pickaxe', name: 'Bronze Pickaxe', kind: 'tool', tool: 'mining', weight: 40, value: 10, tint: '#c8843a', note: 'Use an ore rock to mine it.' }),
+  def({ id: 'iron_pickaxe', name: 'Iron Pickaxe', kind: 'tool', tool: 'mining', weight: 42, value: 60, tint: '#9aa0aa', note: 'Mines faster than bronze. Mining 10.' }),
+  def({ id: 'steel_pickaxe', name: 'Steel Pickaxe', kind: 'tool', tool: 'mining', weight: 42, value: 250, tint: '#c9d0da', rarity: 'uncommon', note: 'Mines faster than iron. Mining 25.' }),
+  def({ id: 'starsteel_pickaxe', name: 'Starsteel Pickaxe', kind: 'tool', tool: 'mining', weight: 38, value: 900, tint: '#5a8ad8', rarity: 'rare', note: 'The best pickaxe a smith can make. Mining 45.' }),
+
+  // --- blacksmithing: bars, the hammer, and smithed gear the shops never had ----------------
+  def({ id: 'smithing_hammer', name: "Smith's Hammer", kind: 'tool', tool: 'hammer', weight: 25, value: 8, tint: '#8a8f9a', note: 'Use an anvil with bars to smith.' }),
+  def({ id: 'bronze_bar', name: 'Bronze Bar', kind: 'material', weight: 10, value: 8, tint: '#c8843a', note: 'Smelted from copper and tin. Blacksmithing 1.' }),
+  def({ id: 'iron_bar', name: 'Iron Bar', kind: 'material', weight: 10, value: 30, tint: '#9aa0aa', note: 'Blacksmithing 15.' }),
+  def({ id: 'silver_bar', name: 'Silver Bar', kind: 'material', weight: 10, value: 60, tint: '#e4e8f0', note: 'Precious metal for jewellers. Blacksmithing 20.' }),
+  def({ id: 'steel_bar', name: 'Steel Bar', kind: 'material', weight: 10, value: 55, tint: '#c9d0da', note: 'Iron hardened with coal. Blacksmithing 30.' }),
+  def({ id: 'gold_bar', name: 'Gold Bar', kind: 'material', weight: 12, value: 110, tint: '#f0c030', note: 'Precious metal for jewellers. Blacksmithing 40.' }),
+  def({ id: 'starsteel_bar', name: 'Starsteel Bar', kind: 'material', weight: 10, value: 220, tint: '#5a8ad8', rarity: 'uncommon', note: 'Blacksmithing 50.' }),
+  def({ id: 'darkstone_bar', name: 'Darkstone Bar', kind: 'material', weight: 12, value: 520, tint: '#6a3a7a', rarity: 'rare', note: 'Blacksmithing 80.' }),
+  def({ id: 'bronze_arrowheads', name: 'Bronze Arrowheads', kind: 'material', weight: 0.2, value: 1, tint: '#c8843a', note: 'For fletchers.' }),
+  def({ id: 'iron_arrowheads', name: 'Iron Arrowheads', kind: 'material', weight: 0.2, value: 2, tint: '#9aa0aa', note: 'For fletchers.' }),
+  def({ id: 'steel_arrowheads', name: 'Steel Arrowheads', kind: 'material', weight: 0.2, value: 4, tint: '#c9d0da', note: 'For fletchers.' }),
+  def({ id: 'starsteel_arrowheads', name: 'Starsteel Arrowheads', kind: 'material', weight: 0.2, value: 15, tint: '#5a8ad8', rarity: 'uncommon', note: 'For fletchers.' }),
+  def({ id: 'darkstone_arrowheads', name: 'Darkstone Arrowheads', kind: 'material', weight: 0.2, value: 35, tint: '#6a3a7a', rarity: 'rare', note: 'For fletchers.' }),
+  W('bronze_dagger', 'Bronze Dagger', 'sword', 8, 4, 1, 6, 15),
+  W('iron_dagger', 'Iron Dagger', 'sword', 11, 6, 4, 22, 18),
+  W('steel_dagger', 'Steel Dagger', 'sword', 14, 8, 10, 40, 18),
+  W('starsteel_dagger', 'Starsteel Dagger', 'sword', 20, 10, 30, 180, 15, { rarity: 'uncommon' }),
+  W('darkstone_dagger', 'Darkstone Dagger', 'sword', 26, 12, 45, 450, 16, { rarity: 'rare' }),
+  W('bronze_mace', 'Bronze Mace', 'club', 11, 6, 1, 12, 45),
+  W('starsteel_sword', 'Starsteel Sword', 'sword', 30, 18, 40, 700, 48, { vocations: KNIGHT, rarity: 'uncommon' }),
+  W('starsteel_axe', 'Starsteel Axe', 'axe', 31, 14, 40, 400, 60, { vocations: KNIGHT, rarity: 'uncommon' }),
+  W('starsteel_mace', 'Starsteel Mace', 'club', 30, 14, 40, 400, 70, { vocations: KNIGHT, rarity: 'uncommon' }),
+  W('darkstone_sword', 'Darkstone Sword', 'sword', 38, 22, 60, 1800, 52, { vocations: KNIGHT, rarity: 'rare' }),
+  W('darkstone_axe', 'Darkstone Axe', 'axe', 39, 16, 60, 1100, 66, { vocations: KNIGHT, rarity: 'rare' }),
+  W('darkstone_mace', 'Darkstone Mace', 'club', 38, 16, 60, 1100, 75, { vocations: KNIGHT, rarity: 'rare' }),
+  def({ id: 'bronze_shield', name: 'Bronze Shield', kind: 'shield', defense: 14, weight: 50, value: 20 }),
+  def({ id: 'steel_shield', name: 'Steel Kite Shield', kind: 'shield', defense: 23, level: 25, weight: 65, value: 400 }),
+  def({ id: 'starsteel_shield', name: 'Starsteel Shield', kind: 'shield', defense: 28, level: 45, vocations: FIGHTERS, weight: 55, value: 1200, rarity: 'uncommon' }),
+  def({ id: 'darkstone_shield', name: 'Darkstone Shield', kind: 'shield', defense: 32, level: 65, vocations: FIGHTERS, weight: 62, value: 2800, rarity: 'rare' }),
+  def({ id: 'steel_helmet', name: 'Steel Helmet', kind: 'helmet', armor: 4, level: 18, weight: 36, value: 150 }),
+  def({ id: 'starsteel_helm', name: 'Starsteel Helm', kind: 'helmet', armor: 6, level: 45, vocations: FIGHTERS, weight: 36, value: 600, rarity: 'uncommon' }),
+  def({ id: 'darkstone_helm', name: 'Darkstone Helm', kind: 'helmet', armor: 7, level: 60, vocations: FIGHTERS, weight: 40, value: 1500, rarity: 'rare' }),
+  def({ id: 'steel_plate', name: 'Steel Plate', kind: 'armor', armor: 10, level: 30, vocations: FIGHTERS, weight: 125, value: 600 }),
+  def({ id: 'starsteel_plate', name: 'Starsteel Plate', kind: 'armor', armor: 12, level: 50, vocations: FIGHTERS, weight: 100, value: 2400, rarity: 'uncommon' }),
+  def({ id: 'darkstone_plate', name: 'Darkstone Plate', kind: 'armor', armor: 13, level: 70, vocations: FIGHTERS, weight: 110, value: 5500, rarity: 'rare' }),
+  def({ id: 'iron_legs', name: 'Iron Legs', kind: 'legs', armor: 4, level: 12, weight: 55, value: 70 }),
+  def({ id: 'starsteel_legs', name: 'Starsteel Legs', kind: 'legs', armor: 7, level: 45, vocations: FIGHTERS, weight: 55, value: 1300, rarity: 'uncommon' }),
+  def({ id: 'darkstone_legs', name: 'Darkstone Legs', kind: 'legs', armor: 8, level: 65, vocations: FIGHTERS, weight: 60, value: 3000, rarity: 'rare' }),
 ];
 
 /** Logs from woodcutting, cheapest first. */

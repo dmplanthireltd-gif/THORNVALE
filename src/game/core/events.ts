@@ -35,6 +35,12 @@ export type GameEvent =
   | { type: 'chop'; id: number; x: number; y: number; z: number; got: boolean; felled: boolean }
   /** A player casts a fishing line at a water tile; `got` = something bit and was landed. */
   | { type: 'fish'; id: number; x: number; y: number; z: number; got: boolean }
+  /** A swing of the pickaxe at an ore rock; `got` = ore came loose, `depleted` = the rock is mined out. */
+  | { type: 'mine'; id: number; x: number; y: number; z: number; got: boolean; depleted: boolean }
+  /** Work at a production station (furnace, anvil); `made` = an item came out. */
+  | { type: 'craft'; id: number; x: number; y: number; z: number; station: string; made: boolean }
+  /** The station window (smithing etc.) opened, closed or changed. */
+  | { type: 'craftChanged'; to: number }
   /** A skill advanced (shown in the Skills panel). */
   | { type: 'skillUp'; skill: string; level: number; to: number }
   | { type: 'levelUp'; id: number; level: number }

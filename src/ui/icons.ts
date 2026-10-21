@@ -533,6 +533,25 @@ function drawTool(x: Ctx, d: ItemDef): void {
     circle(x, 26, 24, 2.2, '#d8302a', 1);
     return;
   }
+  if (d.tool === 'mining') {
+    // a pickaxe: wooden haft, curved metal head in the item's colour
+    bar(x, 7, 28, 22, 9, 2.4, '#7a5530');
+    x.beginPath();
+    x.moveTo(9, 6);
+    x.quadraticCurveTo(20, 3, 29, 14);
+    x.lineTo(26, 15);
+    x.quadraticCurveTo(20, 8, 10, 9);
+    x.closePath();
+    paint(x, d.tint);
+    return;
+  }
+  if (d.tool === 'hammer') {
+    // a smith's hammer: short haft, heavy square head
+    bar(x, 8, 28, 20, 12, 2.6, '#7a5530');
+    poly(x, [14, 5, 26, 13, 21, 20, 9, 12], d.tint);
+    poly(x, [14, 5, 17, 7, 12, 14, 9, 12], shade(d.tint, 1.3), 0.8);
+    return;
+  }
   if (d.tool === 'rope') {
     for (const r of [11, 8, 5]) {
       x.beginPath();
@@ -568,6 +587,13 @@ export const MATERIAL_SHAPE: Record<string, [string, string]> = {
   frozen_heart: ['heart', '#6ac8ff'], frost_dragon_scale: ['scale', '#bfe6f5'],
   logs: ['logs', '#9a6a3a'], pine_logs: ['logs', '#b08850'], palm_logs: ['logs', '#c8a870'], teak_logs: ['logs', '#7a4a28'],
   old_boot: ['boot', '#6a5038'],
+  // mining and blacksmithing
+  copper_ore: ['ore', '#c8743a'], tin_ore: ['ore', '#b8bcc4'], coal: ['ore', '#2a2a30'], silver_ore: ['ore', '#e4e8f0'], gold_ore: ['ore', '#f0c030'],
+  starsteel_ore: ['ore', '#5a8ad8'], darkstone_ore: ['ore', '#6a3a7a'],
+  bronze_bar: ['bar', '#c8843a'], iron_bar: ['bar', '#9aa0aa'], silver_bar: ['bar', '#e4e8f0'], steel_bar: ['bar', '#c9d0da'], gold_bar: ['bar', '#f0c030'],
+  starsteel_bar: ['bar', '#5a8ad8'], darkstone_bar: ['bar', '#6a3a7a'],
+  bronze_arrowheads: ['tips', '#c8843a'], iron_arrowheads: ['tips', '#9aa0aa'], steel_arrowheads: ['tips', '#c9d0da'],
+  starsteel_arrowheads: ['tips', '#5a8ad8'], darkstone_arrowheads: ['tips', '#6a3a7a'],
 };
 
 function drawMaterial(x: Ctx, d: ItemDef): void {
@@ -690,8 +716,25 @@ function drawMaterial(x: Ctx, d: ItemDef): void {
       for (const [cx, cy] of [[8, 10], [13, 7], [19, 7], [24, 10]]) circle(x, cx, cy, 3, shade(c, 0.8));
       break;
     case 'ore':
-      poly(x, [5, 20, 9, 9, 18, 5, 27, 11, 28, 22, 18, 28, 8, 27], c);
-      for (const [cx, cy] of [[12, 14], [20, 18], [15, 22]]) circle(x, cx, cy, 2, '#d8d0c8', 0);
+      if (d.id === 'iron_ore') {
+        poly(x, [5, 20, 9, 9, 18, 5, 27, 11, 28, 22, 18, 28, 8, 27], c);
+        for (const [cx, cy] of [[12, 14], [20, 18], [15, 22]]) circle(x, cx, cy, 2, '#d8d0c8', 0);
+        break;
+      }
+      // grey stone with lumps of the ore's colour
+      poly(x, [5, 20, 9, 9, 18, 5, 27, 11, 28, 22, 18, 28, 8, 27], '#7a746c');
+      for (const [cx, cy, r] of [[12, 14, 3.2], [20, 18, 3], [15, 23, 2.4], [21, 10, 2]]) circle(x, cx, cy, r, c, 1);
+      circle(x, 11, 13, 0.9, 'rgba(255,255,255,0.7)', 0);
+      break;
+    case 'bar':
+      // an ingot seen from the side: wide base, narrower top
+      poly(x, [3, 22, 8, 12, 24, 12, 29, 22], c);
+      poly(x, [8, 12, 24, 12, 22, 9, 10, 9], shade(c, 1.35), 1);
+      bar(x, 6, 21, 26, 21, 0.8, shade(c, 0.7));
+      break;
+    case 'tips':
+      // a little pile of arrowheads
+      for (const [tx, ty] of [[8, 22], [16, 24], [23, 20], [12, 13], [20, 11]]) poly(x, [tx, ty - 6, tx + 3.5, ty + 2, tx - 3.5, ty + 2], c, 1);
       break;
     case 'skull':
       circle(x, 16, 14, 10, c);

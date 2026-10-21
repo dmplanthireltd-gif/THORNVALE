@@ -15,7 +15,7 @@ import { isVocation } from '../player/vocations';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -53,6 +53,8 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   5: (d) => ({ ...d, friends: Array.isArray(d.friends) ? d.friends : [], version: 6 }),
   // v6 → v7: fishing skill; everyone starts at fishing level 1 (woodcutting is kept)
   6: (d) => ({ ...d, gathering: { ...((d.gathering ?? {}) as Record<string, unknown>), fishing: 0 }, version: 7 }),
+  // v7 → v8: mining and blacksmithing; everyone starts at level 1 in both (woodcutting and fishing are kept)
+  7: (d) => ({ ...d, gathering: { ...((d.gathering ?? {}) as Record<string, unknown>), mining: 0, smithing: 0 }, version: 8 }),
 };
 
 export interface MigrationResult {

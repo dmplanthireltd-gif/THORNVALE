@@ -1,4 +1,6 @@
 import { ITEMS, LOG_ITEMS } from '../inventory/items';
+import { ORE_ITEMS } from '../gathering/mining';
+import { BAR_ITEMS } from '../production/smithing';
 import type { SpellId } from '../magic/spells';
 import type { ShopEntry } from './npcs';
 
@@ -30,15 +32,22 @@ const NEW_GEAR = [
   'fur_legs', 'dwarven_legs', 'frost_legs', 'fur_boots', 'glacier_boots',
 ];
 
+/** Mining and blacksmithing goods every smith buys: ores, bars and arrowheads (gems go to the usual gem buyers). */
+export const SMITH_MATERIALS = [
+  ...ORE_ITEMS, ...BAR_ITEMS, 'bronze_arrowheads', 'iron_arrowheads', 'steel_arrowheads', 'starsteel_arrowheads', 'darkstone_arrowheads',
+];
+
 export const EXTRA_SELLS: Record<string, ShopEntry[]> = {
   brunhild: [
     s('barbarian_axe', 750), s('dwarven_axe', 1400), s('tusk_club', 240), s('dwarven_shield', 550),
     s('fur_cap', 70), s('dwarven_helmet', 900), s('fur_armor', 330), s('dwarven_armor', 2600), s('fur_legs', 110), s('dwarven_legs', 1150), s('fur_boots', 140),
+    // mining and blacksmithing tools
+    s('bronze_pickaxe', 30), s('iron_pickaxe', 180), s('steel_pickaxe', 700), s('smithing_hammer', 20),
   ],
   garrick: [
     s('fur_bag', 70), s('fur_backpack', 250), s('sylvan_bow', 3900),
     s('onyx_arrow', 8), s('hawkeye_arrow', 13), s('royal_spear', 16), s('enchanted_spear', 50), s('viper_star', 20), s('shadow_star', 65),
-    s('fish', 5), s('mead', 15), s('hatchet', 70), s('fishing_rod', 50),
+    s('fish', 5), s('mead', 15), s('hatchet', 70), s('fishing_rod', 50), s('bronze_pickaxe', 32),
   ],
   mirella: [
     s('berserk_potion', 400), s('bullseye_potion', 400), s('mastermind_potion', 600), s('glacier_robe', 9500), s('frost_circlet', 6000),
@@ -54,7 +63,7 @@ export const EXTRA_BUYS: Record<string, string[]> = {
   aldric: NEW_MATERIALS,
   brann: NEW_MATERIALS,
   zuri: NEW_MATERIALS,
-  brunhild: [...NEW_GEAR, 'iron_ore', 'minotaur_leather', 'polar_bear_fur', 'frost_dragon_scale', 'lizard_scale'],
+  brunhild: [...NEW_GEAR, 'iron_ore', 'minotaur_leather', 'polar_bear_fur', 'frost_dragon_scale', 'lizard_scale', ...SMITH_MATERIALS, 'bronze_pickaxe', 'iron_pickaxe', 'steel_pickaxe', 'starsteel_pickaxe', 'smithing_hammer'],
   garrick: ['sylvan_bow', 'frostbite_crossbow', 'fur_bag', 'fur_backpack', 'winter_wolf_fur', 'polar_bear_fur', 'snakeskin', 'antlers', 'silver_fur', 'penguin_feather', 'bear_paw', ...LOG_ITEMS],
   mirella: ['glacier_robe', 'frost_circlet', 'frost_charm', 'crystal_shard', 'frozen_heart', 'mummy_wrapping', 'scarab_amulet'],
   orwin: ['scarab_coin', 'skull_trophy', 'cyclops_eye'],

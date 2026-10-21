@@ -5,6 +5,8 @@ import type { Inventory } from '../inventory/Inventory';
 import { EQUIP_SLOTS, isItem, type EquipSlot, type ItemStack } from '../inventory/items';
 import { isSpellId, type SpellId } from '../magic/spells';
 import type { MarketView } from '../market/market';
+import { NONCOMBAT_IDS, type NonCombatSkill } from '../gathering/skills';
+import type { CraftView } from '../production/recipes';
 import type { DialogueState } from '../npc/dialogue';
 import { COMBAT_SKILLS, parseSkills } from '../player/skills';
 import { isOutfit, type Outfit } from '../player/outfits';
@@ -18,7 +20,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 14;
+export const PROTOCOL_VERSION = 15;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -75,7 +77,10 @@ export type Command =
   | { c: 'marketSell'; from: 'depot' | 'inv'; index: number; qty: number; price: number }
   | { c: 'marketBuy'; id: string; qty: number }
   | { c: 'marketCancel'; id: string }
-  | { c: 'marketClose' };
+  | { c: 'marketClose' }
+  /** Production station (furnace, anvil): make `count` of a recipe; count 0 stops the batch. */
+  | { c: 'craft'; recipe: string; count: number }
+  | { c: 'craftClose' };
 
 export type ClientMessage =
   | { t: 'hello'; v: number; name: string; password?: string; token?: string; outfit?: Outfit; vocation?: Vocation }
@@ -132,10 +137,10 @@ export interface SelfSnap {
   party: PartyView | null;
   /** Combat skills: [level, tries] per skill (see player/skills.ts). */
   skills?: Record<string, [number, number]>;
-  /** Woodcutting experience. */
-  wc: number;
-  /** Fishing experience. */
-  fx: number;
+  /** Non-combat skills (woodcutting, fishing, mining, smithing…): total experience per skill. */
+  gx?: Partial<Record<NonCombatSkill, number>>;
+  /** Station window (furnace, anvil) contents (null = closed, absent = unchanged). */
+  cw?: CraftView | null;
   /** Market window contents; only sent when it changed (null = closed, absent = unchanged). */
   mk?: MarketView | null;
   friends?: ReturnType<Game['friendsView']>;
@@ -216,7 +221,9 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     inv: onlyChanged(s, 'inv', s.inventory.toJSON()), quests: onlyChanged(s, 'quests', s.quests.state), dialogue: s.dialogue, bank: s.bank, spells: onlyChanged(s, 'spells', [...s.spells]),
     depot: s.depotOpen ? s.depot : null, trade: game.tradeView(s.id),
     pvp: game.pvp ? 1 : 0, sec: me.secure ? 1 : 0, pz: Math.ceil(me.pzLock), party: game.partyView(me.id),
-    skills: onlyChanged(s, 'skills', Object.fromEntries(COMBAT_SKILLS.map((k) => [k, [s.skills[k].level, Math.floor(s.skills[k].tries)]]))), wc: Math.floor(s.woodcutting), fx: Math.floor(s.fishing), friends: onlyChanged(s, 'friends', game.friendsView(me.id)),
+    skills: onlyChanged(s, 'skills', Object.fromEntries(COMBAT_SKILLS.map((k) => [k, [s.skills[k].level, Math.floor(s.skills[k].tries)]]))),
+    gx: onlyChanged(s, 'gx', Object.fromEntries(NONCOMBAT_IDS.map((k) => [k, Math.floor(s.gathering[k])]))), friends: onlyChanged(s, 'friends', game.friendsView(me.id)),
+    cw: onlyChanged(s, 'cw', game.craftView(s.id)),
   };
   // the market list is only sent when something in it (or in your depot or bank) changed
   const mkKey = s.marketOpen ? `${game.market.version}|${s.bank}|${JSON.stringify(s.depot)}` : 'closed';
@@ -247,7 +254,7 @@ export function eventAudience(e: GameEvent): number | null {
     case 'bagCreated': case 'bagRemoved': case 'playerJoined': case 'playerLeft': case 'tileChanged':
     case 'inventoryChanged': case 'questChanged': case 'dialogueOpened': case 'dialogueClosed':
     case 'gameLoaded': case 'equipmentChanged': case 'outfitChanged': case 'depotChanged': case 'tradeChanged': case 'partyChanged': case 'friendsChanged': case 'spellsChanged':
-    case 'marketChanged':
+    case 'marketChanged': case 'craftChanged':
       return null;
     default:
       return 'to' in e ? e.to : -1;
@@ -319,6 +326,8 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'marketBuy': if (typeof m.id === 'string' && num(m.qty)) game.marketBuy(pid, m.id.slice(0, 64), Math.floor(m.qty)); break;
     case 'marketCancel': if (typeof m.id === 'string') game.marketCancel(pid, m.id.slice(0, 64)); break;
     case 'marketClose': game.closeMarket(pid); break;
+    case 'craft': if (typeof m.recipe === 'string' && num(m.count)) game.commandCraft(pid, m.recipe.slice(0, 64), Math.floor(m.count)); break;
+    case 'craftClose': game.closeCraft(pid); break;
   }
 }
 
@@ -329,6 +338,7 @@ export interface MirrorExtras {
   depot: (ItemStack | null)[] | null;
   trade: TradeView | null;
   market?: MarketView | null;
+  craft?: CraftView | null;
 }
 
 /** Applies a server snapshot to a mirror game. Emits the state-change events the server held back. */
@@ -447,8 +457,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   s.bank = me.bank;
   // the Skills panel redraws itself when these change
   if (me.skills) s.skills = parseSkills(Object.fromEntries(Object.entries(me.skills).map(([k, v]) => [k, { level: v[0], tries: v[1] }])));
-  if (typeof me.wc === 'number') s.woodcutting = me.wc;
-  if (typeof me.fx === 'number') s.fishing = me.fx;
+  if (me.gx) for (const k of NONCOMBAT_IDS) if (typeof me.gx[k] === 'number') s.gathering[k] = me.gx[k]!;
   if (snap.st) game.syncStumps(snap.st, p.x, p.y, p.z, VIEW_RADIUS + 4);
   const spellsBefore = [...s.spells].sort().join();
   const spellsAfter = me.spells ? [...me.spells].sort().join() : spellsBefore;
@@ -489,6 +498,11 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     if (JSON.stringify(game.netParty) !== JSON.stringify(me.party ?? null)) {
       game.netParty = me.party ?? null;
       ev.emit({ type: 'partyChanged', to: me.id });
+    }
+    if (me.cw !== undefined) {
+      extras.craft = me.cw;
+      s.craftOpen = me.cw ? { station: me.cw.station, x: p.x, y: p.y, z: p.z } : null;
+      ev.emit({ type: 'craftChanged', to: me.id });
     }
     if (me.mk !== undefined) {
       extras.market = me.mk;
