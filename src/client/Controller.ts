@@ -65,10 +65,15 @@ export function sessionOf(c: Controller): Session {
 
 const TUTORIAL_FLAG = 'thornvale.tutorialDone';
 
+/** Browser storage when there is one (typed loosely so the server build, without DOM types, compiles too). */
+function browserStorage(): { getItem(k: string): string | null; setItem(k: string, v: string): void } | undefined {
+  return (globalThis as unknown as { localStorage?: { getItem(k: string): string | null; setItem(k: string, v: string): void } }).localStorage;
+}
+
 /** Offline play: has a character in this browser finished the tutorial island? */
 export function offlineTutorialDone(): boolean {
   try {
-    return globalThis.localStorage?.getItem(TUTORIAL_FLAG) === '1';
+    return browserStorage()?.getItem(TUTORIAL_FLAG) === '1';
   } catch {
     return false;
   }
@@ -76,7 +81,7 @@ export function offlineTutorialDone(): boolean {
 
 function markOfflineTutorialDone(): void {
   try {
-    globalThis.localStorage?.setItem(TUTORIAL_FLAG, '1');
+    browserStorage()?.setItem(TUTORIAL_FLAG, '1');
   } catch {
     /* storage off: nothing remembered */
   }
