@@ -15,6 +15,7 @@ import { marketFee, MARKET_MAX_PRICE, type MarketView } from '../game/market/mar
 import { Obj } from '../game/world/WorldMap';
 import { QUESTS } from '../game/quests/quests';
 import { hpColor } from '../render/Overlay';
+import { makeBottomResizable, makePanelsMovable, resetPanelLayout } from './panels';
 import type { Renderer } from '../render/Renderer';
 import { button, el, fmtGold, paintSlot } from './dom';
 import { itemIcon, spellIcon } from './icons';
@@ -133,8 +134,10 @@ export class HUD {
     this.colB = el('div', 'side-col', side);
     this.bottom = el('div', 'bottom', this.root);
     this.buildSidebar();
+    makePanelsMovable(side, [this.colA, this.colB], () => {});
     this.buildHotbar();
     this.buildConsole();
+    makeBottomResizable(this.root, this.bottom, this.bottom.querySelector('.hotbar') as HTMLElement);
     this.buildWindows();
     this.worldMap = new WorldMapView(this.root, this.ctl, this.minimap);
     this.regionEl = el('div', 'region-banner', this.root);
@@ -1746,6 +1749,8 @@ export class HUD {
     intro.textContent = this.ctl.online
       ? 'You are playing online. Other adventurers share this world with you; the server keeps your character.'
       : 'You are playing offline. Your character is saved in this browser.';
+    const lay = el('p', 'hint', b, 'Layout: drag the striped bar at the top of a side panel to move it, drag its bottom edge to resize it, drag the left edge of the side bar to widen it, drag the top edge of the chat to make it taller, and ⇅ on the action bar moves it to the top of the game view. ');
+    button(lay, 'Reset layout', () => resetPanelLayout(), 'btn small');
     const grid = el('div', 'help-grid', b);
     const rows: Array<[string, string]> = [
       ['WASD / arrows', 'Walk (Q E Z C or numpad for diagonals)'],

@@ -21,7 +21,7 @@ services:
       # test commands (/level, /item, the ` console): "1" lets everyone use them;
       # leave "0" and list names in ADMINS to allow only those characters
       - key: ALLOW_ADMIN
-        value: "0"
+        value: "1"
       - key: ADMINS
         value: ""
       # player-versus-player combat: "1" on (skulls, secure mode, PZ lock), "0" off
