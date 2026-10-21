@@ -3011,6 +3011,10 @@ export class Game implements AIContext {
         const found = this.world.chests.find((ch) => ch.x === x && ch.y === y && ch.z === z);
         if (!found) return;
         // the tutorial supply chest holds the starter kit of your own vocation
+        if (found.id === ISLE_CHEST.id && s.tutorial.state !== 'active') {
+          this.msg(s.id, 'The supply chest is meant for newcomers on their first day.', 'info');
+          return;
+        }
         const c = found.id === ISLE_CHEST.id ? { ...found, items: tutorialChestItems(p.vocation, giveStarterKit) } : found;
         if (s.chests.has(c.id)) {
           this.msg(s.id, 'The chest is empty.', 'info');
@@ -4780,7 +4784,7 @@ export class Game implements AIContext {
   startSkipped(pid: number): void {
     const s = this.sessions.get(pid);
     if (!s) return;
-    this.giveItems(s, skipGifts(1, true, []), true);
+    this.giveItems(s, skipGifts(1, true, [], true), true);
     s.chests.add(ISLE_CHEST.id);
     this.completeTutorial(s, true);
   }
@@ -4844,12 +4848,19 @@ export class Game implements AIContext {
     if (t.state !== 'active') return;
     const p = s.player;
     if (p.dead) return;
-    // never stuck in the cellar: the guide's spare rope turns up in your bag
-    if (p.z === -1 && onIsle(p.x, p.y, p.z) && !s.inventory.has('rope') && s.inventory.add('rope', 1) === 0) {
-      this.msg(s.id, 'You find an old rope among the crates. It will get you out of here.', 'loot');
-      this.events.emit({ type: 'inventoryChanged', to: s.id });
+    const stepId = tutorialStep(t.step)?.id;
+    // never stuck in the cellar: once per cellar step a spare rope turns up (dying also takes you back to the shrine)
+    if (stepId === 'cellar' && p.z === -1 && onIsle(p.x, p.y, p.z) && !s.inventory.has('rope') && !(t.flags & 4)) {
+      if (s.inventory.add('rope', 1) === 0) {
+        t.flags |= 4;
+        this.msg(s.id, 'You find an old rope among the crates. It will get you out of here.', 'loot');
+        this.events.emit({ type: 'inventoryChanged', to: s.id });
+      } else if (p.hazardTimer <= 0) {
+        p.hazardTimer = 5;
+        this.msg(s.id, 'There is an old rope among the crates, but your backpack is full. Drop something to take it.', 'warn');
+      }
     }
-    switch (tutorialStep(t.step)?.id) {
+    switch (stepId) {
       case 'walk': {
         const g = this.tutorialTarget(s.id);
         if (g && g.z === p.z && chebyshev(p.x, p.y, g.x, g.y) <= 2) this.advanceTutorial(s);
@@ -4861,7 +4872,26 @@ export class Game implements AIContext {
         break;
       }
       case 'chest': if (s.chests.has(ISLE_CHEST.id)) this.advanceTutorial(s); break;
-      case 'gear': if (s.inventory.equipment.weapon && s.inventory.equipment.armor) this.advanceTutorial(s); break;
+      case 'gear': {
+        const inv = s.inventory;
+        if (inv.equipment.weapon && inv.equipment.armor) {
+          this.advanceTutorial(s);
+          break;
+        }
+        // lost the gear from the chest (dropped, traded)? the guide hands over a spare, once per piece
+        const kit = tutorialChestItems(p.vocation, giveStarterKit);
+        const has = (id: string) => inv.has(id) || Object.values(inv.equipment).some((e) => e?.id === id);
+        const weapon = kit.find((i) => equipSlotFor(itemDef(i.id)) === 'weapon');
+        const armor = kit.find((i) => equipSlotFor(itemDef(i.id)) === 'armor');
+        const lost: ItemStack[] = [];
+        if (!inv.equipment.weapon && weapon && !has(weapon.id) && !(t.flags & 1)) { t.flags |= 1; lost.push(weapon); }
+        if (!inv.equipment.armor && armor && !has(armor.id) && !(t.flags & 2)) { t.flags |= 2; lost.push(armor); }
+        if (lost.length) {
+          this.msg(s.id, 'Guide Maren: Lost your gear already? Here, take these spares. Look after them.', 'npc');
+          this.giveItems(s, lost, false);
+        }
+        break;
+      }
       case 'loot': if ((t.flags & 3) === 3) this.advanceTutorial(s); break;
       case 'depot': if ((t.flags & 3) === 3) this.advanceTutorial(s); break;
       case 'cellar':

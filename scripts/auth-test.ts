@@ -27,7 +27,7 @@ async function connect(name: string, token: string, skipTutorial = false): Promi
 async function main(): Promise<void> {
   await startMock(54330);
   const server = spawn('/opt/npm-tools/node_modules/.bin/tsx', ['server/server.ts'], {
-    env: { ...proc.env, PORT: '8131', SUPABASE_URL: 'http://localhost:54330', SUPABASE_SERVICE_KEY: 'eyJ.test', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test' },
+    env: { ...proc.env, PORT: '8131', SUPABASE_URL: 'http://localhost:54330', SUPABASE_SERVICE_KEY: 'eyJ.test', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', ADMINS: 'Annabel' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';

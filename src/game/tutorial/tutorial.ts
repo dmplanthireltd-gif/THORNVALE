@@ -181,9 +181,9 @@ export const STEP_GIFTS: Partial<Record<TutorialStep['id'], { start?: ItemStack[
  * What skipping hands out, so a skipper ends up with what a graduate walks off the
  * island with: every gift of the steps not reached yet (and the chest, if it was never
  * opened), plus the health potion graduates buy and the food they start with.
- * `fromStep` = the step the character is on (1 for a brand-new character).
+ * `fromStep` = the step the character is on (1 for a brand-new character); `fresh` = skipping at creation.
  */
-export function skipGifts(fromStep: number, chestOpened: boolean, chest: ItemStack[]): ItemStack[] {
+export function skipGifts(fromStep: number, chestOpened: boolean, chest: ItemStack[], fresh = false): ItemStack[] {
   const out: ItemStack[] = [];
   if (!chestOpened) out.push(...chest.map((i) => ({ ...i })));
   TUTORIAL_STEPS.forEach((st, i) => {
@@ -194,6 +194,7 @@ export function skipGifts(fromStep: number, chestOpened: boolean, chest: ItemSta
     if (g.done && n >= fromStep) out.push(...g.done.map((x) => ({ ...x })));
   });
   if (fromStep <= stepNo('shop')) out.push({ id: 'health_potion', qty: 1 });
-  if (fromStep <= 1) out.push(...TUTORIAL_START_ITEMS.map((x) => ({ ...x })));
+  // a character skipping at creation never got the food the island starts you with
+  if (fresh) out.push(...TUTORIAL_START_ITEMS.map((x) => ({ ...x })));
   return out;
 }

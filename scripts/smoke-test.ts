@@ -1979,6 +1979,54 @@ console.log("Tutorial: Wayfarer's Isle (save v10)");
     check(g.serialize(f.pid).tutorial?.state === 'skipped', 'skipped is saved');
   }
 
+  // ---- review fixes: no rope farming, spare gear once, chest and test commands guarded
+  {
+    const r = solo('knight', g);
+    g.beginTutorial(r.pid);
+    r.s.tutorial.step = stepNo('rats');
+    r.s.player.placeAt(ISLE_CELLAR_HOLE.x, ISLE_CELLAR_HOLE.y + 1, -1);
+    run(g, 0.5);
+    check(r.s.inventory.count('rope') === 0, 'no free rope in the cellar outside the cellar step');
+    r.s.tutorial.step = stepNo('cellar');
+    r.s.tutorial.flags = 1;
+    run(g, 0.5);
+    const rs = r.s.inventory.slots.findIndex((x) => x?.id === 'rope');
+    check(rs >= 0, 'a spare rope turns up once in the cellar step');
+    r.s.inventory.slots[rs] = null;
+    run(g, 0.5);
+    check(r.s.inventory.count('rope') === 0, 'but only once (no rope farming)');
+    // gear lost before the gear step is done: one spare per piece
+    const q = solo('knight', g);
+    g.beginTutorial(q.pid);
+    q.s.tutorial.step = stepNo('gear');
+    run(g, 0.5);
+    check(q.s.inventory.count('short_sword') === 1 && q.s.inventory.count('leather_armor') === 1, 'a player who lost the chest gear gets one spare of each');
+    for (let i = 0; i < q.s.inventory.slots.length; i++) if (q.s.inventory.slots[i]?.id === 'short_sword') q.s.inventory.slots[i] = null;
+    run(g, 0.5);
+    check(q.s.inventory.count('short_sword') === 0, 'but only once');
+    // the supply chest is for newcomers only
+    const v = solo('knight', g);
+    v.s.player.placeAt(ISLE_CHEST.x + 1, ISLE_CHEST.y, 0);
+    const before = v.s.inventory.count('short_sword');
+    executeCommand(g, v.pid, { c: 'useTile', x: ISLE_CHEST.x, y: ISLE_CHEST.y });
+    run(g, 2);
+    check(v.s.inventory.count('short_sword') === before, 'characters who finished the tutorial cannot loot the supply chest');
+    // test mode players cannot finish, skip or jump tutorial steps
+    const tm = solo('knight', g);
+    g.beginTutorial(tm.pid);
+    tm.s.admin = true;
+    tm.s.testOnly = true;
+    g.say(tm.pid, '/tutorial done');
+    g.say(tm.pid, '/tutorial step 9');
+    check(tm.s.tutorial.state === 'active' && tm.s.tutorial.step === 1, 'test mode cannot change tutorial progress');
+    // skipping mid-island at step 1 does not hand out the start food twice
+    const sk = solo('knight', g);
+    g.beginTutorial(sk.pid);
+    sk.s.tutorial.canSkip = true;
+    g.skipTutorial(sk.pid);
+    check(sk.s.inventory.count('cheese') === 2, 'skipping at step 1 keeps the two cheeses (no extra)');
+  }
+
   // ---- migration v9 → v10 and loading
   {
     const old = solo('knight');

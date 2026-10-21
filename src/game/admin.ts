@@ -335,6 +335,8 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
         game.beginTutorial(pid);
         return say("Back to Wayfarer's Isle, step 1. Everything you carried is in your depot.", 'warn');
       }
+      // finishing, skipping or jumping steps would set the account flag or repeat the step gifts: game masters only
+      if (s.testOnly) return say('Only game masters can change tutorial progress.', 'warn');
       if (t.state !== 'active') return say('You are not on the tutorial. Use /tutorial reset first.', 'warn');
       if (sub === 'done') {
         game.completeTutorial(s, false);
