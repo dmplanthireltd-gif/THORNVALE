@@ -124,6 +124,8 @@ export interface Session {
   marketOpen: { x: number; y: number; z: number } | null;
   /** Ids of market deliveries this character already received (saved; makes hand-outs idempotent). */
   marketClaimed: string[];
+  /** Character names on the friends list (save v6+). */
+  friends: string[];
 }
 
 export interface CharacterData {
@@ -164,6 +166,8 @@ export interface SaveData {
   gathering?: { woodcutting?: number };
   /** Market deliveries already received (save v5+). */
   market?: { claimed?: string[] };
+  /** Friends list: character names (save v6+). */
+  friends?: string[];
 }
 
 export interface GameOptions {
@@ -245,6 +249,8 @@ export class Game implements AIContext {
   readonly parties: Party[] = [];
   /** Online mirror: the local player's party as last sent by the server. */
   netParty: PartyView | null = null;
+  /** Online mirror: friends list as last sent by the server. */
+  netFriends: ReturnType<Game['friendsView']> | null = null;
   /** Online mirror: party relation per player id (1 member, 2 invited me, 3 I invited). */
   netPartyFlags = new Map<number, 1 | 2 | 3>();
   private nextId = 1;
@@ -277,7 +283,7 @@ export class Game implements AIContext {
     player.name = name;
     const session: Session = {
       id, player, inventory: new Inventory(), quests: new QuestLog(), dialogue: null,
-      intent: opts.intent ?? new BufferedIntent(), depot: new Array(DEPOT_SLOTS).fill(null), depotOpen: null,
+      intent: opts.intent ?? new BufferedIntent(), depot: new Array(DEPOT_SLOTS).fill(null), depotOpen: null, friends: [],
       bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
       skills: startSkills(), woodcutting: 0, marketOpen: null, marketClaimed: [],
     };
@@ -293,6 +299,8 @@ export class Game implements AIContext {
   removePlayer(id: number): void {
     this.cancelTrade(id, 'left the game');
     this.partyLeave(id, true);
+    this.friendRequests.delete(id);
+    for (const set of this.friendRequests.values()) set.delete(id);
     if (!this.sessions.delete(id)) return;
     for (const e of this.enemies) if (e.targetId === id) e.targetId = null;
     for (const o of this.sessions.values()) if (o.player.targetId === id) o.player.targetId = null;
@@ -838,6 +846,25 @@ export class Game implements AIContext {
         const path = this.pathTo(p, n.x, n.y, true, 6000);
         if (!path) { this.msg(s.id, 'There is no way.', 'warn'); p.pending = null; return; }
         p.path = path;
+      }
+    } else if (pend.type === 'follow') {
+      const c = this.getCreature(pend.id);
+      if (!c || c.dead || c.z !== p.z) {
+        p.pending = null;
+        p.path = [];
+        if (!c || c.dead) this.msg(s.id, 'You stop following.', 'info');
+        else this.msg(s.id, `${c.name} is out of reach.`, 'info');
+        return;
+      }
+      if (chebyshev(p.x, p.y, c.x, c.y) <= 1) {
+        p.path = [];
+        return;
+      }
+      // re-plan one step at a time so we keep up with a moving target
+      if (!p.moving) {
+        const path = this.pathTo(p, c.x, c.y, true, 3000);
+        if (!path || !path.length) return;
+        p.path = path.slice(0, 1);
       }
     } else if (pend.type === 'bag') {
       const b = this.bags.find((x) => x.id === pend.bagId);
@@ -1609,6 +1636,85 @@ export class Game implements AIContext {
     bag.items.push(...items);
     bag.ttl = BAG_LIFETIME;
     return bag;
+  }
+
+  /** Walk after someone (player, NPC or monster) until you move, attack or they leave. */
+  commandFollow(pid: number, id: number): void {
+    const p = this.getPlayer(pid);
+    const c = this.getCreature(id);
+    if (!p || !c || p.dead || id === pid || c.z !== p.z) return;
+    p.targetId = null;
+    p.path = [];
+    p.pending = { type: 'follow', id };
+    this.msg(pid, `You follow ${c.name}.`, 'info');
+  }
+
+  // ---------------------------------------------------------------- friends
+
+  /** Friend requests waiting for an answer: target id → set of requester ids. */
+  private friendRequests = new Map<number, Set<number>>();
+
+  private keyOf(name: string): string {
+    return name.trim().toLowerCase();
+  }
+
+  /** Friends with online status, for the Friends panel. */
+  friendsView(pid: number): { friends: Array<{ name: string; online: boolean; level?: number }>; requests: Array<{ id: number; name: string }> } {
+    if (!this.simulate && this.netFriends) return this.netFriends;
+    const s = this.sessions.get(pid);
+    if (!s) return { friends: [], requests: [] };
+    const online = new Map<string, Player>();
+    for (const o of this.sessions.values()) online.set(this.keyOf(o.player.name), o.player);
+    const friends = s.friends.map((n) => {
+      const o = online.get(this.keyOf(n));
+      return { name: o?.name ?? n, online: !!o, level: o?.level };
+    }).sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
+    const requests = [...(this.friendRequests.get(pid) ?? [])].map((id) => this.getPlayer(id)).filter((x): x is Player => !!x).map((x) => ({ id: x.id, name: x.name }));
+    return { friends, requests };
+  }
+
+  friendRequest(pid: number, otherId: number): void {
+    const a = this.sessions.get(pid), b = this.sessions.get(otherId);
+    if (!a || !b || pid === otherId) return;
+    if (a.friends.some((n) => this.keyOf(n) === this.keyOf(b.player.name))) return this.msg(pid, `${b.player.name} is already your friend.`, 'info');
+    if (a.friends.length >= 100) return this.msg(pid, 'Your friends list is full.', 'warn');
+    // they already asked us: that counts as accepting
+    if (this.friendRequests.get(pid)?.has(otherId)) return this.friendAccept(pid, otherId);
+    let set = this.friendRequests.get(otherId);
+    if (!set) this.friendRequests.set(otherId, (set = new Set()));
+    set.add(pid);
+    this.msg(pid, `Friend request sent to ${b.player.name}.`, 'info');
+    this.msg(otherId, `${a.player.name} wants to be your friend. Right-click them or open Friends to accept.`, 'info');
+    this.events.emit({ type: 'friendsChanged', to: otherId });
+  }
+
+  friendAccept(pid: number, otherId: number): void {
+    const a = this.sessions.get(pid), b = this.sessions.get(otherId);
+    const set = this.friendRequests.get(pid);
+    if (!a || !b || !set?.delete(otherId)) return;
+    const add = (s: Session, name: string) => { if (!s.friends.some((n) => this.keyOf(n) === this.keyOf(name))) s.friends.push(name); s.wantsSave = true; };
+    add(a, b.player.name);
+    add(b, a.player.name);
+    this.msg(pid, `You and ${b.player.name} are now friends.`, 'info');
+    this.msg(otherId, `You and ${a.player.name} are now friends.`, 'info');
+    this.events.emit({ type: 'friendsChanged', to: pid });
+    this.events.emit({ type: 'friendsChanged', to: otherId });
+  }
+
+  friendDecline(pid: number, otherId: number): void {
+    if (this.friendRequests.get(pid)?.delete(otherId)) this.events.emit({ type: 'friendsChanged', to: pid });
+  }
+
+  friendRemove(pid: number, name: string): void {
+    const s = this.sessions.get(pid);
+    if (!s) return;
+    const before = s.friends.length;
+    s.friends = s.friends.filter((n) => this.keyOf(n) !== this.keyOf(name));
+    if (s.friends.length !== before) {
+      s.wantsSave = true;
+      this.msg(pid, `${name} was removed from your friends.`, 'info');
+      this.events.emit({ type: 'friendsChanged', to: pid });
+    }
   }
 
   // ---------------------------------------------------------------- party
@@ -3364,6 +3470,7 @@ export class Game implements AIContext {
       skills: Object.fromEntries(Object.entries(s.skills).map(([k, v]) => [k, { level: v.level, tries: v.tries }])),
       gathering: { woodcutting: s.woodcutting },
       market: { claimed: [...s.marketClaimed] },
+      friends: [...s.friends],
     };
   }
 
@@ -3419,6 +3526,7 @@ export class Game implements AIContext {
     this.events.emit({ type: 'equipmentChanged', id: pid });
     this.events.emit({ type: 'teleport', id: pid });
     s.lostItems = data.lostItems ?? [];
+    s.friends = Array.isArray(data.friends) ? data.friends.filter((n): n is string => typeof n === 'string').slice(0, 100) : [];
     for (const it of m.restored) {
       const left = addToList(s.depot, it.id, it.qty);
       if (left > 0) s.lostItems.push({ id: it.id, qty: left });

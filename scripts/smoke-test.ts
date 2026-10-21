@@ -15,6 +15,7 @@ import { ITEM_RENAMES, migrateSave, SAVE_VERSION } from '../src/game/save/migrat
 import { floodFill3D } from '../src/game/world/worldGen';
 import { Obj, WorldMap } from '../src/game/world/WorldMap';
 import { ITEMS } from '../src/game/inventory/items';
+import { chebyshev } from '../src/game/core/types';
 import { PVP_MIN_LEVEL } from '../src/game/Game';
 import { NPCS } from '../src/game/npc/npcs';
 import type { Vocation } from '../src/game/player/vocations';
@@ -1289,6 +1290,38 @@ console.log('Player market');
   g.market.enabled = true;
   g.teleport(b2.player, stand[0].x + 6, stand[0].y + 6, 0);
   check(!b2.marketOpen, 'moving away closes the market');
+}
+
+console.log('Follow and friends');
+{
+  const g = new Game();
+  const a = g.addPlayer('Walker', { vocation: 'knight' });
+  const b = g.addPlayer('Guide', { vocation: 'paladin' });
+  const w = g.world;
+  let at: [number, number] | null = null;
+  for (let y = 300; y < 500 && !at; y++) for (let x = 100; x < 500; x++) {
+    let ok = true;
+    for (let dx = -1; dx <= 12 && ok; dx++) if (!w.isWalkable(x + dx, y, 0) || w.getObj(x + dx, y, 0) !== 0) ok = false;
+    if (ok) { at = [x, y]; break; }
+  }
+  g.teleport(a.player, at![0], at![1], 0);
+  g.teleport(b.player, at![0] + 2, at![1], 0);
+  executeCommand(g, a.id, { c: 'follow', id: b.id });
+  g.teleport(b.player, at![0] + 10, at![1], 0);
+  for (let i = 0; i < 120; i++) g.update(0.05);
+  check(chebyshev(a.player.x, a.player.y, b.player.x, b.player.y) <= 1, 'follow walks after the other player');
+  executeCommand(g, a.id, { c: 'friendRequest', id: b.id });
+  check(g.friendsView(b.id).requests.some((r) => r.id === a.id), 'friend request arrives');
+  executeCommand(g, b.id, { c: 'friendAccept', id: a.id });
+  check(g.friendsView(a.id).friends.some((f) => f.name === 'Guide' && f.online) && g.friendsView(b.id).friends.some((f) => f.name === 'Walker'), 'accepted friends see each other online');
+  const save = g.serialize(a.id);
+  check(save.friends?.includes('Guide') === true && save.version === SAVE_VERSION, 'friends are saved');
+  const old = { ...save, version: 5 } as Record<string, unknown>;
+  delete old.friends;
+  const mig = migrateSave(old);
+  check(typeof mig !== 'string' && Array.isArray(mig.data.friends) && mig.data.friends.length === 0, 'older saves get an empty friends list');
+  executeCommand(g, a.id, { c: 'friendRemove', name: 'guide' });
+  check(g.friendsView(a.id).friends.length === 0, 'remove a friend');
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);

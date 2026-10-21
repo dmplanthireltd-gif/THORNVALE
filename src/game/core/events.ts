@@ -53,6 +53,7 @@ export type GameEvent =
   | { type: 'depotChanged'; to: number }
   | { type: 'tradeChanged'; to: number }
   | { type: 'partyChanged'; to: number }
+  | { type: 'friendsChanged'; to: number }
   | { type: 'spellsChanged'; to: number }
   | { type: 'marketChanged'; to: number }
   | { type: 'gameLoaded'; to: number };

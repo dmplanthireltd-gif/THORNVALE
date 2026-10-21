@@ -133,7 +133,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 2. **Every player action is a `Command`** sent through `Controller.send(...)` → `Game.executeCommand`. UI/input never mutate game state directly. Offline = LocalController runs it locally; online = NetController sends it, the server is authoritative.
 3. **Game → view communication is via the event bus** (`core/events.ts`). Renderer, HUD and Sfx subscribe; they never poll internal fields they don't own.
 4. **Online:** server ticks at 20 Hz and sends snapshots (`VIEW_RADIUS = 20`). The client keeps a mirror Game (`simulate:false`) and applies snapshots. Messages arriving before the HUD exists go to the backlog.
-5. **Protocol:** `PROTOCOL_VERSION` (currently **10**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
+5. **Protocol:** `PROTOCOL_VERSION` (currently **11**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
 6. **PvP** (server option `PVP`, passed as `GameOptions.pvp`; off offline). Rules live in `Game` (`pvpProblem`, `onPvpAttack`, `onPvpKill`); every PvP hit passes `applyDamage`, which re-checks them:
    - Players block players, like monsters do, **except inside protection zones** (temples, depots, town doors) where they pass through each other. Logging in or teleporting onto an occupied tile is allowed.
    - No attacking from inside, or into, a protection zone. Attacker and target must both be level ≥ 8.
@@ -183,7 +183,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 
 ## 8. Save data and migration (PRIORITY)
 
-File: `src/game/save/migrate.ts`. Current **`SAVE_VERSION = 5`** (v2→v3: new world, everyone respawns at the Thornvale temple; v3→v4: `pvp` block — secure mode, skull expiry times, unjustified-kill timestamps — everyone starts unmarked with secure mode on; v4→v5: `skills` (from `legacySkills(vocation, level)`: every weapon skill and magic level at the value where power level ≥ character level, so nobody hits or heals less; shielding by vocation), `gathering.woodcutting = 0`, `market.claimed = []`).
+File: `src/game/save/migrate.ts`. Current **`SAVE_VERSION = 6`** (v2→v3: new world, everyone respawns at the Thornvale temple; v3→v4: `pvp` block — secure mode, skull expiry times, unjustified-kill timestamps — everyone starts unmarked with secure mode on; v4→v5: `skills` (from `legacySkills(vocation, level)`: every weapon skill and magic level at the value where power level ≥ character level, so nobody hits or heals less; shielding by vocation), `gathering.woodcutting = 0`, `market.claimed = []`; v5→v6: `friends = []`).
 
 - Every save stores `version`. On load, `migrateSave()` upgrades it step by step: `MIGRATIONS[n]` turns version n into n+1.
 - **Changed the save shape?** → bump `SAVE_VERSION`, add `MIGRATIONS[old]`, add a case to the smoke test, note it in the Change Log below.
@@ -320,3 +320,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | More blood on hits; blood splats and death pools stay on the floor (dry darker, vanish after 3 min) — `src/render/Blood.ts`, render-only | 4 | 9 |
 | 2026-10-21 | — | Website: guide, highscores (/api/highscores), FAQ, rules, privacy pages; byte-range file serving | 4 | 9 |
 | 2026-10-21 | — | Classic skills (fist/club/sword/axe/distance/shielding/magic level, trained by use, Skills panel, `/skill`), woodcutting (trees → logs, stumps regrow, levels 1–99), player market (market board in every depot, escrow, 1% fee, deliveries to offline sellers; new tables `market_offers`, `market_deliveries`). Old characters get skills that keep their damage | 5 | 10 |
+| 2026-10-21 | — | Follow (right-click any creature), Inspect window (level, vocation, health, skull, party, worn equipment), friends list with requests/accept/online status (saved: save v6 `friends`), bigger name tags (14 px) | 6 | 11 |

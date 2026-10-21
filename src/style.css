@@ -42,12 +42,12 @@ html, body {
 .nameplate {
   position: absolute; left: 0; top: 0;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  font: 700 12px/1 var(--pixel);
+  font: 700 14px/1 var(--pixel);
   text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
   white-space: nowrap;
   will-change: transform;
 }
-.np-bar { width: 32px; height: 5px; background: #000; border: 1px solid #000; }
+.np-bar { width: 38px; height: 5px; background: #000; border: 1px solid #000; }
 .np-fill { height: 100%; }
 .nameplate.targeted .np-name { text-decoration: underline; }
 .float {
@@ -476,3 +476,13 @@ select.text-input { flex: 1; }
 .market-pick { grid-template-columns: repeat(auto-fill, 50px); justify-content: start; max-height: 240px; overflow-y: auto; }
 .market-form { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: rgba(0, 0, 0, 0.2); }
 .num-input.qty { width: 64px; }
+.friend-row { display: flex; align-items: center; gap: 6px; padding: 4px; background: rgba(0,0,0,0.25); margin-bottom: 2px; }
+.friend-row .friend-name { flex: 1; font: 700 12px var(--pixel); color: #9a948c; }
+.friend-row.online .friend-name { color: #7dff8a; }
+.friend-row .friend-state { font-size: 11px; color: var(--muted); }
+.friend-row .friend-dot { width: 8px; height: 8px; border-radius: 50%; background: #5a5650; }
+.friend-row.online .friend-dot { background: #4ae05a; }
+.friend-row.request .friend-name { color: #ffe23a; }
+.inspect-stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin-bottom: 8px; font-size: 13px; }
+.inspect-stats .k { color: var(--muted); }
+.btn.tool.on { border-color: #ffe23a; color: #ffe23a; }

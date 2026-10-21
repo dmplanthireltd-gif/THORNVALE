@@ -18,7 +18,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -64,6 +64,11 @@ export type Command =
   | { c: 'partyLeave' }
   | { c: 'partyLeader'; id: number }
   | { c: 'partyShare'; on: boolean }
+  | { c: 'follow'; id: number }
+  | { c: 'friendRequest'; id: number }
+  | { c: 'friendAccept'; id: number }
+  | { c: 'friendDecline'; id: number }
+  | { c: 'friendRemove'; name: string }
   | { c: 'tradeAccept' }
   | { c: 'tradeCancel' }
   /** Player market (at a market board). */
@@ -130,6 +135,7 @@ export interface SelfSnap {
   wc: number;
   /** Market window contents; only sent when it changed (null = closed, absent = unchanged). */
   mk?: MarketView | null;
+  friends: ReturnType<Game['friendsView']>;
 }
 
 export type ServerMessage =
@@ -179,7 +185,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     inv: s.inventory.toJSON(), quests: s.quests.state, dialogue: s.dialogue, bank: s.bank, spells: [...s.spells],
     depot: s.depotOpen ? s.depot : null, trade: game.tradeView(s.id),
     pvp: game.pvp ? 1 : 0, sec: me.secure ? 1 : 0, pz: Math.ceil(me.pzLock), party: game.partyView(me.id),
-    skills: Object.fromEntries(COMBAT_SKILLS.map((k) => [k, [s.skills[k].level, Math.floor(s.skills[k].tries)]])), wc: Math.floor(s.woodcutting),
+    skills: Object.fromEntries(COMBAT_SKILLS.map((k) => [k, [s.skills[k].level, Math.floor(s.skills[k].tries)]])), wc: Math.floor(s.woodcutting), friends: game.friendsView(me.id),
   };
   // the market list is only sent when something in it (or in your depot or bank) changed
   const mkKey = s.marketOpen ? `${game.market.version}|${s.bank}|${JSON.stringify(s.depot)}` : 'closed';
@@ -209,7 +215,7 @@ export function eventAudience(e: GameEvent): number | null {
     // derived by clients from snapshots
     case 'bagCreated': case 'bagRemoved': case 'playerJoined': case 'playerLeft': case 'tileChanged':
     case 'inventoryChanged': case 'questChanged': case 'dialogueOpened': case 'dialogueClosed':
-    case 'gameLoaded': case 'equipmentChanged': case 'outfitChanged': case 'depotChanged': case 'tradeChanged': case 'partyChanged': case 'spellsChanged':
+    case 'gameLoaded': case 'equipmentChanged': case 'outfitChanged': case 'depotChanged': case 'tradeChanged': case 'partyChanged': case 'friendsChanged': case 'spellsChanged':
     case 'marketChanged':
       return null;
     default:
@@ -269,6 +275,11 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'partyLeave': game.partyLeave(pid); break;
     case 'partyLeader': if (num(m.id)) game.partyPassLeader(pid, Math.floor(m.id)); break;
     case 'partyShare': game.partyShare(pid, m.on === true); break;
+    case 'follow': if (num(m.id)) game.commandFollow(pid, Math.floor(m.id)); break;
+    case 'friendRequest': if (num(m.id)) game.friendRequest(pid, Math.floor(m.id)); break;
+    case 'friendAccept': if (num(m.id)) game.friendAccept(pid, Math.floor(m.id)); break;
+    case 'friendDecline': if (num(m.id)) game.friendDecline(pid, Math.floor(m.id)); break;
+    case 'friendRemove': if (typeof m.name === 'string') game.friendRemove(pid, m.name.slice(0, 40)); break;
     case 'tradeAccept': game.acceptTrade(pid); break;
     case 'tradeCancel': game.cancelTrade(pid); break;
     case 'marketSell':
@@ -437,6 +448,10 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     if (JSON.stringify(extras.trade) !== JSON.stringify(me.trade)) {
       extras.trade = me.trade;
       ev.emit({ type: 'tradeChanged', to: me.id });
+    }
+    if (me.friends && JSON.stringify(game.netFriends) !== JSON.stringify(me.friends)) {
+      game.netFriends = me.friends;
+      ev.emit({ type: 'friendsChanged', to: me.id });
     }
     if (JSON.stringify(game.netParty) !== JSON.stringify(me.party ?? null)) {
       game.netParty = me.party ?? null;

@@ -47,7 +47,8 @@ export function spellLight(b: Buffs): number {
 export type Pending =
   | { type: 'talk'; npcId: number }
   | { type: 'bag'; bagId: number }
-  | { type: 'use'; x: number; y: number; z: number };
+  | { type: 'use'; x: number; y: number; z: number }
+  | { type: 'follow'; id: number };
 
 export type FightMode = 'offensive' | 'balanced' | 'defensive';
 /** Damage dealt and taken (weapon attacks only) for each stance. */

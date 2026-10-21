@@ -104,12 +104,15 @@ export class HUD {
   private bottom!: HTMLDivElement;
   private battleEl!: HTMLDivElement;
   private partyEl!: HTMLDivElement;
+  private friendsBtn!: HTMLButtonElement;
+  private inspectId: number | null = null;
+  private inspectTimer = 0;
   private partyKey = '';
   private battleRows = new Map<number, { row: HTMLDivElement; fill: HTMLDivElement; name: HTMLSpanElement; skull: HTMLSpanElement }>();
   private battleTimer = 0;
   private worldMap!: WorldMapView;
   private lastRegion = '';
-  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev', Win> = {} as never;
+  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev' | 'inspect' | 'friends', Win> = {} as never;
   private skillsEl!: HTMLDivElement;
   private skillsKey = '';
   private skillsTimer = 0;
@@ -207,6 +210,9 @@ export class HUD {
         break;
       case 'skillUp':
         if (e.to === me) this.skillsKey = '';
+        break;
+      case 'friendsChanged':
+        if (e.to === me) this.renderFriends();
         break;
       case 'spellsChanged':
         if (e.to === me) {
@@ -311,6 +317,7 @@ export class HUD {
     const tools = el('div', 'panel toolbar', col);
     button(tools, 'Spells', () => this.toggleWin('spells'), 'btn tool');
     button(tools, 'Quests', () => this.toggleWin('quests'), 'btn tool');
+    this.friendsBtn = button(tools, 'Friends', () => { this.toggleWin('friends'); this.renderFriends(); }, 'btn tool');
     button(tools, 'Outfit', () => this.toggleWin('outfit'), 'btn tool');
     this.pixelBtn = button(tools, 'Pixels: on', () => this.togglePixels(), 'btn tool');
     this.pvpBtn = button(tools, 'PvP: secure', () => this.ctl.send({ c: 'secureMode', on: !this.s.player.secure }), 'btn tool');
@@ -671,10 +678,16 @@ export class HUD {
     if (!c) return;
     const items: MenuItem[] = [];
     if (kind === 'enemy') items.push({ label: `Attack ${c.name}`, run: () => this.ctl.send({ c: 'attack', id }) });
+    items.push({ label: `Follow ${c.name}`, run: () => this.ctl.send({ c: 'follow', id }) });
+    items.push({ label: kind === 'player' ? `Inspect ${c.name}` : `Look at ${c.name}`, run: () => this.inspect(id) });
     if (kind === 'npc') items.push({ label: `Talk to ${c.name}`, run: () => this.ctl.send({ c: 'talk', id }) });
     if (kind === 'player') {
       if (g.pvp) items.push({ label: `Attack ${c.name}`, run: () => this.ctl.send({ c: 'attack', id }) });
       items.push({ label: `Trade with ${c.name}`, run: () => this.ctl.send({ c: 'tradeRequest', id }) });
+      const fv = g.friendsView(this.ctl.pid);
+      const isFriend = fv.friends.some((f) => f.name.toLowerCase() === c.name.toLowerCase());
+      if (fv.requests.some((r) => r.id === id)) items.push({ label: `Accept ${c.name}'s friend request`, run: () => this.ctl.send({ c: 'friendAccept', id }) });
+      else if (!isFriend) items.push({ label: `Add ${c.name} as friend`, run: () => this.ctl.send({ c: 'friendRequest', id }) });
       const flag = g.partyFlag(this.ctl.pid, id);
       const mine = g.partyView(this.ctl.pid);
       const lead = !mine || mine.leader === this.ctl.pid;
@@ -1050,6 +1063,8 @@ export class HUD {
     this.makeWin('quests', 'Quest Log', 'quests-win');
     this.makeWin('help', 'How to play', 'help-win');
     this.makeWin('dev', 'Test console', 'dev-win');
+    this.makeWin('inspect', 'Inspect', 'inspect-win');
+    this.makeWin('friends', 'Friends', 'friends-win');
     this.renderHelp();
   }
 
@@ -1791,6 +1806,83 @@ export class HUD {
 
   // ================================================================ per frame
 
+  /** Friends window: online first; friend requests at the top. */
+  private renderFriends(): void {
+    const fv = this.ctl.game.friendsView(this.ctl.pid);
+    this.friendsBtn.textContent = fv.requests.length ? `Friends (${fv.requests.length})` : 'Friends';
+    this.friendsBtn.classList.toggle('on', fv.requests.length > 0);
+    const w = this.wins.friends;
+    if (!w.open) return;
+    const b = w.body;
+    b.replaceChildren();
+    for (const r of fv.requests) {
+      const row = el('div', 'friend-row request', b);
+      el('span', 'friend-name', row, `${r.name} wants to be your friend`);
+      button(row, 'Accept', () => this.ctl.send({ c: 'friendAccept', id: r.id }), 'btn small');
+      button(row, 'Decline', () => this.ctl.send({ c: 'friendDecline', id: r.id }), 'btn small');
+    }
+    if (!fv.friends.length) el('p', 'hint', b, 'No friends yet. Right-click a player and choose "Add … as friend"; they have to accept.');
+    for (const f of fv.friends) {
+      const row = el('div', `friend-row${f.online ? ' online' : ''}`, b);
+      el('span', 'friend-dot', row);
+      el('span', 'friend-name', row, f.online ? `${f.name}${f.level ? ` (${f.level})` : ''}` : f.name);
+      el('span', 'friend-state', row, f.online ? 'online' : 'offline');
+      button(row, 'Message', () => this.focusChat(`${f.name}, `), 'btn tiny');
+      button(row, '✕', () => this.ctl.send({ c: 'friendRemove', name: f.name }), 'btn tiny');
+    }
+  }
+
+  /** Inspect window: who someone is and what they wear. */
+  inspect(id: number): void {
+    this.inspectId = id;
+    this.toggleWin('inspect', true);
+    this.renderInspect();
+  }
+
+  private renderInspect(): void {
+    const w = this.wins.inspect;
+    if (!w.open || this.inspectId === null) return;
+    const g = this.ctl.game;
+    const c = g.getCreature(this.inspectId);
+    const b = w.body;
+    b.replaceChildren();
+    if (!c) { el('p', 'hint', b, 'Out of sight.'); return; }
+    (w.root.querySelector('.win-title') as HTMLElement).textContent = c.name;
+    const pl = g.getPlayer(c.id);
+    const lines: Array<[string, string]> = [];
+    if (pl) {
+      lines.push(['Level', String(pl.level)], ['Vocation', VOCATIONS[pl.vocation].name], ['Health', `${Math.round((pl.hp / pl.maxHp) * 100)}%`]);
+      const sk = g.skullOf(pl);
+      if (sk) lines.push(['Skull', sk === 2 ? 'red' : 'white']);
+      const pf = g.partyFlag(this.ctl.pid, pl.id);
+      if (pf === 1) lines.push(['Party', 'in your party']);
+      if (pl.id === this.ctl.pid) lines.push(['Experience', fmtGold(pl.exp)]);
+    } else {
+      const en = g.getEnemy(c.id);
+      lines.push(['Health', `${Math.round((c.hp / c.maxHp) * 100)}%`]);
+      if (en) lines.push(['Experience', String(en.def.exp)], ['Hit points', String(en.maxHp)]);
+    }
+    const tbl = el('div', 'inspect-stats', b);
+    for (const [k, v] of lines) { el('span', 'k', tbl, k); el('span', 'v', tbl, v); }
+    const sess = pl ? g.session(pl.id) : null;
+    if (sess) {
+      el('div', 'panel-title', b, 'Equipment');
+      const grid = el('div', 'bag-grid', b);
+      for (const e of EQUIP_LAYOUT) {
+        const st = sess.inventory.equipment[e.slot];
+        const d = el('div', 'slot', grid);
+        paintSlot(d, st, e.ph);
+        if (st) d.title = itemDef(st.id).name;
+      }
+    }
+    if (pl && pl.id !== this.ctl.pid) {
+      const row = el('div', 'trade-actions', b);
+      button(row, 'Follow', () => this.ctl.send({ c: 'follow', id: pl.id }), 'btn small');
+      button(row, 'Trade', () => this.ctl.send({ c: 'tradeRequest', id: pl.id }), 'btn small');
+      button(row, 'Add friend', () => this.ctl.send({ c: 'friendRequest', id: pl.id }), 'btn small');
+    }
+  }
+
   /** Party panel: rebuilt when membership changes, health bars every frame. */
   private renderParty(): void {
     const pv = this.ctl.game.partyView(this.ctl.pid);
@@ -1828,6 +1920,8 @@ export class HUD {
   update(dt: number): void {
     this.music?.update();
     this.renderParty();
+    this.inspectTimer -= dt;
+    if (this.inspectTimer <= 0) { this.inspectTimer = 0.5; this.renderInspect(); }
     const s = this.s;
     const p = s.player;
     const g = this.ctl.game;
