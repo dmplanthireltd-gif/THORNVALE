@@ -223,6 +223,9 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Better spell effects (Effects.ts).
 - [ ] Integrate, test all, push, refresh artifact.
 - [ ] Later: custom SMTP for recovery mails; more map/game polish.
+- [ ] Marketing website (mockups approved on the "Thornvale Website" design canvas): home page at `/`, game moved to `/play`, live player count from `/status`, news. Same Render service, no new dependencies. Update §4 when the routes change.
+- [ ] New sign-in and character screens (email + password, up to 5 characters per account, "Play offline" kept) replacing the current start screen.
+- [ ] Grand opening: set the opening date, countdown on site and title screen, "create account and claim your names early" sign-up, square social post.
 
 ---
 
@@ -234,3 +237,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10 | 7de245b | Supabase saves, account login, save migrations + backups | 2 | 3 |
 | 2026-10 | 55d38a3 | Email accounts with password recovery (Supabase Auth) | 2 | 3 |
 | 2026-10-21 | — | BIBLE.md + CLAUDE.md added | 2 | 3 |
+| 2026-10-21 | — | Open Work: marketing website, new sign-in/character screens, grand opening (design stage, no code yet) | 2 | 3 |
