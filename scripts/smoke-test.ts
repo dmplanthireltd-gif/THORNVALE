@@ -132,7 +132,7 @@ console.log('Movement & floors');
   const p = s.player;
   const sx = p.x;
   intent.dir = { dx: -1, dy: 0 };
-  run(g, 1.0);
+  run(g, 2.0); // level 1 walks about 1.8 tiles a second
   intent.dir = { dx: 0, dy: 0 };
   run(g, 0.5);
   check(p.x < sx - 2, `held key walks several tiles (moved ${sx - p.x})`);
@@ -1665,6 +1665,16 @@ console.log('Mining and blacksmithing');
   check(typeof mig !== 'string' && mig.from === 7 && mig.data.version === 8 && mig.data.gathering?.mining === 0 && mig.data.gathering?.smithing === 0 && mig.data.gathering?.woodcutting === 4321 && mig.data.gathering?.fishing === 777, 'a v7 save migrates: mining and blacksmithing 0, woodcutting and fishing kept');
   const t3 = solo('knight');
   check(t3.g.applySave(t3.pid, v7) && t3.s.gathering.mining === 0 && t3.s.gathering.woodcutting === 4321 && t3.s.inventory.count('starsteel_pickaxe') === 1, 'a migrated v7 character loads with its items and skills');
+}
+
+console.log('Walking speed grows with level');
+{
+  const { g, s } = solo('knight');
+  const t1 = s.player.baseStep;
+  s.player.level = 100;
+  g.refreshStats(s);
+  const t100 = s.player.baseStep;
+  check(t1 > 0.5 && t100 < 0.32 && t100 > 0.25, `level 1 takes ${t1.toFixed(2)} s per tile, level 100 ${t100.toFixed(2)} s`);
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);

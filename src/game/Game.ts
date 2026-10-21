@@ -375,7 +375,9 @@ export class Game implements AIContext {
     p.maxHp = voc.baseHp + (p.level - 1) * voc.hpPerLevel + hp;
     p.maxMana = voc.baseMana + (p.level - 1) * voc.manaPerLevel + mana;
     p.capacity = voc.baseCap + (p.level - 1) * voc.capPerLevel;
-    p.baseStep = Math.max(0.16, 0.27 - (p.level - 1) * 0.0015);
+    // classic speed curve: speed 220 at level 1, +2 per level; a tile takes 120/speed seconds
+    // (level 1 ≈ 0.55 s, level 20 ≈ 0.46 s, level 100 ≈ 0.29 s, level 500 ≈ 0.10 s)
+    p.baseStep = Math.min(0.6, Math.max(0.1, 120 / (220 + 2 * (p.level - 1))));
     p.stepTime = p.baseStep * 100 / (100 + speed);
     p.hpRegen = hpRegen;
     p.manaRegen = manaRegen;
