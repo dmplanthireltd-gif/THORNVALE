@@ -456,3 +456,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Settings: layout presets "Two flanks" (2c) and "Full view" (3c, floating docks over a full-screen view; switches live, no reload) and a sound mix with its own slider per group (your footsteps, creatures, weapons and hits, spells and magic, items and world, interface and alerts, ambience; 0–150 %). Each sound now plays through its group's gain stage. UI/audio only | — | — |
 | 2026-10-21 | — | Dark monsters batch (b): orc, orc spearman, shaman, berserker, leader, warlord, bandit, amazon, valkyrie (6–9 draw calls each instead of 24–43); thicker axe blades | — | — |
 | 2026-10-21 | — | Death loot: dead player bodies you open and loot (backpack always, 25% per worn item), Hearthward Amulet protects and crumbles; red skull loses everything worn too | — | 19 |
+| 2026-10-21 | — | Game masters (OWNER_CHARACTERS + ADMINS env) always have premium (staffPerks, until 2100) | — | — |

@@ -60,6 +60,11 @@ const MAX_CHARACTERS_PER_ACCOUNT = Number(process.env.MAX_CHARACTERS ?? 5);
 /** Game masters: the owner's characters (always) plus any names in the ADMINS env var. */
 const OWNER_CHARACTERS = ['ouriolis'];
 const ADMINS = new Set([...OWNER_CHARACTERS, ...(process.env.ADMINS ?? '').split(',')].map((n) => n.trim().toLowerCase()).filter(Boolean));
+/** Game masters' accounts always have premium (shown with the premium tick), whatever the store says. */
+const STAFF_PREMIUM_UNTIL = Date.UTC(2100, 0, 1);
+function staffPerks(name: string, perks: AccountPerks): AccountPerks {
+  return ADMINS.has(name.trim().toLowerCase()) ? { ...perks, premiumUntil: Math.max(perks.premiumUntil, STAFF_PREMIUM_UNTIL) } : perks;
+}
 
 // ------------------------------------------------------------------ storage and accounts
 
@@ -306,6 +311,7 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
   const online = [...game.sessions.values()].filter((x) => !x.bot).length;
   // the last places are kept for premium accounts (everyone counts as premium when it is not enforced)
   const reserved = PREMIUM ? Math.ceil(MAX_PLAYERS * PREMIUM_RESERVED_SHARE) : 0;
+  perks = staffPerks(name, perks);
   const premiumNow = !PREMIUM || perks.premiumUntil > Date.now();
   if (online >= MAX_PLAYERS || (!premiumNow && online >= MAX_PLAYERS - reserved)) {
     send(c, { t: 'error', text: online >= MAX_PLAYERS ? 'The world is full. Try again later.' : 'The world is full; the last places are kept for premium accounts. Try again later.' });
@@ -480,10 +486,13 @@ async function refreshPerks(only?: string): Promise<void> {
   }
   for (const [o, sids] of owners) {
     try {
-      const perks = await storage.getPerks(o);
-      const j = JSON.stringify(perks);
+      const stored = await storage.getPerks(o);
       for (const sid of sids) {
-        if (perksSeen.get(sid) === j || !game.sessions.has(sid)) continue;
+        const sess = game.sessions.get(sid);
+        if (!sess) continue;
+        const perks = staffPerks(sess.player.name, stored);
+        const j = JSON.stringify(perks);
+        if (perksSeen.get(sid) === j) continue;
         perksSeen.set(sid, j);
         game.setPerks(sid, perks);
       }
