@@ -115,7 +115,7 @@ export class HUD {
   private battleTimer = 0;
   private worldMap!: WorldMapView;
   private lastRegion = '';
-  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'craft' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev' | 'inspect' | 'friends', Win> = {} as never;
+  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'craft' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev' | 'inspect' | 'friends' | 'settings', Win> = {} as never;
   /** Station window state that survives redraws: chosen tab (metal) and the "Make X" amount. */
   private cw = { tab: '', qty: 10, station: '' };
   private skillsEl!: HTMLDivElement;
@@ -128,13 +128,18 @@ export class HUD {
   private preview: OutfitPreview | null = null;
   private pixelBtn!: HTMLButtonElement;
   private pvpBtn!: HTMLButtonElement;
+  private lvlBadge!: HTMLDivElement;
+  private topLoc!: HTMLSpanElement;
   private disconnectEl!: HTMLDivElement;
 
   constructor(private readonly ctl: Controller, private readonly renderer: Renderer, container: HTMLElement, private readonly sfx: Sfx, private readonly music?: Music) {
     this.root = el('div', 'hud', container);
-    // classic client layout: game view top left, two side columns on the right, action bar and console below
-    const side = el('div', 'sidebar', this.root);
-    this.colA = el('div', 'side-col', side);
+    // "two flanks" layout: a slim title strip on top, character/combat/skills/battle on the left,
+    // map/menu/equipment/inventory on the right, the game view in the middle with action bar and chat below
+    this.buildTopbar();
+    const left = el('div', 'flank flank-left', this.root);
+    const side = el('div', 'flank sidebar', this.root);
+    this.colA = el('div', 'side-col', left);
     this.colB = el('div', 'side-col', side);
     this.bottom = el('div', 'bottom', this.root);
     this.buildSidebar();
@@ -267,15 +272,17 @@ export class HUD {
   private buildStatus(): void {
     const panel = el('div', 'panel status', this.colA);
     const head = el('div', 'status-head', panel);
-    this.nameEl = el('span', 'char-name', head);
-    this.levelEl = el('span', 'char-level', head);
+    this.lvlBadge = el('div', 'lvl-badge', head);
+    this.lvlBadge.title = 'Level';
+    const who = el('div', 'status-who', head);
+    this.nameEl = el('span', 'char-name', who);
+    this.levelEl = el('span', 'char-level', who);
     this.hp = this.makeBar(panel, 'hp', 'HP');
     this.mp = this.makeBar(panel, 'mp', 'MP');
     this.xp = this.makeBar(panel, 'xp', 'XP');
     const foot = el('div', 'status-foot', panel);
     this.capEl = el('div', 'cap', foot);
     this.buffsEl = el('div', 'buffs', foot);
-    this.floorEl = el('div', 'floor-ind', panel);
 
     this.targetEl = el('div', 'panel target', this.root);
     const tr = el('div', 'target-row', this.targetEl);
@@ -295,15 +302,67 @@ export class HUD {
 
   // ================================================================ sidebar (right)
 
+  /** Slim title strip above everything: crest, game name, where you are, online or offline. */
+  private buildTopbar(): void {
+    const top = el('div', 'topbar', this.root);
+    const crest = el('span', 'tb-crest', top);
+    crest.innerHTML = '<svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" transform="rotate(45 10 10)" fill="#2b2621" stroke="#c9a24a" stroke-width="1.5"/><path d="M6.5 6.5h7v2h-2.5v6h-2v-6H6.5z" fill="#e8c26a"/></svg>';
+    el('span', 'tb-name', top, 'THORNVALE');
+    el('span', 'tb-sep', top);
+    this.topLoc = el('span', 'tb-loc', top);
+    el('span', 'tb-fill', top);
+    const mode = el('span', `tb-mode ${this.ctl.online ? 'online' : 'offline'}`, top);
+    el('span', 'tb-dot', mode);
+    el('span', '', mode, this.ctl.online ? 'Online' : 'Offline');
+  }
+
+  /** Settings window: display, sound and test tools that used to crowd the side bar. */
+  private buildSettings(): void {
+    const b = this.makeWin('settings', 'Settings', 'settings-win').body;
+    const sec = (title: string) => {
+      el('div', 'panel-title', b, title);
+      return el('div', 'set-row', b);
+    };
+    const disp = sec('Display');
+    this.pixelBtn = button(disp, 'Pixels: on', () => this.togglePixels(), 'btn');
+    this.pixelBtn.title = 'Pixel-art look on or off';
+    const slider = (parent: HTMLElement, value: number, title: string, set: (v: number) => void) => {
+      const s = el('input', 'vol-slider', parent);
+      s.type = 'range';
+      s.min = '0';
+      s.max = '100';
+      s.value = String(Math.round(value * 100));
+      s.title = title;
+      s.addEventListener('input', () => set(Number(s.value) / 100));
+      s.addEventListener('keydown', (e) => e.stopPropagation());
+    };
+    const snd = sec('Sound effects');
+    const sb = button(snd, this.sfx.muted ? 'Sound: off' : 'Sound: on', () => {
+      sb.textContent = this.sfx.toggleMute() ? 'Sound: off' : 'Sound: on';
+    }, 'btn');
+    slider(snd, this.sfx.volume, 'Volume', (v) => this.sfx.setVolume(v));
+    if (this.music) {
+      const mu = this.music;
+      const mus = sec('Music');
+      const mb = button(mus, mu.muted ? 'Music: off' : 'Music: on', () => {
+        mb.textContent = mu.toggleMute() ? 'Music: off' : 'Music: on';
+      }, 'btn');
+      slider(mus, mu.volume, 'Music volume', (v) => mu.setVolume(v));
+    }
+    const game = sec('Game');
+    if (!this.ctl.online) button(game, 'Save now', () => this.saveNow(), 'btn');
+    button(game, 'Test console (`)', () => { this.closeWin('settings'); this.toggleWin('dev'); }, 'btn');
+    button(game, 'Reset layout', () => resetPanelLayout(), 'btn');
+  }
+
   private buildSidebar(): void {
     const col = this.colA;
-    const mp = el('div', 'panel minimap-panel', col);
-    this.minimap = new Minimap(mp, this.ctl);
-    button(mp, 'World map (M)', () => this.toggleWorldMap(), 'btn small wm-open');
     this.buildStatus();
 
-    // classic combat controls: stance (attack / balanced / defence) and chase / stand
+    // classic combat controls: stance (attack / balanced / defence), chase / stand, and PvP secure mode
     const fight = el('div', 'panel fight-modes', col);
+    el('div', 'panel-title', fight, 'Combat');
+    const fgrid = el('div', 'fm-grid', fight);
     let mode: FightMode = 'balanced';
     let chase = true;
     try {
@@ -318,57 +377,40 @@ export class HUD {
       for (const [b, on] of fbtn) b.classList.toggle('on', on());
     };
     const fb = (label: string, tip: string, click: () => void, on: () => boolean) => {
-      const b = button(fight, label, () => { click(); apply(); }, 'btn fm');
+      const b = button(fgrid, label, () => { click(); apply(); }, 'btn fm');
       b.title = tip;
       fbtn.push([b, on]);
     };
-    fb('Atk', 'Offensive: hit harder (+20%), take more damage', () => { mode = 'offensive'; }, () => mode === 'offensive');
-    fb('Bal', 'Balanced', () => { mode = 'balanced'; }, () => mode === 'balanced');
-    fb('Def', 'Defensive: take less damage (−25%), hit softer', () => { mode = 'defensive'; }, () => mode === 'defensive');
+    fb('Attack', 'Offensive: hit harder (+20%), take more damage', () => { mode = 'offensive'; }, () => mode === 'offensive');
+    fb('Balance', 'Balanced', () => { mode = 'balanced'; }, () => mode === 'balanced');
+    fb('Defend', 'Defensive: take less damage (−25%), hit softer', () => { mode = 'defensive'; }, () => mode === 'defensive');
     fb('Follow', 'Chase: follow your target', () => { chase = true; }, () => chase);
     fb('Stand', 'Stand: keep your position while attacking', () => { chase = false; }, () => !chase);
+    this.pvpBtn = button(fgrid, 'Secure', () => this.ctl.send({ c: 'secureMode', on: !this.s.player.secure }), 'btn fm pvp');
+    this.pvpBtn.title = 'Secure mode: you cannot attack unmarked players and your area attacks spare them. Open: you can attack anyone, but attacking unmarked players gives you a skull.';
+    this.pvpBtn.hidden = true;
     apply();
 
-    const tools = el('div', 'panel toolbar', col);
+    // right flank: map, menu, equipment, inventory
+    const right = this.colB;
+    const mp = el('div', 'panel minimap-panel', right);
+    const mt = el('div', 'panel-title map-title', mp);
+    el('span', '', mt, 'Map');
+    this.floorEl = el('div', 'floor-ind', mt);
+    this.minimap = new Minimap(mp, this.ctl);
+    button(mp, 'World map (M)', () => this.toggleWorldMap(), 'btn small wm-open');
+
+    const tools = el('div', 'panel toolbar', right);
     button(tools, 'Spells', () => this.toggleWin('spells'), 'btn tool');
     button(tools, 'Quests', () => this.toggleWin('quests'), 'btn tool');
     this.friendsBtn = button(tools, 'Friends', () => { this.toggleWin('friends'); this.renderFriends(); }, 'btn tool');
     button(tools, 'Outfit', () => this.toggleWin('outfit'), 'btn tool');
-    this.pixelBtn = button(tools, 'Pixels: on', () => this.togglePixels(), 'btn tool');
-    this.pvpBtn = button(tools, 'PvP: secure', () => this.ctl.send({ c: 'secureMode', on: !this.s.player.secure }), 'btn tool');
-    this.pvpBtn.title = 'Secure mode: you cannot attack unmarked players and your area attacks spare them. Open: you can attack anyone, but attacking unmarked players gives you a skull.';
-    this.pvpBtn.hidden = true;
-    if (!this.ctl.online) {
-      button(tools, 'Save', () => this.saveNow(), 'btn tool');
-    }
     button(tools, 'Help', () => this.toggleWin('help'), 'btn tool');
-    const snd = button(tools, this.sfx.muted ? 'Sound: off' : 'Sound: on', () => {
-      snd.textContent = this.sfx.toggleMute() ? 'Sound: off' : 'Sound: on';
-    }, 'btn tool');
-    if (this.music) {
-      const mu = this.music;
-      const mb = button(tools, mu.muted ? 'Music: off' : 'Music: on', () => {
-        mb.textContent = mu.toggleMute() ? 'Music: off' : 'Music: on';
-      }, 'btn tool');
-      const mv = el('input', 'vol-slider', tools);
-      mv.type = 'range';
-      mv.min = '0';
-      mv.max = '100';
-      mv.value = String(Math.round(mu.volume * 100));
-      mv.title = 'Music volume';
-      mv.addEventListener('input', () => mu.setVolume(Number(mv.value) / 100));
-      mv.addEventListener('keydown', (e) => e.stopPropagation());
-    }
-    const vol = el('input', 'vol-slider', tools);
-    vol.type = 'range';
-    vol.min = '0';
-    vol.max = '100';
-    vol.value = String(Math.round(this.sfx.volume * 100));
-    vol.title = 'Volume';
-    vol.addEventListener('input', () => this.sfx.setVolume(Number(vol.value) / 100));
-    button(tools, 'Test console (`)', () => this.toggleWin('dev'), 'btn tool wide');
+    button(tools, 'Settings', () => this.toggleWin('settings'), 'btn tool');
+    this.buildSettings();
 
-    const eqp = el('div', 'panel equipment', col);
+    const eqp = el('div', 'panel equipment', right);
+    el('div', 'panel-title', eqp, 'Equipment');
     const grid = el('div', 'equip-grid', eqp);
     for (const e of EQUIP_LAYOUT) {
       if (!e.slot) {
@@ -400,7 +442,7 @@ export class HUD {
       try { localStorage.setItem('thornvale.skillsFolded', sk.classList.contains('folded') ? '1' : '0'); } catch { /* storage off */ }
     });
 
-    const battle = el('div', 'panel battle', this.colB);
+    const battle = el('div', 'panel battle', this.colA);
     const bt = el('div', 'panel-title battle-title', battle, 'Battle');
     bt.title = 'Click to fold or unfold. Drag the bottom edge of the list to make it taller or shorter.';
     this.battleEl = el('div', 'battle-list', battle);
@@ -419,7 +461,7 @@ export class HUD {
     }).observe(this.battleEl);
 
     // party: members with health, shared experience switch
-    this.partyEl = el('div', 'panel party', this.colB);
+    this.partyEl = el('div', 'panel party', this.colA);
     this.partyEl.hidden = true;
 
     const inv = el('div', 'panel inventory', this.colB);
@@ -565,7 +607,7 @@ export class HUD {
       this.renderer.showClickMarker(t.x, t.y);
       return;
     }
-    if (src.kind === 'bag' && under.closest('.sidebar')) this.ctl.send({ c: 'pickup', id: src.id });
+    if (src.kind === 'bag' && under.closest('.flank')) this.ctl.send({ c: 'pickup', id: src.id });
   }
 
   private useInventorySlot(i: number): void {
@@ -1146,7 +1188,7 @@ export class HUD {
       this.root.classList.remove('assigning');
       return true;
     }
-    for (const k of ['dev', 'help', 'outfit', 'spells', 'quests', 'craft', 'market', 'trade', 'depot', 'dialog'] as const) {
+    for (const k of ['settings', 'dev', 'help', 'outfit', 'spells', 'quests', 'craft', 'market', 'trade', 'depot', 'dialog'] as const) {
       if (this.wins[k].open) {
         this.closeWin(k);
         return true;
@@ -2054,7 +2096,9 @@ export class HUD {
     const p = s.player;
     const g = this.ctl.game;
     this.nameEl.textContent = p.name;
-    this.levelEl.textContent = `Level ${p.level} ${VOCATIONS[p.vocation].name}`;
+    const lvl = String(p.level);
+    if (this.lvlBadge.textContent !== lvl) this.lvlBadge.textContent = lvl;
+    this.levelEl.textContent = `${VOCATIONS[p.vocation].name} · level ${p.level}`;
     this.setBar(this.hp, p.hp / p.maxHp, `${Math.ceil(p.hp)} / ${p.maxHp}`);
     this.hp.fill.style.background = hpColor(p.hp / p.maxHp);
     this.setBar(this.mp, p.maxMana ? p.mana / p.maxMana : 0, `${Math.floor(p.mana)} / ${p.maxMana}`);
@@ -2080,14 +2124,18 @@ export class HUD {
     if (mySkull === 2) buffs.push('☠ red skull');
     else if (mySkull === 1) buffs.push('☠ white skull');
     this.pvpBtn.hidden = !g.pvp;
-    const pvpLabel = p.secure ? 'PvP: secure' : 'PvP: open';
+    const pvpLabel = p.secure ? 'Secure' : 'Open PvP';
     if (this.pvpBtn.textContent !== pvpLabel) {
       this.pvpBtn.textContent = pvpLabel;
       this.pvpBtn.classList.toggle('pvp-open', !p.secure);
     }
     const bt = buffs.join('  ');
     if (this.buffsEl.textContent !== bt) this.buffsEl.textContent = bt;
-    this.floorEl.textContent = p.z === 0 ? 'Ground floor' : p.z > 0 ? `Floor +${p.z}` : `Underground ${p.z}`;
+    const floorText = p.z === 0 ? 'Ground floor' : p.z > 0 ? `Floor +${p.z}` : `Underground ${p.z}`;
+    if (this.floorEl.textContent !== floorText) this.floorEl.textContent = floorText;
+    const where = g.world.regionAt(p.x, p.y, p.z)?.name;
+    const loc = where ? `${where} · ${floorText}` : floorText;
+    if (this.topLoc.textContent !== loc) this.topLoc.textContent = loc;
 
     this.statsEl.textContent = `Atk ${g.attackValue(s)} · Def ${g.defense(s)} · Arm ${g.armor(s)} · Speed ${Math.round(100 * 0.27 / p.stepTime)}`;
 

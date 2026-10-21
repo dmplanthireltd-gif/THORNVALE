@@ -5,7 +5,8 @@
  *  - drag the left edge of the side bar to make the whole side bar wider or narrower (double-click: default).
  * The layout is remembered in this browser. "Reset layout" in the help window puts everything back.
  */
-const KEY = 'thornvale.panelLayout';
+// v2: the two-flank HUD (2026-10-21) — older saved layouts described the old two-column side bar
+const KEY = 'thornvale.panelLayout.v2';
 
 interface Layout {
   cols: string[][];
