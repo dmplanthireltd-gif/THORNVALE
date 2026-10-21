@@ -90,6 +90,13 @@ export const NPCS: Record<string, NpcDef> = {
     look: { type: 'noble', head: 4, body: 125, legs: 107, feet: 99 },
     buys: ['small_ruby', 'small_sapphire', 'small_emerald', 'small_diamond', 'golden_goblet'],
   },
+  tilda: {
+    key: 'tilda', name: 'Tilda', role: 'General goods', prop: 'ledger',
+    greeting: 'Sacks, ropes, bread and lamp oil, {name}. If it keeps you alive out there, I stock it.',
+    look: { type: 'citizen', head: 78, body: 22, legs: 108, feet: 98 },
+    sells: [s('health_potion', 45), s('mana_potion', 50), s('rope', 50), s('shovel', 50), s('bag', 12), s('backpack', 30), s('meat', 6), s('ham', 12), ...PRODUCTION_TOOLS.map((e) => ({ ...e }))],
+    buys: materials,
+  },
   elias: {
     key: 'elias', name: 'Master Elias', role: 'Spell trainer', prop: 'book',
     greeting: 'Knowledge is the sharpest blade, {name}. Which words would you learn?',
