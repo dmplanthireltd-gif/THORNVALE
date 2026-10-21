@@ -312,25 +312,33 @@ function paintAnim(name: TileAnim, f: number, P: Pix): void {
       return;
     }
     case 'earth': {
-      if (f < 5) {
-        P.disc(16, 18, 3 + f * 1.6, C.dust);
-        P.dither(0.45 + f * 0.1, 9 + f);
+      // a ring of dust bursting out, rocks thrown up and falling, leaves whirling
+      if (f < 6) {
+        const r = 3 + f * 2;
+        for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) {
+          const d = Math.hypot(x - 16, (y - 18) * 1.25);
+          if (d <= r && d >= r - 3 && hh(x, y, f) > 0.25) P.set(x, y, d > r - 1 ? C.dust : C.rockHi);
+        }
       }
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2 + 0.3;
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 + 0.3;
         const sp = 0.8 + hh(i, 2) * 0.5;
         const x = 16 + Math.cos(a) * (2 + f * 1.8) * sp;
-        const y = 17 + Math.sin(a) * (2 + f * 1.4) * sp * 0.7 - (f * 2.4 - f * f * 0.32);
-        P.disc(x, y, f < 6 ? 2.3 : 1.6, C.rock);
+        const y = 18 + Math.sin(a) * (2 + f * 1.4) * sp * 0.7 - (f * 2.6 - f * f * 0.34);
+        P.disc(x, y, f < 6 ? 2.8 : 2, C.rock);
         P.set(x - 1, y - 1, C.rockHi);
+        P.set(x, y - 1, C.rockHi);
       }
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2 + 1.1 + f * 0.25;
-        const x = 16 + Math.cos(a) * (1 + f * 1.9), y = 14 + Math.sin(a) * (1 + f * 1.5) + f * 0.5;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + 1.1 + f * 0.3;
+        const x = 16 + Math.cos(a) * (2 + f * 1.8), y = 14 + Math.sin(a) * (2 + f * 1.4) + f * 0.4;
         P.set(x, y, C.leaf);
         P.set(x + 1, y, C.leafHi);
         P.set(x, y + 1, C.leaf);
+        P.set(x + 1, y + 1, C.leaf);
+        P.set(x - 1, y, C.leafHi);
       }
+      if (f >= 7) P.dither(0.3, f);
       P.outline(C.rockDark);
       return;
     }
@@ -1411,7 +1419,7 @@ export class Effects {
   /** A hit on a creature (missile landing, strike spell, melee). `power` ~0.3–1.6 by damage. */
   impact(pos: THREE.Vector3, effect: Effect, power = 1): void {
     const anim = this.animFor(effect);
-    this.playAt(anim, pos, 0, (anim === 'death' ? 1.2 : 1) + Math.max(0, Math.min(0.25, (power - 0.8) * 0.3)));
+    this.playAt(anim, pos, 0, (anim === 'death' ? 1.4 : 1) + Math.max(0, Math.min(0.25, (power - 0.8) * 0.3)));
     if (power >= 0.8 && anim !== 'hit') this.light(pos, this.flashColor(effect), 1.5 + power * 1.5, 3.5, 0.3);
   }
 
