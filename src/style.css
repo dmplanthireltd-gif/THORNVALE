@@ -392,7 +392,11 @@ select.text-input { flex: 1; }
 .log-tab.on { color: var(--gold); background: #3a3228; }
 .log.tab-default .log-line.combat, .log.tab-default .log-line.loot { display: none; }
 .log.tab-loot .log-line:not(.loot) { display: none; }
-.battle-list { display: flex; flex-direction: column; gap: 2px; min-height: 40px; max-height: 330px; overflow-y: auto; }
+.battle-list { display: flex; flex-direction: column; gap: 2px; min-height: 40px; height: 150px; max-height: 80vh; overflow-y: auto; resize: vertical; }
+.battle-title { cursor: pointer; user-select: none; }
+.battle-title::after { content: ' \25BE'; color: var(--muted); }
+.battle.folded .battle-title::after { content: ' \25B8'; }
+.battle.folded .battle-list { display: none; }
 .battle-list.empty::after { content: 'Nobody around.'; color: var(--muted); font-size: 12px; padding: 4px; }
 .battle-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; background: rgba(0, 0, 0, 0.25); border: 1px solid transparent; cursor: pointer; }
 .battle-row:hover { background: #2e2822; }
@@ -426,3 +430,5 @@ select.text-input { flex: 1; }
 .login-body { display: flex; flex-direction: column; gap: 8px; }
 .login-who { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--gold); }
 .char-list { display: flex; flex-direction: column; gap: 4px; }
+
+.dragging .battle-row:hover, .aiming .battle-row:hover { border-color: #ffd23a; background: #3a3020; }

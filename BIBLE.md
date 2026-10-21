@@ -127,7 +127,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 2. **Every player action is a `Command`** sent through `Controller.send(...)` → `Game.executeCommand`. UI/input never mutate game state directly. Offline = LocalController runs it locally; online = NetController sends it, the server is authoritative.
 3. **Game → view communication is via the event bus** (`core/events.ts`). Renderer, HUD and Sfx subscribe; they never poll internal fields they don't own.
 4. **Online:** server ticks at 20 Hz and sends snapshots (`VIEW_RADIUS = 20`). The client keeps a mirror Game (`simulate:false`) and applies snapshots. Messages arriving before the HUD exists go to the backlog.
-5. **Protocol:** `PROTOCOL_VERSION` (currently **4**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
+5. **Protocol:** `PROTOCOL_VERSION` (currently **5**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
 6. Admin/test commands are typed in chat with `/` (`/help` lists them). Offline always allowed; online only for names in `ADMINS` or when `ALLOW_ADMIN=1`. Dev console opens with the **`** key.
 
 ---
@@ -229,8 +229,9 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [x] Ice-region (7.92-style) and classic monsters (35 new), 63 items, 5 spells, 3 buff potions; content-test.
 - [ ] Remaining Tibia-8.0-style spells (~45: waves, beams, exori mort, mass heal, exana pox, utani gran hur, utana vid, exiva, rune conjuring…).
 - [ ] Dark realistic monster models (owner chose this style; sample of 4 in progress, behind `?monsters=dark`).
-- [ ] Owner bugs: can't throw items onto the ground / onto depot lockers; depot lockers need gaps so characters can stand between them and show items for trade.
-- [ ] Owner UI: minimap zoom with mouse wheel; battle list expandable/resizable.
+- [x] Ground items can be dragged to other tiles (`moveBag`); items can be put on depot lockers, tables, counters, crates, barrels (`Game.SURFACES`); depot lockers are placed every second tile.
+- [x] Minimap: wheel zoom, right-drag pan, double-click centre. Battle list: click title to fold, drag bottom edge to resize.
+- [x] Runes on the battle list: drag a rune onto a row, or pick a rune (hotkey/click) and click a row (`useRuneOn`).
 - [ ] Better spell effects (Effects.ts).
 - [ ] Integrate, test all, push, refresh artifact.
 - [ ] Owner decision: upgrade the thornvale service from Free to a paid instance (Starter is enough for ~50 players) so the server never sleeps; then set `plan:` in render.yaml.
@@ -256,4 +257,5 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | 4c04878 | Repo renamed to dmplanthireltd-gif/THORNVALE; grand opening date set to 1 January 2027 | 2 | 3 |
 | 2026-10-21 | c93fc10 | Website planned on WordPress.com (superseded by the next row) | 2 | 3 |
 | 2026-10-21 | — | Game moved to /play/ (Vite base '/play/'); marketing website from `site/` served at the root by server.ts; domain thornvaleonline.com on Render | 2 | 3 |
-| 2026-10-21 | — | New 640×800 world (14 towns), 35 monsters, 63 items, 5 spells, buff potions; saves v3 respawn everyone at the Thornvale temple | 3 | 4 |
+| 2026-10-21 | 8fa1064 | New 640×800 world (14 towns), 35 monsters, 63 items, 5 spells, buff potions; saves v3 respawn everyone at the Thornvale temple | 3 | 4 |
+| 2026-10-21 | — | Move ground items, items on lockers/tables, depot gaps, minimap zoom/pan, foldable/resizable battle list, runes on battle list | 3 | 5 |

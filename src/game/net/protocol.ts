@@ -16,7 +16,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -32,6 +32,9 @@ export type Command =
   | { c: 'cast'; spell: SpellId; param?: string }
   | { c: 'useSlot'; slot: number }
   | { c: 'useRuneAt'; slot: number; x: number; y: number }
+  /** Rune used on a creature (e.g. dropped on its battle-list row); aimed at where it stands now. */
+  | { c: 'useRuneOn'; slot: number; id: number }
+  | { c: 'moveBag'; id: number; x: number; y: number; qty?: number }
   | { c: 'useItem'; item: string }
   | { c: 'unequip'; slot: EquipSlot }
   | { c: 'drop'; slot: number }
@@ -168,6 +171,14 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'cast': if (isSpellId(m.spell)) game.castSpell(pid, m.spell, typeof m.param === 'string' ? m.param.slice(0, 24) : null); break;
     case 'useSlot': if (num(m.slot)) game.useSlot(pid, Math.floor(m.slot)); break;
     case 'useRuneAt': if (num(m.slot) && num(m.x) && num(m.y)) game.useRune(pid, Math.floor(m.slot), { x: Math.floor(m.x), y: Math.floor(m.y) }); break;
+    case 'moveBag': if (num(m.id) && num(m.x) && num(m.y)) game.moveBagItem(pid, Math.floor(m.id), Math.floor(m.x), Math.floor(m.y), num(m.qty) ? Math.floor(m.qty) : undefined); break;
+    case 'useRuneOn': {
+      if (!num(m.slot) || !num(m.id)) break;
+      const t = game.getCreature(Math.floor(m.id));
+      const me = game.getPlayer(pid);
+      if (t && me && !t.dead && t.z === me.z) game.useRune(pid, Math.floor(m.slot), { x: Math.round(t.x), y: Math.round(t.y) });
+      break;
+    }
     case 'useItem': if (typeof m.item === 'string') { try { game.useItem(pid, m.item); } catch { /* unknown item */ } } break;
     case 'unequip': if (typeof m.slot === 'string') game.unequip(pid, m.slot); break;
     case 'drop': if (num(m.slot)) game.dropSlot(pid, Math.floor(m.slot)); break;

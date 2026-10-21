@@ -177,7 +177,8 @@ export function buildTown(g: Gen, s: TownSpec): TownCtx {
   // depot & bank with a second storey of lockers
   t.house(cx + 3, cy - 10, 9, 7, [[cx + 7, cy - 4]], `${s.info.name} Depot & Bank`, { stone: true, noRoof: true, roof: 0x8e4a2e, wall: 0xd8ccb0 });
   b.building(cx + 3, cy - 10, 9, 7, { z: 1, name: `${s.info.name} Depot Loft`, stone: true, floor: Ground.Wood, roof: 0x8e4a2e, wallColor: 0xd8ccb0, wall: Obj.Wall });
-  for (let x = cx + 4; x <= cx + 8; x++) { m.setObj(x, cy - 9, Obj.Locker, 0); m.setObj(x, cy - 9, Obj.Locker, 1); }
+  // one locker every second tile, so each player has a free spot in front of and beside their locker
+  for (let x = cx + 4; x <= cx + 10; x += 2) { m.setObj(x, cy - 9, Obj.Locker, 0); m.setObj(x, cy - 9, Obj.Locker, 1); }
   b.stairs({ x: cx + 10, y: cy - 7, z: 0 }, { x: cx + 10, y: cy - 7, z: 1 }, [-1, 0], [-1, 0]);
   m.setObj(cx + 4, cy - 6, Obj.Counter);
   b.npc(st.bank.key, cx + 5, cy - 7);

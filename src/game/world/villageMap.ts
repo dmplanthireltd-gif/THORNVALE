@@ -125,7 +125,7 @@ export function buildVillage(seed = 1337): WorldMap {
     [16, 14, Obj.Table], [20, 14, Obj.Crate],
     [20, 33, Obj.Barrel], [24, 33, Obj.Crate], [24, 30, Obj.Table],
     [34, 32, Obj.Table], [38, 29, Obj.Barrel], [38, 32, Obj.Barrel],
-    [43, 14, Obj.Locker], [44, 14, Obj.Locker], [45, 14, Obj.Locker], [47, 14, Obj.Locker], [48, 14, Obj.Locker], [43, 17, Obj.Counter], [44, 17, Obj.Counter],
+    [43, 14, Obj.Locker], [45, 14, Obj.Locker], [47, 14, Obj.Locker], [49, 14, Obj.Locker], [43, 17, Obj.Counter], [44, 17, Obj.Counter],
     [45, 38, Obj.Hay], [46, 38, Obj.Hay], [50, 38, Obj.Hay], [50, 35, Obj.Crate],
   ];
   for (const [x, y, o] of props) m.setObj(x, y, o);

@@ -1571,6 +1571,8 @@ export class Game implements AIContext {
 
   /** Furthest you can throw an item onto the ground. */
   static readonly THROW_RANGE = 7;
+  /** Furniture items can be put on top of (depot lockers, tables, counters, crates, barrels). */
+  static readonly SURFACES: ReadonlySet<number> = new Set([Obj.Locker, Obj.Table, Obj.Counter, Obj.Crate, Obj.Barrel]);
 
   /**
    * Throws an item from the backpack (a slot index) or from an equipment slot
@@ -1583,8 +1585,9 @@ export class Game implements AIContext {
     const p = s.player;
     if (p.dead || !this.world.inBounds(x, y)) return;
     if (chebyshev(p.x, p.y, x, y) > Game.THROW_RANGE) return this.msg(pid, 'That is too far away.', 'warn');
-    if (!this.world.isWalkable(x, y, p.z)) return this.msg(pid, 'There is not enough room.', 'warn');
-    if (!this.world.lineOfSight(p.x, p.y, x, y, p.z)) return this.msg(pid, 'You cannot throw there.', 'warn');
+    const onTop = Game.SURFACES.has(this.world.getObj(x, y, p.z));
+    if (!this.world.isWalkable(x, y, p.z) && !onTop) return this.msg(pid, 'There is not enough room.', 'warn');
+    if (!this.world.lineOfSight(p.x, p.y, x, y, p.z) && !(onTop && chebyshev(p.x, p.y, x, y) <= 1)) return this.msg(pid, 'You cannot throw there.', 'warn');
     const inv = s.inventory;
     let stack: ItemStack | null;
     if (typeof from === 'number') {
@@ -1615,6 +1618,33 @@ export class Game implements AIContext {
     this.dropBag(x, y, p.z, [thrown]);
     p.faceTowards(x, y);
     this.events.emit({ type: 'inventoryChanged', to: pid });
+  }
+
+  /** Moves the top item of a ground pile to another tile (like dragging it in classic Tibia). */
+  moveBagItem(pid: number, bagId: number, x: number, y: number, qty?: number): void {
+    const s = this.sessions.get(pid);
+    if (!s) return;
+    const p = s.player;
+    const b = this.bags.find((it) => it.id === bagId);
+    if (p.dead || !b || b.z !== p.z || !this.world.inBounds(x, y)) return;
+    if (b.x === x && b.y === y) return;
+    if (chebyshev(p.x, p.y, b.x, b.y) > 1) return this.msg(pid, 'You need to stand next to it.', 'warn');
+    if (chebyshev(p.x, p.y, x, y) > Game.THROW_RANGE) return this.msg(pid, 'That is too far away.', 'warn');
+    const onTop = Game.SURFACES.has(this.world.getObj(x, y, p.z));
+    if (!this.world.isWalkable(x, y, p.z) && !onTop) return this.msg(pid, 'There is not enough room.', 'warn');
+    if (!this.world.lineOfSight(p.x, p.y, x, y, p.z) && !(onTop && chebyshev(p.x, p.y, x, y) <= 1)) return this.msg(pid, 'You cannot throw there.', 'warn');
+    const top = b.items[b.items.length - 1];
+    if (!top) return;
+    const n = Math.max(1, Math.min(top.qty, Math.floor(qty ?? top.qty)));
+    top.qty -= n;
+    if (top.qty <= 0) b.items.pop();
+    if (!b.items.length) {
+      const i = this.bags.indexOf(b);
+      if (i >= 0) this.bags.splice(i, 1);
+      this.events.emit({ type: 'bagRemoved', bagId: b.id });
+    }
+    this.dropBag(x, y, p.z, [{ id: top.id, qty: n }]);
+    p.faceTowards(x, y);
   }
 
   /** Moves or swaps two backpack slots; equal stackable items merge. */

@@ -19,6 +19,7 @@ import { buildEnemy, buildNpc, ENEMY_SCALE, type BipedRig, type Rig } from './mo
 import { Overlay } from './Overlay';
 import { PixelPass } from './PixelPass';
 import { WorldView } from './WorldView';
+import { Obj } from '../game/world/WorldMap';
 
 export type PickResult =
   | { kind: 'enemy' | 'npc' | 'player'; id: number }
@@ -240,7 +241,11 @@ export class Renderer {
     g.add(hit);
     g.userData.hit = hit;
     g.userData.bag = b;
-    g.position.set(b.x, 0, b.y);
+    // piles put on furniture lie on its top
+    const o = this.ctl.game.world.getObj(b.x, b.y, b.z);
+    const top = o === Obj.Locker ? 1.66 : o === Obj.Counter ? 0.86 : o === Obj.Table ? 0.6 : o === Obj.Crate ? 0.75 : o === Obj.Barrel ? 0.8 : 0;
+    g.position.set(b.x, top, b.y);
+    g.userData.top = top;
     g.scale.setScalar(0.01);
     this.paintPile(g, b);
     this.scene.add(g);
@@ -620,7 +625,7 @@ export class Renderer {
       const bag = b.userData.bag as GroundBag;
       const off = this.worldView.floorOffset(bag.z);
       b.visible = off !== null;
-      if (off !== null) b.position.y = off;
+      if (off !== null) b.position.y = off + (b.userData.top ?? 0);
       b.scale.setScalar(Math.min(1, b.scale.x + dt * 5));
       this.paintPile(b, bag);
     }

@@ -14,6 +14,7 @@ import { SaveSystem, type KeyValueStore } from '../src/game/save/SaveSystem';
 import { ITEM_RENAMES, migrateSave, SAVE_VERSION } from '../src/game/save/migrate';
 import { floodFill3D } from '../src/game/world/worldGen';
 import { Obj, WorldMap } from '../src/game/world/WorldMap';
+import { ITEMS } from '../src/game/inventory/items';
 import type { Vocation } from '../src/game/player/vocations';
 
 let failures = 0;
@@ -661,6 +662,46 @@ console.log('\nSave migration (big updates must not lose progress)');
   delete ITEM_RENAMES.removed_relic;
   const future = { ...again, version: SAVE_VERSION + 1 };
   check(migrateSave(future) === 'newer' && !u.g.applySave(u.pid, future), 'a save from a newer version is never overwritten by an older server');
+}
+
+console.log('Ground items, depot tops and battle-list runes');
+{
+  const { g, s, pid } = solo('sorcerer');
+  const p = s.player;
+  const w = g.world;
+  // a free spot with free tiles around it, away from towns
+  let at: [number, number] | null = null;
+  for (let y = 300; y < 500 && !at; y++) for (let x = 100; x < 500; x++) {
+    let ok = !w.isSafe(x, y, 0);
+    for (let dy = -2; dy <= 2 && ok; dy++) for (let dx = -3; dx <= 3; dx++) if (!w.isWalkable(x + dx, y + dy, 0) || w.getObj(x + dx, y + dy, 0) !== 0) { ok = false; break; }
+    if (ok) { at = [x, y]; break; }
+  }
+  g.teleport(p, at![0], at![1], 0);
+  s.inventory.add('wolf_pelt', 2);
+  const slot = s.inventory.slots.findIndex((x) => x?.id === 'wolf_pelt');
+  executeCommand(g, pid, { c: 'throw', from: slot, x: p.x + 1, y: p.y });
+  const bag = g.bags.find((b) => b.x === p.x + 1 && b.y === p.y);
+  check(!!bag && bag.items.some((i) => i.id === 'wolf_pelt'), 'throw an item onto the ground');
+  executeCommand(g, pid, { c: 'moveBag', id: bag!.id, x: p.x + 3, y: p.y + 1 });
+  check(!g.bags.some((b) => b.id === bag!.id) && g.bags.some((b) => b.x === p.x + 3 && b.y === p.y + 1), 'move an item lying on the ground to another tile');
+  // depot locker top
+  const lk = (() => { for (let y = 0; y < w.height; y++) for (let x = 0; x < w.width; x++) if (w.getObj(x, y, 0) === Obj.Locker && w.isWalkable(x, y + 1, 0)) return [x, y]; return null; })()!;
+  g.teleport(p, lk[0], lk[1] + 1, 0);
+  s.inventory.add('wolf_pelt', 1);
+  executeCommand(g, pid, { c: 'throw', from: s.inventory.slots.findIndex((x) => x?.id === 'wolf_pelt'), x: lk[0], y: lk[1] });
+  check(g.bags.some((b) => b.x === lk[0] && b.y === lk[1]), 'put an item on top of a depot locker');
+  check(w.getObj(lk[0] + 1, lk[1], 0) !== Obj.Locker && w.getObj(lk[0] - 1, lk[1], 0) !== Obj.Locker, 'depot lockers have a gap between them');
+  // rune dropped on a battle-list row
+  g.teleport(p, at![0], at![1], 0);
+  const Ctor = g.enemies[0].constructor as new (id: number, kind: string, x: number, y: number, z: number) => (typeof g.enemies)[number];
+  const foe = new Ctor(999001, 'rat', p.x + 2, p.y, 0);
+  g.enemies.push(foe);
+  const runeId = Object.keys(ITEMS).find((k) => ITEMS[k].rune?.type === 'damage' && !ITEMS[k].rune?.radius && (!ITEMS[k].level || ITEMS[k].level! <= 1))!;
+  s.inventory.add(runeId, 3);
+  p.groupCooldowns.attack = 0;
+  const hp0 = foe.hp;
+  executeCommand(g, pid, { c: 'useRuneOn', slot: s.inventory.slots.findIndex((x) => x?.id === runeId), id: foe.id });
+  check(foe.hp < hp0 || foe.dead, `rune from the backpack hits a creature picked on the battle list (${runeId})`);
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);

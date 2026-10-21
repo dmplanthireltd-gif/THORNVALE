@@ -296,8 +296,22 @@ export class HUD {
     this.statsEl = el('div', 'stats', eqp);
 
     const battle = el('div', 'panel battle', this.colB);
-    el('div', 'panel-title', battle, 'Battle');
+    const bt = el('div', 'panel-title battle-title', battle, 'Battle');
+    bt.title = 'Click to fold or unfold. Drag the bottom edge of the list to make it taller or shorter.';
     this.battleEl = el('div', 'battle-list', battle);
+    try {
+      const h = localStorage.getItem('thornvale.battleHeight');
+      if (h) this.battleEl.style.height = h;
+      if (localStorage.getItem('thornvale.battleFolded') === '1') battle.classList.add('folded');
+    } catch { /* storage off */ }
+    bt.addEventListener('click', () => {
+      battle.classList.toggle('folded');
+      try { localStorage.setItem('thornvale.battleFolded', battle.classList.contains('folded') ? '1' : '0'); } catch { /* storage off */ }
+    });
+    new ResizeObserver(() => {
+      if (battle.classList.contains('folded') || !this.battleEl.style.height) return;
+      try { localStorage.setItem('thornvale.battleHeight', this.battleEl.style.height); } catch { /* storage off */ }
+    }).observe(this.battleEl);
 
     const inv = el('div', 'panel inventory', this.colB);
     el('div', 'panel-title', inv, 'Pockets');
@@ -383,6 +397,12 @@ export class HUD {
     const invSlot = under.closest('[data-inv]') as HTMLElement | null;
     const eqSlot = under.closest('.slot.equip') as HTMLElement | null;
     const hot = under.closest('.hot-slot') as HTMLElement | null;
+    const target = under.closest('.battle-row') as HTMLElement | null;
+    if (target && src.kind === 'inv') {
+      const id = this.dragItemId(src);
+      if (id && itemDef(id).rune) return this.runeOn(Number(target.dataset.cid), src.index);
+      return;
+    }
     if (invSlot) {
       const to = Number(invSlot.dataset.inv);
       if (src.kind === 'inv') this.ctl.send({ c: 'moveSlot', from: src.index, to });
@@ -410,7 +430,11 @@ export class HUD {
     if (under === this.renderer.canvas) {
       const t = this.renderer.pickTile(e.clientX, e.clientY);
       if (!t) return;
-      if (src.kind === 'bag') return; // moving piles around is not supported; click to pick up
+      if (src.kind === 'bag') {
+        this.ctl.send({ c: 'moveBag', id: src.id, x: t.x, y: t.y, qty: d.ctrl ? 1 : undefined });
+        this.renderer.showClickMarker(t.x, t.y);
+        return;
+      }
       this.ctl.send({ c: 'throw', from: src.kind === 'inv' ? src.index : src.slot, x: t.x, y: t.y, qty: d.ctrl ? 1 : undefined });
       this.renderer.showClickMarker(t.x, t.y);
       return;
@@ -446,6 +470,17 @@ export class HUD {
     this.aiming = null;
     this.root.classList.remove('aiming');
     this.renderer.setAim(null, 0);
+  }
+
+  /** Fires the aimed rune at a creature from the battle list. */
+  runeOn(cid: number, slotIndex?: number): void {
+    const id = slotIndex === undefined ? this.aiming : this.s.inventory.slots[slotIndex]?.id ?? null;
+    this.cancelAim();
+    if (!id || !itemDef(id).rune) return;
+    const inv = this.s.inventory;
+    const slot = slotIndex ?? inv.slots.findIndex((st, idx) => idx < inv.size() && st?.id === id);
+    if (slot < 0) return this.log(`You have no ${itemDef(id).name.toLowerCase()} left.`, 'warn');
+    this.ctl.send({ c: 'useRuneOn', slot, id: cid });
   }
 
   /** Throws the aimed rune at a tile. */
@@ -719,8 +754,11 @@ export class HUD {
         const name = el('span', 'battle-name', info, c.name);
         const bar = el('div', 'battle-bar', info);
         const fill = el('div', 'battle-fill', bar);
+        row.dataset.cid = String(c.id);
         row.addEventListener('mousedown', (e) => {
           e.preventDefault();
+          // a rune picked from the bag or hotbar can be fired straight at someone on the list
+          if (this.aiming && e.button === 0) return this.runeOn(c.id);
           if (c.kind === 'enemy') {
             if (e.button === 2) this.creatureMenu('enemy', c.id, e.clientX, e.clientY);
             else this.ctl.send({ c: 'attack', id: c.id });
