@@ -17,6 +17,7 @@ Thornvale is a browser 3D fantasy MMORPG inspired by classic Tibia (7.x–8.x er
 3. **Secrets never leave the dashboards.** See §4.
 4. **The logic layer stays render-agnostic.** See §6.
 5. **Keep what exists.** Graphics style, systems and controls stay as they are unless the owner asks for a change. Don't "improve" by replacing.
+6. **Stay on brand.** `BRAND.md` (Project copy `claude/THORNVALE-BRAND.md`) defines the look, sound and voice: crest, wordmark, palette, fonts, UI building blocks, layout (incl. the chosen login screen), imagery, motion and words. Follow it exactly; brand changes need the owner's OK and update both copies.
 
 **Owner:** dmplanthireltd (GitHub `dmplanthireltd-gif`). The owner often writes in Polish or quick English — read for intent, answer in the language they used.
 
@@ -42,6 +43,7 @@ Thornvale is a browser 3D fantasy MMORPG inspired by classic Tibia (7.x–8.x er
 ```
 BIBLE.md              ← this file
 CLAUDE.md             ← short pointer + checklist for Claude Code
+BRAND.md              ← brand guide: crest, wordmark, colours, fonts, UI building blocks, layout, imagery, motion, sound, voice
 README.md             ← player/host-facing docs
 render.yaml           ← Render Blueprint
 site/                 ← marketing website, served at / — GENERATED: edit scripts/site/ and run `npx tsx scripts/site/build.ts` (add `--no-atlas` to skip the map). Pages: index, news/, guide/, bestiary/, atlas/, soundtrack/, highscores/, faq/, rules/, privacy/, 404, sitemap, favicon. Hand-written: styles.css (same look as the in-game HUD, design 2c: brown panels, gold corner brackets and diamond labels, diamond T crest, Palatino + Verdana system fonts, no web fonts), site.js (live status, countdown, ember sparks, trailer, region music, bestiary filters, atlas pan/zoom, highscores), robots.txt, media/ (trailer, pictures, share image; atlas.webp + atlas-small.jpg are generated)
@@ -70,11 +72,12 @@ src/
     quests/ save/ (SaveSystem.ts, migrate.ts)
     world/            ← WorldMap.ts (tiles, floors, EnemyKind), worldGen/terrain/towns…, mines.ts (deterministic ore rock placement, MINE_SPOTS)
   render/             ← Renderer, WorldView (instanced ore rocks with coloured veins, furnace/anvil/stove/tanning-rack models, lit campfires), skillFx.ts (particles for every trade skill), CreatureView, Effects, PixelPass, CameraController, Overlay, models/, textures.ts
-  ui/                 ← HUD, Minimap, WorldMapView, OnlineLogin, StartScreen, OutfitPreview, icons, dom
+  ui/                 ← HUD, Minimap, WorldMapView, StartScreen (the Gatehouse title screen: one central panel for every step) + OnlineLogin (account steps) + gate.css, emblems.ts (crest + vocation SVGs), OutfitPreview, icons, dom
   input/Input.ts      ← keyboard/mouse → Commands
   audio/              ← Sfx.ts (plays effects for game events and the player's own commands, button clicks), sfxlib.ts (every one-shot effect recipe: combat, magic, items, doors/chests, mining, smithing, UI), foley.ts (footsteps by ground, hits by material, monster voices, spell sweeps/hits by element), ambience.ts (wind/insects/sea/lava/cave beds + birds, frogs, drips), Music.ts + Tracks.ts (region music player, falls back to the old live synth)
 scripts/              ← smoke-test, net-test, storage-test, auth-test, content-test, saves
   music/              ← offline soundtrack: songs.ts (chords + melody + band per song), synth.ts (arranger, mix), instruments.ts (synthesized instruments + drum kits), render.ts → public/audio/music/*.m4a
+public/ui/gate.jpg    ← title-screen background (a darkened gameplay still)
 public/audio/music/   ← rendered region tracks (AAC loops, served at /play/audio/music/); re-render after editing songs
 ```
 
@@ -368,7 +371,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Website: re-run `scripts/site/build.ts` after adding monsters, towns or spells. Share image `site/media/og-image.jpg` redrawn in the HUD style (2026-10-21).
 - [ ] Website: more news posts; refresh the trailer after big visual changes (e.g. the graphics overhaul). Keep guide/FAQ in step with gameplay changes.
 - [ ] Owner: set up email forwarding support@thornvaleonline.com → owner's Gmail (WordPress.com → Domains → thornvaleonline.com → Email → Email forwarding).
-- [ ] New sign-in and character screens (email + password, up to 5 characters per account, "Play offline" kept) replacing the current start screen.
+- [x] New sign-in and character screens: "The Gatehouse" (design A, chosen 2026-10-21). Log in / Create account tabs, Keep me signed in (off = this tab only), Forgot password, Play offline; "Who rides out today?" hero list with 5 slots, Enter / New hero / Delete (type the name); shared hero creator (name, vocation, outfit, 3D preview); live realm count and opening countdown; Herald news strip (text in `HERALD` in StartScreen.ts). Login logic unchanged.
 - [ ] Grand opening on **1 January 2027, 00:00 UK time**: countdown on site and title screen, "create account and claim your names early" sign-up, square social post.
 
 ---
@@ -424,3 +427,5 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Process: every artifact gets a PL/EN switch; screenshot gallery artifact (DWGwwy4R5taKtW54oKnWJP) | — | — |
 | 2026-10-21 | — | Dark realistic monsters are the default: skeleton, orc warrior, demon, wolf (bigger, brighter eyes and blood, stronger contrast); one shared merged mesh per limb, 7–14 draw calls per monster instead of 18–34; `?monsters=classic` shows the old ones | — | — |
 | 2026-10-21 | — | Gear sets and detailed items: 25 sets (leather, chain, furclad, bronze, iron, plate, steel, moonsilver, starsteel, gilded, darkstone, dwarven, boneguard, Knight's Vow, Crownguard, Frostforged, Dragonscale, Hellforged, Ranger's, Silverbough, Spellwoven, Rimeweave, Wardbreaker, Skyfeather, Voidweave) with 2- and 4-piece bonuses (tooltips, Inspect window), 67 new pieces (drops, shops, anvil: boots for every metal, silver and gold armour), redrawn equipment icons and much more detailed 3D gear and weapons; set display names (ids unchanged) | — | — |
+| 2026-10-21 | — | Brand guide `BRAND.md` (+ Project copy `claude/THORNVALE-BRAND.md`): crest, wordmark, palette, fonts, building blocks, layout, imagery, motion, sound, voice; referenced from CLAUDE.md and §1 | — | — |
+| 2026-10-21 | — | Title screen redesigned as "The Gatehouse" (StartScreen.ts, OnlineLogin.ts, gate.css): brand look, central panel for log in / account / heroes / create / offline / password reset; same login logic and API | — | — |
