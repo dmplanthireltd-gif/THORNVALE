@@ -302,6 +302,12 @@ export class Sfx {
         if (s) this.play(s, v * 0.8);
         break;
       }
+      case 'tiles': {
+        if (!e.tiles.length) break;
+        const s = this.elementSound(e.effect);
+        if (s) this.play(s, this.at(e.tiles[0], e.tiles[1], e.z));
+        break;
+      }
       case 'area': {
         const v = this.at(e.x, e.y, e.z);
         const s = this.elementSound(e.effect);

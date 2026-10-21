@@ -16,7 +16,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -82,6 +82,8 @@ export interface CreatureSnap {
   buffs?: Partial<Buffs>;
   /** PvP skull: 0 none, 1 white, 2 red (players only). */
   sk?: 0 | 1 | 2;
+  /** Creature Illusion: the monster kind this player looks like. */
+  ill?: string;
 }
 
 export interface SelfSnap {
@@ -110,7 +112,7 @@ export interface SelfSnap {
 
 export type ServerMessage =
   | { t: 'welcome'; id: number; v: number; players: number }
-  | { t: 'snap'; time: number; c: CreatureSnap[]; b: Array<{ id: number; x: number; y: number; z: number; it?: string[] }>; holes: string[]; self: SelfSnap }
+  | { t: 'snap'; time: number; c: CreatureSnap[]; b: Array<{ id: number; x: number; y: number; z: number; it?: string[] }>; holes: string[]; fields?: string[]; self: SelfSnap }
   | { t: 'ev'; e: GameEvent }
   | { t: 'error'; text: string };
 
@@ -128,7 +130,11 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     c.push({
       id: p.id, k: 'p', x: p.x, y: p.y, z: p.z, fx: p.fromX, fy: p.fromY, mt: r3(p.moveT), md: r3(p.moveDur), f: r3(p.facing),
       hp: Math.ceil(p.hp), mhp: p.maxHp, d: p.dead ? 1 : 0, name: p.name, lvl: p.level, voc: p.vocation, o: p.outfit, eq, sg: p.showGear ? 1 : 0,
-      buffs: { haste: p.buffs.haste > 0 ? 1 : 0, magicShield: p.buffs.magicShield > 0 ? 1 : 0, light: p.buffs.light > 0 ? 1 : 0 },
+      buffs: {
+        haste: p.buffs.haste > 0 || p.buffs.strongHaste > 0 ? 1 : 0, magicShield: p.buffs.magicShield > 0 ? 1 : 0, light: p.buffs.light > 0 ? 1 : 0,
+        invisible: p.buffs.invisible > 0 ? 1 : 0,
+      },
+      ill: p.illusion ?? undefined,
       sk: game.skullOf(p),
     });
   }
@@ -153,7 +159,12 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
   };
   const holes: string[] = [];
   for (const k of game.dugHoles()) holes.push(k);
-  return { t: 'snap', time: r3(game.time), c, b: game.bags.map((b) => ({ id: b.id, x: b.x, y: b.y, z: b.z, it: b.items.slice(-3).map((i) => i.id) })), holes, self };
+  // rune fields near the player (x,y,z,obj)
+  const fields = game.fieldList().filter((f) => {
+    const [x, y, z] = f.split(',').map(Number);
+    return Math.abs(z - me.z) <= 1 && chebyshev(x, y, me.x, me.y) <= VIEW_RADIUS + 4;
+  });
+  return { t: 'snap', time: r3(game.time), c, b: game.bags.map((b) => ({ id: b.id, x: b.x, y: b.y, z: b.z, it: b.items.slice(-3).map((i) => i.id) })), holes, fields, self };
 }
 
 /** Routes a simulation event: null = drop, otherwise the recipient (-1 = everyone). */
@@ -255,6 +266,12 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
         p.buffs.haste = c.buffs.haste ? Math.max(p.buffs.haste, 1) : 0;
         p.buffs.magicShield = c.buffs.magicShield ? Math.max(p.buffs.magicShield, 1) : 0;
         p.buffs.light = c.buffs.light ? Math.max(p.buffs.light, 1) : 0;
+        p.buffs.invisible = c.buffs.invisible ? Math.max(p.buffs.invisible, 1) : 0;
+      }
+      const ill = c.ill ?? null;
+      if (ill !== p.illusion) {
+        p.illusion = ill;
+        ev.emit({ type: 'outfitChanged', id: p.id });
       }
       if (c.eq && c.id !== game.localId) {
         const cur = JSON.stringify(Object.fromEntries(Object.entries(s.inventory.equipment).map(([k, v]) => [k, v?.id ?? null])));
@@ -308,6 +325,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     }
   }
   game.syncHoles(snap.holes);
+  game.syncFields(snap.fields ?? []);
 
   const me = snap.self;
   const s = game.session(me.id);

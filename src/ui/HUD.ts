@@ -2,7 +2,7 @@ import { sessionOf, type Controller } from '../client/Controller';
 import type { GameEvent, MessageKind } from '../game/core/events';
 import type { Session } from '../game/Game';
 import { DEPOT_SLOTS, POCKET_SLOTS } from '../game/inventory/Inventory';
-import { describeItem, equipSlotFor, ITEMS, itemDef, type EquipSlot, type ItemStack } from '../game/inventory/items';
+import { describeItem, equipSlotFor, ITEMS, itemDef, runeGroup, runeIsAimed, type EquipSlot, type ItemStack } from '../game/inventory/items';
 import { GROUP_COOLDOWN, isSpellId, SPELL_LIST, SPELLS, type CooldownGroup, type SpellDef, type SpellId } from '../game/magic/spells';
 import { NPCS } from '../game/npc/npcs';
 import { OUTFIT_PARTS, OUTFIT_TYPES, PALETTE, PALETTE_COLS, PALETTE_ROWS, type Outfit, type OutfitPart } from '../game/player/outfits';
@@ -495,7 +495,7 @@ export class HUD {
     const st = this.s.inventory.slots[i];
     const r = st ? itemDef(st.id).rune : undefined;
     // runes are aimed with the crosshair, the classic "use with…"
-    if (r && r.type === 'damage') return this.beginAim(st!.id);
+    if (r && runeIsAimed(r)) return this.beginAim(st!.id);
     this.ctl.send({ c: 'useSlot', slot: i });
   }
 
@@ -576,7 +576,7 @@ export class HUD {
     else if (d.kind === 'consumable') items.push({ label: d.mana && !d.heal ? 'Drink' : 'Use', run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
     else if (d.rune) {
       items.push({ label: 'Use with crosshair…', run: () => this.beginAim(d.id) });
-      items.push({ label: d.rune.type === 'heal' ? 'Use on yourself' : 'Use on target', run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
+      items.push({ label: !runeIsAimed(d.rune) ? 'Use on yourself' : 'Use on target', run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
     }
     if (d.kind === 'consumable' || d.rune) items.push({ label: 'Assign to hotkey…', run: () => this.beginAssign({ kind: 'item', id: d.id }) });
     if (this.ctl.depot()) items.push({ label: 'Put in depot', run: () => this.ctl.send({ c: 'deposit', slot: i }) });
@@ -778,7 +778,7 @@ export class HUD {
     if (!h) return;
     if (h.kind === 'spell') {
       const sp = SPELLS[h.id];
-      if (sp.kind === 'healFriend') {
+      if (sp.kind === 'healFriend' || sp.param) {
         this.focusChat(`${sp.words} "`);
         return;
       }
@@ -792,7 +792,7 @@ export class HUD {
       return;
     }
     const r = itemDef(h.id).rune;
-    if (r && r.type === 'damage') {
+    if (r && runeIsAimed(r)) {
       // area runes are always aimed; single-target runes hit your target, or aim when you have none
       const t = this.ctl.game.getTarget(this.s.player.targetId);
       if (r.radius > 0 || !t || t.dead) return this.beginAim(h.id);
@@ -886,7 +886,7 @@ export class HUD {
         }
       } else if (h?.kind === 'item') {
         const d = itemDef(h.id);
-        const g: CooldownGroup | null = d.rune ? (d.rune.type === 'heal' ? 'heal' : 'attack') : d.kind === 'consumable' ? 'potion' : null;
+        const g: CooldownGroup | null = d.rune ? runeGroup(d.rune) : d.kind === 'consumable' ? 'potion' : null;
         if (g) {
           left = Math.max(0, gcd[g] ?? 0);
           total = GROUP_COOLDOWN[g];
@@ -1408,10 +1408,10 @@ export class HUD {
       ic.src = spellIcon(sp.id);
       ic.alt = '';
       const info = el('div', 'spell-info', r);
-      el('div', 'spell-name', info, `${sp.name} — "${sp.words}${sp.kind === 'healFriend' ? ' "name"' : ''}"`);
+      el('div', 'spell-name', info, `${sp.name} — "${sp.words}${sp.kind === 'healFriend' ? ' "name"' : sp.param ? ` "${sp.param}` : ''}"`);
       el('div', 'spell-desc', info, `${sp.description} · Level ${sp.level} · ${sp.mana} mana · cooldown ${sp.cooldown}s${known ? '' : ` · learn for ${fmtGold(sp.price)} gold`}`);
       const btns = el('div', 'shop-btns', r);
-      const cast = button(btns, 'Cast', () => sp.kind === 'healFriend' ? this.focusChat(`${sp.words} "`) : this.ctl.send({ c: 'cast', spell: sp.id }), 'btn small');
+      const cast = button(btns, 'Cast', () => sp.kind === 'healFriend' || sp.param ? this.focusChat(`${sp.words} "`) : this.ctl.send({ c: 'cast', spell: sp.id }), 'btn small');
       cast.disabled = !known;
       button(btns, 'Hotkey', () => {
         this.beginAssign({ kind: 'spell', id: sp.id });
@@ -1530,9 +1530,13 @@ export class HUD {
     const w = s.inventory.weight();
     this.capEl.textContent = `Cap ${Math.floor(p.capacity - w)} oz · Gold ${fmtGold(s.inventory.count('gold'))}${s.bank ? ` (+${fmtGold(s.bank)} bank)` : ''}`;
     const buffs: string[] = [];
-    if (p.buffs.haste > 0) buffs.push('⇶ haste');
+    if (p.buffs.strongHaste > 0) buffs.push('⇶ strong haste');
+    else if (p.buffs.haste > 0) buffs.push('⇶ haste');
     if (p.buffs.magicShield > 0) buffs.push('◈ magic shield');
-    if (p.buffs.light > 0) buffs.push('☀ light');
+    if (p.buffs.light > 0 || p.buffs.greatLight > 0 || p.buffs.ultimateLight > 0) buffs.push('☀ light');
+    if (p.buffs.invisible > 0) buffs.push('◌ invisible');
+    if (p.buffs.illusion > 0 && p.illusion) buffs.push(`◐ illusion`);
+    if (p.buffs.poisoned > 0) buffs.push('☣ poisoned');
     const mins = (t: number) => `${Math.ceil(t / 60)}m`;
     if (p.buffs.berserk > 0) buffs.push(`⚔ fury ${mins(p.buffs.berserk)}`);
     if (p.buffs.bullseye > 0) buffs.push(`◎ hawk eye ${mins(p.buffs.bullseye)}`);

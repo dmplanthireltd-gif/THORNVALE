@@ -33,6 +33,9 @@ export class CreatureView {
   private time = Math.random() * 10;
   private transparentOn = false;
 
+  /** 1 = solid; lower = see-through (invisible players). */
+  ghost = 1;
+
   /** Height of the floor this creature is drawn on. */
   yOffset = 0;
 
@@ -224,7 +227,8 @@ export class CreatureView {
   }
 
   private applyFade(): void {
-    const needTransparent = this.fade < 0.999;
+    const a = this.fade * this.ghost;
+    const needTransparent = a < 0.999;
     if (needTransparent !== this.transparentOn) {
       this.transparentOn = needTransparent;
       for (const m of this.rig.materials) {
@@ -232,7 +236,7 @@ export class CreatureView {
         m.needsUpdate = true;
       }
     }
-    if (needTransparent) for (const m of this.rig.materials) m.opacity = this.fade;
+    if (needTransparent) for (const m of this.rig.materials) m.opacity = a;
     else for (const m of this.rig.materials) m.opacity = 1;
   }
 

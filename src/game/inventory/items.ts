@@ -37,8 +37,15 @@ export const POTION_BUFF_SECONDS = 600;
 /** What each potion buff adds: melee attack, distance attack, spell/rune/wand damage percent. */
 export const POTION_BUFF_POWER = { berserk: 8, bullseye: 7, mastermind: 12 } as const;
 
+/** Ground fields runes can create (temporary map objects, see Game.placeField). */
+export type FieldKind = 'fire' | 'energy' | 'poison' | 'wall';
+
 export interface RuneEffect {
-  type: 'damage' | 'heal';
+  /**
+   * damage/heal: hits or heals; field: lays fields on the ground; destroyField: removes them;
+   * paralyze: slows a monster; cure: cures poison.
+   */
+  type: 'damage' | 'heal' | 'field' | 'destroyField' | 'paralyze' | 'cure';
   element?: Element;
   /** 0 = single target, otherwise area radius around the target tile. */
   radius: number;
@@ -46,6 +53,23 @@ export interface RuneEffect {
   max: number;
   perLevel: number;
   range: number;
+  field?: FieldKind;
+  /** Field layout: one tile, a 3×3 bomb, or a 5-tile wall across the throw. */
+  shape?: 'tile' | 'bomb' | 'wall';
+  /** Field lifetime or paralysis, seconds. */
+  duration?: number;
+}
+
+/** Exhaustion group a rune shares (see magic/spells GROUP_COOLDOWN). */
+export function runeGroup(r: RuneEffect): 'attack' | 'heal' | 'support' {
+  if (r.type === 'heal' || r.type === 'cure') return 'heal';
+  if (r.type === 'destroyField') return 'support';
+  return 'attack';
+}
+
+/** Runes thrown with the crosshair (everything but self-use healing and curing). */
+export function runeIsAimed(r: RuneEffect): boolean {
+  return r.type !== 'heal' && r.type !== 'cure';
 }
 
 export interface ItemDef {
@@ -153,6 +177,29 @@ const defs: ItemDef[] = [
   def({ id: 'stoneshower_rune', name: 'Stoneshower Rune', kind: 'rune', weight: 0.7, value: 12, level: 28, tint: '#7fa04a', icon: '✷', rune: { type: 'damage', element: 'earth', radius: 3, min: 25, max: 55, perLevel: 1.7, range: 6 }, rarity: 'uncommon' }),
   def({ id: 'death_rune', name: 'Death Strike Rune', kind: 'rune', weight: 0.7, value: 30, level: 45, tint: '#6a4a8a', icon: '☠', rune: { type: 'damage', element: 'death', radius: 0, min: 90, max: 150, perLevel: 3.2, range: 6 }, rarity: 'rare' }),
   def({ id: 'healing_rune', name: 'Mending Rune', kind: 'rune', weight: 0.7, value: 20, level: 24, tint: '#5ad06a', icon: '✚', rune: { type: 'heal', radius: 0, min: 120, max: 200, perLevel: 3, range: 5 }, rarity: 'uncommon' }),
+  // runes of the spells update: conjured from blank runes (see magic/spells) and sold by mage shops
+  def({ id: 'blank_rune', name: 'Blank Rune', kind: 'material', weight: 1.2, value: 4, tint: '#8a8070', icon: '◇', note: 'Say a rune spell while carrying it to bind magic into it.' }),
+  def({ id: 'thunderbolt_rune', name: 'Thunderbolt Rune', kind: 'rune', weight: 0.7, value: 8, level: 15, tint: '#7a6af0', icon: 'ϟ', rune: { type: 'damage', element: 'energy', radius: 0, min: 30, max: 55, perLevel: 1.8, range: 6 } }),
+  def({ id: 'ember_rune', name: 'Ember Rune', kind: 'rune', weight: 0.7, value: 8, level: 15, tint: '#f08a3a', icon: '✹', rune: { type: 'damage', element: 'fire', radius: 1, min: 18, max: 34, perLevel: 1.2, range: 6 } }),
+  def({ id: 'icicle_rune', name: 'Icicle Rune', kind: 'rune', weight: 0.7, value: 10, level: 20, tint: '#9fe6ff', icon: '❆', rune: { type: 'damage', element: 'ice', radius: 0, min: 40, max: 70, perLevel: 2, range: 6 } }),
+  def({ id: 'rockspike_rune', name: 'Rockspike Rune', kind: 'rune', weight: 0.7, value: 9, level: 18, tint: '#6aa040', icon: '▲', rune: { type: 'damage', element: 'earth', radius: 0, min: 34, max: 62, perLevel: 1.9, range: 6 } }),
+  def({ id: 'stormcloud_rune', name: 'Stormcloud Rune', kind: 'rune', weight: 0.7, value: 12, level: 28, tint: '#b07aff', icon: '☁', rune: { type: 'damage', element: 'energy', radius: 3, min: 25, max: 55, perLevel: 1.7, range: 6 }, rarity: 'uncommon' }),
+  def({ id: 'blast_rune', name: 'Blast Rune', kind: 'rune', weight: 0.7, value: 14, level: 31, tint: '#d8c8a0', icon: '✸', rune: { type: 'damage', element: 'physical', radius: 1, min: 40, max: 80, perLevel: 2, range: 6 }, rarity: 'uncommon' }),
+  def({ id: 'sunlance_rune', name: 'Sunlance Rune', kind: 'rune', weight: 0.7, value: 12, level: 27, vocations: PALADIN, tint: '#fff0a0', icon: '✦', rune: { type: 'damage', element: 'holy', radius: 0, min: 45, max: 80, perLevel: 2.2, range: 6 }, rarity: 'uncommon' }),
+  def({ id: 'soothing_rune', name: 'Soothing Rune', kind: 'rune', weight: 0.7, value: 8, level: 15, tint: '#8ae08a', icon: '✚', rune: { type: 'heal', radius: 0, min: 60, max: 110, perLevel: 2, range: 5 } }),
+  def({ id: 'antidote_rune', name: 'Antidote Rune', kind: 'rune', weight: 0.7, value: 10, level: 15, tint: '#b0e050', icon: '✙', rune: { type: 'cure', radius: 0, min: 0, max: 0, perLevel: 0, range: 5 } }),
+  def({ id: 'snare_rune', name: 'Snare Rune', kind: 'rune', weight: 0.7, value: 60, level: 54, tint: '#c0a0ff', icon: '⌘', rune: { type: 'paralyze', radius: 0, min: 0, max: 0, perLevel: 0, range: 6, duration: 10 }, rarity: 'rare' }),
+  def({ id: 'flame_field_rune', name: 'Flame Field Rune', kind: 'rune', weight: 0.7, value: 6, level: 15, tint: '#ff7a1a', icon: '♨', rune: { type: 'field', field: 'fire', shape: 'tile', element: 'fire', radius: 0, min: 0, max: 0, perLevel: 0, range: 6, duration: 45 } }),
+  def({ id: 'static_field_rune', name: 'Static Field Rune', kind: 'rune', weight: 0.7, value: 8, level: 18, tint: '#c890ff', icon: '⌁', rune: { type: 'field', field: 'energy', shape: 'tile', element: 'energy', radius: 0, min: 0, max: 0, perLevel: 0, range: 6, duration: 30 } }),
+  def({ id: 'venom_field_rune', name: 'Venom Field Rune', kind: 'rune', weight: 0.7, value: 5, level: 14, tint: '#6ad040', icon: '☣', rune: { type: 'field', field: 'poison', shape: 'tile', element: 'earth', radius: 0, min: 0, max: 0, perLevel: 0, range: 6, duration: 60 } }),
+  def({ id: 'firebloom_rune', name: 'Firebloom Rune', kind: 'rune', weight: 0.7, value: 15, level: 27, tint: '#ff5a1a', icon: '✺', rune: { type: 'field', field: 'fire', shape: 'bomb', element: 'fire', radius: 1, min: 0, max: 0, perLevel: 0, range: 6, duration: 45 }, rarity: 'uncommon' }),
+  def({ id: 'stormbloom_rune', name: 'Stormbloom Rune', kind: 'rune', weight: 0.7, value: 20, level: 37, tint: '#a060ff', icon: '✺', rune: { type: 'field', field: 'energy', shape: 'bomb', element: 'energy', radius: 1, min: 0, max: 0, perLevel: 0, range: 6, duration: 30 }, rarity: 'uncommon' }),
+  def({ id: 'venombloom_rune', name: 'Venombloom Rune', kind: 'rune', weight: 0.7, value: 12, level: 25, tint: '#4ab030', icon: '✺', rune: { type: 'field', field: 'poison', shape: 'bomb', element: 'earth', radius: 1, min: 0, max: 0, perLevel: 0, range: 6, duration: 60 }, rarity: 'uncommon' }),
+  def({ id: 'flame_barrier_rune', name: 'Flame Barrier Rune', kind: 'rune', weight: 0.7, value: 18, level: 33, tint: '#ff7a1a', icon: '☰', rune: { type: 'field', field: 'fire', shape: 'wall', element: 'fire', radius: 2, min: 0, max: 0, perLevel: 0, range: 6, duration: 45 }, rarity: 'uncommon' }),
+  def({ id: 'static_barrier_rune', name: 'Static Barrier Rune', kind: 'rune', weight: 0.7, value: 22, level: 41, tint: '#c890ff', icon: '☰', rune: { type: 'field', field: 'energy', shape: 'wall', element: 'energy', radius: 2, min: 0, max: 0, perLevel: 0, range: 6, duration: 30 }, rarity: 'uncommon' }),
+  def({ id: 'venom_barrier_rune', name: 'Venom Barrier Rune', kind: 'rune', weight: 0.7, value: 15, level: 29, tint: '#6ad040', icon: '☰', rune: { type: 'field', field: 'poison', shape: 'wall', element: 'earth', radius: 2, min: 0, max: 0, perLevel: 0, range: 6, duration: 60 }, rarity: 'uncommon' }),
+  def({ id: 'arcane_wall_rune', name: 'Arcane Wall Rune', kind: 'rune', weight: 0.7, value: 40, level: 32, tint: '#7fb2ff', icon: '▣', rune: { type: 'field', field: 'wall', shape: 'tile', radius: 0, min: 0, max: 0, perLevel: 0, range: 6, duration: 20 }, rarity: 'rare' }),
+  def({ id: 'dispel_rune', name: 'Dispel Rune', kind: 'rune', weight: 0.7, value: 5, level: 17, tint: '#d8d8e8', icon: '⊘', rune: { type: 'destroyField', radius: 0, min: 0, max: 0, perLevel: 0, range: 6 } }),
 
   // --- tools -----------------------------------------------------------------------
   def({ id: 'rope', name: 'Rope', kind: 'tool', tool: 'rope', weight: 18, value: 8, tint: '#b08a5a', icon: '§', note: 'Use on a rope spot to climb up.' }),
@@ -358,6 +405,20 @@ export interface ItemStack {
   qty: number;
 }
 
+function runeSummary(r: RuneEffect): string {
+  switch (r.type) {
+    case 'heal': return 'healing rune';
+    case 'cure': return 'cures poison';
+    case 'paralyze': return `slows a monster for ${r.duration ?? 10} s`;
+    case 'destroyField': return 'removes a magic field';
+    case 'field': {
+      const what = r.field === 'wall' ? 'a magic wall' : `${r.field} field${r.shape === 'tile' ? '' : 's'}`;
+      return `${r.shape === 'bomb' ? '3×3 ' : r.shape === 'wall' ? '5-tile wall of ' : ''}${what}, ${r.duration ?? 30} s`;
+    }
+    default: return `${r.element} ${r.radius ? 'area ' : ''}rune`;
+  }
+}
+
 /** One-line stat summary used by tooltips and shop lists. */
 export function describeItem(d: ItemDef): string {
   const parts: string[] = [];
@@ -374,7 +435,7 @@ export function describeItem(d: ItemDef): string {
   if (d.slots) parts.push(`${d.slots} slots`);
   if (d.heal) parts.push(`heals ${d.heal}`);
   if (d.mana) parts.push(`restores ${d.mana} mana`);
-  if (d.rune) parts.push(d.rune.type === 'heal' ? 'healing rune' : `${d.rune.element} ${d.rune.radius ? 'area ' : ''}rune`);
+  if (d.rune) parts.push(runeSummary(d.rune));
   const b = d.bonus;
   if (b) {
     if (b.hp) parts.push(`+${b.hp} hp`);

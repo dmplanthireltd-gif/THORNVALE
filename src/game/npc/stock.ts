@@ -16,6 +16,13 @@ const NEW_MATERIALS = [
   'lizard_scale', 'giant_beard', 'crystal_shard', 'frozen_heart', 'frost_dragon_scale',
 ];
 
+/** Runes added by the spells update (conjured with rune spells, also sold ready-made). */
+export const SPELL_RUNES = [
+  'thunderbolt_rune', 'ember_rune', 'icicle_rune', 'rockspike_rune', 'stormcloud_rune', 'blast_rune', 'sunlance_rune', 'soothing_rune',
+  'antidote_rune', 'snare_rune', 'flame_field_rune', 'static_field_rune', 'venom_field_rune', 'firebloom_rune', 'stormbloom_rune',
+  'venombloom_rune', 'flame_barrier_rune', 'static_barrier_rune', 'venom_barrier_rune', 'arcane_wall_rune', 'dispel_rune',
+];
+
 /** New weapons and armour the smith buys back (rares included, legendaries never exist here). */
 const NEW_GEAR = [
   'lizard_blade', 'barbarian_axe', 'dwarven_axe', 'glacial_cleaver', 'tusk_club', 'stone_maul', 'dwarven_shield', 'scarab_shield', 'frostscale_shield',
@@ -35,8 +42,10 @@ export const EXTRA_SELLS: Record<string, ShopEntry[]> = {
   ],
   mirella: [
     s('berserk_potion', 400), s('bullseye_potion', 400), s('mastermind_potion', 600), s('glacier_robe', 9500), s('frost_circlet', 6000),
+    // spells update: blank runes for rune spells, and every new rune ready-made
+    s('blank_rune', 10), ...SPELL_RUNES.map((id) => s(id)),
   ],
-  zuri: [s('bullseye_potion', 420), s('viper_star', 22), s('onyx_arrow', 9), s('fish', 5)],
+  zuri: [s('bullseye_potion', 420), s('viper_star', 22), s('onyx_arrow', 9), s('fish', 5), s('blank_rune', 12), s('antidote_rune'), s('venom_field_rune')],
   brann: [s('fur_cap', 75), s('fur_boots', 150), s('mead', 16)],
   aldric: [s('berserk_potion', 420)],
 };
@@ -53,5 +62,16 @@ export const EXTRA_BUYS: Record<string, string[]> = {
 
 /** Spells trainers teach in addition to their own list (merged in dialogue.ts). */
 export const EXTRA_SPELLS: Record<string, SpellId[]> = {
-  elias: ['exori_mas_grav', 'exevo_con', 'exevo_con_ferro', 'exevo_con_aquila', 'exevo_lanca'],
+  elias: [
+    'exori_mas_grav', 'exevo_con', 'exevo_con_ferro', 'exevo_con_aquila', 'exevo_lanca',
+    // spells update
+    'exori_mort', 'exori_mas', 'exevo_flam_hur', 'exevo_frigo_hur', 'exevo_tera_hur', 'exevo_vis_hur', 'exevo_vis_lux', 'exevo_gran_vis_lux',
+    'exevo_gran_mas_flam', 'exevo_gran_mas_tera', 'exura_gran_mas_res', 'exura_san', 'exana_pox',
+    'utani_gran_hur', 'utevo_gran_lux', 'utevo_vis_lux', 'utana_vid', 'exiva', 'exani_tera', 'exani_hur_up', 'exani_hur_down', 'exeta_res', 'utevo_res_ina',
+    'exevo_pan', 'exevo_con_flam', 'exevo_con_pox', 'exevo_con_mort',
+    'adori_min_vis', 'adori_vis', 'adori_flam', 'adori_mas_flam', 'adori_frigo', 'adori_mas_frigo', 'adori_tera', 'adori_mas_tera', 'adori_mas_vis',
+    'adori_gran_mort', 'adori_san', 'adevo_mas_hur', 'adura_gran', 'adura_vita', 'adana_pox', 'adana_ani',
+    'adevo_grav_flam', 'adevo_grav_vis', 'adevo_grav_pox', 'adevo_mas_flam', 'adevo_mas_vis', 'adevo_mas_pox',
+    'adevo_mas_grav_flam', 'adevo_mas_grav_vis', 'adevo_mas_grav_pox', 'adevo_grav_tera', 'adito_grav',
+  ],
 };

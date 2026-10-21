@@ -1,4 +1,5 @@
 import type { Element } from '../inventory/items';
+import type { BuffName } from '../player/Player';
 
 /**
  * Game events emitted by the simulation. Rendering and UI subscribe to these;
@@ -21,8 +22,10 @@ export type GameEvent =
   | { type: 'mana'; targetId: number; amount: number; to: number }
   | { type: 'projectile'; fromId: number; toId: number; effect: Effect }
   | { type: 'area'; x: number; y: number; z: number; radius: number; effect: Effect }
+  /** A spell shape that is not a circle (waves, beams, walls): flat list x0,y0,x1,y1… in order from the caster. */
+  | { type: 'tiles'; z: number; tiles: number[]; effect: Effect }
   | { type: 'cast'; casterId: number; words: string }
-  | { type: 'buff'; id: number; buff: 'haste' | 'magicShield' | 'light' | 'berserk' | 'bullseye' | 'mastermind'; on: boolean }
+  | { type: 'buff'; id: number; buff: BuffName; on: boolean }
   | { type: 'death'; id: number }
   | { type: 'spawn'; id: number }
   | { type: 'teleport'; id: number }

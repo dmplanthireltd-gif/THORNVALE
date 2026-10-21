@@ -10,7 +10,10 @@ import { BufferedIntent, Game, type Session } from '../src/game/Game';
 import { Enemy } from '../src/game/enemies/Enemy';
 import { ENEMIES } from '../src/game/enemies/enemyDefs';
 import { equipSlotFor, ITEMS, POTION_BUFF_SECONDS } from '../src/game/inventory/items';
-import { SPELLS, type SpellId } from '../src/game/magic/spells';
+import { exivaText, SPELLS, type SpellId } from '../src/game/magic/spells';
+import { facingFromDelta } from '../src/game/core/types';
+import { Ground, Obj } from '../src/game/world/WorldMap';
+import { SPELL_RUNES } from '../src/game/npc/stock';
 import { buildDialogue } from '../src/game/npc/dialogue';
 import { NPCS } from '../src/game/npc/npcs';
 import { EXTRA_BUYS, EXTRA_SELLS, EXTRA_SPELLS } from '../src/game/npc/stock';
@@ -320,6 +323,376 @@ console.log('Spells');
   const lostSpear = throwN('spear');
   const lostRune = throwN('enchanted_spear');
   check(lostRune < lostSpear, `runebound spears are lost less often (${lostRune} vs ${lostSpear} of 100)`);
+}
+
+// ---------------------------------------------------------------- spells update (classic spell list)
+console.log('Spells update');
+{
+  const SPELLS_UPDATE: SpellId[] = (NPCS.elias.spells ?? []).filter((id) => !['exori_mas_grav', 'exevo_con', 'exevo_con_ferro', 'exevo_con_aquila', 'exevo_lanca'].includes(id))
+    .filter((id) => !['exura_ico', 'exura_gran', 'exura_vita', 'exura_sio', 'exori', 'exori_gran', 'exori_hur', 'exori_con', 'exori_san', 'exori_vis', 'exori_flam',
+      'exori_frigo', 'exori_tera', 'exevo_gran_mas_vis', 'exevo_gran_mas_frigo', 'exevo_mas_san', 'utani_hur', 'utamo_vita'].includes(id));
+  check(SPELLS_UPDATE.length >= 54, `${SPELLS_UPDATE.length} new spells taught by Master Elias`);
+  const all = Object.keys(SPELLS) as SpellId[];
+  const untaught = all.filter((id) => SPELLS[id].price > 0 && !NPCS.elias.spells?.includes(id));
+  check(untaught.length === 0, `every learnable spell has a trainer${untaught.length ? ` (${untaught.join(' ')})` : ''}`);
+  const townTrainers = Object.values(NPCS).filter((n) => n.role === 'Spell trainer' && n.key !== 'elias');
+  check(townTrainers.length > 0 && townTrainers.every((n) => SPELLS_UPDATE.every((id) => n.spells?.includes(id))), `${townTrainers.length} town trainers teach them too`);
+  check(all.every((id) => SPELLS[id].description.length > 10 && SPELLS[id].vocations.length > 0 && SPELLS[id].mana > 0), 'every spell has a description, vocations and a mana cost');
+  const badGroup = all.filter((id) => {
+    const sp = SPELLS[id];
+    const want = ['heal', 'healFriend', 'massHeal', 'cure'].includes(sp.kind) ? 'heal' : ['target', 'selfArea', 'wave', 'beam'].includes(sp.kind) ? 'attack' : 'support';
+    return sp.group !== want;
+  });
+  check(badGroup.length === 0, `spells use the right cooldown group${badGroup.length ? ` (${badGroup.join(' ')})` : ''}`);
+  const runesConjured = new Set(all.map((id) => SPELLS[id].conjure).filter((c) => c?.from === 'blank_rune').map((c) => c!.item));
+  const runeItems = Object.values(ITEMS).filter((d) => d.rune).map((d) => d.id);
+  const noSpell = runeItems.filter((id) => !runesConjured.has(id));
+  check(noSpell.length === 0, `every rune in the game has a rune spell${noSpell.length ? ` (${noSpell.join(' ')})` : ''}`);
+  const sold = new Set(Object.values(NPCS).flatMap((n) => (n.sells ?? []).map((e) => e.id)));
+  const unsold = [...SPELL_RUNES, 'blank_rune'].filter((id) => !ITEMS[id] || !sold.has(id));
+  check(unsold.length === 0, `blank runes and every new rune are sold by mage shops${unsold.length ? ` (${unsold.join(' ')})` : ''}`);
+  const townMage = Object.values(NPCS).find((n) => n.role === 'Magic, runes & potions' && n.key !== 'mirella');
+  check(!!townMage?.sells?.some((e) => e.id === 'blank_rune'), `town mage shops sell blank runes (${townMage?.name})`);
+
+  // ---- every new spell can be learned from a trainer and cast
+  const g = new Game();
+  const at = openSpot(g, 5);
+  const ropeSpot = (() => {
+    const w = g.world;
+    for (const z of [0, -1, -2]) for (let y = 1; y < w.height - 1; y++) for (let x = 1; x < w.width - 1; x++) {
+      if (w.getObj(x, y, z) !== Obj.RopeSpot || !w.linkAt(x, y, z)) continue;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (w.isWalkable(x + dx, y + dy, z) && !w.linkAt(x + dx, y + dy, z)) return { x, y, z, sx: x + dx, sy: y + dy };
+    }
+    return null;
+  })();
+  // levitate: build a small ledge on floor 1 over open ground (the generated map's upper floors are walled in)
+  const ledge = (() => {
+    const l = openSpot(g, 3);
+    g.world.setGround(l.x - 4, l.y, Ground.Stone, 1);
+    if (g.world.getGround(l.x - 3, l.y, 1) !== Ground.Void) return null;
+    return { x: l.x - 4, y: l.y, bx: l.x - 3, by: l.y, dx: 1, dy: 0 };
+  })();
+  const failedCast: string[] = [];
+  const trainer = g.npcs.find((n) => n.key === 'elias')!;
+  for (const id of SPELLS_UPDATE) {
+    const sp = SPELLS[id];
+    const t = solo(sp.vocations[0], g);
+    setLevel(g, t.s, Math.max(sp.level, 100));
+    // learn it at the trainer
+    t.s.inventory.add('gold', sp.price);
+    t.s.dialogue = { npcId: trainer.id, npcKey: 'elias', npcName: trainer.name, page: 'spells', text: '' };
+    t.s.player.placeAt(trainer.x + 1, trainer.y, trainer.z);
+    g.dialogueAction(t.pid, `learn:${id}`);
+    if (!t.s.spells.has(id)) { failedCast.push(`${id}: not learned (${t.s.dialogue?.text ?? ''})`); g.removePlayer(t.pid); continue; }
+    g.closeDialogue(t.pid);
+    park(g, t.s, at);
+    t.s.player.facing = facingFromDelta(1, 0);
+    let param: string | null = null;
+    let foe: Enemy | null = null;
+    switch (sp.kind) {
+      case 'target': foe = dummy(g, 'polar_bear', { x: at.x + 1, y: at.y, z: 0 }); t.s.player.targetId = foe.id; break;
+      case 'heal': case 'massHeal': t.s.player.hp = 10; break;
+      case 'cure': g.poison(t.s, 5, 10); break;
+      case 'find': param = 'Tester'; break;
+      case 'illusion': param = 'wolf'; break;
+      case 'conjure': if (sp.conjure?.from) t.s.inventory.add(sp.conjure.from, 1); break;
+      case 'rope': if (ropeSpot) t.s.player.placeAt(ropeSpot.sx, ropeSpot.sy, ropeSpot.z); break;
+      case 'levitate':
+        if (ledge) {
+          if (sp.dir === 'down') { t.s.player.placeAt(ledge.x, ledge.y, 1); t.s.player.facing = facingFromDelta(ledge.dx, ledge.dy); }
+          else { t.s.player.placeAt(ledge.bx, ledge.by, 0); t.s.player.facing = facingFromDelta(-ledge.dx, -ledge.dy); }
+        }
+        break;
+    }
+    const mana0 = t.s.player.mana;
+    g.castSpell(t.pid, id, param);
+    if (t.s.player.mana !== mana0 - sp.mana) failedCast.push(`${id}: not cast`);
+    if (foe) foe.dead = true;
+    g.removePlayer(t.pid);
+  }
+  check(failedCast.length === 0, `all ${SPELLS_UPDATE.length} new spells learned from the trainer and cast${failedCast.length ? ` (${failedCast.slice(0, 6).join('; ')})` : ''}`);
+  check(!!ropeSpot && !!ledge, `map has a rope spot and a ledge for the tests (${!!ropeSpot}/${!!ledge})`);
+  for (const e of g.enemies) if (e.id >= 900000) e.dead = true;
+
+  // ---- waves: cone in front, nothing behind or beside
+  {
+    const sorc = solo('sorcerer', g);
+    setLevel(g, sorc.s, 60);
+    sorc.s.spells.add('exevo_vis_hur');
+    const a = openSpot(g, 6);
+    park(g, sorc.s, a);
+    sorc.s.player.facing = facingFromDelta(1, 0); // east
+    const inCone = [[1, 0], [2, 1], [3, -1], [4, 2], [5, -2]].map(([dx, dy]) => dummy(g, 'polar_bear', { x: a.x + dx, y: a.y + dy, z: 0 }));
+    const outside = [[-1, 0], [-2, 0], [0, 1], [0, -2], [1, 1], [2, 2], [6, 0]].map(([dx, dy]) => dummy(g, 'polar_bear', { x: a.x + dx, y: a.y + dy, z: 0 }));
+    g.say(sorc.pid, 'exevo vis hur');
+    const hit = inCone.filter((e) => e.hp < e.maxHp || e.dead).length;
+    check(hit === inCone.length, `Energy Wave hits ${hit}/${inCone.length} monsters in the cone`);
+    const wrong = outside.filter((e) => e.hp < e.maxHp);
+    check(wrong.length === 0, `Energy Wave misses monsters behind and beside (${wrong.length} wrongly hit)`);
+    for (const e of [...inCone, ...outside]) e.dead = true;
+
+    // facing north instead
+    sorc.s.player.groupCooldowns.attack = 0;
+    sorc.s.player.spellCooldowns = {};
+    sorc.s.player.mana = sorc.s.player.maxMana;
+    sorc.s.player.facing = facingFromDelta(0, -1);
+    const north = dummy(g, 'polar_bear', { x: a.x, y: a.y - 3, z: 0 });
+    const east = dummy(g, 'polar_bear', { x: a.x + 3, y: a.y, z: 0 });
+    g.say(sorc.pid, 'exevo vis hur');
+    check(north.hp < north.maxHp && east.hp === east.maxHp, 'the wave follows where you face');
+    north.dead = east.dead = true;
+
+    // beams: a straight line
+    sorc.s.spells.add('exevo_gran_vis_lux');
+    sorc.s.player.groupCooldowns.attack = 0;
+    sorc.s.player.spellCooldowns = {};
+    sorc.s.player.mana = sorc.s.player.maxMana;
+    sorc.s.player.facing = facingFromDelta(0, 1); // south
+    const line = [1, 3, 6].map((d) => dummy(g, 'polar_bear', { x: a.x, y: a.y + d, z: 0 }));
+    const off = [dummy(g, 'polar_bear', { x: a.x + 1, y: a.y + 2, z: 0 }), dummy(g, 'polar_bear', { x: a.x, y: a.y - 1, z: 0 })];
+    g.say(sorc.pid, 'exevo gran vis lux');
+    check(line.every((e) => e.hp < e.maxHp || e.dead), 'Great Energy Beam hits every monster on the line');
+    check(off.every((e) => e.hp === e.maxHp), 'the beam misses monsters off the line and behind');
+    for (const e of [...line, ...off]) e.dead = true;
+  }
+
+  // ---- mass healing heals a nearby ally, not a far one
+  {
+    const dr = solo('druid', g);
+    setLevel(g, dr.s, 50);
+    dr.s.spells.add('exura_gran_mas_res');
+    const a = openSpot(g, 6);
+    park(g, dr.s, a);
+    const ally = solo('knight', g);
+    setLevel(g, ally.s, 30);
+    ally.s.player.placeAt(a.x + 2, a.y, 0);
+    const farAlly = solo('knight', g);
+    setLevel(g, farAlly.s, 30);
+    farAlly.s.player.placeAt(a.x + 9, a.y, 0);
+    ally.s.player.hp = 20;
+    farAlly.s.player.hp = 20;
+    dr.s.player.hp = dr.s.player.maxHp - 50;
+    g.say(dr.pid, 'exura gran mas res');
+    check(ally.s.player.hp > 20, `Mass Healing heals a nearby ally (20 → ${ally.s.player.hp})`);
+    check(dr.s.player.hp > dr.s.player.maxHp - 50, 'and the caster');
+    check(farAlly.s.player.hp === 20, 'but not someone far away');
+    for (const x of [dr, ally, farAlly]) g.removePlayer(x.pid);
+  }
+
+  // ---- poison and exana pox
+  {
+    const k = solo('knight', g);
+    setLevel(g, k.s, 20);
+    const a = openSpot(g, 3);
+    k.s.player.placeAt(a.x, a.y, 0);
+    for (const id of ['exana_pox', 'exiva', 'exani_tera', 'exani_hur_up', 'exani_hur_down'] as SpellId[]) k.s.spells.add(id);
+    g.poison(k.s, 6, 10);
+    check(k.s.player.buffs.poisoned > 0, 'a player can be poisoned');
+    let ticks = 0;
+    const offP = g.events.on((e) => { if (e.type === 'damage' && e.targetId === k.pid && e.element === 'earth') ticks++; });
+    for (let i = 0; i < 45; i++) g.update(0.1);
+    offP();
+    check(ticks >= 2, `poison hurts every 2 seconds (${ticks} ticks in 4.5 s)`);
+    g.say(k.pid, 'exana pox');
+    check(k.s.player.buffs.poisoned === 0, 'exana pox cures poison');
+    const m0 = k.s.player.mana;
+    k.s.player.spellCooldowns = {};
+    k.s.player.groupCooldowns.heal = 0;
+    g.say(k.pid, 'exana pox');
+    check(k.s.player.mana === m0, 'exana pox is refused when not poisoned');
+    // the antidote rune cures too
+    g.poison(k.s, 6, 10);
+    k.s.player.groupCooldowns.heal = 0;
+    k.s.inventory.add('antidote_rune', 1);
+    g.useItem(k.pid, 'antidote_rune');
+    check(k.s.player.buffs.poisoned === 0 && !k.s.inventory.has('antidote_rune'), 'antidote rune cures poison');
+    g.removePlayer(k.pid);
+  }
+
+  // ---- conjuring runes from blank runes
+  {
+    const so = solo('sorcerer', g);
+    setLevel(g, so.s, 50);
+    so.s.spells.add('adori_gran_mort');
+    const sd0 = so.s.inventory.count('death_rune');
+    g.say(so.pid, 'adori gran mort');
+    check(so.s.inventory.count('death_rune') === sd0, 'no blank rune, no rune');
+    so.s.inventory.add('blank_rune', 2);
+    const mana0 = so.s.player.mana;
+    g.say(so.pid, 'adori gran mort');
+    check(so.s.inventory.count('death_rune') === sd0 + SPELLS.adori_gran_mort.conjure!.qty && so.s.inventory.count('blank_rune') === 1, 'adori gran mort turns a blank rune into death strike runes');
+    check(so.s.player.mana === mana0 - SPELLS.adori_gran_mort.mana, 'conjuring costs mana');
+    const dr = solo('druid', g);
+    setLevel(g, dr.s, 50);
+    dr.s.spells.add('adori_gran_mort');
+    dr.s.inventory.add('blank_rune', 1);
+    g.say(dr.pid, 'adori gran mort');
+    check(dr.s.inventory.count('blank_rune') === 1, 'druids cannot make sorcerer runes');
+    const low = solo('sorcerer', g);
+    setLevel(g, low.s, 20);
+    low.s.spells.add('adori_gran_mort');
+    low.s.inventory.add('blank_rune', 1);
+    g.say(low.pid, 'adori gran mort');
+    check(low.s.inventory.count('blank_rune') === 1, 'minimum level for rune spells');
+    for (const x of [so, dr, low]) g.removePlayer(x.pid);
+  }
+
+  // ---- exiva
+  {
+    check(exivaText('Bob', 0, -50, 0) === 'Bob is to the north.', 'exiva: north');
+    check(exivaText('Bob', 150, 150, 0) === 'Bob is far to the south-east.', 'exiva: far south-east');
+    check(exivaText('Bob', -300, 0, -1).startsWith('Bob is very far to the west on a lower level'), 'exiva: very far, lower level');
+    check(exivaText('Bob', 1, 2, 0) === 'Bob is standing next to you.', 'exiva: next to you');
+    const a = solo('knight', g);
+    const b = solo('knight', g);
+    b.s.player.name = 'Farwalker';
+    setLevel(g, a.s, 20);
+    a.s.spells.add('exiva');
+    const sp = openSpot(g, 3);
+    a.s.player.placeAt(sp.x, sp.y, 0);
+    b.s.player.placeAt(sp.x + 40, sp.y - 40, 0);
+    const msgs: string[] = [];
+    const off = g.events.on((e) => { if (e.type === 'message' && e.to === a.pid) msgs.push(e.text); });
+    g.say(a.pid, 'exiva "Farwalker');
+    off();
+    check(msgs.some((m) => m === 'Farwalker is to the north-east.'), `exiva tells the direction (${msgs.join(' | ')})`);
+    g.removePlayer(a.pid);
+    g.removePlayer(b.pid);
+  }
+
+  // ---- exani tera on a rope spot
+  if (ropeSpot) {
+    const r = solo('druid', g);
+    setLevel(g, r.s, 20);
+    r.s.spells.add('exani_tera');
+    r.s.player.placeAt(ropeSpot.sx, ropeSpot.sy, ropeSpot.z);
+    check(!r.s.inventory.has('rope'), 'tester carries no rope');
+    const link = g.world.linkAt(ropeSpot.x, ropeSpot.y, ropeSpot.z)!;
+    g.say(r.pid, 'exani tera');
+    check(r.s.player.z === link.to.z && Math.max(Math.abs(r.s.player.x - link.to.x), Math.abs(r.s.player.y - link.to.y)) <= 2, `exani tera climbs the rope spot (floor ${ropeSpot.z} → ${r.s.player.z})`);
+    const z1 = r.s.player.z;
+    r.s.player.spellCooldowns = {};
+    r.s.player.groupCooldowns.support = 0;
+    g.say(r.pid, 'exani tera');
+    check(r.s.player.z === z1, 'exani tera does nothing away from a rope spot');
+    g.removePlayer(r.pid);
+  }
+
+  // ---- levitate
+  if (ledge) {
+    const l = solo('knight', g);
+    setLevel(g, l.s, 20);
+    l.s.spells.add('exani_hur_up');
+    l.s.spells.add('exani_hur_down');
+    l.s.player.placeAt(ledge.x, ledge.y, 1);
+    l.s.player.facing = facingFromDelta(ledge.dx, ledge.dy);
+    g.say(l.pid, 'exani hur down');
+    check(l.s.player.z === 0 && l.s.player.x === ledge.bx && l.s.player.y === ledge.by, 'exani hur down floats off a ledge');
+    l.s.player.spellCooldowns = {};
+    l.s.player.groupCooldowns.support = 0;
+    l.s.player.facing = facingFromDelta(-ledge.dx, -ledge.dy);
+    g.say(l.pid, 'exani hur up');
+    check(l.s.player.z === 1 && l.s.player.x === ledge.x, 'exani hur up floats back up');
+    g.removePlayer(l.pid);
+  }
+
+  // ---- challenge, invisibility, illusion
+  {
+    const k = solo('knight', g);
+    const friend = solo('druid', g);
+    setLevel(g, k.s, 30);
+    k.s.spells.add('exeta_res');
+    const a = openSpot(g, 4);
+    park(g, k.s, a);
+    friend.s.player.placeAt(a.x - 2, a.y, 0);
+    friend.s.player.god = true;
+    const bears = [dummy(g, 'polar_bear', { x: a.x + 1, y: a.y + 1, z: 0 }), dummy(g, 'polar_bear', { x: a.x - 2, y: a.y + 1, z: 0 })];
+    for (const b of bears) { b.targetId = friend.pid; b.state = 'chase'; }
+    g.say(k.pid, 'exeta res');
+    check(bears.every((b) => b.targetId === k.pid), 'exeta res: nearby monsters turn on the knight');
+    for (const b of bears) b.dead = true;
+
+    const m = solo('sorcerer', g);
+    setLevel(g, m.s, 40);
+    m.s.spells.add('utana_vid');
+    m.s.spells.add('utevo_res_ina');
+    const b2 = openSpot(g, 4);
+    m.s.player.placeAt(b2.x, b2.y, 0);
+    m.s.player.god = true;
+    const wolf = dummy(g, 'polar_bear', { x: b2.x + 2, y: b2.y, z: 0 });
+    for (let i = 0; i < 5; i++) g.update(0.1);
+    check(wolf.targetId === m.pid, 'a monster hunts a visible player');
+    g.say(m.pid, 'utana vid');
+    for (let i = 0; i < 5; i++) g.update(0.1);
+    check(m.s.player.buffs.invisible > 0 && wolf.targetId !== m.pid, 'utana vid: monsters lose track of you');
+    wolf.dead = true;
+    m.s.player.groupCooldowns.support = 0;
+    m.s.player.mana = m.s.player.maxMana;
+    g.say(m.pid, 'utevo res ina "wolf');
+    check(m.s.player.illusion === 'wolf' && m.s.player.buffs.illusion > 0, 'utevo res ina turns you into a wolf');
+    const mirror = new Game({ simulate: false });
+    const ms = mirror.addPlayer('Tester', { id: m.s.id, starter: false });
+    mirror.localId = ms.id;
+    const snap = buildSnapshot(g, m.s);
+    if (snap.t === 'snap') applySnapshot(mirror, snap);
+    check(ms.player.illusion === 'wolf' && ms.player.buffs.invisible > 0, 'illusion and invisibility reach the client');
+    for (const x of [k, friend, m]) g.removePlayer(x.pid);
+  }
+
+  // ---- field runes, magic wall, dispel, snare
+  {
+    const so = solo('sorcerer', g);
+    setLevel(g, so.s, 60);
+    const a = openSpot(g, 6);
+    park(g, so.s, a);
+    so.s.inventory.add('flame_field_rune', 2);
+    so.s.inventory.add('arcane_wall_rune', 1);
+    so.s.inventory.add('dispel_rune', 1);
+    so.s.inventory.add('firebloom_rune', 1);
+    const slotOf = (id: string) => so.s.inventory.slots.findIndex((x) => x?.id === id);
+    const bear = dummy(g, 'polar_bear', { x: a.x + 3, y: a.y, z: 0 });
+    bear.state = 'idle';
+    g.useRune(so.pid, slotOf('flame_field_rune'), { x: a.x + 3, y: a.y });
+    check(g.fieldAt(a.x + 3, a.y, 0) === Obj.FireField && so.s.inventory.count('flame_field_rune') === 1, 'flame field rune lays a fire field');
+    bear.hazardTimer = 0;
+    const hp0 = bear.hp;
+    (g as unknown as { enemyOnField(e: Enemy, dt: number): void }).enemyOnField(bear, 0.1);
+    check(bear.hp < hp0, 'a monster standing in the fire field burns');
+    // snapshot carries the field
+    const mirror = new Game({ simulate: false });
+    const ms = mirror.addPlayer('Tester', { id: so.s.id, starter: false });
+    mirror.localId = ms.id;
+    const snap = buildSnapshot(g, so.s);
+    if (snap.t === 'snap') applySnapshot(mirror, snap);
+    check(mirror.world.getObj(a.x + 3, a.y, 0) === Obj.FireField, 'fields reach the client');
+    so.s.player.groupCooldowns.support = 0;
+    g.useRune(so.pid, slotOf('dispel_rune'), { x: a.x + 3, y: a.y });
+    check(g.fieldAt(a.x + 3, a.y, 0) === null && g.world.getObj(a.x + 3, a.y, 0) === Obj.None, 'dispel rune removes the field');
+    bear.dead = true;
+    so.s.player.groupCooldowns.attack = 0;
+    g.useRune(so.pid, slotOf('arcane_wall_rune'), { x: a.x + 2, y: a.y + 2 });
+    check(!g.world.isWalkable(a.x + 2, a.y + 2, 0) && !g.world.lineOfSight(a.x + 2, a.y + 1, a.x + 2, a.y + 3, 0), 'arcane wall blocks walking and sight');
+    for (let i = 0; i < 22; i++) g.update(1);
+    check(g.world.isWalkable(a.x + 2, a.y + 2, 0) && g.fieldAt(a.x + 2, a.y + 2, 0) === null, 'the wall vanishes after 20 seconds');
+    so.s.player.groupCooldowns.attack = 0;
+    g.useRune(so.pid, slotOf('firebloom_rune'), { x: a.x - 3, y: a.y });
+    let n = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (g.fieldAt(a.x - 3 + dx, a.y + dy, 0) === Obj.FireField) n++;
+    check(n === 9, `firebloom lays a 3×3 of fire (${n})`);
+    // snare
+    const dr = solo('druid', g);
+    setLevel(g, dr.s, 60);
+    const b = openSpot(g, 4);
+    park(g, dr.s, b);
+    const slow = dummy(g, 'polar_bear', { x: b.x + 2, y: b.y, z: 0 });
+    dr.s.inventory.add('snare_rune', 1);
+    g.useRune(dr.pid, dr.s.inventory.slots.findIndex((x) => x?.id === 'snare_rune'), { x: b.x + 2, y: b.y });
+    g.update(0.05);
+    check(slow.slowTimer > 0 && slow.stepTime > slow.def.stepTime * 2, 'snare rune paralyses a monster');
+    slow.dead = true;
+    g.removePlayer(so.pid);
+    g.removePlayer(dr.pid);
+  }
 }
 
 // ---------------------------------------------------------------- models

@@ -25,7 +25,8 @@ function nearestPlayer(e: Enemy, ctx: AIContext, range: number): Player | null {
   let best: Player | null = null;
   let bestD = Infinity;
   for (const p of ctx.alivePlayers()) {
-    if (ctx.isProtected(p)) continue;
+    // invisible players (utana vid) cannot be seen by monsters
+    if (ctx.isProtected(p) || p.buffs.invisible > 0) continue;
     const d = dist(e, p);
     if (d <= range && d < bestD && ctx.canSee(e, p)) {
       best = p;
@@ -71,7 +72,7 @@ export function updateEnemyAI(e: Enemy, ctx: AIContext, dt: number): void {
   if (e.state !== 'chase' && e.state !== 'attack') return;
 
   let p = ctx.getPlayer(e.targetId);
-  if (!p || p.dead || dist(e, p) > def.aggroRange + 5 || ctx.isProtected(p)) {
+  if (!p || p.dead || dist(e, p) > def.aggroRange + 5 || ctx.isProtected(p) || p.buffs.invisible > 0) {
     p = nearestPlayer(e, ctx, def.aggroRange);
     e.targetId = p ? p.id : null;
   }

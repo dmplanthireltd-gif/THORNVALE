@@ -127,7 +127,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 2. **Every player action is a `Command`** sent through `Controller.send(...)` → `Game.executeCommand`. UI/input never mutate game state directly. Offline = LocalController runs it locally; online = NetController sends it, the server is authoritative.
 3. **Game → view communication is via the event bus** (`core/events.ts`). Renderer, HUD and Sfx subscribe; they never poll internal fields they don't own.
 4. **Online:** server ticks at 20 Hz and sends snapshots (`VIEW_RADIUS = 20`). The client keeps a mirror Game (`simulate:false`) and applies snapshots. Messages arriving before the HUD exists go to the backlog.
-5. **Protocol:** `PROTOCOL_VERSION` (currently **7**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
+5. **Protocol:** `PROTOCOL_VERSION` (currently **8**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
 6. **PvP** (server option `PVP`, passed as `GameOptions.pvp`; off offline). Rules live in `Game` (`pvpProblem`, `onPvpAttack`, `onPvpKill`); every PvP hit passes `applyDamage`, which re-checks them:
    - Players block players, like monsters do, **except inside protection zones** (temples, depots, town doors) where they pass through each other. Logging in or teleporting onto an occupied tile is allowed.
    - No attacking from inside, or into, a protection zone. Attacker and target must both be level ≥ 8.
@@ -158,6 +158,9 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 | Throw range | 7 tiles | Game.ts |
 | Ground bag lifetime | 180 s | Game.ts |
 | Area runes | shape `dx² + dy² ≤ r² + r` | Game.ts |
+| Waves / beams | face N/E/S/W only (diagonal facing → east/west); wave cone widths 1,3,3,5,5…; beam = straight line | magic/spells.ts |
+| Rune fields | fire 45 s, energy 30 s, poison 60 s, magic wall 20 s; tick every 2 s; not in protection zones; never saved | items.ts, Game.ts |
+| Poison | `buffs.poisoned` seconds, damage every 2 s; from venom fields and earth monster attacks (35%); cured by exana pox / antidote rune | Game.ts |
 | Autosave | every 30 s + on logout + on SIGTERM | server/server.ts |
 | PvP min level | `PVP_MIN_LEVEL = 8` (attacker and target) | Game.ts |
 | White skull | `WHITE_SKULL_MS` 15 min, refreshed per attack; self-defence window also 15 min | Game.ts |
@@ -186,7 +189,15 @@ File: `src/game/save/migrate.ts`. Current **`SAVE_VERSION = 4`** (v2→v3: new w
 IDs are `snake_case`, English, stable forever once shipped (they live in saves). Display names may change freely.
 
 - **Vocations:** `knight`, `paladin`, `sorcerer`, `druid`.
-- **Spells (words):** exura, exura ico, exura gran, exura vita, exura sio, exori, exori gran, exori hur, exori con, exori san, exori vis, exori flam, exori frigo, exori tera, exevo gran mas vis, exevo gran mas frigo, exevo mas san, utani hur, utamo vita, utevo lux, exori mas grav, exevo con, exevo con ferro, exevo con aquila, exevo lanca (+ any added by the content work — the list in `magic/spells.ts` is authoritative).
+- **Spells (words; id = words with `_`):** the list in `magic/spells.ts` is authoritative. Trainers: Master Elias + every town trainer (`EXTRA_SPELLS.elias` in npc/stock.ts).
+  - *Healing:* exura, exura ico, exura gran, exura vita, exura sio "name, exura san (paladin), exura gran mas res (mass heal, druid), exana pox (cure poison).
+  - *Attack, one target:* exori hur, exori con, exori san, exori vis, exori flam, exori frigo, exori tera, exori mort (sorcerer).
+  - *Attack, around you:* exori, exori gran, exori mas (knight, radius 2), exori mas grav, exevo mas san, exevo gran mas vis, exevo gran mas frigo, exevo gran mas flam (sorcerer), exevo gran mas tera (druid).
+  - *Waves (cone in front):* exevo flam hur, exevo vis hur (sorcerer); exevo frigo hur, exevo tera hur (druid). *Beams (line in front):* exevo vis lux, exevo gran vis lux (sorcerer).
+  - *Support:* utani hur, utani gran hur, utamo vita, utevo lux, utevo gran lux, utevo vis lux, utana vid (invisible to monsters), exiva "name (direction/distance), exani tera (magic rope), exani hur up / exani hur down (levitate), exeta res (challenge, knight), utevo res ina "creature (illusion).
+  - *Conjuring:* exevo con, exevo con ferro, exevo con aquila, exevo lanca, exevo pan (food), exevo con flam (flaming arrows), exevo con pox (venom arrows), exevo con mort (bolts).
+  - *Rune spells (1 `blank_rune` + mana + level → runes):* adori min vis → spark_rune, adori vis → thunderbolt_rune, adori flam → ember_rune, adori mas flam → fireball_rune, adori frigo → icicle_rune, adori mas frigo → avalanche_rune, adori tera → rockspike_rune, adori mas tera → stoneshower_rune, adori mas vis → stormcloud_rune, adori gran mort → death_rune, adori san → sunlance_rune, adevo mas hur → blast_rune, adura gran → soothing_rune, adura vita → healing_rune, adana pox → antidote_rune, adana ani → snare_rune, adevo grav flam/vis/pox → flame/static/venom_field_rune, adevo mas flam/vis/pox → firebloom/stormbloom/venombloom_rune, adevo mas grav flam/vis/pox → flame/static/venom_barrier_rune, adevo grav tera → arcane_wall_rune, adito grav → dispel_rune.
+- **Map objects added for rune fields:** `Obj.EnergyField = 42`, `Obj.PoisonField = 43`, `Obj.MagicWall = 44` (fire fields reuse `Obj.FireField`). Only ever placed temporarily by `Game.placeField`.
 - **Items:** `src/game/inventory/items.ts` is authoritative (~100+). Runes, potions, weapons, armour sets, tools, loot.
 - **Monsters:** `EnemyKind` in `world/WorldMap.ts`, stats in `enemies/enemyDefs.ts`. Includes the classic set plus the ice-region set (frost_dragon, ice_golem, crystal_spider, frost_giant, frost_giantess, ice_witch, barbarian_*, frostkin*, dire_penguin, silver_rabbit, winter_wolf, polar_bear) and scorpion, mummy, scarab, minotaur(+archer/mage), cyclops, dwarf(+soldier/guard), bandit, amazon, valkyrie, bear, deer, snake, lizard_sentinel/templar.
 - **NPCs:** `npc/npcs.ts`; shop lists in `npc/stock.ts` (EXTRA_SELLS / EXTRA_BUYS merged into NPCS). Services: shop, bank, depot, travel, quests.
@@ -241,7 +252,8 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Supabase Auth: "Confirm email" off (or custom SMTP). Done 2026-10-21: Site URL `https://thornvaleonline.com`; redirect URLs `https://thornvaleonline.com/**`, `https://www.thornvaleonline.com/**`, `https://thornvale.onrender.com/**`.
 - [x] New 640 × 800 world (14 towns: Thornvale, Westmarch, Elderglen, Stonedeep, Highmoor, Millbrook, Valdrheim, Aurelion, Briarwatch, Corvane, Saltmere, Palmreach, Sunspire, Dunewatch). Owner asked to skip Zao/Yalahar/Darashia/Rookgaard/Liberty Bay equivalents to save time; Zao and Rookgaard were never built, the others (Briarwatch+Emberhold, Dunewatch, Saltmere) were already built and kept for now — owner may ask to remove them later.
 - [x] Ice-region (7.92-style) and classic monsters (35 new), 63 items, 5 spells, 3 buff potions; content-test.
-- [ ] Remaining Tibia-8.0-style spells (~45: waves, beams, exori mort, mass heal, exana pox, utani gran hur, utana vid, exiva, rune conjuring…).
+- [x] Remaining Tibia-8.0-style spells: 54 new spells (waves, beams, exori mort, mass heal, exura san, exana pox, utani gran hur, lights, utana vid, exiva, exani tera, levitate, challenge, creature illusion, food/ammo conjuring, 27 rune spells), blank runes, 21 new runes incl. fields/bombs/walls/magic wall/dispel/snare, poison condition.
+- [ ] Spells skipped for now: utevo res (summon creature) and adeta sio (convince creature) — no friendly-monster AI yet; adana mort (animate dead), adevo ina (chameleon), adito tera (disintegrate) — no systems for them; exana mort — no curse condition in the game (curses came after 8.0).
 - [ ] Dark realistic monster models (owner chose this style; sample of 4 in progress, behind `?monsters=dark`).
 - [x] Ground items can be dragged to other tiles (`moveBag`); items can be put on depot lockers, tables, counters, crates, barrels (`Game.SURFACES`); depot lockers are placed every second tile.
 - [x] Minimap: wheel zoom, right-drag pan, double-click centre. Battle list: click title to fold, drag bottom edge to resize.
@@ -283,3 +295,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Item trading by drag-and-drop, fight stance + follow/stand, lurable monsters (no leash/home-healing) | 3 | 6 |
 | 2026-10-21 | — | PvP (`PVP` env, default on): players block each other outside protection zones, secure mode, white/red skulls, PZ lock, red skull drops the backpack | 4 | 7 |
 | 2026-10-21 | — | Removed the classic-look option: worn equipment always changes the character's look | 4 | 7 |
+| 2026-10-21 | — | Classic spell list: 54 spells (waves, beams, mass heal, cure poison, invisibility, find person, magic rope, levitate, challenge, illusion, rune conjuring from blank runes), 22 new items (blank rune + 21 runes), rune fields and magic walls, poison condition | 4 | 8 |

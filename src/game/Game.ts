@@ -9,8 +9,9 @@ import { onEnemyDamaged, updateEnemyAI, type AIContext } from './enemies/EnemyAI
 import type { Ability } from './enemies/enemyDefs';
 import type { Creature } from './entities/Creature';
 import { addToList, DEPOT_SLOTS, Inventory } from './inventory/Inventory';
-import { describeItem, EQUIP_SLOTS, equipSlotFor, itemDef, POTION_BUFF_POWER, POTION_BUFF_SECONDS, type Element, type EquipSlot, type ItemDef, type ItemStack } from './inventory/items';
-import { GROUP_COOLDOWN, isSpellId, parseSpellWords, SPELLS, startingSpells, type SpellDef, type SpellId } from './magic/spells';
+import { describeItem, EQUIP_SLOTS, equipSlotFor, itemDef, POTION_BUFF_POWER, POTION_BUFF_SECONDS, runeGroup, type Element, type EquipSlot, type FieldKind, type ItemDef, type ItemStack } from './inventory/items';
+import { ENEMIES } from './enemies/enemyDefs';
+import { beamTiles, exivaText, facingDir, GROUP_COOLDOWN, isSpellId, parseSpellWords, SPELLS, startingSpells, waveTiles, type SpellDef, type SpellId } from './magic/spells';
 import { findPath } from './movement/pathfinding';
 import { buildDialogue, type DialogueState, type DialogueView } from './npc/dialogue';
 import { Npc } from './npc/Npc';
@@ -22,7 +23,7 @@ import { BUFF_NAMES, emptyBuffs, expForLevel, FIGHT_MODE, Player, type FightMode
 import { isVocation, VOCATIONS, type Vocation } from './player/vocations';
 import { QUESTS, QuestLog } from './quests/quests';
 import { buildWorld } from './world/worldGen';
-import { Ground, Obj, WorldMap } from './world/WorldMap';
+import { FLOOR_MAX, FLOOR_MIN, Ground, Obj, WorldMap, type EnemyKind } from './world/WorldMap';
 
 /** Source of directional input. Keeps the simulation free of DOM concerns. */
 export interface MoveIntent {
@@ -145,6 +146,18 @@ export const PZ_LOCK_SECONDS = 60;
 /** How long the victim of an attack may hit back without getting a skull. */
 const SELF_DEFENCE_MS = WHITE_SKULL_MS;
 const HOLE_OPEN_SECONDS = 90;
+
+/** A magic field laid by a rune: a temporary map object that restores what was there. */
+interface TempField {
+  obj: Obj;
+  prev: Obj;
+  ttl: number;
+  /** Player who made it (monsters it hurts give them the experience). */
+  owner: number;
+}
+
+const FIELD_OBJ: Record<FieldKind, Obj> = { fire: Obj.FireField, energy: Obj.EnergyField, poison: Obj.PoisonField, wall: Obj.MagicWall };
+const FIELD_ELEMENT: Partial<Record<Obj, Element>> = { [Obj.FireField]: 'fire', [Obj.EnergyField]: 'energy', [Obj.PoisonField]: 'earth' };
 const TRADE_RANGE = 3;
 
 /**
@@ -167,6 +180,8 @@ export class Game implements AIContext {
   now: () => number;
   /** Dug holes that close again: key → seconds left. */
   private openHoles = new Map<string, number>();
+  /** Rune fields and magic walls: "x,y,z" → field. */
+  private fields = new Map<string, TempField>();
   time = 0;
   localId: number | null = null;
   private nextId = 1;
@@ -262,7 +277,7 @@ export class Game implements AIContext {
       hpRegen += b.hpRegen ?? 0;
       manaRegen += b.manaRegen ?? 0;
     }
-    if (p.buffs.haste > 0) speed += 30;
+    speed += p.buffs.strongHaste > 0 ? 70 : p.buffs.haste > 0 ? 30 : 0;
     p.maxHp = voc.baseHp + (p.level - 1) * voc.hpPerLevel + hp;
     p.maxMana = voc.baseMana + (p.level - 1) * voc.manaPerLevel + mana;
     p.capacity = voc.baseCap + (p.level - 1) * voc.capPerLevel;
@@ -482,6 +497,7 @@ export class Game implements AIContext {
     for (const n of this.npcs) this.updateNpc(n, dt);
     this.updateBags(dt);
     this.updateHoles(dt);
+    this.updateFields(dt);
     for (const s of this.sessions.values()) {
       if (s.dialogue) {
         const n = this.npcs.find((x) => x.id === s.dialogue!.npcId);
@@ -518,13 +534,26 @@ export class Game implements AIContext {
     }
     for (const k of Object.keys(p.spellCooldowns)) p.spellCooldowns[k] -= dt;
     for (const g of ['attack', 'heal', 'support', 'potion'] as const) p.groupCooldowns[g] = Math.max(0, p.groupCooldowns[g] - dt);
+    if (p.buffs.poisoned > 0) {
+      p.poisonTick -= dt;
+      if (p.poisonTick <= 0) {
+        p.poisonTick += 2;
+        this.hurtPlayerByEnvironment(s, p.poisonDamage, 'earth', 'You feel the poison.');
+        if (p.dead) return;
+      }
+    }
     for (const bName of BUFF_NAMES) {
       if (p.buffs[bName] > 0) {
         p.buffs[bName] -= dt;
         if (p.buffs[bName] <= 0) {
           p.buffs[bName] = 0;
           this.events.emit({ type: 'buff', id: p.id, buff: bName, on: false });
-          if (bName === 'haste') this.refreshStats(s);
+          if (bName === 'haste' || bName === 'strongHaste') this.refreshStats(s);
+          if (bName === 'poisoned') p.poisonDamage = 0;
+          if (bName === 'illusion' && p.illusion) {
+            p.illusion = null;
+            this.events.emit({ type: 'outfitChanged', id: p.id });
+          }
           this.msg(s.id, BUFF_FADE[bName], 'info');
         }
       }
@@ -646,6 +675,12 @@ export class Game implements AIContext {
       p.hazardTimer = 2;
       if (s.inventory.equipped('feet') === 'emberwalk_boots') return;
       this.hurtPlayerByEnvironment(s, randInt(15, 40) + p.level, 'fire', 'You are burnt by a fire field.');
+    } else if (o === Obj.EnergyField) {
+      p.hazardTimer = 2;
+      this.hurtPlayerByEnvironment(s, randInt(20, 40) + Math.floor(p.level / 2), 'energy', 'You are shocked by an energy field.');
+    } else if (o === Obj.PoisonField) {
+      p.hazardTimer = 2;
+      this.poison(s, 4 + Math.floor(p.level / 12), 12);
     } else if (g === Ground.Swamp) {
       p.hazardTimer = 3;
       if (Math.random() < 0.5) this.hurtPlayerByEnvironment(s, randInt(4, 12), 'earth', 'The swamp water poisons you.');
@@ -771,6 +806,10 @@ export class Game implements AIContext {
     }
     if (!awake && e.state === 'idle') return;
     e.attackTimer -= dt;
+    if (e.slowTimer > 0) e.slowTimer = Math.max(0, e.slowTimer - dt);
+    e.stepTime = e.slowTimer > 0 ? e.def.stepTime * 2.5 : e.def.stepTime;
+    this.enemyOnField(e, dt);
+    if (e.dead) return;
     const left = this.advanceStep(e, dt);
     updateEnemyAI(e, this, dt);
     if (left > 0 && e.moving) this.advanceStep(e, left);
@@ -839,6 +878,110 @@ export class Game implements AIContext {
       this.world.setObj(x, y, Obj.LooseStone, z);
       this.events.emit({ type: 'tileChanged', x, y, z });
     }
+  }
+
+  // ================================================================ magic fields
+
+  /** Rune field or magic wall at a tile, if any. */
+  fieldAt(x: number, y: number, z: number): Obj | null {
+    return this.fields.get(WorldMap.key(x, y, z))?.obj ?? null;
+  }
+
+  /** Current fields as "x,y,z,obj" (for snapshots). */
+  fieldList(): string[] {
+    return [...this.fields].map(([k, f]) => `${k},${f.obj}`);
+  }
+
+  /** Lays one field. Refused on walls, objects, stairs, protection zones, and (for magic walls) creatures. */
+  placeField(x: number, y: number, z: number, kind: FieldKind, ttl: number, owner: number): boolean {
+    const w = this.world;
+    const k = WorldMap.key(x, y, z);
+    if (!w.inBounds(x, y) || !w.isWalkable(x, y, z) || w.isSafe(x, y, z) || w.linkAt(x, y, z)) return false;
+    const cur = this.fields.get(k);
+    const o = w.getObj(x, y, z);
+    if (!cur && o !== Obj.None) return false;
+    if (kind === 'wall' && this.isOccupied(x, y, z)) return false;
+    const obj = FIELD_OBJ[kind];
+    this.fields.set(k, { obj, prev: cur ? cur.prev : o, ttl, owner });
+    w.setObj(x, y, obj, z);
+    this.events.emit({ type: 'tileChanged', x, y, z });
+    return true;
+  }
+
+  removeField(x: number, y: number, z: number): boolean {
+    const k = WorldMap.key(x, y, z);
+    const f = this.fields.get(k);
+    if (!f) return false;
+    this.fields.delete(k);
+    this.world.setObj(x, y, f.prev, z);
+    this.events.emit({ type: 'tileChanged', x, y, z });
+    return true;
+  }
+
+  /** Mirror mode: matches fields to the server's list. */
+  syncFields(list: string[]): void {
+    const want = new Map<string, Obj>();
+    for (const e of list) {
+      const [x, y, z, o] = e.split(',').map(Number);
+      want.set(WorldMap.key(x, y, z), o as Obj);
+    }
+    for (const k of [...this.fields.keys()]) {
+      if (want.get(k) === this.fields.get(k)!.obj) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      this.removeField(x, y, z);
+    }
+    for (const [k, obj] of want) {
+      if (this.fields.has(k)) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      this.fields.set(k, { obj, prev: this.world.getObj(x, y, z), ttl: 999, owner: -1 });
+      this.world.setObj(x, y, obj, z);
+      this.events.emit({ type: 'tileChanged', x, y, z });
+    }
+  }
+
+  private updateFields(dt: number): void {
+    for (const [k, f] of [...this.fields]) {
+      f.ttl -= dt;
+      if (f.ttl > 0) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      this.removeField(x, y, z);
+    }
+  }
+
+  /** Rune fields hurt monsters standing in them (credited to the caster). */
+  private enemyOnField(e: Enemy, dt: number): void {
+    e.hazardTimer -= dt;
+    if (e.hazardTimer > 0 || e.moving) return;
+    const f = this.fields.get(WorldMap.key(e.x, e.y, e.z));
+    const el = f ? FIELD_ELEMENT[f.obj] : undefined;
+    if (!f || !el) return;
+    e.hazardTimer = 2;
+    const owner = this.getPlayer(f.owner);
+    if (!owner) return;
+    const raw = el === 'fire' ? randInt(20, 40) + owner.level : el === 'energy' ? randInt(25, 45) + owner.level : randInt(10, 20) + Math.floor(owner.level / 2);
+    this.applyDamage(e, owner, { amount: applyResist(raw, e.def.resist[el]), result: 'hit' }, el);
+  }
+
+  /** Poisons a player: `damage` every 2 s for `seconds` (the stronger poison wins). */
+  poison(s: Session, damage: number, seconds: number): void {
+    const p = s.player;
+    if (p.dead || damage <= 0) return;
+    const was = p.buffs.poisoned > 0;
+    p.poisonDamage = Math.max(was ? p.poisonDamage : 0, damage);
+    p.buffs.poisoned = Math.max(p.buffs.poisoned, seconds);
+    if (!was) {
+      p.poisonTick = 2;
+      this.events.emit({ type: 'buff', id: p.id, buff: 'poisoned', on: true });
+      this.msg(s.id, 'You are poisoned.', 'warn');
+    }
+  }
+
+  curePoison(p: Player): void {
+    if (p.buffs.poisoned <= 0) return;
+    p.buffs.poisoned = 0;
+    p.poisonDamage = 0;
+    this.events.emit({ type: 'buff', id: p.id, buff: 'poisoned', on: false });
+    this.msg(p.id, 'You are cured of poison.', 'info');
   }
 
   // ================================================================ combat
@@ -958,6 +1101,8 @@ export class Game implements AIContext {
       else raw -= randInt(0, Math.floor(this.defense(s) / 4));
       const amount = applyResist(Math.max(1, raw), this.resist(s, a.element));
       this.applyDamage(p, e, { amount, result: amount > 0 ? 'hit' : 'blocked' }, a.element, a.name);
+      // venomous attacks (earth) can leave poison behind — cured by exana pox
+      if (a.element === 'earth' && amount > 0 && !p.dead && !p.god && Math.random() < 0.35) this.poison(s, Math.max(2, Math.round(a.max / 10)), 10);
     };
     if (a.kind === 'ranged') {
       this.events.emit({ type: 'projectile', fromId: e.id, toId: target.id, effect: a.effect as Effect });
@@ -1227,6 +1372,11 @@ export class Game implements AIContext {
     p.facing = 0;
     p.attackTimer = 0;
     p.buffs = emptyBuffs();
+    p.poisonDamage = 0;
+    if (p.illusion) {
+      p.illusion = null;
+      this.events.emit({ type: 'outfitChanged', id: p.id });
+    }
     this.refreshStats(s);
     this.events.emit({ type: 'playerRespawn', id: p.id });
     this.msg(p.id, `You awaken at the temple of ${home ? (home.name === 'Temple Plaza' ? 'Thornvale' : home.name) : 'Thornvale'}.`, 'info');
@@ -1458,9 +1608,120 @@ export class Game implements AIContext {
         spend();
         const b = sp.buff!;
         p.buffs[b] = sp.duration ?? 30;
-        if (b === 'haste') this.refreshStats(s);
+        if (b === 'haste' || b === 'strongHaste') this.refreshStats(s);
         this.events.emit({ type: 'buff', id: p.id, buff: b, on: true });
-        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: b === 'haste' ? 'haste' : b === 'magicShield' ? 'shield' : 'light' });
+        const fx: Effect = b === 'haste' || b === 'strongHaste' ? 'haste' : b === 'magicShield' ? 'shield' : b === 'invisible' ? 'energy' : 'light';
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: fx });
+        if (b === 'invisible') {
+          // monsters hunting you lose track at once
+          for (const e of this.enemies) if (e.targetId === p.id) { e.targetId = null; e.path = []; }
+          this.msg(pid, 'You fade from sight: monsters can no longer see you.', 'info');
+        }
+        return;
+      }
+      case 'massHeal': {
+        const r = sp.radius ?? 4;
+        const who = this.alivePlayers().filter((o) => o.z === p.z && inAreaShape(o.x - p.x, o.y - p.y, r) && this.world.lineOfSight(p.x, p.y, o.x, o.y, p.z));
+        if (!who.some((o) => o.hp < o.maxHp)) return fail('Nobody here is wounded.');
+        spend();
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: r, effect: 'heal' });
+        for (const o of who) {
+          const amount = Math.min(o.maxHp - o.hp, rollFormula(sp.min!, sp.max!, sp.perLevel!, p.level, voc.healing));
+          if (amount <= 0) continue;
+          o.hp += amount;
+          this.events.emit({ type: 'heal', targetId: o.id, amount });
+          if (o !== p) this.msg(o.id, `${p.name} heals you for ${amount} hitpoints.`, 'info');
+        }
+        return;
+      }
+      case 'cure': {
+        if (p.buffs.poisoned <= 0) return fail('You are not poisoned.');
+        spend();
+        this.curePoison(p);
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'heal' });
+        return;
+      }
+      case 'find': {
+        if (!param) return fail(`Say ${sp.words} "Name to find someone.`);
+        const t = this.findPlayerByName(param);
+        if (!t) return fail('A player with this name is not online.');
+        spend();
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'light' });
+        this.msg(pid, exivaText(t.name, t.x - p.x, t.y - p.y, t.z - p.z), 'info');
+        return;
+      }
+      case 'rope': {
+        let spot: { x: number; y: number } | null = null;
+        for (let dy = -1; dy <= 1 && !spot; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (this.world.getObj(p.x + dx, p.y + dy, p.z) === Obj.RopeSpot && this.world.linkAt(p.x + dx, p.y + dy, p.z)) { spot = { x: p.x + dx, y: p.y + dy }; break; }
+        }
+        if (!spot) return fail('There is no rope spot here.');
+        spend();
+        const link = this.world.linkAt(spot.x, spot.y, p.z)!;
+        this.teleport(p, link.to.x, link.to.y, link.to.z);
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'haste' });
+        this.msg(pid, 'Magic lifts you up through the opening.', 'info');
+        return;
+      }
+      case 'levitate': {
+        const d = facingDir(p.facing);
+        const tx = p.x + d.dx, ty = p.y + d.dy;
+        const up = sp.dir === 'up';
+        const tz = up ? p.z + 1 : p.z - 1;
+        const w = this.world;
+        // up: open sky above you and solid footing ahead on the floor above; down: an open edge ahead and footing below it
+        const ok = tz >= FLOOR_MIN && tz <= FLOOR_MAX && w.isWalkable(tx, ty, tz) && !w.linkAt(tx, ty, tz) && !this.isOccupied(tx, ty, tz, p.id, true)
+          && (up ? w.getGround(p.x, p.y, tz) === Ground.Void : w.getGround(tx, ty, p.z) === Ground.Void);
+        if (!ok) return fail('You cannot levitate here.');
+        spend();
+        this.teleport(p, tx, ty, tz);
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'haste' });
+        return;
+      }
+      case 'challenge': {
+        const r = sp.radius ?? 2;
+        spend();
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: r, effect: 'blood' });
+        let n = 0;
+        for (const e of this.enemies) {
+          if (e.dead || e.z !== p.z || chebyshev(e.x, e.y, p.x, p.y) > r || e.def.aggroRange <= 0) continue;
+          if (!this.world.lineOfSight(p.x, p.y, e.x, e.y, p.z)) continue;
+          e.targetId = p.id;
+          e.state = 'chase';
+          e.path = [];
+          n++;
+        }
+        this.msg(pid, n ? `${n} ${n > 1 ? 'monsters turn' : 'monster turns'} on you.` : 'No monster answers your challenge.', 'info');
+        return;
+      }
+      case 'illusion': {
+        if (!param) return fail(`Say ${sp.words} "creature to take its shape.`);
+        const kind = findEnemyKind(param);
+        if (!kind) return fail(`There is no creature called "${param}".`);
+        if (ENEMIES[kind].elite) return fail('That creature is too mighty to imitate.');
+        spend();
+        p.illusion = kind;
+        p.buffs.illusion = sp.duration ?? 180;
+        this.events.emit({ type: 'buff', id: p.id, buff: 'illusion', on: true });
+        this.events.emit({ type: 'outfitChanged', id: p.id });
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'energy' });
+        return;
+      }
+      case 'wave':
+      case 'beam': {
+        if (this.isProtected(p)) return fail('You may not attack from inside a protection zone.');
+        spend();
+        const el = sp.element ?? 'energy';
+        const d = facingDir(p.facing);
+        const len = sp.length ?? 4;
+        const tiles = (sp.kind === 'wave' ? waveTiles(p.x, p.y, d, len) : beamTiles(p.x, p.y, d, len))
+          .filter(([x, y]) => this.world.inBounds(x, y) && !this.world.blocksSight(x, y, p.z) && this.world.lineOfSight(p.x, p.y, x, y, p.z));
+        this.events.emit({ type: 'tiles', z: p.z, tiles: tiles.flat(), effect: el === 'physical' ? 'stone' : el });
+        const hitSet = new Set(tiles.map(([x, y]) => `${x},${y}`));
+        for (const e of this.areaVictims(p)) {
+          if (e.dead || e.z !== p.z || !hitSet.has(`${e.x},${e.y}`)) continue;
+          this.applyDamage(e, p, { amount: applyResist(this.spellDamage(s, sp, magicMult), this.targetResist(e, el)), result: 'hit' }, el);
+        }
         return;
       }
       case 'target': {
@@ -1496,7 +1757,8 @@ export class Game implements AIContext {
         if (c.from) s.inventory.removeById(c.from, 1);
         const left = s.inventory.add(c.item, c.qty);
         if (left > 0) this.dropBag(p.x, p.y, p.z, [{ id: c.item, qty: left }]);
-        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'energy' });
+        const runeEl = made.rune?.element;
+        this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: made.rune?.type === 'heal' || made.rune?.type === 'cure' ? 'heal' : runeEl && runeEl !== 'physical' ? runeEl : 'energy' });
         this.events.emit({ type: 'inventoryChanged', to: pid });
         this.msg(pid, `You conjure ${c.qty > 1 ? `${c.qty} ${made.name.toLowerCase()}s` : article(made.name)}.`, 'info');
         return;
@@ -1567,8 +1829,9 @@ export class Game implements AIContext {
     const r = d.rune;
     if (!r) return;
     if (d.level && p.level < d.level) return this.msg(pid, `You need level ${d.level} to use this rune.`, 'warn');
-    if (p.groupCooldowns.attack > 0 && r.type === 'damage') return this.msg(pid, 'You are exhausted.', 'warn');
-    if (p.groupCooldowns.heal > 0 && r.type === 'heal') return this.msg(pid, 'You are exhausted.', 'warn');
+    if (d.vocations && !d.vocations.includes(p.vocation)) return this.msg(pid, `${VOCATIONS[p.vocation].name}s cannot use this rune.`, 'warn');
+    const grp = runeGroup(r);
+    if (p.groupCooldowns[grp] > 0) return this.msg(pid, 'You are exhausted.', 'warn');
     const voc = VOCATIONS[p.vocation];
     const creatureAt = (x: number, y: number) => this.creatures().find((c) => !c.dead && c.z === p.z && c.x === x && c.y === y) ?? null;
     if (at) {
@@ -1588,6 +1851,62 @@ export class Game implements AIContext {
       if (who !== p) this.events.emit({ type: 'projectile', fromId: p.id, toId: who.id, effect: 'heal' });
       this.events.emit({ type: 'area', x: who.x, y: who.y, z: who.z, radius: 0, effect: 'heal' });
       this.events.emit({ type: 'heal', targetId: who.id, amount });
+    } else if (r.type === 'cure') {
+      const c = at ? creatureAt(at.x, at.y) : p;
+      const who = c instanceof Player ? c : null;
+      if (!who) return this.msg(pid, 'You can only use this rune on a player.', 'warn');
+      if (who.buffs.poisoned <= 0) return this.msg(pid, who === p ? 'You are not poisoned.' : `${who.name} is not poisoned.`, 'warn');
+      p.groupCooldowns.heal = GROUP_COOLDOWN.heal;
+      if (who !== p) this.events.emit({ type: 'projectile', fromId: p.id, toId: who.id, effect: 'heal' });
+      this.events.emit({ type: 'area', x: who.x, y: who.y, z: who.z, radius: 0, effect: 'heal' });
+      this.curePoison(who);
+    } else if (r.type === 'field' || r.type === 'destroyField') {
+      let tx: number, ty: number;
+      if (at) {
+        tx = at.x;
+        ty = at.y;
+      } else {
+        const t = this.getEnemy(p.targetId);
+        if (!t || t.dead || t.z !== p.z) return this.msg(pid, 'Aim the rune at a spot.', 'warn');
+        if (chebyshev(p.x, p.y, t.x, t.y) > r.range || !this.canSee(p, t)) return this.msg(pid, 'You cannot throw there.', 'warn');
+        tx = t.x;
+        ty = t.y;
+      }
+      if (r.type === 'destroyField') {
+        const f = this.fieldAt(tx, ty, p.z);
+        if (f === null || f === Obj.MagicWall) return this.msg(pid, 'There is no field here to dispel.', 'warn');
+        this.removeField(tx, ty, p.z);
+        p.groupCooldowns[grp] = GROUP_COOLDOWN[grp];
+        this.events.emit({ type: 'area', x: tx, y: ty, z: p.z, radius: 0, effect: 'light' });
+      } else {
+        if (this.isProtected(p)) return this.msg(pid, 'You may not use this rune inside a protection zone.', 'warn');
+        const spots: Array<[number, number]> = [];
+        if (r.shape === 'bomb') {
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) spots.push([tx + dx, ty + dy]);
+        } else if (r.shape === 'wall') {
+          // the wall runs across the line of the throw
+          const alongY = Math.abs(tx - p.x) > Math.abs(ty - p.y);
+          for (let i = -2; i <= 2; i++) spots.push(alongY ? [tx, ty + i] : [tx + i, ty]);
+        } else spots.push([tx, ty]);
+        const placed = spots.filter(([x, y]) => (x === tx && y === ty) || this.world.lineOfSight(tx, ty, x, y, p.z))
+          .filter(([x, y]) => this.placeField(x, y, p.z, r.field ?? 'fire', r.duration ?? 30, p.id));
+        if (!placed.length) return this.msg(pid, 'There is not enough room.', 'warn');
+        p.groupCooldowns[grp] = GROUP_COOLDOWN[grp];
+        const fx: Effect = r.field === 'wall' ? 'shield' : r.element && r.element !== 'physical' ? r.element : 'fire';
+        this.events.emit({ type: 'tiles', z: p.z, tiles: placed.flat(), effect: fx });
+      }
+    } else if (r.type === 'paralyze') {
+      const c = at ? creatureAt(at.x, at.y) : this.getEnemy(p.targetId);
+      const t = c instanceof Enemy ? c : null;
+      if (!t || t.dead || t.z !== p.z) return this.msg(pid, at ? 'Aim this rune at a monster.' : 'You need a target. Click an enemy first.', 'warn');
+      if (this.isProtected(p)) return this.msg(pid, 'You may not attack from inside a protection zone.', 'warn');
+      if (chebyshev(p.x, p.y, t.x, t.y) > r.range) return this.msg(pid, 'Your target is too far away.', 'warn');
+      if (!this.canSee(p, t)) return this.msg(pid, 'You cannot throw there.', 'warn');
+      p.groupCooldowns[grp] = GROUP_COOLDOWN[grp];
+      t.slowTimer = r.duration ?? 10;
+      onEnemyDamaged(t, p.id);
+      this.events.emit({ type: 'projectile', fromId: p.id, toId: t.id, effect: 'energy' });
+      this.msg(pid, `The ${t.name.toLowerCase()} is paralysed.`, 'combat');
     } else {
       if (this.isProtected(p)) return this.msg(pid, 'You may not attack from inside a protection zone.', 'warn');
       const el = r.element ?? 'energy';
@@ -2433,6 +2752,10 @@ export class Game implements AIContext {
   }
 
   private resetWorldState(): void {
+    for (const k of [...this.fields.keys()]) {
+      const [x, y, z] = k.split(',').map(Number);
+      this.removeField(x, y, z);
+    }
     for (const b of this.bags) this.events.emit({ type: 'bagRemoved', bagId: b.id });
     this.bags.length = 0;
     for (const e of this.enemies) {
@@ -2456,6 +2779,8 @@ export class Game implements AIContext {
 const BUFF_FADE: Record<(typeof BUFF_NAMES)[number], string> = {
   haste: 'Your haste wears off.', magicShield: 'Your magic shield fades.', light: 'Your light fades.',
   berserk: 'Your fury subsides.', bullseye: 'Your eagle eye fades.', mastermind: 'Your thoughts lose their clarity.',
+  strongHaste: 'Your strong haste wears off.', greatLight: 'Your light fades.', ultimateLight: 'Your light fades.',
+  invisible: 'You are visible again.', illusion: 'Your illusion fades.', poisoned: 'You are no longer poisoned.',
 };
 
 const BUFF_START: Record<'berserk' | 'bullseye' | 'mastermind', string> = {
@@ -2472,6 +2797,8 @@ function resetPlayerState(p: Player): void {
   p.spellCooldowns = {};
   p.groupCooldowns = { attack: 0, heal: 0, support: 0, potion: 0 };
   p.buffs = emptyBuffs();
+  p.poisonDamage = 0;
+  p.illusion = null;
   p.attackTimer = 0;
   p.sinceCombat = 99;
   p.pzLock = 0;
@@ -2519,6 +2846,13 @@ export function giveStarterKit(inv: Inventory, voc: Vocation = 'knight'): void {
 /** The round area of runes and area spells: a circle of the given radius in tiles. */
 export function inAreaShape(dx: number, dy: number, radius: number): boolean {
   return dx * dx + dy * dy <= radius * radius + radius;
+}
+
+/** Monster kind for a spoken creature name ("orc spearman" or "orc_spearman"). */
+export function findEnemyKind(name: string): EnemyKind | null {
+  const n = name.trim().toLowerCase();
+  for (const [k, d] of Object.entries(ENEMIES)) if (d.name.toLowerCase() === n || k === n.replace(/\s+/g, '_')) return k as EnemyKind;
+  return null;
 }
 
 export function article(name: string): string {

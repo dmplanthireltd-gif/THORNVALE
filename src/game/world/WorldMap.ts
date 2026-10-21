@@ -72,17 +72,21 @@ export enum Obj {
   Railing = 40,
   /** Golden sandstone city wall. */
   SandWall = 41,
+  // temporary fields made by runes (never part of the generated map)
+  EnergyField = 42,
+  PoisonField = 43,
+  MagicWall = 44,
 }
 
 const SOLID = new Set<number>([
   Obj.Tree, Obj.Pine, Obj.DeadTree, Obj.Rock, Obj.Bush, Obj.Wall, Obj.Fence,
   Obj.Grave, Obj.Well, Obj.Barrel, Obj.Crate, Obj.Table, Obj.Hay, Obj.Lamp,
   Obj.Cliff, Obj.Palisade, Obj.Campfire, Obj.Chest, Obj.Locker, Obj.Palm, Obj.Pillar,
-  Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall,
+  Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall, Obj.MagicWall,
 ]);
 
 /** Objects that stop arrows and spells. Trees and fences do not. */
-const BLOCKS_SIGHT = new Set<number>([Obj.Wall, Obj.Cliff, Obj.Palisade, Obj.Pillar, Obj.StoneWall, Obj.Stalagmite, Obj.SandWall]);
+const BLOCKS_SIGHT = new Set<number>([Obj.Wall, Obj.Cliff, Obj.Palisade, Obj.Pillar, Obj.StoneWall, Obj.Stalagmite, Obj.SandWall, Obj.MagicWall]);
 
 const UNWALKABLE_GROUND_SET = new Set<number>([Ground.Water, Ground.Lava, Ground.Void, Ground.DeepWater]);
 

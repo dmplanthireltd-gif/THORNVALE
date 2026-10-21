@@ -672,7 +672,7 @@ function draw(x: Ctx, d: ItemDef): void {
     case 'ring': return drawJewel(x, d);
     case 'backpack': return drawBackpack(x, d);
     case 'ammo': return drawAmmo(x, d);
-    case 'material': return drawMaterial(x, d);
+    case 'material': return d.id === 'blank_rune' ? drawRune(x, d) : drawMaterial(x, d);
     default: glyph(x, d.icon, 16, 16, 18, d.tint);
   }
 }
@@ -699,15 +699,26 @@ const ELEMENT_BG: Record<string, [string, string]> = {
 };
 
 function spellLook(sp: SpellDef): { bg: [string, string]; sym: string } {
-  if (sp.kind === 'heal' || sp.kind === 'healFriend') return { bg: ['#7dff9a', '#0a4a1a'], sym: sp.kind === 'healFriend' ? '✚→' : '✚' };
-  if (sp.kind === 'conjure') return { bg: ['#d8c8ff', '#2a1a5a'], sym: sp.conjure?.from ? '↟' : '➶' };
+  if (sp.kind === 'heal' || sp.kind === 'healFriend' || sp.kind === 'massHeal') return { bg: ['#7dff9a', '#0a4a1a'], sym: sp.kind === 'healFriend' ? '✚→' : sp.kind === 'massHeal' ? '✚✚' : '✚' };
+  if (sp.kind === 'cure') return { bg: ['#c8f070', '#2a4a0a'], sym: '✙' };
+  if (sp.kind === 'conjure') {
+    const made = ITEMS[sp.conjure?.item ?? ''];
+    if (made?.rune) return { bg: [made.tint, '#2a1a3a'], sym: made.icon };
+    if (made?.kind === 'consumable') return { bg: ['#e0b080', '#4a2a10'], sym: '▼' };
+    return { bg: ['#d8c8ff', '#2a1a5a'], sym: sp.conjure?.from ? '↟' : '➶' };
+  }
+  if (sp.kind === 'find') return { bg: ['#f0e0a0', '#3a3010'], sym: '⌖' };
+  if (sp.kind === 'rope' || sp.kind === 'levitate') return { bg: ['#c8e0ff', '#1a2a4a'], sym: sp.dir === 'down' ? '⇩' : '⇧' };
+  if (sp.kind === 'challenge') return { bg: ['#ff9a7a', '#4a1008'], sym: '!' };
+  if (sp.kind === 'illusion') return { bg: ['#e0a0ff', '#2a0a3a'], sym: '◐' };
   if (sp.kind === 'buff') {
-    if (sp.buff === 'haste') return { bg: ['#9fe8ff', '#103a4a'], sym: '»' };
+    if (sp.buff === 'haste' || sp.buff === 'strongHaste') return { bg: ['#9fe8ff', '#103a4a'], sym: sp.buff === 'strongHaste' ? '»»' : '»' };
     if (sp.buff === 'magicShield') return { bg: ['#7fb2ff', '#101a4a'], sym: '◈' };
-    return { bg: ['#fff2b0', '#5a4a10'], sym: '☀' };
+    if (sp.buff === 'invisible') return { bg: ['#b8b8d8', '#1a1a2a'], sym: '◌' };
+    return { bg: ['#fff2b0', '#5a4a10'], sym: sp.buff === 'light' ? '☀' : '☼' };
   }
   const bg = ELEMENT_BG[sp.element ?? 'physical'] ?? ELEMENT_BG.physical;
-  const sym = sp.kind === 'selfArea' ? '✷' : sp.element === 'fire' ? '♨' : sp.element === 'energy' ? 'ϟ' : sp.element === 'ice' ? '❄'
+  const sym = sp.kind === 'wave' ? '◢' : sp.kind === 'beam' ? '═' : sp.kind === 'selfArea' ? '✷' : sp.element === 'fire' ? '♨' : sp.element === 'energy' ? 'ϟ' : sp.element === 'ice' ? '❄'
     : sp.element === 'earth' ? '♣' : sp.element === 'holy' ? '✦' : sp.element === 'death' ? '☠' : '⚔';
   return { bg, sym };
 }

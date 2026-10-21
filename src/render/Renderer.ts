@@ -8,7 +8,7 @@ import type { GroundBag } from '../game/Game';
 import { itemDef, type Element } from '../game/inventory/items';
 import { NPCS } from '../game/npc/npcs';
 import { Npc } from '../game/npc/Npc';
-import { Player } from '../game/player/Player';
+import { Player, spellLight } from '../game/player/Player';
 import { CreatureView } from './CreatureView';
 import { EFFECT_COLOR, Effects } from './Effects';
 import { applyGear, buildOutfitRig } from './models/humanoid';
@@ -19,7 +19,7 @@ import { buildEnemy, buildNpc, ENEMY_SCALE, type BipedRig, type Rig } from './mo
 import { Overlay } from './Overlay';
 import { PixelPass } from './PixelPass';
 import { WorldView } from './WorldView';
-import { Obj } from '../game/world/WorldMap';
+import { Obj, WorldMap, type EnemyKind } from '../game/world/WorldMap';
 
 export type PickResult =
   | { kind: 'enemy' | 'npc' | 'player'; id: number }
@@ -127,7 +127,15 @@ export class Renderer {
 
   private buildRig(c: Creature): Rig {
     let rig: Rig;
-    if (c instanceof Player) {
+    if (c instanceof Player && c.illusion) {
+      // Creature Illusion: drawn as the monster
+      const kind = c.illusion as EnemyKind;
+      rig = buildEnemy(kind);
+      const sc = ENEMY_SCALE[kind] ?? 1;
+      rig.root.scale.setScalar(sc);
+      rig.height *= sc;
+      return rig;
+    } else if (c instanceof Player) {
       rig = buildOutfitRig(c.outfit);
       this.gearUp(rig as BipedRig, c.id);
     } else if (c instanceof Npc) {
@@ -173,6 +181,57 @@ export class Renderer {
     const c = v.creature;
     this.dropView(id);
     this.ensureView(c);
+  }
+
+  // ------------------------------------------------------------------ rune fields
+
+  /** Meshes for fields laid by runes: "x,y,z" → mesh. */
+  private fieldMeshes = new Map<string, THREE.Mesh>();
+  private fieldTime = 0;
+
+  private syncFieldMesh(x: number, y: number, z: number): void {
+    const k = WorldMap.key(x, y, z);
+    const obj = this.ctl.game.fieldAt(x, y, z);
+    const old = this.fieldMeshes.get(k);
+    if (old && old.userData.obj === obj) return;
+    if (old) {
+      this.scene.remove(old);
+      old.geometry.dispose();
+      (old.material as THREE.Material).dispose();
+      this.fieldMeshes.delete(k);
+    }
+    if (obj === null) return;
+    let mesh: THREE.Mesh;
+    if (obj === Obj.MagicWall) {
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(0.94, 1.5, 0.94), new THREE.MeshBasicMaterial({ color: 0x7fb2ff, transparent: true, opacity: 0.55, depthWrite: false }));
+      mesh.userData.h = 0.75;
+    } else {
+      const color = obj === Obj.FireField ? EFFECT_COLOR.fire : obj === Obj.EnergyField ? EFFECT_COLOR.energy : EFFECT_COLOR.earth;
+      mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending }));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.userData.h = 0.05;
+    }
+    mesh.userData.obj = obj;
+    mesh.userData.tile = { x, y, z };
+    mesh.renderOrder = 4;
+    this.scene.add(mesh);
+    this.fieldMeshes.set(k, mesh);
+  }
+
+  private updateFieldMeshes(dt: number): void {
+    this.fieldTime += dt;
+    for (const m of this.fieldMeshes.values()) {
+      const t = m.userData.tile as { x: number; y: number; z: number };
+      const off = this.worldView.floorOffset(t.z);
+      m.visible = off !== null && chebyshev(t.x, t.y, this.me.x, this.me.y) <= VIEW_RANGE + 2;
+      if (!m.visible) continue;
+      m.position.set(t.x, off! + (m.userData.h as number), t.y);
+      const mat = m.material as THREE.MeshBasicMaterial;
+      if (m.userData.obj !== Obj.MagicWall) {
+        mat.opacity = 0.45 + 0.2 * Math.sin(this.fieldTime * 7 + t.x * 1.3 + t.y);
+        if (Math.random() < dt * 3) this.effects.burst(new THREE.Vector3(t.x, off! + 0.1, t.y), mat.color.getHex(), 2, 0.8, m.userData.obj === Obj.FireField ? -1.5 : 2, 0.06);
+      }
+    }
   }
 
   // ------------------------------------------------------------------ bags
@@ -348,6 +407,22 @@ export class Renderer {
         }
         break;
       }
+      case 'tiles': {
+        // waves, beams, walls: flash each tile in order, nearest first
+        const off = this.worldView.floorOffset(e.z);
+        if (off === null || !e.tiles.length) break;
+        if (chebyshev(e.tiles[0], e.tiles[1], this.me.x, this.me.y) > VIEW_RANGE + 6) break;
+        const color = EFFECT_COLOR[e.effect];
+        for (let i = 0; i < e.tiles.length; i += 2) {
+          const x = e.tiles[i], y = e.tiles[i + 1];
+          const delay = (i / 2) * 0.025;
+          this.effects.tileFlash(x, off, y, e.effect, delay);
+          const pos = new THREE.Vector3(x, off + 0.15, y);
+          if (e.effect === 'holy' || e.effect === 'shield') this.effects.sparkle(pos, color, 4, 0.4);
+          else this.effects.burst(pos, color, 5, 1.6, e.effect === 'fire' ? -1 : 5, 0.08);
+        }
+        break;
+      }
       case 'cast':
         this.float(e.casterId, e.words, 'speech spell', 1.6, 0.15);
         break;
@@ -357,7 +432,8 @@ export class Renderer {
       case 'buff': {
         const v = this.visibleView(e.id);
         if (v && e.on) {
-          const c = e.buff === 'haste' ? 0x9fe8ff : e.buff === 'magicShield' ? 0x7fb2ff : 0xfff2b0;
+          const c = e.buff === 'haste' || e.buff === 'strongHaste' ? 0x9fe8ff : e.buff === 'magicShield' ? 0x7fb2ff
+            : e.buff === 'poisoned' ? 0x7ad04a : e.buff === 'invisible' || e.buff === 'illusion' ? 0xb07aff : 0xfff2b0;
           this.effects.ring(new THREE.Vector3(v.rig.root.position.x, v.yOffset + 0.05, v.rig.root.position.z), c, 0.2, 1.1, 0.7, 0.8);
         }
         break;
@@ -412,6 +488,7 @@ export class Renderer {
         break;
       case 'tileChanged':
         this.worldView.onTileChanged(e.x, e.y, e.z);
+        this.syncFieldMesh(e.x, e.y, e.z);
         break;
       case 'playerLeft':
         this.dropView(e.id);
@@ -428,7 +505,7 @@ export class Renderer {
       }
       case 'equipmentChanged': {
         const v = this.views.get(e.id);
-        if (v && v.rig.type === 'biped') this.gearUp(v.rig, e.id);
+        if (v && v.rig.type === 'biped' && !(v.creature instanceof Player && v.creature.illusion)) this.gearUp(v.rig, e.id);
         break;
       }
       case 'outfitChanged':
@@ -439,6 +516,15 @@ export class Renderer {
         for (const id of [...this.views.keys()]) this.dropView(id);
         for (const id of [...this.bagMeshes.keys()]) this.removeBag(id);
         for (const b of this.ctl.game.bags) this.addBag(b);
+        for (const k of [...this.fieldMeshes.keys()]) {
+          const [x, y, z] = k.split(',').map(Number);
+          this.fieldMeshes.get(k)!.userData.obj = -1;
+          this.syncFieldMesh(x, y, z);
+        }
+        for (const f of this.ctl.game.fieldList()) {
+          const [x, y, z] = f.split(',').map(Number);
+          this.syncFieldMesh(x, y, z);
+        }
         this.cam.snapTo(this.me.x, this.me.y);
         break;
       default:
@@ -606,6 +692,8 @@ export class Renderer {
       }
       const view = this.ensureView(c);
       view.yOffset = off;
+      // invisible players show as a faint shimmer to other players, a little more to themselves
+      view.ghost = c instanceof Player && c.buffs.invisible > 0 ? (c === p ? 0.45 : 0.2) : 1;
       const corpse = c instanceof Enemy ? c.corpseTimer > 0 : true;
       if (!c.dead) view.rig.root.visible = true;
       view.update(dt, corpse);
@@ -620,6 +708,8 @@ export class Renderer {
     for (const c of g.players()) consider(c);
     for (const c of g.npcs) consider(c);
     for (const c of g.enemies) consider(c);
+
+    this.updateFieldMeshes(dt);
 
     for (const b of this.bagMeshes.values()) {
       const bag = b.userData.bag as GroundBag;
@@ -682,7 +772,7 @@ export class Renderer {
     this.sun.target.position.set(f.x, 0, f.z);
     const s = g.session(this.ctl.pid);
     const ringLight = s?.inventory.equipment.ring ? itemDef(s.inventory.equipment.ring.id).bonus?.light ?? 0 : 0;
-    const light = (pz < 0 ? 2.5 : 0) + (p.buffs.light > 0 ? 4 : 0) + ringLight;
+    const light = (pz < 0 ? 2.5 : 0) + spellLight(p.buffs) + ringLight;
     this.torch.intensity = light > 0 ? (pz < 0 ? 5 + light * 1.4 : 1.5) : 0;
     this.torch.distance = 3 + light * 1.8;
     this.torch.position.set(vp.x, 2.2, vp.y + 0.3);

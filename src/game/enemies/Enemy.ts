@@ -25,6 +25,10 @@ export class Enemy extends Creature {
   abilityTimers: number[];
   /** Damage dealt by each player since the last respawn, for exp sharing. */
   damageBy = new Map<number, number>();
+  /** Seconds of paralysis left (walks much slower). */
+  slowTimer = 0;
+  /** Seconds until a magic field may hurt it again. */
+  hazardTimer = 0;
 
   constructor(id: number, readonly enemyKind: EnemyKind, readonly spawnX: number, readonly spawnY: number, readonly spawnZ = 0) {
     const def = ENEMIES[enemyKind];
