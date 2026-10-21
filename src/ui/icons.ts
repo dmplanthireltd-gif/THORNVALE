@@ -341,22 +341,112 @@ function drawPotion(x: Ctx, d: ItemDef): void {
   if (d.buff) glyph(x, d.buff === 'berserk' ? '⚔' : d.buff === 'bullseye' ? '◎' : '✦', 16, 21, 8, '#ffffff');
 }
 
-function drawRune(x: Ctx, d: ItemDef): void {
+/** Short labels so every rune can be told apart at a glance (also on the action bar). */
+const RUNE_LABEL: Record<string, string> = {
+  spark_rune: 'SPRK', fireball_rune: 'FIRE', avalanche_rune: 'AVA', stoneshower_rune: 'STON', death_rune: 'DEATH',
+  healing_rune: 'MEND', blank_rune: '', thunderbolt_rune: 'BOLT', ember_rune: 'EMBR', icicle_rune: 'ICE', rockspike_rune: 'ROCK',
+  stormcloud_rune: 'STRM', blast_rune: 'BLST', sunlance_rune: 'SUN', soothing_rune: 'HEAL', antidote_rune: 'CURE', snare_rune: 'SNAR',
+  flame_field_rune: 'FF', static_field_rune: 'EF', venom_field_rune: 'PF', firebloom_rune: 'FB', stormbloom_rune: 'EB', venombloom_rune: 'PB',
+  flame_barrier_rune: 'FW', static_barrier_rune: 'EW', venom_barrier_rune: 'PW', arcane_wall_rune: 'MW', dispel_rune: 'DISP',
+};
+
+const RUNE_COLORS: Record<string, [string, string]> = {
+  fire: ['#ff7a1a', '#5a1404'], energy: ['#b070ff', '#240a4a'], ice: ['#7fdcff', '#0a2e4a'], earth: ['#6ad040', '#123208'],
+  death: ['#9a50c8', '#180820'], holy: ['#ffe680', '#5a4008'], physical: ['#d8c8a0', '#3a3020'],
+};
+
+/** Big clear pictogram per rune family, drawn with shapes (no font symbols). */
+function runeSymbol(x: Ctx, d: ItemDef, c: string): void {
+  const r = d.rune;
+  const id = d.id;
+  const W = '#ffffff';
+  if (!r) return;
+  if (id === 'arcane_wall_rune') {
+    // brick wall
+    for (let row = 0; row < 3; row++) for (let i = 0; i < 3; i++) {
+      const ox = 6 + i * 7 + (row % 2 ? 3.5 : 0) - (row % 2 && i === 2 ? 7 : 0);
+      rect(x, ox, 6 + row * 5, 6, 4, row % 2 && i === 2 ? c : W, 1);
+    }
+    return;
+  }
+  if (r.type === 'field') {
+    if (r.shape === 'wall') { for (let i = 0; i < 3; i++) rect(x, 6 + i * 7, 7, 5, 13, W, 1); return; }
+    if (r.shape === 'bomb') { for (let yy = 0; yy < 3; yy++) for (let xx = 0; xx < 3; xx++) rect(x, 7 + xx * 6, 6 + yy * 5, 5, 4, W, 1); return; }
+    rect(x, 10, 7, 12, 11, W, 1.2);
+    return;
+  }
+  if (r.type === 'heal' || r.type === 'cure') {
+    rect(x, 13, 5, 6, 16, W, 1.2);
+    rect(x, 8, 10, 16, 6, W, 1.2);
+    return;
+  }
+  if (r.type === 'paralyze') { circle(x, 16, 13, 7, 'rgba(0,0,0,0)', 0); x.lineWidth = 3; x.strokeStyle = W; x.beginPath(); x.arc(16, 13, 6.5, 0, Math.PI * 2); x.stroke(); bar(x, 11, 8, 21, 18, 2.4, W); return; }
+  if (r.type === 'destroyField') { x.lineWidth = 3; x.strokeStyle = W; x.beginPath(); x.arc(16, 13, 6.5, 0, Math.PI * 2); x.stroke(); bar(x, 11, 18, 21, 8, 2.4, W); return; }
+  if (r.element === 'death') {
+    // skull
+    circle(x, 16, 11, 6.5, W, 1);
+    rect(x, 12.5, 15, 7, 4, W, 0);
+    circle(x, 13.5, 11, 1.8, '#180820', 0);
+    circle(x, 18.5, 11, 1.8, '#180820', 0);
+    return;
+  }
+  if (r.radius > 0) {
+    // area burst: rays around a core
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      bar(x, 16 + Math.cos(a) * 3, 13 + Math.sin(a) * 3, 16 + Math.cos(a) * 9, 13 + Math.sin(a) * 8, 1.8, W);
+    }
+    circle(x, 16, 13, 3.6, W, 1);
+    return;
+  }
+  // single target: a missile / bolt
+  if (r.element === 'energy') { poly(x, [18, 4, 10, 14, 15, 14, 12, 22, 22, 11, 17, 11], W, 1); return; }
+  if (r.element === 'ice') { for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI; bar(x, 16 - Math.cos(a) * 8, 13 - Math.sin(a) * 8, 16 + Math.cos(a) * 8, 13 + Math.sin(a) * 8, 2, W); } return; }
+  if (r.element === 'earth') { poly(x, [8, 21, 16, 5, 24, 21], W, 1); return; }
+  if (r.element === 'holy') { poly(x, [16, 4, 19, 11, 26, 13, 19, 15, 16, 22, 13, 15, 6, 13, 13, 11], W, 1); return; }
+  // fire and others: a flame / orb
   x.beginPath();
-  x.moveTo(8, 3);
-  x.lineTo(24, 3);
-  x.quadraticCurveTo(29, 3, 29, 8);
-  x.lineTo(29, 24);
-  x.quadraticCurveTo(29, 29, 24, 29);
-  x.lineTo(8, 29);
-  x.quadraticCurveTo(3, 29, 3, 24);
-  x.lineTo(3, 8);
-  x.quadraticCurveTo(3, 3, 8, 3);
-  x.closePath();
-  paint(x, '#8a8070');
-  rect(x, 6, 6, 20, 20, '#6e6658', 0.8);
-  glow(x, 16, 16, 11, d.tint.length === 7 ? `${d.tint}aa` : d.tint);
-  glyph(x, d.icon, 16, 16, 15, '#ffffff');
+  x.moveTo(16, 4);
+  x.quadraticCurveTo(24, 12, 21, 18);
+  x.quadraticCurveTo(16, 23, 11, 18);
+  x.quadraticCurveTo(8, 12, 16, 4);
+  paint(x, W);
+}
+
+function drawRune(x: Ctx, d: ItemDef): void {
+  const r = d.rune;
+  const el = r?.type === 'heal' || r?.type === 'cure' ? 'heal' : r?.element ?? 'physical';
+  const [light, dark] = el === 'heal' ? ['#5ae07a', '#0a3a18'] as [string, string] : RUNE_COLORS[el] ?? RUNE_COLORS.physical;
+  const blank = d.id === 'blank_rune';
+  // the stone: solid element colour, dark rim, bevel
+  x.beginPath();
+  x.moveTo(7, 2); x.lineTo(25, 2); x.quadraticCurveTo(30, 2, 30, 7); x.lineTo(30, 25); x.quadraticCurveTo(30, 30, 25, 30);
+  x.lineTo(7, 30); x.quadraticCurveTo(2, 30, 2, 25); x.lineTo(2, 7); x.quadraticCurveTo(2, 2, 7, 2); x.closePath();
+  if (blank) { paint(x, '#9a9080'); rect(x, 6, 6, 20, 20, '#7e7666', 0.8); return; }
+  const g = x.createLinearGradient(0, 2, 0, 30);
+  g.addColorStop(0, light);
+  g.addColorStop(1, dark);
+  x.fillStyle = g;
+  x.fill();
+  x.lineWidth = 1.6;
+  x.strokeStyle = '#0b0805';
+  x.stroke();
+  rect(x, 4, 4, 24, 1.2, 'rgba(255,255,255,0.35)', 0);
+  // pictogram on a dark plate so it pops
+  x.fillStyle = 'rgba(0,0,0,0.35)';
+  x.fillRect(5, 4, 22, 19);
+  runeSymbol(x, d, dark);
+  // short name strip
+  const label = RUNE_LABEL[d.id] ?? d.name.slice(0, 4).toUpperCase();
+  if (label) {
+    x.fillStyle = '#0b0805';
+    x.fillRect(3, 22.5, 26, 7);
+    x.font = `900 ${label.length > 4 ? 5.6 : 6.8}px Verdana, sans-serif`;
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillStyle = '#ffffff';
+    x.fillText(label, 16, 26.3);
+  }
 }
 
 function drawBackpack(x: Ctx, d: ItemDef): void {

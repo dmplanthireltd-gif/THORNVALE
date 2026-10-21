@@ -339,3 +339,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Website: cinematic trailer with music (Watch the trailer pop-up) and new hero loop | — | — |
 | 2026-10-21 | — | Lag fix: A* reuses scratch arrays (was allocating ~4.6 MB per search on the 640×800 map) and gathers creature positions once per search; snapshots leave out unchanged inv/quests/spells/skills/friends; bots use short path searches. Server tick ~2× faster, worst spikes 40 ms → 5 ms | — | 13 |
 | 2026-10-21 | — | Smaller snapshots: other players' name/level/look/gear only resent when changed (per receiver); snapshot ~11 KB → ~6 KB. Monsters already sleep when no player is within 24 tiles | — | 14 |
+| 2026-10-21 | — | Clear rune icons: solid element-colour stone, drawn pictogram per rune family (bolt, burst, skull, cross, field, wall…) and a short name strip (`RUNE_LABEL` in ui/icons.ts — add a label for every new rune) | — | — |
