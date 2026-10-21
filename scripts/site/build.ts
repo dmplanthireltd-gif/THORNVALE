@@ -6,7 +6,7 @@
  *   npx tsx scripts/site/build.ts --no-atlas
  *
  * Pages are plain HTML written here from templates; long-form text lives in scripts/site/content/
- * (guide, FAQ, rules, privacy, news posts) so it can be edited without touching code. Monster,
+ * (guide, FAQ, rules, privacy, terms of sale, news posts) so it can be edited without touching code. Monster,
  * town, vocation and count facts are read from the game's own content (scripts/site/data.ts), so
  * re-run this after adding monsters, towns or spells. Output is static: the Node server serves
  * site/ as-is, no runtime dependencies.
@@ -15,6 +15,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { atlas, bestiary, counts, towns, vocations, type Beast } from './data';
+import {
+  FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, FREE_TOWNS, LEGEND_CAP, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS, PREMIUM_REGEN, PRODUCTS, type ProductId,
+} from '../../src/game/premium/premium';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SITE = join(ROOT, 'site');
@@ -59,7 +62,7 @@ const PLAY_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="
 
 const NAV: [string, string][] = [
   ['/news/', 'News'], ['/guide/', 'Guide'], ['/bestiary/', 'Bestiary'], ['/atlas/', 'Atlas'],
-  ['/soundtrack/', 'Soundtrack'], ['/highscores/', 'Highscores'], ['/faq/', 'FAQ'],
+  ['/soundtrack/', 'Music'], ['/highscores/', 'Highscores'], ['/store/', 'Store'], ['/faq/', 'FAQ'],
 ];
 
 interface Page {
@@ -69,6 +72,8 @@ interface Page {
   body: string;
   image?: string;
   bodyClass?: string;
+  /** An extra hand-written script for this page only (loaded after /site.js). */
+  script?: string;
 }
 
 function layout(p: Page): string {
@@ -95,7 +100,7 @@ function layout(p: Page): string {
 <meta name="theme-color" content="#1d1915">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/styles.css">
-<script src="/site.js" defer></script>
+<script src="/site.js" defer></script>${p.script ? `\n<script src="${p.script}" defer></script>` : ''}
 </head>
 <body${p.bodyClass ? ` class="${p.bodyClass}"` : ''}>
 <a class="skip" href="#main">Skip to content</a>
@@ -119,15 +124,16 @@ ${p.body}
     </div>
     <nav class="foot-col" aria-label="Play">
       <h2>Play</h2>
-      <a href="/play/">Enter the realm</a><a href="/guide/">Game guide</a><a href="/faq/">FAQ</a><a href="/rules/">Rules</a>
+      <a href="/play/">Enter the realm</a><a href="/guide/">Game guide</a><a href="/store/">Store</a><a href="/faq/">FAQ</a><a href="/rules/">Rules</a>
     </nav>
     <nav class="foot-col" aria-label="The world">
       <h2>The world</h2>
-      <a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/news/">News</a>
+      <a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/founders/">Founders</a><a href="/news/">News</a>
     </nav>
     <div class="foot-col">
       <h2>Contact</h2>
       <span class="sel">support@thornvaleonline.com</span>
+      <a href="/terms/">Terms of sale</a>
       <a href="/privacy/">Privacy</a>
     </div>
   </div>
@@ -338,6 +344,16 @@ function home(): Page {
       <span class="btn iron">See the highscores</span>
     </a>
   </div>
+  <div class="sec-in">
+    <a class="promo plate" href="/store/">
+      <div class="promo-txt">
+        <p class="kicker left"><span>Founder packs · 1 December 2026 to 31 January 2027</span></p>
+        <h3>Back Thornvale as a founder</h3>
+        <p>Premium time, a founder cloak and your name in the hall of founders. Sold for two months only. Looks and comfort, never power.</p>
+      </div>
+      <span class="btn iron">See the founder packs</span>
+    </a>
+  </div>
 </section>
 
 <section class="final">
@@ -448,6 +464,195 @@ const doc = (path: string, title: string, description: string, name: string): Pa
   body: `<section class="sec doc-sec"><div class="sec-in"><div class="doc plate">${content(name)}</div></div></section>`,
 });
 
+// ------------------------------------------------------------------ store and founders
+
+const money = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+const price = (id: ProductId) => money(PRODUCTS[id].pence);
+const townName = new Map(towns().map((t) => [t.key, t.name]));
+const FREE_TOWN_NAMES = FREE_TOWNS.map((k) => townName.get(k) ?? k);
+const PREMIUM_TOWN_NAMES = towns().filter((t) => !(FREE_TOWNS as readonly string[]).includes(t.key)).map((t) => t.name);
+
+/** One pack card. store.js fills in the live price, button label and note. */
+function packCard(id: ProductId, title: string, lead: string, ticks: string[], opts: { cls?: string; badge?: string; primary?: boolean; save?: string; leadExtra?: string } = {}): string {
+  const p = PRODUCTS[id];
+  return `<article class="pack plate${opts.cls ? ` ${opts.cls}` : ''}" data-product="${id}">
+        ${opts.badge ? `<span class="badge">${opts.badge}</span>` : ''}
+        <h3>${title}</h3>
+        ${lead ? `<p class="pack-lead">${lead}${opts.leadExtra ?? ''}</p>` : ''}
+        <div class="price"><span data-price>${money(p.pence)}</span></div>
+        ${opts.save ? `<p class="save">${opts.save}</p>` : ''}
+        ${ticks.length ? `<ul class="ticks">${ticks.map((t) => `<li>${t}</li>`).join('')}</ul>` : ''}
+        <div class="pack-foot"><button type="button" class="btn${opts.primary ? ' ember' : ' iron'}" data-buy disabled>Buy ${title}</button><p class="pack-note" data-note></p></div>
+      </article>`;
+}
+
+function storePage(): Page {
+  const nn = (i: number) => String(i + 1).padStart(2, '0');
+  const tracks = `<ol class="tracks">${MUSIC.map(([id, title], i) => `<li><a href="/play/audio/music/${id}.m4a" download="Thornvale ${nn(i)} - ${title}.m4a"><span>${nn(i)}</span><b>${title}</b></a></li>`).join('')}</ol>`;
+  const row = (k: string, free: string, prem: string, same = false) => `<tr${same ? ' class="same"' : ''}><th scope="row">${k}</th><td>${free}</td><td>${prem}</td></tr>`;
+  const body = `${banner('Store', 'Premium and founder packs', 'Thornvale is free to play. Premium opens up the rest of the world and makes life a little more comfortable. It never makes you stronger: nothing with stats is ever sold.',
+    `\n    <div class="notice plate" data-sale-status role="status"><b>Checking the store…</b></div>`)}
+
+<section class="sec tight store-account" id="account" aria-labelledby="account-title">
+  <div class="sec-in">
+    <div class="notice plate ok" data-thanks role="status" hidden></div>
+    <div class="store-duo">
+      <div class="store-panel plate" data-account>
+        <h2 id="account-title">Your account</h2>
+        <p class="faint">Checking your login…</p>
+      </div>
+      <div class="store-panel plate warm">
+        <h2>Before you buy</h2>
+        <p>Purchases go to your whole Thornvale account, so every character on it shares them. Log in with the same email and password you use in the game.</p>
+        <label class="consent" data-consent-box>
+          <input type="checkbox" data-consent>
+          <span>I want my purchase delivered straight away. I understand that once premium time or founder items are delivered I lose my 14-day right to cancel, except for the founder refund promise. If I am under 18, a parent or guardian has agreed. <a href="/terms/">Terms of sale</a></span>
+        </label>
+        <p class="faint small">Payments are handled by Paddle. Prices include UK VAT, and Paddle shows the price in your own currency at checkout.</p>
+      </div>
+    </div>
+    <template data-soundtrack-tpl>${tracks}</template>
+  </div>
+</section>
+
+<section class="sec sec-dark" id="founders" aria-labelledby="founders-title">
+  <div class="sec-in">
+    <header class="sec-head"><p class="kicker"><span>Founder packs · 1 December 2026 to 31 January 2027</span></p><h2 id="founders-title">Be a founder of Thornvale</h2><p class="lede">Founder packs are sold for two months only and never again. Your founder premium starts on opening day, 1 January 2027, so you don't lose a single day before the gates open.</p></header>
+    <div class="packs">
+      ${packCard('founder_wayfarer', 'Wayfarer', 'A first step on the road.', [
+        `<b>${PRODUCTS.founder_wayfarer.days} days</b> of premium`,
+        'The <b>Founder</b> title',
+        "<b>Founder's Cloak</b> in ember, worn over your armour (looks only)",
+        'Your name in the <a href="/founders/">hall of founders</a>',
+      ])}
+      ${packCard('founder_warden', 'Warden', 'Everything in Wayfarer, and more.', [
+        `<b>${PRODUCTS.founder_warden.days} days</b> of premium instead of ${PRODUCTS.founder_wayfarer.days}`,
+        'The founder-only <b>Warden outfit</b>',
+        "Founder's Cloak in <b>gold</b>",
+        'A <b>6th character slot</b>',
+        `The <b>Thornvale soundtrack</b> (${MUSIC.length} tracks) to download`,
+        'The Founder title and your name in the hall of founders',
+      ], { cls: 'featured', badge: 'Recommended', primary: true })}
+      ${packCard('founder_legend', 'Legend', 'Everything in Warden, and your mark on the world.', [
+        `<b>${PRODUCTS.founder_legend.days} days</b> of premium`,
+        'A numbered title, for example <b>Legend #027</b>',
+        "Founder's Cloak in <b>crimson and gold</b>",
+        'A <b>7th character slot</b>',
+        "Your name carved on the <b>Founders' Stone</b> in the Thornvale temple",
+        'A <b>vote</b> on the name of a future region or boss',
+        'The Warden outfit, the soundtrack and the 6th slot too',
+      ], { cls: 'pack-legend', badge: `Only ${LEGEND_CAP} · numbered`, leadExtra: ' <span class="left-n" data-left></span>' })}
+    </div>
+    <p class="faint small store-after">Already a founder? During the sale you can move up by paying only the difference: Wayfarer to Warden ${price('upgrade_wayfarer_warden')}, Wayfarer to Legend ${price('upgrade_wayfarer_legend')}, Warden to Legend ${price('upgrade_warden_legend')}. Log in and the upgrade price shows on the pack. Buying another pack on the same account adds its premium days, but not another title.</p>
+  </div>
+</section>
+
+<section class="sec" id="premium" aria-labelledby="premium-title">
+  <div class="sec-in">
+    <header class="sec-head"><p class="kicker"><span>Premium time · on sale from 1 January 2027</span></p><h2 id="premium-title">Premium time</h2><p class="lede">One-off purchases, never a subscription. Nothing renews by itself. Days count down in real time, and buying more adds them on top of what you have.</p></header>
+    <div class="packs premium">
+      ${packCard('premium_30', '30 days', 'Try the whole world for a month.', [])}
+      ${packCard('premium_90', '90 days', '', [], { save: 'Save 11%' })}
+      ${packCard('premium_180', '180 days', '', [], { save: 'Save 17%' })}
+      ${packCard('premium_365', '365 days', '', [], { cls: 'featured', badge: 'Best value', save: 'Save 24%' })}
+    </div>
+  </div>
+</section>
+
+<section class="sec sec-dark" id="compare" aria-labelledby="compare-title">
+  <div class="sec-in">
+    <header class="sec-head"><p class="kicker"><span>Free and premium</span></p><h2 id="compare-title">What premium gives you</h2><p class="lede">Premium belongs to your account, so all your characters share it.</p></header>
+    <div class="table plate compare-box">
+      <table class="compare">
+        <thead><tr><th scope="col">Feature</th><th scope="col">Free</th><th scope="col">Premium</th></tr></thead>
+        <tbody>
+          ${row('Towns', `${FREE_TOWNS.length} towns and the land around them`, `All ${C.towns} towns and their regions`)}
+          ${row('Ship routes', 'Routes between free towns', 'Every ship route')}
+          ${row('Depot', `${FREE_DEPOT_SLOTS} slots`, `${PREMIUM_DEPOT_SLOTS} slots`)}
+          ${row('Market offers', `${FREE_MARKET_OFFERS} at a time`, `${PREMIUM_MARKET_OFFERS} at a time`)}
+          ${row('Full server', 'Wait in the queue', 'A reserved place')}
+          ${row('Health and mana regeneration', 'Normal', `${PREMIUM_REGEN} times faster, out of combat only`)}
+          ${row('Outfits', 'All free outfits', 'Plus Warlord and Mystic')}
+          ${row('Inspect window', '–', 'A premium crown')}
+          ${row('Vocations, levels, spells, skills', 'All of them', 'The same', true)}
+          ${row('PvP, parties, trading', 'All of them', 'The same', true)}
+          ${row('Items with stats', 'Never sold', 'Never sold', true)}
+        </tbody>
+      </table>
+    </div>
+    <div class="store-duo">
+      <div class="store-panel plate"><h3>Free towns</h3><ul class="town-chips">${FREE_TOWN_NAMES.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>
+      <div class="store-panel plate"><h3>Premium adds</h3><ul class="town-chips prem">${PREMIUM_TOWN_NAMES.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="safety" aria-label="When premium runs out and the opening-day promise">
+  <div class="sec-in store-duo">
+    <div class="store-panel plate">
+      <p class="kicker left"><span>Safety net</span></p>
+      <h2>When premium runs out</h2>
+      <p>Nothing is ever deleted.</p>
+      <ul class="ticks">
+        <li>A character standing in a premium region is moved to a free temple, with everything it carries.</li>
+        <li>An overfull depot keeps every item. New items wait until it's back under ${FREE_DEPOT_SLOTS}.</li>
+        <li>Market offers above ${FREE_MARKET_OFFERS} stay up until they sell or expire.</li>
+        <li>Premium outfits switch to a free one, and unlock again when premium returns.</li>
+      </ul>
+    </div>
+    <div class="store-panel plate warm">
+      <p class="kicker left"><span>Opening-day promise</span></p>
+      <h2>If the opening moves, you lose nothing</h2>
+      <ul class="ticks">
+        <li>Founder premium starts whenever the server actually opens, even if that's later than 1 January 2027.</li>
+        <li>Until opening day you can have a full refund of a founder pack, no questions asked. Just email <a href="mailto:support@thornvaleonline.com">support@thornvaleonline.com</a>.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec-dark" id="store-faq" aria-labelledby="store-faq-title">
+  <div class="sec-in">
+    <header class="sec-head"><p class="kicker"><span>Questions</span></p><h2 id="store-faq-title">Store questions</h2></header>
+    <div class="doc plate"><div>
+      <details><summary>Is it pay-to-win?</summary>
+        <p>No. Everyone gets the same vocations, levels, spells, skills, PvP, parties and trading. We never sell items with stats. Premium gives more places to explore and more room to store and trade, and the faster regeneration only works out of combat.</p></details>
+      <details><summary>Do all my characters get it?</summary>
+        <p>Yes. Premium and founder packs belong to your account, so every character on it shares them.</p></details>
+      <details><summary>What if the opening moves?</summary>
+        <p>Founder premium starts whenever the server actually opens, so you never lose days. And until opening day you can ask for a full refund of a founder pack, no questions asked.</p></details>
+      <details><summary>Can I get a refund?</summary>
+        <p>Founder packs: yes, a full refund on request until opening day. Premium time: once it's delivered to your account, the 14-day right to cancel ends, but if something has gone wrong, email us and we'll look at it fairly. The details are in the <a href="/terms/">terms of sale</a>.</p></details>
+      <details><summary>Who handles payment?</summary>
+        <p>Paddle, our reseller. Paddle takes the payment, handles VAT and sends your receipt. We never see your card details. Prices include UK VAT, and Paddle shows your local currency.</p></details>
+      <details><summary>Is there a subscription?</summary>
+        <p>No. Every purchase is one-off. Nothing renews and nothing is charged again unless you buy more.</p></details>
+      <p>Anything else? Email <a href="mailto:support@thornvaleonline.com">support@thornvaleonline.com</a>.</p>
+    </div></div>
+  </div>
+</section>`;
+  return {
+    path: '/store/', title: 'Premium and founder packs – Thornvale',
+    description: 'Premium time and founder packs for Thornvale. Premium opens more of the world and adds comfort, never power. Founder packs are on sale from 1 December 2026 to 31 January 2027 only.',
+    body, bodyClass: 'store', script: '/store.js',
+  };
+}
+
+function foundersPage(): Page {
+  const body = `${banner('Founders', 'Hall of founders', "These heroes backed Thornvale before its gates opened. Legends are carved on the Founders' Stone in the Thornvale temple, in the order they joined.")}
+<section class="sec tight">
+  <div class="sec-in narrow">
+    <div class="roll" data-founders aria-live="polite"><p class="faint center">Loading the founders…</p></div>
+    <p class="faint small center roll-note">Founder packs are sold from 1 December 2026 to 31 January 2027 only. Founders choose which of their characters' names appears here. <a href="/store/#founders">See the founder packs</a>.</p>
+  </div>
+</section>`;
+  return {
+    path: '/founders/', title: 'Hall of founders – Thornvale',
+    description: 'The founders of Thornvale: every player who backed the world before the grand opening with a Legend, Warden or Wayfarer pack.',
+    body, script: '/founders.js',
+  };
+}
+
 function newsList(): Page {
   const body = `${banner('Chronicle', 'News', 'Updates from the realm: new lands, new monsters, server news and the road to the grand opening.')}
 <section class="sec tight"><div class="sec-in narrow">
@@ -483,6 +688,8 @@ const pages: Page[] = [
   doc('/guide/', 'Game guide – Thornvale', 'How to start playing Thornvale: controls, vocations, spells, items, travel and PvP.', 'guide'),
   doc('/faq/', 'FAQ – Thornvale', 'Answers to common questions about Thornvale.', 'faq'),
   doc('/rules/', 'Rules – Thornvale', 'The rules of play in Thornvale.', 'rules'),
+  storePage(), foundersPage(),
+  doc('/terms/', 'Terms of sale – Thornvale', 'The terms for buying premium time and founder packs for Thornvale, and how refunds work.', 'terms'),
   doc('/privacy/', 'Privacy – Thornvale', 'What Thornvale collects and why.', 'privacy'),
   notFound(),
 ];

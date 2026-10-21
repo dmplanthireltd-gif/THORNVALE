@@ -27,7 +27,7 @@
     <a class="brand" href="/" aria-label="Thornvale home"><svg class="crest" width="30" height="30" viewBox="0 0 20 20" aria-hidden="true">
 <rect x="3" y="3" width="14" height="14" transform="rotate(45 10 10)" fill="#2b2621" stroke="#c9a24a" stroke-width="1.5"/>
 <path d="M6.5 6.5h7v2h-2.5v6h-2v-6H6.5z" fill="#e8c26a"/></svg><span>Thornvale</span></a>
-    <nav class="nav" aria-label="Main"><a href="/news/">News</a><a href="/guide/">Guide</a><a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/faq/">FAQ</a></nav>
+    <nav class="nav" aria-label="Main"><a href="/news/">News</a><a href="/guide/">Guide</a><a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Music</a><a href="/highscores/">Highscores</a><a href="/store/">Store</a><a href="/faq/">FAQ</a></nav>
     <span class="realm" data-status><i aria-hidden="true"></i><span data-status-text>Realm</span></span>
     <a class="btn ember" href="/play/">Play free</a>
   </div>
@@ -46,6 +46,7 @@
       <li><b>Your account:</b> your email address and password. Your password is stored only in scrambled (hashed) form by our account provider. We never see it.</li>
       <li><b>Your characters:</b> names, vocation, level, experience, items, gold, quests and other game progress, and which account they belong to.</li>
       <li><b>Technical data:</b> your IP address is used briefly to block repeated wrong passwords, and our server log notes when a character joins or leaves the game.</li>
+      <li><b>Purchases:</b> if you buy something in the <a href="/store/">store</a>, a record of the purchase. See <a href="#payments">Payments</a> below.</li>
       <li><b>Emails you send us,</b> if you contact support.</li>
     </ul>
     <p>We don't store in-game chat, and we don't use advertising or analytics trackers.</p>
@@ -62,16 +63,25 @@
     <p>We use these services to run Thornvale. They only handle your data on our behalf:</p>
     <ul>
       <li><b>Render</b>: hosts the website and game server (Frankfurt, Germany).</li>
-      <li><b>Supabase</b>: stores accounts and characters and sends account emails (Frankfurt, Germany).</li>
-      <li><b>Google Fonts</b>: provides the website's fonts, so your browser connects to Google, which sees your IP address.</li>
+      <li><b>Supabase</b>: stores accounts, characters and purchase records, and sends account emails (Frankfurt, Germany).</li>
+      <li><b>Paddle</b>: takes payments in the store (see Payments below).</li>
     </ul>
     <p>We don't sell your data or share it with anyone else, unless the law requires it.</p>
+
+    <h2 id="payments">Payments</h2>
+    <p>If you buy premium time or a founder pack, the payment is handled by <b>Paddle</b>, our reseller and merchant of record. Paddle collects your payment details, works out the tax and sends your receipt, as an independent controller of that data under its own <a href="https://www.paddle.com/legal/privacy">privacy policy</a>.</p>
+    <ul>
+      <li>Paddle shares with us your <b>email address, country, what you bought, the amount and the transaction ID</b>.</li>
+      <li>We <b>never see your full card details</b>.</li>
+      <li>We store a purchase record (product, amount, currency, date, status and transaction ID) linked to your account, so we can deliver what you bought, handle refunds and keep our accounts.</li>
+      <li>We keep purchase records for as long as UK tax law requires (currently six years after the end of the tax year), even if you delete your account.</li>
+    </ul>
 
     <h2>Your browser</h2>
     <p>The game keeps your sign-in, settings and any offline characters in your browser's storage on your device. This is needed for the game to work. We don't use cookies for advertising or tracking.</p>
 
     <h2>How long we keep it</h2>
-    <p>We keep your account and characters while your account exists. If you ask us to delete your account, we delete it with its characters and their backups. Server logs are kept only for a short time.</p>
+    <p>We keep your account and characters while your account exists. If you ask us to delete your account, we delete it with its characters and their backups, except purchase records that tax law tells us to keep. Server logs are kept only for a short time.</p>
 
     <h2>Age</h2>
     <p>You must be at least 13 years old to create an account.</p>
@@ -95,15 +105,16 @@
     </div>
     <nav class="foot-col" aria-label="Play">
       <h2>Play</h2>
-      <a href="/play/">Enter the realm</a><a href="/guide/">Game guide</a><a href="/faq/">FAQ</a><a href="/rules/">Rules</a>
+      <a href="/play/">Enter the realm</a><a href="/guide/">Game guide</a><a href="/store/">Store</a><a href="/faq/">FAQ</a><a href="/rules/">Rules</a>
     </nav>
     <nav class="foot-col" aria-label="The world">
       <h2>The world</h2>
-      <a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/news/">News</a>
+      <a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/founders/">Founders</a><a href="/news/">News</a>
     </nav>
     <div class="foot-col">
       <h2>Contact</h2>
       <span class="sel">support@thornvaleonline.com</span>
+      <a href="/terms/">Terms of sale</a>
       <a href="/privacy/">Privacy</a>
     </div>
   </div>
