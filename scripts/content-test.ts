@@ -727,11 +727,24 @@ console.log('Models');
     for (const k of Object.keys(ENEMIES) as EnemyKind[]) {
       try {
         const r = buildEnemy(k);
+        // dark models merge each limb into one mesh, so count triangles too and compare real geometry
         let meshes = 0;
-        r.root.traverse((o) => { if ((o as { isMesh?: boolean }).isMesh) meshes++; });
-        if (meshes < 5) failed.push(`${k}: only ${meshes} meshes`);
+        let tris = 0;
+        const geo: string[] = [];
+        r.root.traverse((o) => {
+          const me = o as { isMesh?: boolean; visible?: boolean; geometry?: { index: { count: number } | null; attributes: { position: { count: number; array: ArrayLike<number> }; color?: { array: ArrayLike<number> } } } };
+          if (!me.isMesh || !me.visible || !me.geometry) return;
+          meshes++;
+          const g = me.geometry;
+          const n = g.index ? g.index.count : g.attributes.position.count;
+          tris += n / 3;
+          const a = g.attributes.position.array;
+          const c = g.attributes.color?.array;
+          geo.push(`${n}/${a[0]?.toFixed(3)}/${a[a.length - 1]?.toFixed(3)}/${c ? c[0].toFixed(3) : ''}`);
+        });
+        if (meshes < 5 && tris < 200) failed.push(`${k}: only ${meshes} meshes / ${tris} triangles`);
         if (!(ENEMY_SCALE[k] > 0.5)) failed.push(`${k}: scale`);
-        sigs.set(k, `${r.type}:${meshes}:${r.materials.map((m) => m.color.getHex()).sort().join(',')}`);
+        sigs.set(k, `${r.type}:${meshes}:${geo.sort().join(',')}:${r.materials.map((m) => m.color.getHex()).sort().join(',')}`);
       } catch (err) {
         failed.push(`${k}: ${(err as Error).message}`);
       }

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import type { EnemyKind } from '../../game/world/WorldMap';
-import type { BipedRig, QuadRig, Rig } from './rigs';
-import { bipedRig, C, hitbox, Kit, quadRig, type Mesher, type V3 } from './darkRigsCore';
+import type { BipedRig, Rig } from './rigs';
+import { bipedRig, C, hitbox, Kit, type Mesher, type V3 } from './darkRigsCore';
+
+import { DARK_BEASTS } from './darkRigsBeasts';
 
 export { DARK_MONSTERS } from './darkRigsCore';
 
@@ -364,97 +366,13 @@ export function batWing(m: Mesher, s: number, S: number, membrane: number, arm: 
   m.spike(P(0.42, 0.4), [s * 0.2, 1, 0.3], 0.14, 0.03, bone);
 }
 
-// ------------------------------------------------------------------ wolf
-
-const FUR = 0x6a645a;
-const FUR_D = 0x2a2723;
-const FUR_L = 0x9e9482;
-const GUM = 0x8a1a14;
-const FANG = 0xe8dcc0;
-
-function darkWolf(): QuadRig {
-  const K = new Kit('wolf', 0xffcc22, 1.8);
-  const body = K.limb('body', [0, 0, 0], (m) => {
-    m.sph(0.5, FUR, [0, 0.6, 0.18], { s: [0.38, 0.44, 0.52], grit: 0.2 }); // deep chest
-    m.sph(0.5, FUR_D, [0, 0.47, 0.2], { s: [0.26, 0.2, 0.4] });
-    m.sph(0.5, FUR, [0, 0.6, -0.16], { s: [0.25, 0.23, 0.44], grit: 0.2 }); // tucked waist
-    m.sph(0.5, FUR, [0, 0.6, -0.36], { s: [0.32, 0.31, 0.3], grit: 0.2 }); // haunches
-    // pale saddle over the back so the shape reads against dark ground
-    m.sph(0.5, FUR_L, [0, 0.7, -0.02], { s: [0.24, 0.12, 0.6], grit: 0.25 });
-    for (const s of [-1, 1]) for (let i = 0; i < 4; i++) m.box(0.018, 0.16, 0.022, FUR_D, [s * 0.175, 0.56, 0.24 - i * 0.07], { r: [0, 0, s * 0.25] });
-    // fresh claw wounds on the flank and shoulder
-    for (let i = 0; i < 3; i++) m.box(0.016, 0.016, 0.22, GUM, [0.16, 0.63 - i * 0.045, -0.06], { r: [0.4, 0, 0], blood: 1, flat: true });
-    m.box(0.016, 0.16, 0.016, GUM, [-0.185, 0.62, 0.22], { r: [0.4, 0, 0], blood: 1, flat: true });
-    // raised hackles along the spine, pale-tipped
-    for (let i = 0; i < 9; i++) {
-      const z = 0.34 - i * 0.075;
-      const h = 0.17 - Math.abs(i - 2) * 0.015;
-      m.spike([0, 0.77 - Math.max(0, i - 3) * 0.02, z], [0, 1, -0.7], Math.max(0.07, h), 0.04, i % 2 ? FUR_L : FUR, {}, 3);
-      if (i < 6) for (const s of [-1, 1]) m.spike([s * 0.07, 0.75, z], [s * 0.6, 1, -0.7], Math.max(0.06, h * 0.75), 0.034, i % 2 ? FUR : FUR_D, {}, 3);
-    }
-    m.seg([0, 0.66, 0.34], [0, 0.6, 0.6], 0.12, 0.1, FUR);
-    m.sph(0.11, FUR_L, [0, 0.68, 0.4], { s: [1.2, 1, 1] });
-  });
-  const head = K.limb('head', [0, 0.58, 0.64], (m) => {
-    m.ao = 0.1;
-    m.push([0, 0, 0], [0, 0, 0], [1.18, 1.18, 1.18]);
-    m.sph(0.14, FUR, [0, 0, 0], { s: [1, 0.9, 1.15], grit: 0.2 });
-    m.cyl(0.06, 0.085, 0.22, FUR, [0, -0.02, 0.17], { r: [Math.PI / 2, 0, 0] });
-    m.box(0.11, 0.022, 0.16, FUR_D, [0, 0.04, 0.17], { r: [0.12, 0, 0] });
-    m.box(0.1, 0.022, 0.1, FUR_D, [0, 0.05, 0.12], { r: [0.4, 0, 0] });
-    m.sph(0.032, 0x0e0c0a, [0, 0.0, 0.29]);
-    m.box(0.13, 0.04, 0.2, GUM, [0, -0.07, 0.17], { blood: 0.4, flat: true }); // raised lips, bare gums
-    for (const x of [-0.05, 0.05]) m.spike([x, -0.06, 0.25], [0, -1, 0.25], 0.12, 0.026, FANG, { flat: true });
-    for (let i = 0; i < 4; i++) m.box(0.018, 0.022, 0.018, FANG, [(i % 2 ? 1 : -1) * 0.045, -0.09, 0.12 + Math.floor(i / 2) * 0.05], { flat: true });
-    m.push([0, -0.09, 0.07], [0.42, 0, 0]); // snapping lower jaw
-    m.box(0.09, 0.035, 0.18, FUR_D, [0, -0.03, 0.1], { blood: 0.6 });
-    for (const x of [-0.04, 0.04]) m.spike([x, -0.015, 0.17], [0, 1, 0.2], 0.09, 0.022, FANG, { flat: true });
-    m.pop();
-    // big burning eyes
-    m.eyes(0.068, 0.045, 0.125, 0.09, 0.055, 0.4);
-    m.box(0.24, 0.032, 0.05, FUR_D, [0, 0.08, 0.11], { r: [0.3, 0, 0] });
-    m.box(0.014, 0.14, 0.014, C.SCAR, [0.075, 0.04, 0.13], { r: [0.3, 0, 0.3], flat: true });
-    m.spike([0.08, 0.08, -0.04], [0.4, 0.6, -1], 0.16, 0.045, FUR_D, {}, 3);
-    m.spike([-0.08, 0.08, -0.04], [-0.4, 0.6, -1], 0.11, 0.045, FUR_D, {}, 3); // torn ear
-    m.sph(0.075, FUR_L, [0, -0.06, -0.06], { s: [1.4, 1, 1], grit: 0.25 }); // ruff
-    m.pop();
-  });
-  const front = (m: Mesher) => {
-    m.sph(0.075, FUR, [0, -0.02, 0], { s: [1, 1.4, 1.1] });
-    m.seg([0, 0, 0], [0, -0.26, 0.02], 0.055, 0.038, FUR);
-    m.seg([0, -0.26, 0.02], [0, -0.48, 0.0], 0.033, 0.028, FUR_D);
-    m.sph(0.048, FUR_D, [0, -0.5, 0.03], { s: [1, 0.55, 1.3] });
-    for (const dx of [-0.025, 0, 0.025]) m.spike([dx, -0.51, 0.07], [0, -0.3, 1], 0.05, 0.011, CLAW);
-  };
-  const back = (m: Mesher) => {
-    m.sph(0.095, FUR, [0, -0.04, -0.02], { s: [0.8, 1.3, 1.2] });
-    m.seg([0, 0, 0], [0, -0.22, 0.07], 0.065, 0.045, FUR);
-    m.seg([0, -0.22, 0.07], [0, -0.36, -0.07], 0.038, 0.032, FUR_D);
-    m.seg([0, -0.36, -0.07], [0, -0.49, -0.02], 0.03, 0.027, FUR_D);
-    m.sph(0.048, FUR_D, [0, -0.5, 0.01], { s: [1, 0.55, 1.3] });
-    for (const dx of [-0.025, 0, 0.025]) m.spike([dx, -0.51, 0.05], [0, -0.3, 1], 0.045, 0.011, CLAW);
-  };
-  const legs = [
-    K.limb('front', [0.12, 0.52, 0.28], front),
-    K.limb('front', [-0.12, 0.52, 0.28], front),
-    K.limb('back', [0.12, 0.52, -0.34], back),
-    K.limb('back', [-0.12, 0.52, -0.34], back),
-  ];
-  const tail = K.limb('tail', [0, 0.64, -0.5], (m) => {
-    m.seg([0, 0, 0], [0, -0.14, -0.2], 0.055, 0.065, FUR);
-    m.seg([0, -0.14, -0.2], [0, -0.32, -0.3], 0.065, 0.035, FUR_D);
-    for (let i = 0; i < 5; i++) m.spike([0, -0.06 - i * 0.06, -0.1 - i * 0.045], [(i % 2 ? 1 : -1) * 0.5, -0.6, -1], 0.11, 0.034, i % 2 ? FUR_L : FUR_D, {}, 3);
-  });
-  return quadRig(K, { body, head, legs, tail }, hitbox(0.7, 1.15, 1.0), 1.25);
-}
-
 // ------------------------------------------------------------------ dispatch
 
 const DARK: Partial<Record<EnemyKind, () => Rig>> = {
   skeleton: darkSkeleton,
   orc_warrior: darkOrcWarrior,
   demon: darkDemon,
-  wolf: darkWolf,
+  ...DARK_BEASTS,
 };
 
 /** The dark model for a monster kind, or null to use the classic one. */
