@@ -70,7 +70,7 @@ src/
   render/             ← Renderer, WorldView (instanced ore rocks with coloured veins, furnace/anvil models), skillFx.ts (mining/smithing particles), CreatureView, Effects, PixelPass, CameraController, Overlay, models/, textures.ts
   ui/                 ← HUD, Minimap, WorldMapView, OnlineLogin, StartScreen, OutfitPreview, icons, dom
   input/Input.ts      ← keyboard/mouse → Commands
-  audio/              ← Sfx.ts (effects from game events), foley.ts (footsteps by ground, hits by material, monster voices, spell sweeps/hits by element), ambience.ts (wind/insects/sea/lava/cave beds + birds, frogs, drips), Music.ts + Tracks.ts (region music player, falls back to the old live synth)
+  audio/              ← Sfx.ts (plays effects for game events and the player's own commands, button clicks), sfxlib.ts (every one-shot effect recipe: combat, magic, items, doors/chests, mining, smithing, UI), foley.ts (footsteps by ground, hits by material, monster voices, spell sweeps/hits by element), ambience.ts (wind/insects/sea/lava/cave beds + birds, frogs, drips), Music.ts + Tracks.ts (region music player, falls back to the old live synth)
 scripts/              ← smoke-test, net-test, storage-test, auth-test, content-test, saves
   music/              ← offline soundtrack: songs.ts (chords + melody + band per song), synth.ts (arranger, mix), instruments.ts (synthesized instruments + drum kits), render.ts → public/audio/music/*.m4a
 public/audio/music/   ← rendered region tracks (AAC loops, served at /play/audio/music/); re-render after editing songs
@@ -307,6 +307,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [x] Website pages: guide, highscores, FAQ, rules, privacy (2026-10-21).
 - [x] Website graphics: full trailer with game music (`site/media/trailer-full.webm|mp4`, 44 s: title card, captions, town, amazons, frost dragon, demon pit, desert, end card) behind "Watch the trailer"; silent 14 s hero loop (`trailer.webm|mp4`). Recorded in the owner's Mac Chrome by canvas + Web Audio capture with an offline test character, world-card and news pictures, share image `og-image.jpg` (2026-10-21).
 - [x] Audio overhaul: 11 region tracks with real-instrument bands (synthesized offline), footsteps by ground, hits by monster material, monster voices, ambience beds, element spell waves/beams and hits (2026-10-21).
+- [x] Sound effects pass: every effect rebuilt (layered synth recipes in `src/audio/sfxlib.ts`) plus new ones for mining, smithing, weapon-specific swings, shield blocks, equip/unequip by material, eat/drink, doors, chests, stairs, item moves, quest, respawn, spell words, chat, UI clicks and campfire crackle (2026-10-21).
 - [ ] Audio: owner to listen in game and pick favourites/changes (soundtrack page artifact); more songs per region later (day/night variants).
 - [ ] Website: more news posts; refresh the trailer after big visual changes (e.g. the graphics overhaul). Keep guide/FAQ in step with gameplay changes.
 - [ ] Owner: set up email forwarding support@thornvaleonline.com → owner's Gmail (WordPress.com → Domains → thornvaleonline.com → Email → Email forwarding).
@@ -357,3 +358,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Walking speed follows a classic level curve (slower at low level, faster at high level) | — | — |
 | 2026-10-21 | — | Audio overhaul: 11 region music tracks (new forest + swamp zones) played by synthesized instrument bands (`scripts/music/`, `public/audio/music/`), material footsteps/hits, monster voices, ambience, element spell sounds | — | — |
 | 2026-10-21 | — | Spell/rune effects in the classic tile-sprite style: one procedurally painted pixel-art atlas (8-frame 32×32 bursts per element, heal sparkles, mana rings, poff, buff/teleport rings, missile sprites) drawn by a single instanced mesh; every tile of an area/UE/wave/beam bursts; missiles fly as sprites; fire/energy/poison fields animate on every tile (also when synced online); translucent rune-lit magic wall; deeper UE sounds; subtle shake for big blasts (off with reduced motion). Render/audio only | — | — |
+| 2026-10-21 | — | Sound effects pass: all effects rebuilt in `src/audio/sfxlib.ts` + new mining, smithing, weapon swings, blocks, equip, eat/drink, door/chest/stairs, item, quest, respawn, UI and campfire sounds | — | — |

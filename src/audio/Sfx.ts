@@ -1,4 +1,6 @@
 import type { Controller } from '../client/Controller';
+import type { Command } from '../game/net/protocol';
+import type { ItemDef } from '../game/inventory/items';
 import type { Effect, GameEvent } from '../game/core/events';
 import { chebyshev } from '../game/core/types';
 import { itemDef } from '../game/inventory/items';
@@ -6,17 +8,13 @@ import { Ground, Obj } from '../game/world/WorldMap';
 import { Enemy } from '../game/enemies/Enemy';
 import { bodyFall, bodyOf, elementHit, footstep, impact, spellSweep, voice, type Body, type Cry, type Kit, type SpellElement } from './foley';
 import { Ambience } from './ambience';
+import { SOUNDS, type SoundName } from './sfxlib';
 
 /**
  * Small synthesized sound effects (Web Audio, no sound files). Sounds near the
  * player are louder; anything on another floor or far away is silent.
  */
-type Sound =
-  | 'hit' | 'hitHard' | 'miss' | 'block' | 'swing' | 'bow' | 'throw'
-  | 'fire' | 'energy' | 'ice' | 'earth' | 'death' | 'holy'
-  | 'heal' | 'mana' | 'buff' | 'shield' | 'levelUp' | 'die' | 'monsterDie'
-  | 'coins' | 'pickup' | 'drink' | 'click' | 'teleport' | 'dig' | 'error' | 'explosion' | 'chop' | 'treeFall' | 'skillUp' | 'cast' | 'splash'
-  | 'boom' | 'thunder' | 'shatter' | 'implode' | 'roar' | 'quake' | 'healBig';
+type Sound = SoundName;
 
 const HEARING = 11;
 
@@ -37,6 +35,9 @@ export class Sfx {
   private lastVoice = new Map<number, number>();
   private steps = new Map<number, { x: number; y: number; z: number; alt: boolean }>();
   private ambience: Ambience | null = null;
+  private myZ: number | null = null;
+  private lastChat = 0;
+  private gear = new Map<string, string | null>();
   volume = 0.6;
   muted = false;
 
@@ -53,6 +54,18 @@ export class Sfx {
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
     ctl.game.events.on((e) => this.onEvent(e));
+    // listen to the player's own actions (opening doors, eating, moving items). This only
+    // observes: the command still goes to Controller.send unchanged.
+    const send = ctl.send.bind(ctl);
+    ctl.send = (cmd: Command) => {
+      try { this.onCommand(cmd); } catch { /* never block an action over a sound */ }
+      send(cmd);
+    };
+    // a soft click for every button in the interface
+    document.addEventListener('click', (ev) => {
+      const el = ev.target as HTMLElement | null;
+      if (el?.closest?.('button')) this.play('click', 0.35);
+    }, true);
     // footsteps and ambience follow movement, so they run on the animation clock
     const frame = () => {
       try { this.tick(); } catch { /* never break the game over a sound */ }
@@ -151,7 +164,7 @@ export class Sfx {
     src.stop(t + attack + dur + 0.05);
   }
 
-  /** Plays a sound; `gain` scales it (distance falloff). */
+  /** Plays a sound from the library (sfxlib.ts); `gain` scales it (distance falloff). */
   play(s: Sound, gain = 1, delay = 0): void {
     if (this.muted || gain <= 0.02) return;
     const c = this.ensure();
@@ -160,182 +173,7 @@ export class Sfx {
     const now = c.currentTime;
     if (now - (this.last.get(s) ?? -1) < 0.035) return;
     this.last.set(s, now);
-    const out = c.createGain();
-    out.gain.value = gain;
-    out.connect(this.master);
-    const t = now + 0.005 + delay;
-    const r = (a: number, b: number) => a + Math.random() * (b - a);
-    switch (s) {
-      case 'hit':
-        this.noise(out, 'bandpass', 900, 300, t, 0.09, 0.6, 1.5);
-        this.tone(out, 'triangle', 160, 70, t, 0.08, 0.35);
-        break;
-      case 'hitHard':
-        this.noise(out, 'lowpass', 1600, 200, t, 0.16, 0.8, 0.8);
-        this.tone(out, 'sine', 110, 45, t, 0.18, 0.6);
-        break;
-      case 'miss':
-        this.noise(out, 'bandpass', 2400, 900, t, 0.12, 0.25, 2);
-        break;
-      case 'block':
-        this.tone(out, 'square', r(780, 900), 600, t, 0.09, 0.12);
-        this.tone(out, 'triangle', 1500, 1300, t, 0.15, 0.12);
-        break;
-      case 'swing':
-        this.noise(out, 'bandpass', 600, 2500, t, 0.14, 0.25, 3, 0.03);
-        break;
-      case 'bow':
-        this.tone(out, 'triangle', 420, 180, t, 0.12, 0.25);
-        this.noise(out, 'highpass', 3000, 6000, t + 0.02, 0.12, 0.15, 1);
-        break;
-      case 'throw':
-        this.noise(out, 'bandpass', 900, 2200, t, 0.2, 0.25, 2, 0.04);
-        break;
-      case 'fire':
-        this.noise(out, 'lowpass', 900, 3500, t, 0.35, 0.6, 1, 0.03);
-        this.noise(out, 'bandpass', 300, 120, t + 0.05, 0.4, 0.4, 1);
-        break;
-      case 'boom':
-        // a heavy, deep blast: sub-bass drop, a crack on top, a long rumble tail
-        this.tone(out, 'sine', 120, 28, t, 0.9, 1.0, 0.004);
-        this.tone(out, 'triangle', 70, 30, t, 0.7, 0.6, 0.004);
-        this.noise(out, 'lowpass', 4000, 300, t, 0.25, 1.0, 0.7, 0.002);
-        this.noise(out, 'lowpass', 600, 60, t + 0.05, 1.4, 0.8, 0.8, 0.02);
-        break;
-      case 'roar':
-        // a rushing firestorm
-        this.noise(out, 'lowpass', 500, 2600, t, 0.5, 0.8, 0.8, 0.04);
-        this.noise(out, 'bandpass', 240, 90, t + 0.1, 1.2, 0.7, 0.9, 0.05);
-        for (let i = 0; i < 6; i++) this.noise(out, 'highpass', 2500, 1800, t + 0.15 + i * r(0.07, 0.15), 0.04, 0.25, 1);
-        break;
-      case 'thunder':
-        // a sharp crack followed by rolling thunder
-        this.noise(out, 'highpass', 6000, 1500, t, 0.08, 1.0, 0.7, 0.001);
-        for (let i = 0; i < 6; i++) this.tone(out, 'sawtooth', r(1200, 3000), r(150, 400), t + i * 0.03, 0.06, 0.18);
-        this.noise(out, 'lowpass', 900, 70, t + 0.06, 1.3, 0.9, 0.8, 0.03);
-        this.tone(out, 'sine', 80, 32, t + 0.05, 0.9, 0.6, 0.01);
-        break;
-      case 'shatter':
-        // ice bursting: glassy breaks over a cold boom
-        for (let i = 0; i < 9; i++) this.tone(out, 'triangle', r(2200, 5200), r(1500, 3500), t + i * r(0.015, 0.05), 0.12, 0.18);
-        this.noise(out, 'highpass', 7000, 3000, t, 0.4, 0.4, 1);
-        this.noise(out, 'bandpass', 900, 300, t + 0.05, 0.9, 0.5, 0.7, 0.05);
-        break;
-      case 'quake':
-        // the ground erupts
-        this.noise(out, 'lowpass', 350, 50, t, 1.4, 1.0, 1, 0.03);
-        for (let i = 0; i < 7; i++) this.noise(out, 'lowpass', r(700, 1400), 150, t + i * r(0.06, 0.14), 0.12, 0.6, 1);
-        this.tone(out, 'sine', 60, 25, t, 1.1, 0.8, 0.02);
-        break;
-      case 'implode':
-        // the air sucked in, then a dead, hollow thud
-        this.noise(out, 'bandpass', 300, 3000, t, 0.14, 0.35, 2, 0.12);
-        this.tone(out, 'sawtooth', 160, 40, t + 0.14, 0.5, 0.35, 0.005);
-        this.tone(out, 'sine', 110, 30, t + 0.14, 0.6, 0.8, 0.005);
-        this.tone(out, 'sine', 233, 120, t + 0.14, 0.6, 0.15, 0.02);
-        break;
-      case 'healBig':
-        // a warm swell of bells
-        [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(out, 'sine', f, f, t + i * 0.05, 0.6, 0.15, 0.01));
-        [262, 392].forEach((f) => this.tone(out, 'triangle', f, f, t, 0.8, 0.1, 0.15));
-        this.noise(out, 'bandpass', 3000, 6000, t, 0.7, 0.08, 3, 0.2);
-        break;
-      case 'explosion':
-        this.noise(out, 'lowpass', 2500, 120, t, 0.55, 0.9, 0.7);
-        this.tone(out, 'sine', 90, 30, t, 0.5, 0.7);
-        break;
-      case 'energy':
-        for (let i = 0; i < 4; i++) this.tone(out, 'sawtooth', r(900, 2200), r(200, 500), t + i * 0.035, 0.07, 0.12);
-        this.noise(out, 'highpass', 4000, 2000, t, 0.25, 0.25, 1);
-        break;
-      case 'ice':
-        for (let i = 0; i < 5; i++) this.tone(out, 'sine', r(1800, 3200), r(2600, 4000), t + i * 0.04, 0.18, 0.12);
-        this.noise(out, 'highpass', 5000, 7000, t, 0.3, 0.15, 1);
-        break;
-      case 'earth':
-        this.noise(out, 'lowpass', 400, 80, t, 0.45, 0.8, 1);
-        for (let i = 0; i < 3; i++) this.tone(out, 'triangle', r(120, 200), 60, t + i * 0.06, 0.12, 0.3);
-        break;
-      case 'death':
-        this.tone(out, 'sawtooth', 220, 55, t, 0.5, 0.25, 0.02);
-        this.tone(out, 'sine', 233, 58, t, 0.5, 0.25, 0.02);
-        this.noise(out, 'lowpass', 600, 100, t, 0.4, 0.3, 2);
-        break;
-      case 'holy':
-        [880, 1109, 1319].forEach((f, i) => this.tone(out, 'sine', f, f * 1.01, t + i * 0.05, 0.4, 0.18, 0.02));
-        break;
-      case 'heal':
-        [523, 659, 784, 1047].forEach((f, i) => this.tone(out, 'sine', f, f, t + i * 0.06, 0.25, 0.16, 0.01));
-        break;
-      case 'mana':
-        [392, 523, 659].forEach((f, i) => this.tone(out, 'triangle', f, f * 1.02, t + i * 0.06, 0.25, 0.14, 0.01));
-        break;
-      case 'buff':
-        this.tone(out, 'sine', 300, 900, t, 0.35, 0.2, 0.05);
-        this.noise(out, 'bandpass', 800, 3000, t, 0.35, 0.15, 2, 0.05);
-        break;
-      case 'shield':
-        this.tone(out, 'sine', 200, 400, t, 0.5, 0.25, 0.08);
-        this.tone(out, 'sine', 300, 600, t, 0.5, 0.15, 0.08);
-        break;
-      case 'levelUp':
-        [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(out, 'square', f, f, t + i * 0.09, 0.22, 0.09, 0.01));
-        [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(out, 'sine', f * 2, f * 2, t + i * 0.09, 0.3, 0.06, 0.01));
-        break;
-      case 'die':
-        [392, 330, 262, 196].forEach((f, i) => this.tone(out, 'triangle', f, f * 0.97, t + i * 0.16, 0.3, 0.2, 0.01));
-        break;
-      case 'monsterDie':
-        this.tone(out, 'sawtooth', 300, 60, t, 0.35, 0.18, 0.01);
-        this.noise(out, 'lowpass', 1200, 150, t, 0.3, 0.35, 1);
-        break;
-      case 'coins':
-        for (let i = 0; i < 4; i++) this.tone(out, 'square', r(2000, 3200), r(1800, 3000), t + i * 0.05, 0.06, 0.06);
-        break;
-      case 'pickup':
-        this.tone(out, 'triangle', 600, 900, t, 0.08, 0.2);
-        break;
-      case 'drink':
-        for (let i = 0; i < 3; i++) this.tone(out, 'sine', r(300, 450), r(600, 800), t + i * 0.09, 0.07, 0.25);
-        break;
-      case 'click':
-        this.tone(out, 'square', 1200, 900, t, 0.03, 0.08);
-        break;
-      case 'teleport':
-        this.tone(out, 'sine', 200, 1200, t, 0.35, 0.18, 0.05);
-        this.noise(out, 'bandpass', 500, 4000, t, 0.35, 0.12, 3, 0.05);
-        break;
-      case 'dig':
-        this.noise(out, 'lowpass', 700, 200, t, 0.18, 0.6, 1);
-        this.noise(out, 'lowpass', 700, 200, t + 0.2, 0.18, 0.5, 1);
-        break;
-      case 'error':
-        this.tone(out, 'square', 180, 160, t, 0.12, 0.08);
-        break;
-      case 'chop':
-        // an axe biting into wood: a dull knock with a woody ring
-        this.noise(out, 'bandpass', r(500, 650), 220, t, 0.09, 0.7, 2.5);
-        this.tone(out, 'triangle', r(190, 230), 110, t, 0.1, 0.35);
-        break;
-      case 'treeFall':
-        this.noise(out, 'bandpass', 1400, 400, t, 0.35, 0.35, 1.5, 0.05);
-        this.noise(out, 'lowpass', 500, 80, t + 0.35, 0.45, 0.8, 0.8);
-        this.tone(out, 'sine', 80, 40, t + 0.35, 0.4, 0.5);
-        break;
-      case 'cast':
-        // the line whips out and the float drops in: a soft plop
-        this.noise(out, 'bandpass', 2400, 900, t, 0.12, 0.08, 1.2);
-        this.tone(out, 'sine', r(520, 600), 260, t + 0.12, 0.09, 0.08);
-        break;
-      case 'splash':
-        // a fish breaks the surface
-        this.noise(out, 'lowpass', 2200, 400, t, 0.3, 0.3, 0.8, 0.01);
-        this.noise(out, 'bandpass', 900, 1600, t + 0.08, 0.22, 0.12, 2);
-        break;
-      case 'skillUp':
-        [659, 784, 988].forEach((f, i) => this.tone(out, 'triangle', f, f, t + i * 0.07, 0.18, 0.12, 0.01));
-        break;
-    }
+    this.sound(SOUNDS[s], gain, delay);
   }
 
   // ------------------------------------------------------------------ game events → sounds
@@ -365,7 +203,8 @@ export class Sfx {
       case 'heal': return 'heal';
       case 'haste': return 'buff';
       case 'shield': return 'shield';
-      case 'arrow': case 'bolt': return 'bow';
+      case 'arrow': return 'bow';
+      case 'bolt': return 'crossbow';
       case 'spear': case 'star': return 'throw';
       default: return null;
     }
@@ -376,7 +215,8 @@ export class Sfx {
     switch (e.type) {
       case 'attack': {
         const v = this.atId(e.attackerId);
-        if (v) this.play('swing', v * 0.6);
+        const sw = this.swingOf(e.attackerId);
+        if (v && sw) this.play(sw, v * 0.6);
         const body = this.bodyOfId(e.attackerId);
         if (v && body && Math.random() < 0.45) this.cry(e.attackerId, body, 'attack', v, 3500);
         break;
@@ -385,7 +225,7 @@ export class Sfx {
         const v = this.atId(e.targetId);
         if (!v) break;
         if (e.result === 'miss') this.play('miss', v);
-        else if (e.result === 'blocked') this.play('block', v);
+        else if (e.result === 'blocked') this.play(this.blockOf(e.targetId), v);
         else {
           const body = this.bodyOfId(e.targetId);
           const c = this.ctl.game.getCreature(e.targetId);
@@ -460,8 +300,50 @@ export class Sfx {
           } else if (v) this.play('monsterDie', v);
         }
         break;
-      case 'teleport':
-        if (e.id === me) this.play('teleport', 0.6);
+      case 'teleport': {
+        if (e.id !== me) break;
+        const p = this.ctl.game.getPlayer(me);
+        if (p && this.myZ !== null && p.z !== this.myZ) {
+          // stairs, ladders and holes: a few quick steps on the new floor
+          const gr = this.ctl.game.world.getGround(Math.round(p.x), Math.round(p.y), p.z);
+          for (let i = 0; i < 3; i++) this.later(i * 110, () => this.sound((k) => footstep(k, gr === Ground.Void ? Ground.Stone : gr, 1, i % 2 === 1, false), 0.5));
+        } else this.play('teleport', 0.6);
+        break;
+      }
+      case 'cast': {
+        const v = this.atId(e.casterId);
+        if (v) this.play('spellCast', v * 0.7);
+        break;
+      }
+      case 'chat': {
+        if (e.id === me) break;
+        const v = this.atId(e.id), now = performance.now();
+        if (v && now - this.lastChat > 1500) { this.lastChat = now; this.play('chat', v * 0.6); }
+        break;
+      }
+      case 'mine': {
+        const v = this.at(e.x, e.y, e.z);
+        this.play(e.got ? 'mineOre' : 'mineHit', v);
+        if (e.depleted) this.later(150, () => this.play('rockBreak', v));
+        break;
+      }
+      case 'craft': {
+        const v = this.at(e.x, e.y, e.z);
+        this.play(e.station === 'furnace' ? 'furnace' : 'anvil', v);
+        if (e.made && e.id === me) this.later(e.station === 'furnace' ? 650 : 600, () => this.play('crafted', 0.7));
+        break;
+      }
+      case 'equipmentChanged':
+        if (e.id === me) this.gearChanged();
+        break;
+      case 'outfitChanged':
+        if (e.id === me) this.play('pickupCloth', 0.6);
+        break;
+      case 'playerRespawn':
+        if (e.id === me) this.play('respawn', 0.8);
+        break;
+      case 'questChanged':
+        if (e.to === me) this.play('quest', 0.7);
         break;
       case 'tileChanged': {
         // holes being dug; felled and regrowing trees make their own sounds (chop events)
@@ -485,7 +367,7 @@ export class Sfx {
         break;
       case 'message':
         if (e.to !== me) break;
-        if (e.kind === 'loot') this.play(/gold/i.test(e.text) ? 'coins' : 'pickup', 0.8);
+        if (e.kind === 'loot') this.play(/gold/i.test(e.text) ? 'coins' : /potion/i.test(e.text) ? 'pickupGlass' : /gem|ruby|sapphire|emerald|diamond|amethyst|pearl/i.test(e.text) ? 'pickupGem' : 'pickup', 0.8);
         else if (e.kind === 'warn' && /exhausted|cannot|need|too far|full/i.test(e.text)) this.play('error', 0.7);
         else if (e.kind === 'trade' && /sold|bought|gold/i.test(e.text)) this.play('coins', 0.7);
         break;
@@ -518,6 +400,20 @@ export class Sfx {
       t,
       r: (a, b) => a + Math.random() * (b - a),
       tone: (type, f0, f1, at, dur, peak, attack) => this.tone(out, type, f0, f1, at, dur, peak, attack),
+      ftone: (type, f0, f1, filter, c0, c1, at, dur, peak, q = 1, attack = 0.005) => {
+        const o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(f0, at);
+        o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), at + dur);
+        f.type = filter;
+        f.Q.value = q;
+        f.frequency.setValueAtTime(c0, at);
+        f.frequency.exponentialRampToValueAtTime(Math.max(20, c1), at + dur);
+        this.env(g, at, attack, peak, dur);
+        o.connect(f).connect(g).connect(out);
+        o.start(at);
+        o.stop(at + attack + dur + 0.05);
+      },
       noise: (filter, f0, f1, at, dur, peak, q, attack) => this.noise(out, filter, f0, f1, at, dur, peak, q, attack),
       pulse: (duty, f0, f1, at, dur, peak, tremolo) => {
         const o = c.createOscillator();
@@ -542,14 +438,14 @@ export class Sfx {
   }
 
   /** Plays a foley sound built from the kit, at a volume (distance falloff). */
-  private sound(build: (k: Kit) => void, gain: number): void {
+  private sound(build: (k: Kit) => void, gain: number, delay = 0): void {
     if (this.muted || gain <= 0.02) return;
     const c = this.ensure();
     if (!c || !this.master || c.state !== 'running') return;
     const out = c.createGain();
     out.gain.value = gain;
     out.connect(this.master);
-    build(this.kit(out, c.currentTime + 0.005));
+    build(this.kit(out, c.currentTime + 0.005 + delay));
   }
 
   private bodyOfId(id: number): Body | null {
@@ -571,6 +467,7 @@ export class Sfx {
     const g = this.ctl.game;
     const me = g.getPlayer(this.ctl.pid);
     if (!me) return;
+    this.myZ = me.z;
     this.stepCheck(me.id, me.x, me.y, me.z, 0.55, false);
     for (const e of g.enemies) {
       if (e.dead || e.z !== me.z) continue;
@@ -591,17 +488,91 @@ export class Sfx {
     if (!moved) return; // teleports and floor changes aren't steps
     const ground = this.ctl.game.world.getGround(x, y, z);
     const alt = prev.alt;
+    if (id === this.ctl.pid && this.ctl.game.world.getObj(x, y, z) === Obj.Door) this.play('door', 0.5);
     this.sound((k) => footstep(k, ground === Ground.Void ? Ground.Cave : ground, 1, alt, heavy), gain);
   }
 
-  /** Called by the UI when the player drinks or uses something. */
-  used(itemId: string): void {
-    try {
-      const d = itemDef(itemId);
-      if (d.kind === 'consumable') this.play('drink', 0.8);
-    } catch {
-      /* unknown item */
+  /** Sounds for the player's own actions that have no game event of their own. */
+  private onCommand(cmd: Command): void {
+    const g = this.ctl.game, sess = g.session(this.ctl.pid);
+    switch (cmd.c) {
+      case 'useItem': this.used(cmd.item); break;
+      case 'useSlot': { const it = sess?.inventory.slots[cmd.slot]; if (it) this.used(it.id); break; }
+      case 'useTile': {
+        const me = g.getPlayer(this.ctl.pid);
+        if (!me) break;
+        const o = g.world.getObj(cmd.x, cmd.y, me.z);
+        if (o === Obj.Door) this.play('door', 0.6);
+        else if (o === Obj.Chest || o === Obj.Locker) this.play('chest', 0.7);
+        break;
+      }
+      case 'moveSlot': case 'moveBag': case 'deposit': case 'withdraw': this.play('itemMove', 0.6); break;
+      case 'drop': this.play('drop', 0.6); break;
+      case 'throw': this.play('throw', 0.4); this.later(250, () => this.play('drop', 0.5)); break;
+      case 'pickup': this.play('pickup', 0.6); break;
+      case 'talk': this.play('uiOpen', 0.5); break;
+      case 'tradeAccept': this.play('coins', 0.6); break;
     }
+  }
+
+  /** Drinking and eating. */
+  used(itemId: string): void {
+    const d = this.def(itemId);
+    if (!d || d.kind !== 'consumable') return;
+    this.play(/potion|mead/.test(d.id) ? 'drink' : 'eat', 0.8);
+  }
+
+  private def(id: string): ItemDef | null {
+    try { return itemDef(id); } catch { return null; }
+  }
+
+  /** Metal gear clanks; leather, cloth and jewellery rustle. */
+  private isMetal(d: ItemDef): boolean {
+    if (/leather|robe|cape|cloth|wool|hat|sandal|studded|fur|silk|hood|wood|bow|staff|wand|rod/i.test(d.name)) return false;
+    return d.kind === 'weapon' || /steel|iron|plate|chain|mail|bronze|copper|knight|crown|golden|silver|scale|helmet|shield|starsteel|darkstone/i.test(d.name);
+  }
+
+  /** The player's equipment changed: clank for what went on, rustle for what came off. */
+  private gearChanged(): void {
+    const eq = this.ctl.game.session(this.ctl.pid)?.inventory.equipment;
+    if (!eq) return;
+    let on: string | null = null, off = false;
+    for (const [slot, it] of Object.entries(eq)) {
+      const id = it?.id ?? null, before = this.gear.get(slot);
+      if (before !== undefined && before !== id) { if (id) on = id; else off = true; }
+      this.gear.set(slot, id);
+    }
+    if (on) { const d = this.def(on); this.play(d && this.isMetal(d) ? 'equipMetal' : 'equipLeather', 0.7); }
+    else if (off) this.play('unequip', 0.6);
+  }
+
+  /** Swing sound from what the attacker holds; ranged weapons are heard through their projectile. */
+  private swingOf(id: number): Sound | null {
+    const c = this.ctl.game.getCreature(id);
+    if (!c) return null;
+    if (c instanceof Enemy) return 'swing';
+    const w = this.ctl.game.session(id)?.inventory.equipment.weapon?.id;
+    const d = w ? this.def(w) : null;
+    switch (d?.weaponType) {
+      case undefined: return 'swingFist';
+      case 'sword': return 'swingBlade';
+      case 'axe': return 'swingHeavy';
+      case 'club': return 'swingBlunt';
+      default: return null;
+    }
+  }
+
+  /** A blocked blow rings on metal and knocks on wood or hide. */
+  private blockOf(id: number): Sound {
+    const sh = this.ctl.game.session(id)?.inventory.equipment.shield?.id;
+    if (sh) { const d = this.def(sh); return d && /wood|bark|hide|leather/i.test(d.name) ? 'blockWood' : 'block'; }
+    const body = this.bodyOfId(id);
+    if (body) return ['metal', 'stone', 'crystal', 'bone', 'ice'].includes(body.material) ? 'block' : 'blockWood';
+    return 'block';
+  }
+
+  private later(ms: number, fn: () => void): void {
+    setTimeout(() => { try { fn(); } catch { /* ignore */ } }, ms);
   }
 }
 

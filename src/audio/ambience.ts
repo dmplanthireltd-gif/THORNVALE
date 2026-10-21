@@ -1,19 +1,20 @@
 import type { Game } from '../game/Game';
 import type { Player } from '../game/player/Player';
-import { Ground } from '../game/world/WorldMap';
+import { Ground, Obj } from '../game/world/WorldMap';
 
 /**
  * Background ambience that follows the surroundings: wind on snow, ice and sand, birds in grass
  * and forest, insects and frogs in jungle and swamp, waves near water, rumbling and bubbling near
- * lava, and a low drone with water drips underground. Synthesized live; very quiet by design.
+ * lava, crackling near campfires, and a low drone with water drips underground. Synthesized live; very quiet by design.
  */
 
-type Bed = 'wind' | 'insects' | 'sea' | 'lava' | 'cave';
+type Bed = 'wind' | 'insects' | 'sea' | 'lava' | 'cave' | 'fire';
 
 export class Ambience {
   private beds = new Map<Bed, GainNode>();
   private lastSample = 0;
-  private level: Record<Bed, number> = { wind: 0, insects: 0, sea: 0, lava: 0, cave: 0 };
+  private level: Record<Bed, number> = { wind: 0, insects: 0, sea: 0, lava: 0, cave: 0, fire: 0 };
+  private nextCrackle = 0;
   private birds = 0;
   private frogs = 0;
   private nextChirp = 0;
@@ -46,6 +47,7 @@ export class Ambience {
     mk('sea', 'lowpass', 520, 0.7, 0.09, 300);
     mk('lava', 'lowpass', 140, 0.8, 0.2, 40);
     mk('cave', 'lowpass', 180, 0.6, 0.05, 50);
+    mk('fire', 'bandpass', 1800, 0.7, 0.6, 600);
   }
 
   /** Called every frame; samples the surroundings twice a second. */
@@ -65,6 +67,10 @@ export class Ambience {
     if (this.level.cave > 0.01 && now > this.nextDrip) {
       this.nextDrip = now + 1.5 + Math.random() * 4.5;
       this.drip(now);
+    }
+    if (this.level.fire > 0.005 && now > this.nextCrackle) {
+      this.nextCrackle = now + 0.08 + Math.random() * 0.5;
+      this.blip('square', 3000 + Math.random() * 3000, 1500, now, 0.012, this.level.fire * 1.2);
     }
     if (this.level.lava > 0.01 && now > this.nextPop) {
       this.nextPop = now + 0.6 + Math.random() * 2;
@@ -88,6 +94,11 @@ export class Ambience {
         else if (gr === Ground.Lava || gr === Ground.Ash) lava++;
       }
     }
+    // campfires within 5 tiles crackle, louder the closer you stand
+    let fire = 0;
+    for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) {
+      if (g.world.getObj(cx + dx, cy + dy, z) === Obj.Campfire) fire = Math.max(fire, 1 - Math.max(Math.abs(dx), Math.abs(dy)) / 6);
+    }
     const f = (v: number) => (n ? v / n : 0);
     const under = z < 0;
     const indoors = g.world.isSafe(cx, cy, z);
@@ -97,6 +108,7 @@ export class Ambience {
       sea: under ? 0 : Math.min(1, f(water) * 1.6) * 0.07,
       lava: f(lava) * 0.12,
       cave: under ? 0.06 : 0,
+      fire: fire * 0.035,
     };
     this.birds = under || indoors ? 0 : f(green) + f(wild) * 0.5;
     this.frogs = under ? 0 : f(wild);

@@ -15,6 +15,8 @@ export interface Kit {
   noise(filter: BiquadFilterType, f0: number, f1: number, at: number, dur: number, peak: number, q?: number, attack?: number): void;
   /** Narrow pulse wave (chiptune voice) with a pitch sweep and optional tremolo. */
   pulse(duty: number, f0: number, f1: number, at: number, dur: number, peak: number, tremolo?: number): void;
+  /** Oscillator through a swept filter (plucked strings, brass, creaks). */
+  ftone(type: OscillatorType, f0: number, f1: number, filter: BiquadFilterType, c0: number, c1: number, at: number, dur: number, peak: number, q?: number, attack?: number): void;
   r(a: number, b: number): number;
 }
 
