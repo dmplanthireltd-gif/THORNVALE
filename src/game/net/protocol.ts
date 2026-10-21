@@ -17,6 +17,7 @@ import { emptyBuffs, FIGHT_MODE, type Buffs, type FightMode, type Player } from 
 import { isVocation, type Vocation } from '../player/vocations';
 import type { QuestLog } from '../quests/quests';
 import type { TutorialState } from '../tutorial/tutorial';
+import type { ExpStages } from '../progression/stages';
 
 /**
  * Wire protocol (JSON over WebSocket). The server runs the real Game; clients
@@ -24,7 +25,7 @@ import type { TutorialState } from '../tutorial/tutorial';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 20;
+export const PROTOCOL_VERSION = 21;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -167,7 +168,8 @@ export interface SelfSnap {
 }
 
 export type ServerMessage =
-  | { t: 'welcome'; id: number; v: number; players: number }
+  /** `rates`: the server's exp stages (progression/stages.ts), shown in the Skills panel and help (protocol 21). */
+  | { t: 'welcome'; id: number; v: number; players: number; rates?: ExpStages }
   | {
     t: 'snap'; time: number; c: CreatureSnap[]; b: Array<{ id: number; x: number; y: number; z: number; it?: string[]; cp?: string; all?: Array<[string, number]> }>; holes: string[]; fields?: string[]; self: SelfSnap; st?: string[];
     /** Lit campfires near the player ("x,y,z"); only sent when the list changed (absent = unchanged). */

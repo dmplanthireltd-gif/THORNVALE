@@ -460,6 +460,8 @@ select.text-input { flex: 1; }
 .skill-bar { height: 3px; background: #0c0a08; border: 1px solid #000; }
 .skill-fill { height: 100%; background: #4fbf5a; }
 .skill-head { margin-top: 4px; font: 700 11px var(--pixel); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.skill-rates { font: 600 11px var(--pixel); color: var(--gold); letter-spacing: 0.04em; padding: 1px 0 3px; border-bottom: 1px solid #3a2c1c; margin-bottom: 2px; cursor: help; }
+.help-rates { white-space: pre-line; }
 
 /* ---------------------------------------------------------------- market */
 .market-tabs { display: flex; gap: 4px; }

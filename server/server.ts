@@ -33,6 +33,7 @@ import {
   FOUNDER_SALE_FROM, FOUNDER_SALE_UNTIL, LAUNCH_AT, LEGEND_CAP, NO_PERKS, PREMIUM_RESERVED_SHARE, PRODUCTS, type AccountPerks,
 } from '../src/game/premium/premium';
 import { WsConnection } from './ws';
+import { stagesFromEnv, stagesTable } from '../src/game/progression/stages';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8080);
@@ -140,7 +141,9 @@ const PREMIUM = process.env.PREMIUM === '1' || (process.env.PREMIUM !== '0' && !
 const PADDLE = paddleConfigFromEnv(process.env);
 /** The store tables exist in storage (set at start-up). */
 let storeTables = false;
-const game = new Game({ pvp: PVP, testMode: TEST_MODE, premium: PREMIUM });
+/** Exp stages (progression/stages.ts): STAGES=season|classic (default season), SEASON_STAGES JSON overrides. */
+const STAGES = stagesFromEnv(process.env);
+const game = new Game({ pvp: PVP, testMode: TEST_MODE, premium: PREMIUM, stages: STAGES.stages });
 interface Client {
   addr: string;
   loggingIn?: boolean;
@@ -421,7 +424,7 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
     game.msg(s.id, `Test server: your character has been raised to level ${START_LEVEL}.`, 'info');
     void saveCharacter(s);
   }
-  send(c, { t: 'welcome', id: s.id, v: PROTOCOL_VERSION, players: game.sessions.size });
+  send(c, { t: 'welcome', id: s.id, v: PROTOCOL_VERSION, players: game.sessions.size, rates: game.stages });
   game.msg(s.id, saved ? `Welcome back to Thornvale, ${name}.` : `Welcome to Thornvale, ${name}.`, 'info');
   for (const other of game.sessions.values()) {
     if (other.id !== s.id) game.msg(other.id, `${name} has entered Thornvale.`, 'info');
@@ -891,6 +894,7 @@ console.log(market ? `Market: open (${market.offers.length} offers, ${market.del
 console.log(`Saves: ${storage.kind === 'supabase' ? 'Supabase database' : `files in ${dirname(DATA_FILE)}`} (save format v${SAVE_VERSION})`);
 console.log(`Tutorial flags: ${await storage.accountFlagsMode()}`);
 console.log(`PvP: ${PVP ? 'on' : 'off'}`);
+console.log(`Exp stages: ${STAGES.stages.name}${STAGES.warning ? ` (${STAGES.warning})` : ''} — ${stagesTable(STAGES.stages).join('; ')}`);
 console.log(`Premium: ${PREMIUM ? 'enforced (free heartland, premium regions)' : 'open to everyone (test mode)'}`);
 console.log(`Store: ${!storeTables ? 'closed (no store tables in storage yet)' : !EMAIL_AUTH ? 'closed (needs email login)' : paddleReady(PADDLE) ? `open (Paddle ${PADDLE.env}, ${Object.keys(PADDLE.prices).length} prices)` : 'closed (Paddle not set up yet)'}`);
 if (START_LEVEL > 1) console.log(`Test server: characters start at level ${START_LEVEL}`);

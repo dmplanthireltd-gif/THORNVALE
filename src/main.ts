@@ -8,6 +8,7 @@ import { HUD } from './ui/HUD';
 import { Sfx } from './audio/Sfx';
 import { Music } from './audio/Music';
 import { StartScreen } from './ui/StartScreen';
+import { SEASON_STAGES } from './game/progression/stages';
 
 async function boot(): Promise<void> {
   const container = document.getElementById('app');
@@ -25,10 +26,10 @@ async function boot(): Promise<void> {
         ctl = await NetController.connect({ url: choice.url, name: choice.name, password: choice.password, token: choice.token, vocation: choice.vocation, outfit: choice.outfit, skipTutorial: choice.skipTutorial });
       } else if (choice.mode === 'continue') {
         const peek = saves.peek();
-        ctl = new LocalController(new Game(), saves, peek?.name ?? 'Adventurer', 'knight', { load: true });
+        ctl = new LocalController(new Game({ stages: SEASON_STAGES }), saves, peek?.name ?? 'Adventurer', 'knight', { load: true });
       } else {
         saves.clear();
-        ctl = new LocalController(new Game(), saves, choice.name, choice.vocation, { load: false, outfit: choice.outfit, skipTutorial: choice.skipTutorial });
+        ctl = new LocalController(new Game({ stages: SEASON_STAGES }), saves, choice.name, choice.vocation, { load: false, outfit: choice.outfit, skipTutorial: choice.skipTutorial });
       }
     } catch (err) {
       start.setError(err instanceof Error ? err.message : String(err));

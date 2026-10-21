@@ -33,6 +33,7 @@ async function main(): Promise<void> {
   const tu = a.game.session(a.pid)!.tutorial;
   check(tu.state === 'active' && tu.step >= 1 && !tu.canSkip, 'new characters start on the tutorial island');
   check(a.game.pvp && a.game.getPlayer(a.pid)!.secure, 'server reports PvP on, secure mode starts on');
+  check(a.game.stages.name === (process.argv[3] ?? 'season') && a.game.stages.exp.length > 0, `client knows the server's exp stages (${a.game.stages.name})`);
   a.send({ c: 'secureMode', on: false });
   await pump([a, b], 0.4);
   check(!a.game.getPlayer(a.pid)!.secure, 'secure mode toggles over the network');

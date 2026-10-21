@@ -187,7 +187,8 @@ export class WorldEvents {
     const items: ItemStack[] = [];
     for (const l of e.def.loot) {
       if (l.id === 'gold') {
-        const qty = Math.max(50, Math.round(randInt(l.min, l.max) * Math.min(1.5, Math.max(0.1, share * 4))));
+        // gold from monsters follows the server's exp stages (progression/stages.ts)
+        const qty = Math.max(50, Math.round(randInt(l.min, l.max) * Math.min(1.5, Math.max(0.1, share * 4)) * this.game.stages.gold));
         items.push({ id: 'gold', qty });
         continue;
       }

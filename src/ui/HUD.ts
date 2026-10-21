@@ -33,6 +33,7 @@ import type { Music } from '../audio/Music';
 import { Minimap } from './Minimap';
 import { WorldMapView } from './WorldMapView';
 import { OutfitPreview } from './OutfitPreview';
+import { expStageLine, isClassic, stagesTable } from '../game/progression/stages';
 
 /** Where a dragged item comes from. */
 export type DragSrc = { kind: 'inv'; index: number } | { kind: 'eq'; slot: EquipSlot } | { kind: 'bag'; id: number };
@@ -1490,11 +1491,17 @@ export class HUD {
   private renderSkills(): void {
     const s = this.s;
     const voc = s.player.vocation;
-    const key = `${voc}|${JSON.stringify(s.skills)}|${NONCOMBAT_SKILLS.map((d) => Math.floor(s.gathering[d.id])).join(',')}`;
+    const st = this.ctl.game.stages;
+    const key = `${voc}|${s.player.level}|${st.name}|${JSON.stringify(s.skills)}|${NONCOMBAT_SKILLS.map((d) => Math.floor(s.gathering[d.id])).join(',')}`;
     if (key === this.skillsKey) return;
     this.skillsKey = key;
     const box = this.skillsEl;
     box.replaceChildren();
+    // server rates (exp stages): what this character earns right now
+    if (!isClassic(st)) {
+      const rates = el('div', 'skill-rates', box, `Rates · ${expStageLine(st, s.player.level)}`);
+      rates.title = `Server rates (${st.name}):\n${stagesTable(st).join('\n')}`;
+    }
     const row = (name: string, level: number, frac: number, tip: string) => {
       const r = el('div', 'skill-row', box);
       r.title = tip;
@@ -2110,6 +2117,9 @@ export class HUD {
       el('div', 'help-key', grid, k);
       el('div', 'help-val', grid, v);
     }
+    const st = this.ctl.game.stages;
+    el('div', 'panel-title', b, `Server rates (${st.name})`);
+    el('p', 'hint help-rates', b, (isClassic(st) ? ['Classic: everything ×1.'] : stagesTable(st)).join('\n'));
     el('p', 'hint', b, 'Stairs and holes take you between floors; mountains, towers and dungeons go up to two floors high and four deep. Towns are protection zones: monsters cannot follow you in.');
   }
 

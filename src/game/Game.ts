@@ -42,6 +42,7 @@ import { runAdminCommand } from './admin';
 import { GM_BOSS_LIFETIME, SUMMON_LIFETIME, type WorldMark } from './bosses/bosses';
 import { WorldEvents } from './bosses/WorldEvents';
 import { migrateSave, SAVE_VERSION } from './save/migrate';
+import { CLASSIC_STAGES, combatSkillRate, expRate, gatheringRate, scaleAmount, stagedGold, type ExpStages } from './progression/stages';
 import { DEFAULT_OUTFIT, isOutfit, type Outfit, type OutfitType } from './player/outfits';
 import { BUFF_NAMES, emptyBuffs, expForLevel, FIGHT_MODE, Player, type FightMode } from './player/Player';
 import { isVocation, VOCATIONS, type Vocation } from './player/vocations';
@@ -248,6 +249,8 @@ export interface GameOptions {
    * character gets the premium regions, depot and market limits and outfits.
    */
   premium?: boolean;
+  /** Experience stages / server rates (progression/stages.ts). Left out = classic ×1 everywhere. */
+  stages?: ExpStages;
 }
 
 export const BAG_LIFETIME = 180;
@@ -358,6 +361,8 @@ export class Game implements AIContext {
   private nextId = 1;
   /** Server test mode: /raid and /worldboss for everyone. */
   readonly testMode: boolean;
+  /** Server rates (exp stages). The online mirror gets the server's table in the welcome message. */
+  stages: ExpStages;
   /** World bosses and raids (schedule, broadcasts, loot by contribution). */
   readonly worldEvents: WorldEvents;
   /** Online mirror: active world boss / raid markers as last sent by the server. */
@@ -369,6 +374,7 @@ export class Game implements AIContext {
     this.simulate = opts.simulate ?? true;
     this.pvp = opts.pvp ?? false;
     this.testMode = opts.testMode ?? false;
+    this.stages = opts.stages ?? CLASSIC_STAGES;
     this.worldEvents = new WorldEvents(this);
     // a mirror drops raid monsters, summons and world bosses when the server says they left
     if (!this.simulate) this.events.on((e) => { if (e.type === 'despawn') this.removeEnemyNow(e.id); });
@@ -545,7 +551,9 @@ export class Game implements AIContext {
   /** Adds tries to a skill and announces new levels. */
   trainSkill(s: Session, skill: CombatSkill, tries: number): void {
     if (!this.simulate || tries <= 0) return;
-    const gained = addTries(s.skills, skill, tries, s.player.vocation);
+    // exp stages: the skill's level picks the multiplier (fractions kept as a chance)
+    const staged = scaleAmount(tries, combatSkillRate(this.stages, skill, s.skills[skill].level));
+    const gained = addTries(s.skills, skill, staged, s.player.vocation);
     if (!gained) return;
     const lvl = s.skills[skill].level;
     this.msg(s.id, skill === 'magic' ? `You advanced to magic level ${lvl}.` : `You advanced to ${SKILL_NAMES[skill].toLowerCase()} level ${lvl}.`, 'level');
@@ -1298,7 +1306,9 @@ export class Game implements AIContext {
   /** Adds experience to a non-combat skill and announces new levels (the one path every trade skill uses). */
   gainSkill(s: Session, id: NonCombatSkill, xp: number, atId: number): void {
     const before = this.skillLevel(s, id);
-    s.gathering[id] = Math.min(SKILL_XP_CAP, s.gathering[id] + Math.max(0, xp));
+    // exp stages: the skill's level picks the multiplier
+    xp = Math.round(Math.max(0, xp) * gatheringRate(this.stages, before));
+    s.gathering[id] = Math.min(SKILL_XP_CAP, s.gathering[id] + xp);
     this.events.emit({ type: 'xp', amount: xp, atId, to: s.id, skill: id });
     const after = this.skillLevel(s, id);
     if (after > before) {
@@ -2331,7 +2341,7 @@ export class Game implements AIContext {
 
     const items: ItemStack[] = [];
     for (const l of e.def.loot) {
-      if (Math.random() < l.chance) items.push({ id: l.id, qty: randInt(l.min, l.max) });
+      if (Math.random() < l.chance) items.push({ id: l.id, qty: l.id === 'gold' ? stagedGold(this.stages, randInt(l.min, l.max)) : randInt(l.min, l.max) });
     }
     const names = items.length ? items.map(describeStack).join(', ') : 'nothing';
     for (const pid of looters) this.msg(pid, `Loot of ${who}: ${names}.`, 'loot');
@@ -2670,8 +2680,10 @@ export class Game implements AIContext {
     this.partyChanged(party);
   }
 
+  /** Character experience from monsters and quests; the receiver's level picks the exp stage. */
   private grantExp(s: Session, exp: number, atId: number, why: string): void {
     const p = s.player;
+    exp = Math.max(1, Math.round(exp * expRate(this.stages, p.level)));
     this.events.emit({ type: 'xp', amount: exp, atId, to: s.id });
     this.msg(s.id, `You gained ${exp} experience points ${why}.`, 'info');
     const levels = p.gainExp(exp);

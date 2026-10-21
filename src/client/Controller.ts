@@ -9,6 +9,7 @@ import {
 import type { Outfit } from '../game/player/outfits';
 import type { Vocation } from '../game/player/vocations';
 import type { SaveSystem } from '../game/save/SaveSystem';
+import { parseStages } from '../game/progression/stages';
 
 /**
  * Everything the renderer, HUD and input need from "the game", whether it runs
@@ -271,6 +272,7 @@ export class NetController implements Controller {
       case 'welcome':
         this.pid = m.id;
         this.game.localId = m.id;
+        if (m.rates) this.game.stages = parseStages(m.rates);
         break;
       case 'snap':
         applySnapshot(this.game, m, this.extras);
