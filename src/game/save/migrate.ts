@@ -13,7 +13,7 @@ import type { SaveData } from '../Game';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -36,6 +36,8 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
     const player = { ...(d.player as Record<string, unknown>), x: -1, y: -1, z: 0, home: 'Thornvale' };
     return { ...d, player, version: 3 };
   },
+  // v3 → v4 (PvP): every character starts unmarked, with secure mode on.
+  3: (d) => ({ ...d, pvp: { secure: true, whiteSkullUntil: 0, redSkullUntil: 0, unjustKills: [] }, version: 4 }),
 };
 
 export interface MigrationResult {

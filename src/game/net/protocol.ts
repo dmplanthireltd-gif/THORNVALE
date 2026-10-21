@@ -16,7 +16,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -45,6 +45,8 @@ export type Command =
   | { c: 'closeDialogue' }
   | { c: 'outfit'; outfit: Outfit }
   | { c: 'showGear'; on: boolean }
+  /** PvP secure mode: on = never attack unmarked players. */
+  | { c: 'secureMode'; on: boolean }
   | { c: 'say'; text: string }
   | { c: 'deposit'; slot: number }
   | { c: 'withdraw'; index: number }
@@ -78,6 +80,8 @@ export interface CreatureSnap {
   /** Shows equipment on the model. */
   sg?: 0 | 1;
   buffs?: Partial<Buffs>;
+  /** PvP skull: 0 none, 1 white, 2 red (players only). */
+  sk?: 0 | 1 | 2;
 }
 
 export interface SelfSnap {
@@ -98,6 +102,10 @@ export interface SelfSnap {
   spells: string[];
   depot: (ItemStack | null)[] | null;
   trade: TradeView | null;
+  /** PvP: server allows it, own secure mode, seconds of PZ lock left. */
+  pvp: 0 | 1;
+  sec: 0 | 1;
+  pz: number;
 }
 
 export type ServerMessage =
@@ -121,6 +129,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
       id: p.id, k: 'p', x: p.x, y: p.y, z: p.z, fx: p.fromX, fy: p.fromY, mt: r3(p.moveT), md: r3(p.moveDur), f: r3(p.facing),
       hp: Math.ceil(p.hp), mhp: p.maxHp, d: p.dead ? 1 : 0, name: p.name, lvl: p.level, voc: p.vocation, o: p.outfit, eq, sg: p.showGear ? 1 : 0,
       buffs: { haste: p.buffs.haste > 0 ? 1 : 0, magicShield: p.buffs.magicShield > 0 ? 1 : 0, light: p.buffs.light > 0 ? 1 : 0 },
+      sk: game.skullOf(p),
     });
   }
   for (const n of game.npcs) {
@@ -140,6 +149,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     step: me.stepTime, target: me.targetId, cds: { ...me.spellCooldowns }, gcds: { ...me.groupCooldowns }, buffs: { ...me.buffs }, home: me.home,
     inv: s.inventory.toJSON(), quests: s.quests.state, dialogue: s.dialogue, bank: s.bank, spells: [...s.spells],
     depot: s.depotOpen ? s.depot : null, trade: game.tradeView(s.id),
+    pvp: game.pvp ? 1 : 0, sec: me.secure ? 1 : 0, pz: Math.ceil(me.pzLock),
   };
   const holes: string[] = [];
   for (const k of game.dugHoles()) holes.push(k);
@@ -196,6 +206,7 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'closeDialogue': game.closeDialogue(pid); break;
     case 'outfit': if (isOutfit(m.outfit)) game.setOutfit(pid, m.outfit); break;
     case 'showGear': game.setShowGear(pid, m.on === true); break;
+    case 'secureMode': game.setSecureMode(pid, m.on !== false); break;
     case 'say': if (typeof m.text === 'string') game.say(pid, m.text); break;
     case 'deposit': if (num(m.slot)) game.depositItem(pid, Math.floor(m.slot)); break;
     case 'withdraw': if (num(m.index)) game.withdrawItem(pid, Math.floor(m.index)); break;
@@ -239,6 +250,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
         p.showGear = c.sg === 1;
         ev.emit({ type: 'equipmentChanged', id: p.id });
       }
+      p.netSkull = c.sk === 1 || c.sk === 2 ? c.sk : 0;
       if (c.buffs) {
         p.buffs.haste = c.buffs.haste ? Math.max(p.buffs.haste, 1) : 0;
         p.buffs.magicShield = c.buffs.magicShield ? Math.max(p.buffs.magicShield, 1) : 0;
@@ -315,6 +327,9 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   p.groupCooldowns = { ...me.gcds, potion: me.gcds.potion ?? 0 };
   p.buffs = { ...emptyBuffs(), ...me.buffs };
   p.home = me.home;
+  game.pvp = me.pvp === 1;
+  p.secure = me.sec !== 0;
+  p.pzLock = me.pz ?? 0;
   s.bank = me.bank;
   const spellsBefore = [...s.spells].sort().join();
   const spellsAfter = [...me.spells].sort().join();

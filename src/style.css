@@ -435,3 +435,11 @@ select.text-input { flex: 1; }
 .fight-modes { display: flex; gap: 3px; padding: 3px; }
 .fight-modes .btn.fm { flex: 1; padding: 3px 0; font-size: 12px; min-width: 0; }
 .fight-modes .btn.fm.on { background: #5a4a2a; border-color: #e0b03c; color: #ffe9a8; }
+
+/* PvP skulls (nameplate and battle list) and the secure-mode button */
+.np-head { display: flex; align-items: center; gap: 3px; }
+.np-skull, .battle-skull { display: none; font-size: 12px; line-height: 1; }
+.np-skull.white, .battle-skull.white { display: inline; color: #f4f4f4; }
+.np-skull.red, .battle-skull.red { display: inline; color: #ff3030; }
+.battle-row .battle-skull { flex: none; }
+.btn.tool.pvp-open { color: #ff8a6a; }

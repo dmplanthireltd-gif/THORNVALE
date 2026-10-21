@@ -13,6 +13,7 @@ interface FloatText {
 interface Label {
   el: HTMLDivElement;
   name: HTMLSpanElement;
+  skull: HTMLSpanElement;
   bar: HTMLDivElement;
   fill: HTMLDivElement;
 }
@@ -50,21 +51,27 @@ export class Overlay {
     return { x: (v.x * 0.5 + 0.5) * this.w, y: (-v.y * 0.5 + 0.5) * this.h, visible: Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2 };
   }
 
-  setLabel(id: number, anchor: THREE.Vector3 | null, name: string, hpFrac: number, opts: { player?: boolean; npc?: boolean; other?: boolean; targeted?: boolean } = {}): void {
+  setLabel(id: number, anchor: THREE.Vector3 | null, name: string, hpFrac: number, opts: { player?: boolean; npc?: boolean; other?: boolean; targeted?: boolean; skull?: 0 | 1 | 2 } = {}): void {
     let l = this.labels.get(id);
     if (!l) {
       const el = document.createElement('div');
       el.className = 'nameplate';
       const nm = document.createElement('span');
       nm.className = 'np-name';
+      const sk = document.createElement('span');
+      sk.className = 'np-skull';
+      sk.textContent = '☠';
       const bar = document.createElement('div');
       bar.className = 'np-bar';
       const fill = document.createElement('div');
       fill.className = 'np-fill';
       bar.appendChild(fill);
-      el.append(nm, bar);
+      const head = document.createElement('div');
+      head.className = 'np-head';
+      head.append(sk, nm);
+      el.append(head, bar);
       this.root.appendChild(el);
-      l = { el, name: nm, bar, fill };
+      l = { el, name: nm, skull: sk, bar, fill };
       this.labels.set(id, l);
     }
     if (!anchor) {
@@ -86,6 +93,10 @@ export class Overlay {
     l.fill.style.background = col;
     l.bar.style.display = opts.npc ? 'none' : '';
     l.el.classList.toggle('targeted', !!opts.targeted);
+    // PvP skull next to the name: white or red
+    const sk = opts.skull ?? 0;
+    const skCls = sk === 2 ? 'np-skull red' : sk === 1 ? 'np-skull white' : 'np-skull';
+    if (l.skull.className !== skCls) l.skull.className = skCls;
   }
 
   removeLabel(id: number): void {

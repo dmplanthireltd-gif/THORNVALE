@@ -116,14 +116,34 @@ export interface SaveData {
   chests?: string[];
   /** Items that no longer exist in the game, kept so a later update can give them back. */
   lostItems?: ItemStack[];
+  /** PvP marks (save v4+). Times are wall-clock ms. */
+  pvp?: { secure?: boolean; whiteSkullUntil?: number; redSkullUntil?: number; unjustKills?: number[] };
 }
 
 export interface GameOptions {
   /** false = mirror mode: state arrives from a server, only animation timing runs locally. */
   simulate?: boolean;
+  /** Players may attack each other (server env PVP, default on online; always off offline). */
+  pvp?: boolean;
+  /** Wall clock in ms (skulls, unjustified kills). Tests replace it. */
+  now?: () => number;
 }
 
 export const BAG_LIFETIME = 180;
+/** PvP: players below this level can neither attack nor be attacked by players. */
+export const PVP_MIN_LEVEL = 8;
+/** White skull after attacking an unmarked player, refreshed on every attack. */
+export const WHITE_SKULL_MS = 15 * 60 * 1000;
+/** Red skull after too many unjustified kills. */
+export const RED_SKULL_MS = 24 * 60 * 60 * 1000;
+/** Unjustified kills count for this long… */
+export const UNJUST_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** …and this many of them within the window give a red skull. */
+export const UNJUST_KILLS_FOR_RED = 3;
+/** Seconds you cannot enter a protection zone after attacking a player. */
+export const PZ_LOCK_SECONDS = 60;
+/** How long the victim of an attack may hit back without getting a skull. */
+const SELF_DEFENCE_MS = WHITE_SKULL_MS;
 const HOLE_OPEN_SECONDS = 90;
 const TRADE_RANGE = 3;
 
@@ -141,6 +161,10 @@ export class Game implements AIContext {
   readonly bags: GroundBag[] = [];
   readonly trades: Trade[] = [];
   readonly simulate: boolean;
+  /** Player-versus-player combat allowed (mirror games learn it from the server). */
+  pvp: boolean;
+  /** Wall clock in ms. */
+  now: () => number;
   /** Dug holes that close again: key → seconds left. */
   private openHoles = new Map<string, number>();
   time = 0;
@@ -149,6 +173,8 @@ export class Game implements AIContext {
 
   constructor(opts: GameOptions = {}) {
     this.simulate = opts.simulate ?? true;
+    this.pvp = opts.pvp ?? false;
+    this.now = opts.now ?? (() => Date.now());
     this.world = buildWorld();
     // NPCs and monsters always take the first ids, so a server and its clients agree on them
     for (const n of this.world.npcs) {
@@ -189,6 +215,7 @@ export class Game implements AIContext {
     this.cancelTrade(id, 'left the game');
     if (!this.sessions.delete(id)) return;
     for (const e of this.enemies) if (e.targetId === id) e.targetId = null;
+    for (const o of this.sessions.values()) if (o.player.targetId === id) o.player.targetId = null;
     this.events.emit({ type: 'playerLeft', id });
   }
 
@@ -324,11 +351,21 @@ export class Game implements AIContext {
     return this.enemies.find((e) => e.id === id) ?? null;
   }
 
-  /** NPCs and monsters block everyone; players block monsters but walk through each other. */
+  /** What a player is fighting: a monster, or (PvP) another player. */
+  getTarget(id: number | null): Enemy | Player | null {
+    if (id === null) return null;
+    return this.getEnemy(id) ?? this.getPlayer(id);
+  }
+
+  /**
+   * NPCs and monsters block everyone. Players block monsters, and block each
+   * other too, except inside protection zones (temples, depots, town doors), so
+   * nobody can wall off a temple or a depot.
+   */
   isOccupied(x: number, y: number, z: number, ignoreId = -1, moverIsPlayer = false): boolean {
     for (const n of this.npcs) if (n.id !== ignoreId && n.z === z && n.x === x && n.y === y) return true;
     for (const e of this.enemies) if (e.id !== ignoreId && !e.dead && e.z === z && e.x === x && e.y === y) return true;
-    if (!moverIsPlayer) {
+    if (!moverIsPlayer || !this.world.isSafe(x, y, z)) {
       for (const s of this.sessions.values()) {
         const p = s.player;
         if (p.id !== ignoreId && !p.dead && p.z === z && p.x === x && p.y === y) return true;
@@ -367,19 +404,33 @@ export class Game implements AIContext {
       if (this.world.isSafe(c.x + dx, c.y + dy, c.z)) return false;
       if (this.world.linkAt(c.x + dx, c.y + dy, c.z)) return false;
     }
+    if (c instanceof Player && this.pzLockedOut(c, c.x + dx, c.y + dy)) {
+      if (c.pzMsgTimer <= 0) {
+        c.pzMsgTimer = 2;
+        this.msg(c.id, 'You are PZ-locked.', 'warn');
+      }
+      return false;
+    }
     c.beginStep(dx, dy);
     return true;
+  }
+
+  /** A PZ-locked player may not step from outside into a protection zone. */
+  private pzLockedOut(p: Player, x: number, y: number): boolean {
+    return p.pzLock > 0 && !this.world.isSafe(p.x, p.y, p.z) && this.world.isSafe(x, y, p.z);
   }
 
   pathTo(c: Creature, tx: number, ty: number, adjacent: boolean, maxNodes: number): TilePos[] | null {
     const isPlayer = c.kind === 'player';
     const z = c.z;
+    const pzBlocked = c instanceof Player && c.pzLock > 0 && !this.world.isSafe(c.x, c.y, z);
     return findPath(this.world.grid(z), {
       sx: c.x, sy: c.y, tx, ty, maxNodes,
       isGoal: adjacent ? (x, y) => chebyshev(x, y, tx, ty) === 1 && !this.isOccupied(x, y, z, c.id, isPlayer) : undefined,
       isBlocked: (x, y) => {
         if (this.isOccupied(x, y, z, c.id, isPlayer) && !(x === tx && y === ty && !adjacent)) return true;
         if (!isPlayer && (this.world.isSafe(x, y, z) || this.world.linkAt(x, y, z))) return true;
+        if (pzBlocked && this.world.isSafe(x, y, z)) return true;
         // players path around floor changes unless that is the destination
         if (isPlayer && !(x === tx && y === ty)) {
           const o = this.world.getObj(x, y, z);
@@ -456,6 +507,15 @@ export class Game implements AIContext {
     p.chaseSuppressed -= dt;
     p.sinceCombat += dt;
     p.hazardTimer -= dt;
+    p.pzMsgTimer -= dt;
+    if (p.pzLock > 0) {
+      p.pzLock = Math.max(0, p.pzLock - dt);
+      if (p.pzLock === 0) this.msg(s.id, 'You are no longer PZ-locked.', 'info');
+    }
+    if (p.attackedBy.size) {
+      const now = this.now();
+      for (const [id, until] of p.attackedBy) if (until <= now) p.attackedBy.delete(id);
+    }
     for (const k of Object.keys(p.spellCooldowns)) p.spellCooldowns[k] -= dt;
     for (const g of ['attack', 'heal', 'support', 'potion'] as const) p.groupCooldowns[g] = Math.max(0, p.groupCooldowns[g] - dt);
     for (const bName of BUFF_NAMES) {
@@ -520,6 +580,11 @@ export class Game implements AIContext {
         return true;
       }
       const dest = p.path[p.path.length - 1];
+      // the last tile is taken (someone stands there): stop next to it instead of retrying forever
+      if (p.path.length === 1 && this.isOccupied(dest.x, dest.y, p.z, p.id, true)) {
+        p.path = [];
+        return false;
+      }
       const re = this.pathTo(p, dest.x, dest.y, false, 4000);
       p.path = re ?? [];
       if (re && re.length && this.tryStep(p, re[0].x - p.x, re[0].y - p.y)) {
@@ -530,7 +595,7 @@ export class Game implements AIContext {
     }
 
     // chase the target until it is in weapon range and in sight
-    const t = this.getEnemy(p.targetId);
+    const t = this.getTarget(p.targetId);
     if (t && !t.dead && p.chase && p.chaseSuppressed <= 0 && t.z === p.z) {
       const range = this.weaponRange(s);
       const d = chebyshev(p.x, p.y, t.x, t.y);
@@ -651,10 +716,19 @@ export class Game implements AIContext {
 
   private updatePlayerCombat(s: Session): void {
     const p = s.player;
-    const t = this.getEnemy(p.targetId);
-    if (!t) return;
+    const t = this.getTarget(p.targetId);
+    if (!t) { p.targetId = null; return; }
     if (t.dead || t.z !== p.z) { p.targetId = null; return; }
     if (this.isProtected(p)) return;
+    if (t instanceof Player) {
+      // rules may have changed since the attack started (target walked into a temple, secure mode…)
+      const why = this.pvpProblem(p, t, false);
+      if (why) {
+        p.targetId = null;
+        this.msg(s.id, why, 'warn');
+        return;
+      }
+    }
     const range = this.weaponRange(s);
     const d = chebyshev(p.x, p.y, t.x, t.y);
     if (d > range) return;
@@ -772,17 +846,17 @@ export class Game implements AIContext {
   meleeAttack(attacker: Creature, target: Creature): void {
     if (attacker.dead || target.dead || attacker.z !== target.z) return;
     this.events.emit({ type: 'attack', attackerId: attacker.id, targetId: target.id });
-    if (attacker instanceof Player && target instanceof Enemy) {
+    if (attacker instanceof Player && (target instanceof Enemy || target instanceof Player)) {
       const s = this.sessions.get(attacker.id);
       if (!s) return;
       const w = s.inventory.equipped('weapon');
       const wd = w ? itemDef(w) : null;
       const atk = (wd?.attack ?? FIST_ATTACK) + this.attackBonus(s) + this.potionAttack(s, 'melee');
-      const roll = rollMelee(attacker.level, atk, VOCATIONS[attacker.vocation].melee, target.def.armor);
-      roll.amount = applyResist(Math.round(roll.amount * FIGHT_MODE[attacker.fightMode].dealt), target.def.resist.physical);
+      const roll = rollMelee(attacker.level, atk, VOCATIONS[attacker.vocation].melee, this.targetArmor(target));
+      roll.amount = applyResist(Math.round(roll.amount * this.stanceFactor(attacker, target)), this.targetResist(target, 'physical'));
       this.applyDamage(target, attacker, roll, 'physical');
       if (roll.result === 'hit' && wd?.element && wd.elementDamage && !target.dead) {
-        const extra = applyResist(Math.round(wd.elementDamage * (1 + attacker.level / 60) * (0.6 + Math.random() * 0.8)), target.def.resist[wd.element]);
+        const extra = applyResist(Math.round(wd.elementDamage * (1 + attacker.level / 60) * (0.6 + Math.random() * 0.8)), this.targetResist(target, wd.element));
         if (extra > 0) this.applyDamage(target, attacker, { amount: extra, result: 'hit' }, wd.element);
       }
     } else if (attacker instanceof Enemy && target instanceof Player) {
@@ -795,7 +869,7 @@ export class Game implements AIContext {
   }
 
   /** Bows, crossbows, throwing weapons, wands and rods. */
-  private distanceAttack(s: Session, t: Enemy, d: number): void {
+  private distanceAttack(s: Session, t: Enemy | Player, d: number): void {
     const p = s.player;
     const inv = s.inventory;
     const w = inv.equipment.weapon;
@@ -812,7 +886,7 @@ export class Game implements AIContext {
       const el = wd.element ?? 'energy';
       this.events.emit({ type: 'projectile', fromId: p.id, toId: t.id, effect: el as Effect });
       const raw = randInt(wd.magicDamage[0], wd.magicDamage[1]);
-      this.applyDamage(t, p, { amount: applyResist(Math.round(raw * (1 + this.magicBonus(s) / 100)), t.def.resist[el]), result: 'hit' }, el);
+      this.applyDamage(t, p, { amount: applyResist(Math.round(raw * (1 + this.magicBonus(s) / 100)), this.targetResist(t, el)), result: 'hit' }, el);
       return;
     }
     let atk = this.attackBonus(s) + this.potionAttack(s, 'distance');
@@ -857,11 +931,11 @@ export class Game implements AIContext {
     this.events.emit({ type: 'projectile', fromId: p.id, toId: t.id, effect });
     // a steady hand (Potion of the Hawk) shoots as if two tiles closer
     const aimD = p.buffs.bullseye > 0 ? Math.max(1, d - 2) : d;
-    const roll = rollDistance(p.level, atk, VOCATIONS[p.vocation].distance, t.def.armor, aimD);
-    roll.amount = applyResist(Math.round(roll.amount * FIGHT_MODE[p.fightMode].dealt), t.def.resist.physical);
+    const roll = rollDistance(p.level, atk, VOCATIONS[p.vocation].distance, this.targetArmor(t), aimD);
+    roll.amount = applyResist(Math.round(roll.amount * this.stanceFactor(p, t)), this.targetResist(t, 'physical'));
     this.applyDamage(t, p, roll, 'physical');
     if (roll.result === 'hit' && element && elementDamage && !t.dead) {
-      const extra = applyResist(Math.round(elementDamage * (1 + p.level / 60)), t.def.resist[element]);
+      const extra = applyResist(Math.round(elementDamage * (1 + p.level / 60)), this.targetResist(t, element));
       if (extra > 0) this.applyDamage(t, p, { amount: extra, result: 'hit' }, element);
     }
   }
@@ -899,8 +973,104 @@ export class Game implements AIContext {
     }
   }
 
+  // ---------------------------------------------------------------- PvP
+
+  /** Armour of whatever is being hit: a monster's natural armour, or a player's worn armour. */
+  targetArmor(c: Enemy | Player): number {
+    if (c instanceof Enemy) return c.def.armor;
+    const s = this.sessions.get(c.id);
+    return s ? this.armor(s) : 0;
+  }
+
+  /** Resistance in percent of whatever is being hit (players: from their gear). */
+  targetResist(c: Enemy | Player, el: Element): number {
+    if (c instanceof Enemy) return c.def.resist[el] ?? 0;
+    const s = this.sessions.get(c.id);
+    return s ? this.resist(s, el) : 0;
+  }
+
+  /** Fight-stance multiplier for a weapon hit: the attacker's "dealt", times the defender's "taken" when it is a player. */
+  private stanceFactor(attacker: Player, target: Enemy | Player): number {
+    return FIGHT_MODE[attacker.fightMode].dealt * (target instanceof Player ? FIGHT_MODE[target.fightMode].taken : 1);
+  }
+
+  /** 0 = unmarked, 1 = white skull, 2 = red skull. */
+  skullOf(p: Player): 0 | 1 | 2 {
+    if (!this.simulate) return p.netSkull;
+    const now = this.now();
+    if (p.redSkullUntil > now) return 2;
+    if (p.whiteSkullUntil > now) return 1;
+    return 0;
+  }
+
+  /** Whether `victim` attacked `p` recently, so `p` may hit back without a skull. */
+  private isAggressor(p: Player, victim: Player): boolean {
+    return (p.attackedBy.get(victim.id) ?? 0) > this.now();
+  }
+
+  /**
+   * Why `p` may not hurt player `t` right now, or null when it is allowed.
+   * `area` = splash damage from an area spell or rune (no level message needed,
+   * but the same rules apply).
+   */
+  pvpProblem(p: Player, t: Player, area: boolean): string | null {
+    if (p.id === t.id) return 'You may not attack yourself.';
+    if (!this.pvp) return 'You may not attack players in this world.';
+    if (t.dead) return 'Your target is already dead.';
+    if (this.isProtected(p)) return 'You may not attack from inside a protection zone.';
+    if (this.isProtected(t)) return 'You may not attack a person in a protection zone.';
+    if (p.level < PVP_MIN_LEVEL) return `You need level ${PVP_MIN_LEVEL} to attack players.`;
+    if (t.level < PVP_MIN_LEVEL) return `You may not attack a player below level ${PVP_MIN_LEVEL}.`;
+    if (p.secure && this.skullOf(t) === 0 && !this.isAggressor(p, t)) {
+      return area ? 'Secure mode protects unmarked players.' : 'Turn secure mode off to attack unmarked players.';
+    }
+    return null;
+  }
+
+  /** Bookkeeping for one attack by `p` on player `t`: PZ lock, white skull, the victim's right to hit back. */
+  private onPvpAttack(p: Player, t: Player): void {
+    const now = this.now();
+    p.pzLock = PZ_LOCK_SECONDS;
+    // self-defence and fighting marked players are free; everything else earns a white skull
+    if (this.skullOf(t) === 0 && !this.isAggressor(p, t)) {
+      if (p.whiteSkullUntil <= now && p.redSkullUntil <= now) this.msg(p.id, 'You attacked an unmarked player. You have a white skull.', 'warn');
+      p.whiteSkullUntil = now + WHITE_SKULL_MS;
+    }
+    t.attackedBy.set(p.id, now + SELF_DEFENCE_MS);
+  }
+
+  /** Death by another player: unjustified kills and red skulls. */
+  private onPvpKill(killer: Player, victim: Player, victimSkull: 0 | 1 | 2): void {
+    const now = this.now();
+    this.msg(killer.id, `You killed ${victim.name}.`, 'combat');
+    if (victimSkull !== 0 || this.isAggressor(killer, victim)) return;
+    killer.unjustKills = killer.unjustKills.filter((t) => t > now - UNJUST_WINDOW_MS);
+    killer.unjustKills.push(now);
+    this.msg(killer.id, `Warning: that was an unjustified kill (${killer.unjustKills.length} in the last 24 hours).`, 'warn');
+    if (killer.unjustKills.length >= UNJUST_KILLS_FOR_RED) {
+      if (killer.redSkullUntil <= now) this.msg(killer.id, 'You have a red skull! If you die you lose your whole backpack.', 'warn');
+      killer.redSkullUntil = now + RED_SKULL_MS;
+    }
+    const ks = this.sessions.get(killer.id);
+    if (ks) ks.wantsSave = true;
+  }
+
+  /** Secure mode toggle (on = you cannot attack unmarked players). */
+  setSecureMode(pid: number, on: boolean): void {
+    const s = this.sessions.get(pid);
+    if (!s) return;
+    s.player.secure = !!on;
+    s.wantsSave = true;
+    this.msg(pid, on ? 'Secure mode on: you will not attack unmarked players.' : 'Secure mode off: you can attack any player. Attacking unmarked players gives you a skull.', 'info');
+  }
+
   private applyDamage(target: Creature, source: Creature, roll: Roll, element: Element, sourceName?: string): void {
     if (target.dead) return;
+    if (target instanceof Player && source instanceof Player && target !== source) {
+      // every PvP hit passes here, so this is the last word on the rules
+      if (this.pvpProblem(source, target, true)) return;
+      this.onPvpAttack(source, target);
+    }
     let manaShield = 0;
     let amount = roll.amount;
     if (target instanceof Player && roll.result === 'hit' && target.buffs.magicShield > 0) {
@@ -920,7 +1090,8 @@ export class Game implements AIContext {
     }
     target.hp -= amount;
     if (target instanceof Player) {
-      const how = sourceName ? `${article(source.name)}'s ${sourceName}` : `an attack by ${article(source.name)}`;
+      const who = source instanceof Player ? source.name : article(source.name);
+      const how = sourceName ? `${who}'s ${sourceName}` : `an attack by ${who}`;
       if (amount > 0) this.msg(target.id, `You lose ${amount} hitpoints due to ${how}.`, 'combat');
       if (manaShield > 0) this.msg(target.id, `You lose ${manaShield} mana to your magic shield.`, 'combat');
     }
@@ -1000,7 +1171,12 @@ export class Game implements AIContext {
 
   private killPlayer(p: Player, killer: Creature | null): void {
     const s = this.sessions.get(p.id);
+    const skull = this.skullOf(p);
+    const byPlayer = killer instanceof Player && killer !== p ? killer : null;
     p.dead = true;
+    p.pzLock = 0;
+    p.attackedBy.clear();
+    for (const o of this.sessions.values()) if (o.player.targetId === p.id) o.player.targetId = null;
     p.path = [];
     p.pending = null;
     p.targetId = null;
@@ -1018,7 +1194,25 @@ export class Game implements AIContext {
     if (s) this.refreshStats(s);
     for (const e of this.enemies) if (e.targetId === p.id) e.targetId = null;
     this.events.emit({ type: 'death', id: p.id });
-    this.msg(p.id, `You were slain${killer ? ` by ${article(killer.name)}` : ''}. You lost ${loss} experience.`, 'warn');
+    if (byPlayer) this.msg(p.id, `You were killed by ${byPlayer.name}. You lost ${loss} experience.`, 'warn');
+    else this.msg(p.id, `You were slain${killer ? ` by ${article(killer.name)}` : ''}. You lost ${loss} experience.`, 'warn');
+    // a red skull costs the whole backpack: it stays where you fell
+    if (skull === 2 && s) {
+      const dropped: ItemStack[] = [];
+      for (let i = 0; i < s.inventory.slots.length; i++) {
+        const st = s.inventory.slots[i];
+        if (!st) continue;
+        dropped.push({ ...st });
+        s.inventory.slots[i] = null;
+      }
+      if (dropped.length) {
+        this.dropBag(p.x, p.y, p.z, dropped);
+        this.msg(p.id, 'Your red skull cost you everything in your backpack.', 'warn');
+        this.events.emit({ type: 'inventoryChanged', to: p.id });
+      }
+    }
+    if (byPlayer) this.onPvpKill(byPlayer, p, skull);
+    if (s && (byPlayer || skull === 2)) s.wantsSave = true;
   }
 
   private respawnPlayer(s: Session): void {
@@ -1059,7 +1253,8 @@ export class Game implements AIContext {
     if (p.dead || !this.world.inBounds(x, y)) return null;
     p.pending = null;
     p.chaseSuppressed = 1.5;
-    const walkable = this.world.isWalkable(x, y, p.z);
+    // someone standing on the tile (outside a protection zone): walk next to them instead
+    const walkable = this.world.isWalkable(x, y, p.z) && !this.isOccupied(x, y, p.z, p.id, true);
     const path = this.pathTo(p, x, y, !walkable, 40000);
     if (!path) {
       this.msg(pid, 'There is no way.', 'warn');
@@ -1071,13 +1266,20 @@ export class Game implements AIContext {
 
   commandAttack(pid: number, id: number): void {
     const p = this.getPlayer(pid);
-    const e = this.getEnemy(id);
+    const e = this.getTarget(id);
     if (!p || !e || e.dead || p.dead || e.z !== p.z) return;
+    if (e instanceof Player) {
+      const why = this.pvpProblem(p, e, false);
+      if (why) {
+        this.msg(pid, why, 'warn');
+        return;
+      }
+    }
     if (this.isProtected(p)) {
       this.msg(pid, 'You may not attack from inside a protection zone.', 'warn');
       return;
     }
-    if (p.targetId !== id) this.msg(pid, `Attacking ${e.name.toLowerCase()}.`, 'combat');
+    if (p.targetId !== id) this.msg(pid, `Attacking ${e instanceof Player ? e.name : e.name.toLowerCase()}.`, 'combat');
     p.targetId = id;
     p.path = [];
     p.pending = null;
@@ -1262,9 +1464,13 @@ export class Game implements AIContext {
         return;
       }
       case 'target': {
-        const t = this.getEnemy(p.targetId);
+        const t = this.getTarget(p.targetId);
         if (!t || t.dead || t.z !== p.z) return fail('You need a target. Click an enemy first.');
         if (this.isProtected(p)) return fail('You may not attack from inside a protection zone.');
+        if (t instanceof Player) {
+          const why = this.pvpProblem(p, t, false);
+          if (why) return fail(why);
+        }
         if (chebyshev(p.x, p.y, t.x, t.y) > (sp.range ?? 3)) return fail('Your target is too far away.');
         if (!this.canSee(p, t)) return fail('You cannot see your target.');
         spend();
@@ -1272,7 +1478,7 @@ export class Game implements AIContext {
         const el = sp.element ?? 'energy';
         const effect: Effect = el === 'physical' ? 'spear' : el;
         this.events.emit({ type: 'projectile', fromId: p.id, toId: t.id, effect });
-        this.applyDamage(t, p, { amount: applyResist(this.spellDamage(s, sp, magicMult), t.def.resist[el]), result: 'hit' }, el);
+        this.applyDamage(t, p, { amount: applyResist(this.spellDamage(s, sp, magicMult), this.targetResist(t, el)), result: 'hit' }, el);
         return;
       }
       case 'conjure': {
@@ -1301,14 +1507,26 @@ export class Game implements AIContext {
         const el = sp.element ?? 'energy';
         const r = sp.radius ?? 1;
         this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: r, effect: el === 'physical' ? (r > 1 ? 'stone' : 'blood') : el });
-        for (const e of this.enemies) {
+        for (const e of this.areaVictims(p)) {
           if (e.dead || e.z !== p.z || (r > 1 ? !inAreaShape(e.x - p.x, e.y - p.y, r) : chebyshev(e.x, e.y, p.x, p.y) > r)) continue;
           if (!this.world.lineOfSight(p.x, p.y, e.x, e.y, p.z)) continue;
-          this.applyDamage(e, p, { amount: applyResist(this.spellDamage(s, sp, magicMult), e.def.resist[el]), result: 'hit' }, el);
+          this.applyDamage(e, p, { amount: applyResist(this.spellDamage(s, sp, magicMult), this.targetResist(e, el)), result: 'hit' }, el);
         }
         return;
       }
     }
+  }
+
+  /**
+   * Who an area attack by `p` can hurt: every monster, plus (PvP) the players the
+   * rules allow — never the caster, never anyone in a protection zone, and with
+   * secure mode on only marked players.
+   */
+  private areaVictims(p: Player): Array<Enemy | Player> {
+    const out: Array<Enemy | Player> = [...this.enemies];
+    if (!this.pvp) return out;
+    for (const o of this.alivePlayers()) if (o.z === p.z && !this.pvpProblem(p, o, true)) out.push(o);
+    return out;
   }
 
   private spellDamage(s: Session, sp: SpellDef, magicMult: number): number {
@@ -1374,7 +1592,7 @@ export class Game implements AIContext {
       if (this.isProtected(p)) return this.msg(pid, 'You may not attack from inside a protection zone.', 'warn');
       const el = r.element ?? 'energy';
       const mult = voc.magic * (1 + this.magicBonus(s) / 100);
-      const roll = (e: Enemy) => ({ amount: applyResist(rollFormula(r.min, r.max, r.perLevel, p.level, mult), e.def.resist[el]), result: 'hit' as const });
+      const roll = (e: Enemy | Player) => ({ amount: applyResist(rollFormula(r.min, r.max, r.perLevel, p.level, mult), this.targetResist(e, el)), result: 'hit' as const });
       if (r.radius > 0) {
         // area rune: centred on the aimed tile, or on the target
         let cx: number, cy: number;
@@ -1382,7 +1600,7 @@ export class Game implements AIContext {
           cx = at.x;
           cy = at.y;
         } else {
-          const t = this.getEnemy(p.targetId);
+          const t = this.getTarget(p.targetId);
           if (!t || t.dead || t.z !== p.z) return this.msg(pid, 'Aim the rune at a spot, or target a monster first.', 'warn');
           if (chebyshev(p.x, p.y, t.x, t.y) > r.range) return this.msg(pid, 'Your target is too far away.', 'warn');
           if (!this.canSee(p, t)) return this.msg(pid, 'You cannot throw there.', 'warn');
@@ -1393,15 +1611,19 @@ export class Game implements AIContext {
         const t = creatureAt(cx, cy);
         if (t) this.events.emit({ type: 'projectile', fromId: p.id, toId: t.id, effect: el as Effect });
         this.events.emit({ type: 'area', x: cx, y: cy, z: p.z, radius: r.radius, effect: el as Effect });
-        for (const e of this.enemies) {
+        for (const e of this.areaVictims(p)) {
           if (e.dead || e.z !== p.z || !inAreaShape(e.x - cx, e.y - cy, r.radius)) continue;
           if (!this.world.lineOfSight(cx, cy, e.x, e.y, p.z)) continue;
           this.applyDamage(e, p, roll(e), el);
         }
       } else {
-        const c = at ? creatureAt(at.x, at.y) : this.getEnemy(p.targetId);
-        const t = c instanceof Enemy ? c : null;
+        const c = at ? creatureAt(at.x, at.y) : this.getTarget(p.targetId);
+        const t = c instanceof Enemy || (c instanceof Player && c !== p && this.pvp) ? c : null;
         if (!t || t.dead || t.z !== p.z) return this.msg(pid, at ? 'Aim this rune at a monster.' : 'You need a target. Click an enemy first.', 'warn');
+        if (t instanceof Player) {
+          const why = this.pvpProblem(p, t, false);
+          if (why) return this.msg(pid, why, 'warn');
+        }
         if (chebyshev(p.x, p.y, t.x, t.y) > r.range) return this.msg(pid, 'Your target is too far away.', 'warn');
         if (!this.canSee(p, t)) return this.msg(pid, 'You cannot throw there.', 'warn');
         p.groupCooldowns.attack = GROUP_COOLDOWN.attack;
@@ -2116,6 +2338,7 @@ export class Game implements AIContext {
       spells: [...s.spells],
       chests: [...s.chests],
       lostItems: s.lostItems.map((x) => ({ ...x })),
+      pvp: { secure: p.secure, whiteSkullUntil: p.whiteSkullUntil, redSkullUntil: p.redSkullUntil, unjustKills: [...p.unjustKills] },
     };
   }
 
@@ -2155,6 +2378,11 @@ export class Game implements AIContext {
     p.outfit = isOutfit(data.player.outfit) ? { ...data.player.outfit } : { ...DEFAULT_OUTFIT };
     p.home = typeof data.player.home === 'string' ? data.player.home : 'Thornvale';
     p.showGear = data.player.showGear !== false;
+    const pv = data.pvp ?? {};
+    p.secure = pv.secure !== false;
+    p.whiteSkullUntil = finiteOr0(pv.whiteSkullUntil);
+    p.redSkullUntil = finiteOr0(pv.redSkullUntil);
+    p.unjustKills = Array.isArray(pv.unjustKills) ? pv.unjustKills.filter((t) => typeof t === 'number' && Number.isFinite(t)).slice(-20) : [];
     this.events.emit({ type: 'outfitChanged', id: pid });
     this.events.emit({ type: 'equipmentChanged', id: pid });
     this.events.emit({ type: 'teleport', id: pid });
@@ -2244,6 +2472,12 @@ function resetPlayerState(p: Player): void {
   p.buffs = emptyBuffs();
   p.attackTimer = 0;
   p.sinceCombat = 99;
+  p.pzLock = 0;
+  p.attackedBy.clear();
+  p.secure = true;
+  p.whiteSkullUntil = 0;
+  p.redSkullUntil = 0;
+  p.unjustKills = [];
 }
 
 /** Each vocation starts with gear it can actually use. */
@@ -2294,6 +2528,10 @@ export function describeStack(s: ItemStack): string {
   const d = itemDef(s.id);
   if (d.id === 'gold') return `${s.qty} gold`;
   return s.qty > 1 ? `${s.qty} ${d.name.toLowerCase()}s` : article(d.name);
+}
+
+function finiteOr0(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
 
 function clampNum(v: unknown, lo: number, hi: number): number {

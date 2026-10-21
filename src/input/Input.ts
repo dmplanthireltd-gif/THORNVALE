@@ -157,7 +157,8 @@ export class Input {
         else this.ctl.send({ c: 'talk', id: hit.id });
         break;
       case 'player':
-        this.hud.creatureMenu('player', hit.id, e.clientX, e.clientY);
+        if (right) this.hud.creatureMenu('player', hit.id, e.clientX, e.clientY);
+        else this.hud.clickPlayer(hit.id, e.clientX, e.clientY);
         break;
       case 'bag': {
         const id = hit.id;

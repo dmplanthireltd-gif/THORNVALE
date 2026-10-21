@@ -29,6 +29,14 @@ async function main(): Promise<void> {
   const b = await NetController.connect({ url, name: `Ben ${tag}`, password: 'secret2', vocation: 'sorcerer', outfit: DEFAULT_OUTFIT });
   await pump([a, b], 1);
   check(a.game.players().length >= 2 && b.game.players().length >= 2, 'both clients see each other');
+  check(a.game.pvp && a.game.getPlayer(a.pid)!.secure, 'server reports PvP on, secure mode starts on');
+  a.send({ c: 'secureMode', on: false });
+  await pump([a, b], 0.4);
+  check(!a.game.getPlayer(a.pid)!.secure, 'secure mode toggles over the network');
+  a.send({ c: 'attack', id: b.pid });
+  await pump([a, b], 0.4);
+  check(a.game.getPlayer(a.pid)!.targetId === null, 'new characters below level 8 cannot attack each other');
+  a.send({ c: 'secureMode', on: true });
   const chats: string[] = [];
   b.game.events.on((e) => { if (e.type === 'chat') chats.push(e.text); });
   a.send({ c: 'say', text: 'hi there' });

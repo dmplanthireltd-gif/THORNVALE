@@ -71,6 +71,21 @@ export class Player extends Creature {
   showGear = true;
   /** Town whose temple is home. */
   home = 'thornvale';
+  // ---- PvP (see Game: pvp rules). Times are wall-clock ms so they survive restarts.
+  /** Secure mode: refuses attacks on unmarked players and spares them from your area attacks. */
+  secure = true;
+  whiteSkullUntil = 0;
+  redSkullUntil = 0;
+  /** Wall-clock ms of recent unjustified kills (last 24 h). */
+  unjustKills: number[] = [];
+  /** Seconds left of the protection-zone lock after attacking a player. Not saved. */
+  pzLock = 0;
+  /** Players who attacked us recently: attacker id → wall-clock ms the right to fight back ends. */
+  attackedBy = new Map<number, number>();
+  /** Mirror mode: skull as sent by the server (0 none, 1 white, 2 red). */
+  netSkull: 0 | 1 | 2 = 0;
+  /** Throttles the "You are PZ-locked." message. */
+  pzMsgTimer = 0;
   // derived from vocation, level and gear (refreshed by the game)
   baseStep = 0.27;
   hpRegen = 0;

@@ -16,6 +16,7 @@ import { floodFill3D } from '../src/game/world/worldGen';
 import { Obj, WorldMap } from '../src/game/world/WorldMap';
 import { ITEMS } from '../src/game/inventory/items';
 import type { Vocation } from '../src/game/player/vocations';
+import { expForLevel } from '../src/game/player/Player';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -744,6 +745,127 @@ console.log('Trading items, fight stance, luring');
   check(foe.distFromSpawn() >= 15 && !foe.dead, `a lured monster follows far from its spawn (${foe.distFromSpawn()} tiles)`);
   check(foe.hp <= Math.floor(foe.maxHp / 2), 'a lured monster does not heal by running home');
   void pid;
+}
+
+console.log('\nPvP');
+{
+  let clock = 1_000_000;
+  const g = new Game({ pvp: true, now: () => clock });
+  const a = g.addPlayer('Attacker', { vocation: 'knight' });
+  const b = g.addPlayer('Defender', { vocation: 'knight' });
+  const w = g.world;
+  const free = (x: number, y: number) => w.isWalkable(x, y, 0) && w.getObj(x, y, 0) === Obj.None && !w.linkAt(x, y, 0) && !g.isOccupied(x, y, 0);
+  const find = (ok: (x: number, y: number) => boolean): [number, number] => {
+    for (let y = 1; y < w.height - 1; y++) for (let x = 1; x < w.width - 1; x++) if (ok(x, y)) return [x, y];
+    throw new Error('no such tile');
+  };
+  const spot = openStrip(g);
+  a.player.placeAt(spot.x, spot.y, 0);
+  b.player.placeAt(spot.x + 1, spot.y, 0);
+  check(!g.tryStep(a.player, 1, 0), 'players block each other outside protection zones');
+  const pathAround = g.pathTo(a.player, spot.x + 2, spot.y, false, 2000);
+  check(!!pathAround && !pathAround.some((t) => t.x === spot.x + 1 && t.y === spot.y), 'click-to-move paths around a player');
+  const [sx, sy] = find((x, y) => w.isSafe(x, y, 0) && w.isSafe(x + 1, y, 0) && free(x, y) && free(x + 1, y));
+  a.player.placeAt(sx, sy, 0);
+  b.player.placeAt(sx + 1, sy, 0);
+  check(g.tryStep(a.player, 1, 0), 'players walk through each other inside a protection zone');
+  run(g, 0.5);
+
+  a.player.placeAt(spot.x, spot.y, 0);
+  b.player.placeAt(spot.x + 1, spot.y, 0);
+  executeCommand(g, a.id, { c: 'secureMode', on: false });
+  executeCommand(g, a.id, { c: 'attack', id: b.id });
+  check(a.player.targetId === null, 'attacking a player below level 8 is refused');
+  // real experience, so the 6% death penalty keeps them well above level 8
+  for (const s of [a, b]) { s.player.level = 20; s.player.exp = expForLevel(20); g.refreshStats(s); s.player.hp = s.player.maxHp; }
+  executeCommand(g, a.id, { c: 'secureMode', on: true });
+  executeCommand(g, a.id, { c: 'attack', id: b.id });
+  check(a.player.targetId === null, 'secure mode refuses attacking an unmarked player');
+  executeCommand(g, a.id, { c: 'secureMode', on: false });
+  executeCommand(g, a.id, { c: 'attack', id: b.id });
+  check(a.player.targetId === b.id, 'secure mode off: the attack starts');
+  run(g, 10, () => b.player.hp < b.player.maxHp);
+  check(b.player.hp < b.player.maxHp, `melee damages a player (${b.player.maxHp - b.player.hp})`);
+  check(g.skullOf(a.player) === 1 && g.skullOf(b.player) === 0, 'the attacker gets a white skull');
+  check(a.player.pzLock > 0, 'attacking a player gives a PZ lock');
+  executeCommand(g, b.id, { c: 'attack', id: a.id });
+  check(b.player.targetId === a.id, 'the victim may hit back even with secure mode on (attacker is marked)');
+  const aHp = a.player.hp;
+  run(g, 10, () => a.player.hp < aHp);
+  check(a.player.hp < aHp && g.skullOf(b.player) === 0, 'self-defence gives no skull');
+  executeCommand(g, a.id, { c: 'clearTarget' });
+  executeCommand(g, b.id, { c: 'clearTarget' });
+  check(buildSnapshot(g, b).t === 'snap' && (buildSnapshot(g, b) as { c: Array<{ id: number; sk?: number }> }).c.find((c) => c.id === a.id)?.sk === 1, 'snapshots carry the skull');
+
+  // PZ lock: no stepping from outside into a protection zone
+  const [ex, ey] = find((x, y) => !w.isSafe(x, y, 0) && w.isSafe(x + 1, y, 0) && free(x, y) && free(x + 1, y) && w.canStep(x, y, 0, 1, 0));
+  a.player.placeAt(ex, ey, 0);
+  a.player.pzLock = 30;
+  check(!g.tryStep(a.player, 1, 0), 'a PZ-locked player cannot enter a protection zone');
+  a.player.pzLock = 0;
+  check(g.tryStep(a.player, 1, 0), 'without the lock the protection zone is open');
+  run(g, 0.5);
+  b.player.placeAt(spot.x + 1, spot.y, 0);
+  executeCommand(g, a.id, { c: 'attack', id: b.id });
+  check(a.player.targetId === null, 'no attacking a player from inside a protection zone');
+  a.player.placeAt(ex - 1, ey, 0);
+  b.player.placeAt(ex + 1, ey, 0);
+  executeCommand(g, a.id, { c: 'attack', id: b.id });
+  check(a.player.targetId === null, 'no attacking a player standing in a protection zone');
+
+  // unjustified kills → red skull
+  clock += 20 * 60 * 1000; // the old fight is forgotten: both unmarked again
+  check(g.skullOf(a.player) === 0, 'the white skull wears off');
+  for (let k = 0; k < 3; k++) {
+    run(g, 6, () => !b.player.dead);
+    b.player.attackedBy.clear();
+    a.player.placeAt(spot.x, spot.y, 0);
+    b.player.placeAt(spot.x + 1, spot.y, 0);
+    b.player.hp = 1;
+    a.player.attackTimer = 0;
+    executeCommand(g, a.id, { c: 'attack', id: b.id });
+    run(g, 10, () => b.player.dead);
+  }
+  check(b.player.dead && a.player.unjustKills.length === 3, `three unjustified kills recorded (${a.player.unjustKills.length})`);
+  check(g.skullOf(a.player) === 2, 'three unjustified kills give a red skull');
+  run(g, 6, () => !b.player.dead);
+
+  // skulls survive save/load
+  const save = JSON.parse(JSON.stringify(g.serialize(a.id)));
+  const g2 = new Game({ pvp: true, now: () => clock });
+  const a2 = g2.addPlayer('Attacker');
+  check(g2.applySave(a2.id, save) && g2.skullOf(a2.player) === 2 && a2.player.unjustKills.length === 3 && !a2.player.secure, 'skulls, kills and secure mode survive save/load');
+  const v3 = { ...save, version: 3 };
+  delete v3.pvp;
+  check(g2.applySave(a2.id, v3) && g2.skullOf(a2.player) === 0 && a2.player.secure, 'a v3 save loads unmarked with secure mode on');
+
+  // a red skull loses the whole backpack on death
+  s0: {
+    a.inventory.add('wolf_pelt', 2);
+    const carried = a.inventory.slots.filter(Boolean).length;
+    a.player.placeAt(spot.x, spot.y, 0);
+    b.player.placeAt(spot.x + 1, spot.y, 0);
+    a.player.hp = 1;
+    executeCommand(g, b.id, { c: 'attack', id: a.id });
+    check(b.player.targetId === a.id, 'a red-skulled player can be attacked in secure mode');
+    const msgs: string[] = [];
+    g.events.on((e) => { if (e.type === 'message' && e.to === a.id) msgs.push(e.text); });
+    run(g, 10, () => a.player.dead);
+    if (!a.player.dead) { check(false, 'red skull dies'); break s0; }
+    check(msgs.some((m) => m.startsWith('You were killed by Defender')), 'death message names the killer');
+    check(a.inventory.slots.every((x) => !x) && g.bags.some((bg) => bg.items.some((i) => i.id === 'wolf_pelt')) && carried > 0, 'a red skull drops the whole backpack');
+  }
+
+  // PvP off
+  const off = new Game();
+  const c1 = off.addPlayer('One'), c2 = off.addPlayer('Two');
+  const os = openStrip(off);
+  for (const s of [c1, c2]) { s.player.level = 20; off.refreshStats(s); }
+  c1.player.placeAt(os.x, os.y, 0);
+  c2.player.placeAt(os.x + 1, os.y, 0);
+  executeCommand(off, c1.id, { c: 'secureMode', on: false });
+  executeCommand(off, c1.id, { c: 'attack', id: c2.id });
+  check(c1.player.targetId === null && !off.pvp, 'with PvP off, attacking players is refused');
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);

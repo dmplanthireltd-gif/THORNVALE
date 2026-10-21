@@ -93,7 +93,7 @@ scripts/              ← smoke-test, net-test, storage-test, auth-test, content
 - Never print env vars in logs. Never echo a key back to the user.
 - Publishable key and URL are public by design.
 
-**Render environment variables:** `NODE_VERSION=20`, `MAX_PLAYERS=50`, `ALLOW_ADMIN=0`, `ADMINS=""` (comma-separated character names allowed to use `/` commands online), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_KEY` (secret), optional `MAX_CHARACTERS` (default 5).
+**Render environment variables:** `NODE_VERSION=20`, `MAX_PLAYERS=50`, `ALLOW_ADMIN=0`, `ADMINS=""` (comma-separated character names allowed to use `/` commands online), `PVP=1` (player-versus-player on; `0` turns it off — offline single-player never has PvP), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_KEY` (secret), optional `MAX_CHARACTERS` (default 5).
 
 **Startup log lines to check after a deploy:**
 - `Login: email (Supabase Auth)` — email accounts active (else "name + password").
@@ -127,8 +127,18 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 2. **Every player action is a `Command`** sent through `Controller.send(...)` → `Game.executeCommand`. UI/input never mutate game state directly. Offline = LocalController runs it locally; online = NetController sends it, the server is authoritative.
 3. **Game → view communication is via the event bus** (`core/events.ts`). Renderer, HUD and Sfx subscribe; they never poll internal fields they don't own.
 4. **Online:** server ticks at 20 Hz and sends snapshots (`VIEW_RADIUS = 20`). The client keeps a mirror Game (`simulate:false`) and applies snapshots. Messages arriving before the HUD exists go to the backlog.
-5. **Protocol:** `PROTOCOL_VERSION` (currently **6**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
-6. Admin/test commands are typed in chat with `/` (`/help` lists them). Offline always allowed; online only for names in `ADMINS` or when `ALLOW_ADMIN=1`. Dev console opens with the **`** key.
+5. **Protocol:** `PROTOCOL_VERSION` (currently **7**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
+6. **PvP** (server option `PVP`, passed as `GameOptions.pvp`; off offline). Rules live in `Game` (`pvpProblem`, `onPvpAttack`, `onPvpKill`); every PvP hit passes `applyDamage`, which re-checks them:
+   - Players block players, like monsters do, **except inside protection zones** (temples, depots, town doors) where they pass through each other. Logging in or teleporting onto an occupied tile is allowed.
+   - No attacking from inside, or into, a protection zone. Attacker and target must both be level ≥ 8.
+   - Melee, distance, wands/rods, targeted spells, targeted runes hurt players. Area spells and area runes hurt players in the area too, never the caster, never anyone in a protection zone. Players have no `def`: armour and resistances come from their gear.
+   - **Secure mode** (per player, default on, saved; command `secureMode`, HUD button "PvP: secure"/"PvP: open"): refuses attacks on unmarked players and spares them from your area attacks. Skulled players and people who attacked you recently can always be attacked.
+   - **White skull:** attacking an unmarked player who did not attack you first (self-defence is free) → white skull, refreshed on every attack.
+   - **Unjustified kill:** killing an unmarked player who did not attack you. 3 within 24 h → **red skull**. A red-skulled player who dies drops the whole backpack (equipment stays) on the spot.
+   - **PZ lock:** attacking a player locks you out of protection zones (status line shows "PZ-locked Ns"). There is no logout check (closing the game logs out at once).
+   - Death by a player: normal death penalty, "You were killed by NAME", the killer is told "You killed NAME".
+   - Skull times and kill timestamps are wall-clock ms (they keep running while offline and across restarts).
+7. Admin/test commands are typed in chat with `/` (`/help` lists them). Offline always allowed; online only for names in `ADMINS` or when `ALLOW_ADMIN=1`. Dev console opens with the **`** key.
 
 ---
 
@@ -149,12 +159,16 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 | Ground bag lifetime | 180 s | Game.ts |
 | Area runes | shape `dx² + dy² ≤ r² + r` | Game.ts |
 | Autosave | every 30 s + on logout + on SIGTERM | server/server.ts |
+| PvP min level | `PVP_MIN_LEVEL = 8` (attacker and target) | Game.ts |
+| White skull | `WHITE_SKULL_MS` 15 min, refreshed per attack; self-defence window also 15 min | Game.ts |
+| Red skull | `UNJUST_KILLS_FOR_RED = 3` unjustified kills within `UNJUST_WINDOW_MS` 24 h → `RED_SKULL_MS` 24 h | Game.ts |
+| PZ lock | `PZ_LOCK_SECONDS = 60` after attacking a player | Game.ts |
 
 ---
 
 ## 8. Save data and migration (PRIORITY)
 
-File: `src/game/save/migrate.ts`. Current **`SAVE_VERSION = 3`** (v2→v3: new world, everyone respawns at the Thornvale temple).
+File: `src/game/save/migrate.ts`. Current **`SAVE_VERSION = 4`** (v2→v3: new world, everyone respawns at the Thornvale temple; v3→v4: `pvp` block — secure mode, skull expiry times, unjustified-kill timestamps — everyone starts unmarked with secure mode on).
 
 - Every save stores `version`. On load, `migrateSave()` upgrades it step by step: `MIGRATIONS[n]` turns version n into n+1.
 - **Changed the save shape?** → bump `SAVE_VERSION`, add `MIGRATIONS[old]`, add a case to the smoke test, note it in the Change Log below.
@@ -237,6 +251,8 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Skills like the classic game (fist, club, sword, axe, distance, shielding, magic level, fishing) trained by use, shown in a left-side Skills panel — needs SAVE_VERSION bump. Do after PvP merges.
 - [ ] RuneScape-style gathering skills (woodcutting first: chop trees with an axe → logs, levels, sell) and a player market — after skills.
 - [x] Runes on the battle list: drag a rune onto a row, or pick a rune (hotkey/click) and click a row (`useRuneOn`).
+- [x] PvP: player collision outside protection zones, secure mode, white/red skulls, PZ lock, red-skull backpack loss (server env `PVP`).
+- [ ] PvP later (owner decision): logout block while PZ-locked / in a fight, skulls on the minimap, party/guild war marks, frags list.
 - [ ] Better spell effects (Effects.ts).
 - [ ] Integrate, test all, push, refresh artifact.
 - [ ] Owner decision: upgrade the thornvale service from Free to a paid instance (Starter is enough for ~50 players) so the server never sleeps; then set `plan:` in render.yaml.
@@ -265,3 +281,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | 8fa1064 | New 640×800 world (14 towns), 35 monsters, 63 items, 5 spells, buff potions; saves v3 respawn everyone at the Thornvale temple | 3 | 4 |
 | 2026-10-21 | 0eb9396 | Move ground items, items on lockers/tables, depot gaps, minimap zoom/pan, foldable/resizable battle list, runes on battle list | 3 | 5 |
 | 2026-10-21 | — | Item trading by drag-and-drop, fight stance + follow/stand, lurable monsters (no leash/home-healing) | 3 | 6 |
+| 2026-10-21 | — | PvP (`PVP` env, default on): players block each other outside protection zones, secure mode, white/red skulls, PZ lock, red skull drops the backpack | 4 | 7 |

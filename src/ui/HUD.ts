@@ -6,6 +6,7 @@ import { describeItem, equipSlotFor, ITEMS, itemDef, type EquipSlot, type ItemSt
 import { GROUP_COOLDOWN, isSpellId, SPELL_LIST, SPELLS, type CooldownGroup, type SpellDef, type SpellId } from '../game/magic/spells';
 import { NPCS } from '../game/npc/npcs';
 import { OUTFIT_PARTS, OUTFIT_TYPES, PALETTE, PALETTE_COLS, PALETTE_ROWS, type Outfit, type OutfitPart } from '../game/player/outfits';
+import { Enemy } from '../game/enemies/Enemy';
 import { expForLevel, type FightMode } from '../game/player/Player';
 import { VOCATIONS } from '../game/player/vocations';
 import { QUESTS } from '../game/quests/quests';
@@ -97,7 +98,7 @@ export class HUD {
   private colB!: HTMLDivElement;
   private bottom!: HTMLDivElement;
   private battleEl!: HTMLDivElement;
-  private battleRows = new Map<number, { row: HTMLDivElement; fill: HTMLDivElement; name: HTMLSpanElement }>();
+  private battleRows = new Map<number, { row: HTMLDivElement; fill: HTMLDivElement; name: HTMLSpanElement; skull: HTMLSpanElement }>();
   private battleTimer = 0;
   private worldMap!: WorldMapView;
   private lastRegion = '';
@@ -106,6 +107,7 @@ export class HUD {
   private outfitPart: OutfitPart = 'head';
   private preview: OutfitPreview | null = null;
   private pixelBtn!: HTMLButtonElement;
+  private pvpBtn!: HTMLButtonElement;
   private disconnectEl!: HTMLDivElement;
 
   constructor(private readonly ctl: Controller, private readonly renderer: Renderer, container: HTMLElement, private readonly sfx: Sfx) {
@@ -287,6 +289,9 @@ export class HUD {
     button(tools, 'Quests', () => this.toggleWin('quests'), 'btn tool');
     button(tools, 'Outfit', () => this.toggleWin('outfit'), 'btn tool');
     this.pixelBtn = button(tools, 'Pixels: on', () => this.togglePixels(), 'btn tool');
+    this.pvpBtn = button(tools, 'PvP: secure', () => this.ctl.send({ c: 'secureMode', on: !this.s.player.secure }), 'btn tool');
+    this.pvpBtn.title = 'Secure mode: you cannot attack unmarked players and your area attacks spare them. Open: you can attack anyone, but attacking unmarked players gives you a skull.';
+    this.pvpBtn.hidden = true;
     if (!this.ctl.online) {
       button(tools, 'Save', () => this.saveNow(), 'btn tool');
     }
@@ -613,12 +618,28 @@ export class HUD {
     if (kind === 'enemy') items.push({ label: `Attack ${c.name}`, run: () => this.ctl.send({ c: 'attack', id }) });
     if (kind === 'npc') items.push({ label: `Talk to ${c.name}`, run: () => this.ctl.send({ c: 'talk', id }) });
     if (kind === 'player') {
+      if (g.pvp) items.push({ label: `Attack ${c.name}`, run: () => this.ctl.send({ c: 'attack', id }) });
       items.push({ label: `Trade with ${c.name}`, run: () => this.ctl.send({ c: 'tradeRequest', id }) });
       items.push({ label: `Heal ${c.name} (exura sio)`, run: () => this.ctl.send({ c: 'cast', spell: 'exura_sio', param: c.name }), disabled: !this.s.spells.has('exura_sio') });
       items.push({ label: 'Message…', run: () => this.focusChat(`${c.name}, `) });
     }
     items.push({ label: 'Look', run: () => this.log(`You see ${this.renderer.describeHover() || c.name}.`, 'info') });
     this.showMenu(items, x, y);
+  }
+
+  /**
+   * Left-click on another player: with PvP on it attacks, if secure mode allows it
+   * (the server checks every rule again); otherwise the usual menu.
+   */
+  clickPlayer(id: number, x: number, y: number): void {
+    const g = this.ctl.game;
+    const t = g.getPlayer(id);
+    if (!g.pvp || !t) return this.creatureMenu('player', id, x, y);
+    if (this.s.player.secure && g.skullOf(t) === 0) {
+      this.log('Secure mode is on: you cannot attack unmarked players. Use the "PvP: secure" button to turn it off.', 'warn');
+      return this.creatureMenu('player', id, x, y);
+    }
+    this.ctl.send({ c: 'attack', id });
   }
 
   // ================================================================ hotbar
@@ -773,7 +794,7 @@ export class HUD {
     const r = itemDef(h.id).rune;
     if (r && r.type === 'damage') {
       // area runes are always aimed; single-target runes hit your target, or aim when you have none
-      const t = this.ctl.game.getEnemy(this.s.player.targetId);
+      const t = this.ctl.game.getTarget(this.s.player.targetId);
       if (r.radius > 0 || !t || t.dead) return this.beginAim(h.id);
     }
     this.ctl.send({ c: 'useSlot', slot });
@@ -794,6 +815,7 @@ export class HUD {
       if (!r) {
         const row = el('div', `battle-row k-${c.kind}`);
         el('span', 'battle-dot', row);
+        const skull = el('span', 'battle-skull', row, '☠');
         const info = el('div', 'battle-info', row);
         const name = el('span', 'battle-name', info, c.name);
         const bar = el('div', 'battle-bar', info);
@@ -809,15 +831,19 @@ export class HUD {
           } else if (c.kind === 'npc') {
             if (e.button === 2) this.creatureMenu('npc', c.id, e.clientX, e.clientY);
             else this.ctl.send({ c: 'talk', id: c.id });
-          } else this.creatureMenu('player', c.id, e.clientX, e.clientY);
+          } else if (e.button === 2) this.creatureMenu('player', c.id, e.clientX, e.clientY);
+          else this.clickPlayer(c.id, e.clientX, e.clientY);
         });
-        r = { row, fill, name };
+        r = { row, fill, name, skull };
         this.battleRows.set(c.id, r);
       }
       if (c.kind === 'player') {
         const pl = g.getPlayer(c.id);
         const label = pl ? `${pl.name} · ${pl.level} ${VOCATIONS[pl.vocation].name}` : c.name;
         if (r.name.textContent !== label) r.name.textContent = label;
+        const sk = pl ? g.skullOf(pl) : 0;
+        const skCls = sk === 2 ? 'battle-skull red' : sk === 1 ? 'battle-skull white' : 'battle-skull';
+        if (r.skull.className !== skCls) r.skull.className = skCls;
       }
       const frac = c.hp / c.maxHp;
       r.fill.style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`;
@@ -1521,6 +1547,16 @@ export class HUD {
     if (p.buffs.bullseye > 0) buffs.push(`◎ hawk eye ${mins(p.buffs.bullseye)}`);
     if (p.buffs.mastermind > 0) buffs.push(`✦ clarity ${mins(p.buffs.mastermind)}`);
     if (g.isProtected(p)) buffs.push('⛨ protection zone');
+    if (p.pzLock > 0) buffs.push(`⚠ PZ-locked ${Math.ceil(p.pzLock)}s`);
+    const mySkull = g.skullOf(p);
+    if (mySkull === 2) buffs.push('☠ red skull');
+    else if (mySkull === 1) buffs.push('☠ white skull');
+    this.pvpBtn.hidden = !g.pvp;
+    const pvpLabel = p.secure ? 'PvP: secure' : 'PvP: open';
+    if (this.pvpBtn.textContent !== pvpLabel) {
+      this.pvpBtn.textContent = pvpLabel;
+      this.pvpBtn.classList.toggle('pvp-open', !p.secure);
+    }
     const bt = buffs.join('  ');
     if (this.buffsEl.textContent !== bt) this.buffsEl.textContent = bt;
     this.floorEl.textContent = p.z === 0 ? 'Ground floor' : p.z > 0 ? `Floor +${p.z}` : `Underground ${p.z}`;
@@ -1539,10 +1575,10 @@ export class HUD {
       }
     }
 
-    const t = g.getEnemy(p.targetId);
+    const t = g.getTarget(p.targetId);
     if (t && !t.dead) {
       this.targetEl.classList.add('on');
-      this.targetName.textContent = t.def.elite ? `★ ${t.name}` : t.name;
+      this.targetName.textContent = t instanceof Enemy && t.def.elite ? `★ ${t.name}` : t.name;
       this.targetFill.style.width = `${(t.hp / t.maxHp) * 100}%`;
       this.targetFill.style.background = hpColor(t.hp / t.maxHp);
     } else {

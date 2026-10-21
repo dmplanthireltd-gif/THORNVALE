@@ -91,7 +91,9 @@ const pendingSaves = new Map<string, Promise<void>>();
 
 // ------------------------------------------------------------------ game + clients
 
-const game = new Game();
+/** Players may fight each other (PVP=0 turns it off). */
+const PVP = process.env.PVP !== '0';
+const game = new Game({ pvp: PVP });
 interface Client {
   addr: string;
   loggingIn?: boolean;
@@ -478,6 +480,7 @@ process.on('SIGTERM', () => void shutdown());
 storage = await openStorage(DATA_FILE);
 console.log(`Login: ${EMAIL_AUTH ? 'email (Supabase Auth)' : 'character name + password'}`);
 console.log(`Saves: ${storage.kind === 'supabase' ? 'Supabase database' : `files in ${dirname(DATA_FILE)}`} (save format v${SAVE_VERSION})`);
+console.log(`PvP: ${PVP ? 'on' : 'off'}`);
 if (storage.kind !== 'supabase' && process.env.RENDER) {
   console.warn('WARNING: running on Render without SUPABASE_URL / SUPABASE_SERVICE_KEY — characters are lost on every restart.');
 }

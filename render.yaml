@@ -24,6 +24,9 @@ services:
         value: "0"
       - key: ADMINS
         value: ""
+      # player-versus-player combat: "1" on (skulls, secure mode, PZ lock), "0" off
+      - key: PVP
+        value: "1"
       # Supabase keeps accounts and characters safe across restarts and updates.
       # Render asks for these two values when you create or sync the Blueprint
       # (Supabase dashboard → Project Settings → API / API Keys). Run supabase/schema.sql first.
