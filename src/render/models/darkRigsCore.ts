@@ -102,11 +102,16 @@ export class Mesher {
     return this.add(g, c, p, o);
   }
 
-  /** A flat polygon (wing membranes, blades, cloth) in the XY plane. */
-  poly(pts: [number, number][], c: number, p?: V3, o?: PartOpt): this {
+  /** A flat polygon (wing membranes, cloth) in the XY plane; with `depth` a solid slab (blades). */
+  poly(pts: [number, number][], c: number, p?: V3, o?: PartOpt, depth = 0): this {
     const sh = new THREE.Shape();
     sh.moveTo(pts[0][0], pts[0][1]);
     for (const [x, y] of pts.slice(1)) sh.lineTo(x, y);
+    if (depth > 0) {
+      const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false });
+      g.translate(0, 0, -depth / 2);
+      return this.add(g, c, p, o);
+    }
     return this.add(new THREE.ShapeGeometry(sh), c, p, { two: true, ...o });
   }
 

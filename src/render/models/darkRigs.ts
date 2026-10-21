@@ -4,6 +4,7 @@ import type { BipedRig, Rig } from './rigs';
 import { bipedRig, C, hitbox, Kit, type Mesher, type V3 } from './darkRigsCore';
 
 import { DARK_BEASTS } from './darkRigsBeasts';
+import { DARK_ORCS } from './darkRigsOrcs';
 
 export { DARK_MONSTERS } from './darkRigsCore';
 
@@ -373,6 +374,7 @@ const DARK: Partial<Record<EnemyKind, () => Rig>> = {
   orc_warrior: darkOrcWarrior,
   demon: darkDemon,
   ...DARK_BEASTS,
+  ...DARK_ORCS,
 };
 
 /** The dark model for a monster kind, or null to use the classic one. */

@@ -184,8 +184,8 @@ export function wAxe(m: Mesher, o: { len?: number; head?: number; haft?: number;
   // blade flat in the YZ plane (shape x → −z), sticking out below the haft (−Y)
   const blade = (dir: number) => {
     const pts: [number, number][] = [[-0.06, 0.02], [0.06, 0.02], [0.17, -0.2], [0.12, -0.32], [-0.16, -0.32], [-0.13, -0.18]];
-    m.poly(pts.map(([x, y]) => [x * s, y * s * dir] as [number, number]), head, [0, 0, 0], { r: [0, Math.PI / 2, 0], grit: 0.25, blood: o.blood ?? 0.35 });
-    m.box(0.035, 0.035, 0.3 * s, C.IRON_L, [0, -0.31 * s * dir, 0.01], { flat: true, blood: (o.blood ?? 0.35) * 0.8 });
+    m.poly(pts.map(([x, y]) => [x * s * 1.25, y * s * dir * 1.25] as [number, number]), head, [0, 0, 0], { r: [0, Math.PI / 2, 0], grit: 0.25, blood: o.blood ?? 0.35 }, 0.045);
+    m.box(0.05, 0.04, 0.38 * s, C.IRON_L, [0, -0.39 * s * dir, 0.01], { flat: true, blood: (o.blood ?? 0.35) * 0.8 });
   };
   m.box(0.08, 0.13, 0.13, C.IRON_D, [0, 0, 0]);
   blade(1);
@@ -234,7 +234,7 @@ export function wHalberd(m: Mesher, o: { len?: number; head?: number; blood?: nu
   m.cyl(0.024, 0.026, len, C.WOOD, [0, 0, len / 2 - 0.4], { r: [Math.PI / 2, 0, 0], grit: 0.25 });
   m.push([0, 0, len - 0.45]);
   m.spike([0, 0, 0], [0, 0, 1], 0.3, 0.05, o.head ?? C.IRON, { blood: o.blood ?? 0.3 });
-  m.poly([[0, 0.05], [0.2, 0.1], [0.24, -0.05], [0.16, -0.22], [0, -0.04]], o.head ?? C.IRON, [0, 0, -0.05], { r: [-Math.PI / 2, Math.PI / 2, 0], blood: o.blood ?? 0.3 });
+  m.poly([[0, 0.05], [0.2, 0.1], [0.24, -0.05], [0.16, -0.22], [0, -0.04]], o.head ?? C.IRON, [0, 0, -0.05], { r: [-Math.PI / 2, Math.PI / 2, 0], blood: o.blood ?? 0.3 }, 0.035);
   m.spike([0, 0.02, -0.08], [0, 1, 0.2], 0.14, 0.025, o.head ?? C.IRON);
   m.pop();
 }
