@@ -19,6 +19,7 @@ npm run typecheck && npm run test:logic && npx tsx scripts/content-test.ts && np
 ```
 (In the Claude cloud sandbox npm registry is blocked: use `/opt/npm-tools/node_modules/.bin/{tsc,tsx,esbuild}`.)
 `test:net` needs a local server started with `PUBLIC_TEST_COMMANDS=1` (it uses test commands like /worldboss).
+The sandbox has TypeScript 6 and newer @types/node than Render (TS 5.9, @types/node 20). After pushing, check the GitHub Actions **Build check** (`gh run list -R dmplanthireltd-gif/THORNVALE -L 3`); it runs Render's exact `npm install && npm run build`. Never use `globalThis.localStorage`/DOM globals in code the server tsconfig compiles.
 
 ## After every change
 - Update `BIBLE.md` (and the claude.ai Project copy `claude/THORNVALE-BIBLE.md`) if IDs, schema, protocol/save version, constants, controls, infra or process changed.
