@@ -28,6 +28,7 @@
   "exclude": [
     "scripts/auth-test.ts",
     "scripts/saves.ts",
-    "scripts/storage-test.ts"
+    "scripts/storage-test.ts",
+    "scripts/music"
   ]
 }

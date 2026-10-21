@@ -13,7 +13,8 @@
     "scripts/saves.ts",
     "scripts/storage-test.ts",
     "server",
-    "src/game"
+    "src/game",
+    "scripts/music"
   ],
   "exclude": []
 }

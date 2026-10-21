@@ -2,7 +2,10 @@ import type { Controller } from '../client/Controller';
 import type { Effect, GameEvent } from '../game/core/events';
 import { chebyshev } from '../game/core/types';
 import { itemDef } from '../game/inventory/items';
-import { Obj } from '../game/world/WorldMap';
+import { Ground, Obj } from '../game/world/WorldMap';
+import { Enemy } from '../game/enemies/Enemy';
+import { bodyFall, bodyOf, elementHit, footstep, impact, spellSweep, voice, type Body, type Cry, type Kit, type SpellElement } from './foley';
+import { Ambience } from './ambience';
 
 /**
  * Small synthesized sound effects (Web Audio, no sound files). Sounds near the
@@ -29,6 +32,10 @@ export class Sfx {
   private master: GainNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
   private last = new Map<Sound, number>();
+  private pulses = new Map<number, PeriodicWave>();
+  private lastVoice = new Map<number, number>();
+  private steps = new Map<number, { x: number; y: number; z: number; alt: boolean }>();
+  private ambience: Ambience | null = null;
   volume = 0.6;
   muted = false;
 
@@ -45,6 +52,12 @@ export class Sfx {
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
     ctl.game.events.on((e) => this.onEvent(e));
+    // footsteps and ambience follow movement, so they run on the animation clock
+    const frame = () => {
+      try { this.tick(); } catch { /* never break the game over a sound */ }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
   }
 
   private ensure(): AudioContext | null {
@@ -67,6 +80,7 @@ export class Sfx {
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.ambience = new Ambience(this.ctx, this.master, this.noiseBuf);
     return this.ctx;
   }
 
@@ -310,6 +324,8 @@ export class Sfx {
       case 'attack': {
         const v = this.atId(e.attackerId);
         if (v) this.play('swing', v * 0.6);
+        const body = this.bodyOfId(e.attackerId);
+        if (v && body && Math.random() < 0.45) this.cry(e.attackerId, body, 'attack', v, 3500);
         break;
       }
       case 'damage': {
@@ -317,7 +333,15 @@ export class Sfx {
         if (!v) break;
         if (e.result === 'miss') this.play('miss', v);
         else if (e.result === 'blocked') this.play('block', v);
-        else if (e.element === 'physical') this.play(e.amount > 60 || e.targetId === me ? 'hitHard' : 'hit', v);
+        else {
+          const body = this.bodyOfId(e.targetId);
+          const c = this.ctl.game.getCreature(e.targetId);
+          const big = !!c && e.amount >= c.maxHp * 0.15;
+          if (e.element === 'physical') this.sound((k) => impact(k, body?.material ?? 'flesh', 1, e.amount > 60 || big), v);
+          else { const el = spellElement(e.element); if (el) this.sound((k) => elementHit(k, el, big ? 1 : 0.7), v * 0.8); }
+          if (body && big && !c?.dead) this.cry(e.targetId, body, 'hurt', v, 1200);
+          if (e.targetId === me && big) this.cry(me, { family: 'man', material: 'flesh', size: 'medium' }, 'hurt', 0.7, 1500);
+        }
         break;
       }
       case 'projectile': {
@@ -329,7 +353,10 @@ export class Sfx {
       case 'tiles': {
         if (!e.tiles.length) break;
         const s = this.elementSound(e.effect);
-        if (s) this.play(s, this.at(e.tiles[0], e.tiles[1], e.z));
+        const v = this.at(e.tiles[0], e.tiles[1], e.z);
+        if (s) this.play(s, v);
+        const el = spellElement(e.effect), size = e.tiles.length / 2;
+        if (el && size >= 3) this.sound((k) => spellSweep(k, el, size, 1), v * 0.8);
         break;
       }
       case 'area': {
@@ -337,6 +364,8 @@ export class Sfx {
         const s = this.elementSound(e.effect);
         if (s) this.play(s, v);
         if (e.radius >= 2 && (e.effect === 'fire' || e.effect === 'earth' || e.effect === 'energy')) this.play('explosion', v * 0.7);
+        const el = spellElement(e.effect);
+        if (el && e.radius >= 1) this.sound((k) => spellSweep(k, el, (e.radius * 2 + 1) ** 2, 1), v * 0.7);
         break;
       }
       case 'heal':
@@ -355,7 +384,11 @@ export class Sfx {
         if (e.id === me) this.play('die');
         else {
           const v = this.atId(e.id);
-          if (v) this.play('monsterDie', v);
+          const body = this.bodyOfId(e.id);
+          if (v && body) {
+            this.sound((k) => voice(k, body, 'die', 1), v);
+            this.sound((k) => bodyFall(k, body, 1), v);
+          } else if (v) this.play('monsterDie', v);
         }
         break;
       case 'teleport':
@@ -394,6 +427,104 @@ export class Sfx {
     }
   }
 
+  // ------------------------------------------------------------------ foley (footsteps, materials, voices)
+
+  /** A pulse wave of the given duty cycle (cached), the classic chiptune voice. */
+  private pulseWave(duty: number): PeriodicWave {
+    const key = Math.round(duty * 1000);
+    let w = this.pulses.get(key);
+    if (!w) {
+      const n = 32, re = new Float32Array(n), im = new Float32Array(n);
+      for (let k = 1; k < n; k++) im[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty);
+      w = this.ctx!.createPeriodicWave(re, im);
+      this.pulses.set(key, w);
+    }
+    return w;
+  }
+
+  /** Builds a Kit (see foley.ts) writing into `out` at time `t`. */
+  private kit(out: AudioNode, t: number): Kit {
+    const c = this.ctx!;
+    return {
+      t,
+      r: (a, b) => a + Math.random() * (b - a),
+      tone: (type, f0, f1, at, dur, peak, attack) => this.tone(out, type, f0, f1, at, dur, peak, attack),
+      noise: (filter, f0, f1, at, dur, peak, q, attack) => this.noise(out, filter, f0, f1, at, dur, peak, q, attack),
+      pulse: (duty, f0, f1, at, dur, peak, tremolo) => {
+        const o = c.createOscillator();
+        o.setPeriodicWave(this.pulseWave(duty));
+        o.frequency.setValueAtTime(f0, at);
+        o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), at + dur);
+        const g = c.createGain();
+        this.env(g, at, 0.005, peak, dur);
+        if (tremolo) {
+          const lfo = c.createOscillator(), depth = c.createGain();
+          lfo.frequency.value = tremolo;
+          depth.gain.value = peak * 0.6;
+          lfo.connect(depth).connect(g.gain);
+          lfo.start(at);
+          lfo.stop(at + dur + 0.05);
+        }
+        o.connect(g).connect(out);
+        o.start(at);
+        o.stop(at + dur + 0.06);
+      },
+    };
+  }
+
+  /** Plays a foley sound built from the kit, at a volume (distance falloff). */
+  private sound(build: (k: Kit) => void, gain: number): void {
+    if (this.muted || gain <= 0.02) return;
+    const c = this.ensure();
+    if (!c || !this.master || c.state !== 'running') return;
+    const out = c.createGain();
+    out.gain.value = gain;
+    out.connect(this.master);
+    build(this.kit(out, c.currentTime + 0.005));
+  }
+
+  private bodyOfId(id: number): Body | null {
+    const c = this.ctl.game.getCreature(id);
+    return c instanceof Enemy ? bodyOf(c.enemyKind) : null;
+  }
+
+  /** A creature's voice, at most once per `cooldownMs` for that creature. */
+  private cry(id: number, body: Body, cry: Cry, gain: number, cooldownMs: number): void {
+    const now = performance.now();
+    if (now - (this.lastVoice.get(id) ?? -Infinity) < cooldownMs) return;
+    this.lastVoice.set(id, now);
+    this.sound((k) => voice(k, body, cry, 1), gain);
+  }
+
+  /** Every frame: footsteps for the player and big monsters, and the ambience bed. */
+  private tick(): void {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const g = this.ctl.game;
+    const me = g.getPlayer(this.ctl.pid);
+    if (!me) return;
+    this.stepCheck(me.id, me.x, me.y, me.z, 0.55, false);
+    for (const e of g.enemies) {
+      if (e.dead || e.z !== me.z) continue;
+      const b = bodyOf(e.enemyKind);
+      if (b.size !== 'huge' && b.size !== 'large') continue;
+      if (chebyshev(e.x, e.y, me.x, me.y) > 9) { this.steps.delete(e.id); continue; }
+      this.stepCheck(e.id, e.x, e.y, e.z, this.at(e.x, e.y, e.z) * (b.size === 'huge' ? 0.9 : 0.5), b.size === 'huge');
+    }
+    if (this.ambience && !this.muted) this.ambience.update(g, me);
+  }
+
+  private stepCheck(id: number, x: number, y: number, z: number, gain: number, heavy: boolean): void {
+    const prev = this.steps.get(id);
+    if (!prev) { this.steps.set(id, { x, y, z, alt: false }); return; }
+    if (prev.x === x && prev.y === y && prev.z === z) return;
+    const moved = prev.z === z && chebyshev(prev.x, prev.y, x, y) <= 1;
+    prev.x = x; prev.y = y; prev.z = z; prev.alt = !prev.alt;
+    if (!moved) return; // teleports and floor changes aren't steps
+    const ground = this.ctl.game.world.getGround(x, y, z);
+    const alt = prev.alt;
+    this.sound((k) => footstep(k, ground === Ground.Void ? Ground.Cave : ground, 1, alt, heavy), gain);
+  }
+
   /** Called by the UI when the player drinks or uses something. */
   used(itemId: string): void {
     try {
@@ -403,4 +534,12 @@ export class Sfx {
       /* unknown item */
     }
   }
+}
+
+/** The six spell elements that get their own wave, beam and hit sounds. */
+function spellElement(e: string): SpellElement | null {
+  if (e === 'fire' || e === 'energy' || e === 'ice' || e === 'earth' || e === 'death' || e === 'holy') return e;
+  if (e === 'stone') return 'earth';
+  if (e === 'light') return 'holy';
+  return null;
 }

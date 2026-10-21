@@ -1,8 +1,10 @@
 import type { Controller } from '../client/Controller';
+import { Tracks } from './Tracks';
 
 /**
- * Background music, composed for Thornvale and synthesized live with Web Audio
- * (no sound files). Three pieces follow where the player is:
+ * Background music. The main soundtrack is pre-rendered chiptune (see Tracks.ts and
+ * scripts/music/). When those files can't be loaded (e.g. the single-file offline build), the
+ * pieces below are synthesized live with Web Audio instead. Three pieces follow where the player is:
  *
  *  - "The Open Road"   (fields and forests): flute melody, harp, strings, war drums
  *  - "Hearth and Lantern" (inside a town's protection zone): gentle lute and harp
@@ -118,11 +120,13 @@ export class Music {
   private bar = 0;
   private nextBarTime = 0;
   private timer: number | null = null;
-  get running(): boolean { return this.timer !== null; }
+  get running(): boolean { return this.timer !== null || this.tracks !== null; }
   volume = 0.5;
   muted = false;
 
   private ctl: Controller | null = null;
+  /** The pre-rendered soundtrack, once it has loaded; null while loading or when unavailable. */
+  private tracks: Tracks | null = null;
 
   /** Plays the town theme on the title screen; follow the player once `attach` is called. */
   constructor() {
@@ -158,6 +162,20 @@ export class Music {
       return;
     }
     this.setup(this.ctx);
+    // prefer the pre-rendered soundtrack; fall back to the live pieces if it can't load
+    const tracks = new Tracks(this.ctx, this.out!);
+    void tracks.init('town').then((ok) => {
+      if (ok) {
+        this.tracks = tracks;
+        if (this.ctl) tracks.attach(this.ctl);
+      } else {
+        this.startSynth();
+      }
+    });
+  }
+
+  private startSynth(): void {
+    if (!this.ctx || this.timer !== null) return;
     this.mood = this.wanted;
     this.bar = 0;
     this.nextBarTime = this.ctx.currentTime + 0.2;
@@ -224,11 +242,16 @@ export class Music {
 
   attach(ctl: Controller): void {
     this.ctl = ctl;
+    this.tracks?.attach(ctl);
   }
 
   /** Picks the piece for where the player stands (called every frame; cheap). */
   update(): void {
     if (!this.ctl) return;
+    if (this.tracks) {
+      this.tracks.update();
+      return;
+    }
     const g = this.ctl.game;
     const p = g.getPlayer(this.ctl.pid);
     if (!p) return;

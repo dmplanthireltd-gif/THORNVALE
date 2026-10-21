@@ -70,8 +70,10 @@ src/
   render/             ← Renderer, WorldView (instanced ore rocks with coloured veins, furnace/anvil models), skillFx.ts (mining/smithing particles), CreatureView, Effects, PixelPass, CameraController, Overlay, models/, textures.ts
   ui/                 ← HUD, Minimap, WorldMapView, OnlineLogin, StartScreen, OutfitPreview, icons, dom
   input/Input.ts      ← keyboard/mouse → Commands
-  audio/Sfx.ts        ← synthesized Web Audio effects from game events
+  audio/              ← Sfx.ts (effects from game events), foley.ts (footsteps by ground, hits by material, monster voices, spell sweeps/hits by element), ambience.ts (wind/insects/sea/lava/cave beds + birds, frogs, drips), Music.ts + Tracks.ts (region music player, falls back to the old live synth)
 scripts/              ← smoke-test, net-test, storage-test, auth-test, content-test, saves
+  music/              ← offline soundtrack: songs.ts (chords + melody + band per song), synth.ts (arranger, mix), instruments.ts (synthesized instruments + drum kits), render.ts → public/audio/music/*.m4a
+public/audio/music/   ← rendered region tracks (AAC loops, served at /play/audio/music/); re-render after editing songs
 ```
 
 ---
@@ -169,7 +171,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 | Waves / beams | face N/E/S/W only (diagonal facing → east/west); wave cone widths 1,3,3,5,5…; beam = straight line | magic/spells.ts |
 | Rune fields | fire 45 s, energy 30 s, poison 60 s, magic wall 20 s; tick every 2 s; not in protection zones; never saved | items.ts, Game.ts |
 | Poison | `buffs.poisoned` seconds, damage every 2 s; from venom fields and earth monster attacks (35%); cured by exana pox / antidote rune | Game.ts |
-| Music | `src/audio/Music.ts`: "The Open Road" (fields, 88 bpm), "Hearth and Lantern" (protection zones, 96 bpm), "Below the Stone" (z<0, 60 bpm); switches at phrase ends | audio/Music.ts |
+| Music | 11 original looping tracks, each played by its own instrument band: town (Hearth and Lantern, fiddle/lute/accordion, protection zones), fields (The Open Road, whistle/guitar), forest (Whispering Pines, DarkGrass ≥35%), jungle (The Green Deep, pan pipes/marimba/hand drums), swamp (Mirewater, Swamp ≥30%), snow (Frostfang, celesta/harp), desert (Sunspire, oud/ney/darbuka), volcano (Cinderfall, horns/taiko; also lava caves), deep (Below the Stone, z<0), sea (Saltwind, water ≥40%), battle (Steel and Thunder, 7 s after combat, never in protection zones). Region sampled every 1 s over 9×9 tiles, must hold 2.5 s; crossfade 1.6 s (battle 0.5 s); each track resumes where it left off | audio/Tracks.ts, scripts/music/songs.ts |
 | Party | `PARTY_SHARE_RANGE = 30`, `PARTY_SHARE_BONUS = 1.2`, level rule lowest ≥ ⌈2/3 × highest⌉; parties are not saved (logout leaves the party) | Game.ts |
 | Walking speed | speed = 220 + 2 × (level − 1); seconds per tile = 120 / speed, clamped 0.1–0.6 (level 1 ≈ 0.55, 20 ≈ 0.46, 100 ≈ 0.29, 500 ≈ 0.10); haste multiplies on top | Game.refreshStats |
 | Autosave | every 30 s + on logout + on SIGTERM | server/server.ts |
@@ -304,6 +306,8 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [x] Website at thornvaleonline.com from `site/`, game at `/play/` (2026-10-21).
 - [x] Website pages: guide, highscores, FAQ, rules, privacy (2026-10-21).
 - [x] Website graphics: full trailer with game music (`site/media/trailer-full.webm|mp4`, 44 s: title card, captions, town, amazons, frost dragon, demon pit, desert, end card) behind "Watch the trailer"; silent 14 s hero loop (`trailer.webm|mp4`). Recorded in the owner's Mac Chrome by canvas + Web Audio capture with an offline test character, world-card and news pictures, share image `og-image.jpg` (2026-10-21).
+- [x] Audio overhaul: 11 region tracks with real-instrument bands (synthesized offline), footsteps by ground, hits by monster material, monster voices, ambience beds, element spell waves/beams and hits (2026-10-21).
+- [ ] Audio: owner to listen in game and pick favourites/changes (soundtrack page artifact); more songs per region later (day/night variants).
 - [ ] Website: more news posts; refresh the trailer after big visual changes (e.g. the graphics overhaul). Keep guide/FAQ in step with gameplay changes.
 - [ ] Owner: set up email forwarding support@thornvaleonline.com → owner's Gmail (WordPress.com → Domains → thornvaleonline.com → Email → Email forwarding).
 - [ ] New sign-in and character screens (email + password, up to 5 characters per account, "Play offline" kept) replacing the current start screen.
@@ -351,3 +355,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Clear rune icons: solid element-colour stone, drawn pictogram per rune family (bolt, burst, skull, cross, field, wall…) and a short name strip (`RUNE_LABEL` in ui/icons.ts — add a label for every new rune) | — | — |
 | 2026-10-21 | — | Mining (copper, tin, iron, coal, silver, gold, starsteel, darkstone rocks in fields, Greyspine, Stonedeep mines and deep caves; 4 pickaxes; rare gems; rocks turn to rubble and refill) and blacksmithing (furnace + anvil in every smithy: smelt 7 bars, smith daggers to plate armour, pickaxes and arrowheads, Make X); smiths buy ores and bars; Skills panel Gathering / Production; `/mining N`, `/smithing N`; generic skill registry for later skills | 8 | 15 |
 | 2026-10-21 | — | Walking speed follows a classic level curve (slower at low level, faster at high level) | — | — |
+| 2026-10-21 | — | Audio overhaul: 11 region music tracks (new forest + swamp zones) played by synthesized instrument bands (`scripts/music/`, `public/audio/music/`), material footsteps/hits, monster voices, ambience, element spell sounds | — | — |
