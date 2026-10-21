@@ -7,15 +7,15 @@ Every creature, building and item is real 3D geometry built procedurally in code
 
 ```bash
 npm install
-npm run dev          # single player at http://localhost:5173
+npm run dev          # single player at http://localhost:5173/play/
 npm run build        # type-check (client + server) and build into dist/
-npm run server       # multiplayer server: serves dist/ and the game on http://localhost:8080
+npm run server       # server: website on http://localhost:8080, game on http://localhost:8080/play/
 npm run test:logic   # headless simulation test of every system (no browser needed)
 ```
 
-Requires Node 20+. For multiplayer, run `npm run build` and then `npm run server`, and open `http://localhost:8080` in several browsers. On the title screen log in with a character name and password: a new name creates the character (with the vocation and outfit chosen below the login box) and the password protects it from then on. Passwords are stored only as salted scrypt hashes in `server/data/accounts.json`; characters are in `server/data/characters.json`. Five wrong passwords from one address lock logins for a minute.
+Requires Node 20+. For multiplayer, run `npm run build` and then `npm run server`, and open `http://localhost:8080/play/` in several browsers (the root is the marketing website from `site/`). On the title screen log in with a character name and password: a new name creates the character (with the vocation and outfit chosen below the login box) and the password protects it from then on. Passwords are stored only as salted scrypt hashes in `server/data/accounts.json`; characters are in `server/data/characters.json`. Five wrong passwords from one address lock logins for a minute.
 
-Server settings come from environment variables: `PORT` (8080), `MAX_PLAYERS` (50), `STATIC_DIR`, `DATA_FILE`, and for test commands `ALLOW_ADMIN=1` (everyone) or `ADMINS="Name One,Name Two"`. Offline, test commands are always on.
+Server settings come from environment variables: `PORT` (8080), `MAX_PLAYERS` (50), `STATIC_DIR` (built game, served under `/play/`), `SITE_DIR` (website, served at `/`), `DATA_FILE`, and for test commands `ALLOW_ADMIN=1` (everyone) or `ADMINS="Name One,Name Two"`. Offline, test commands are always on.
 
 ## Host it online for free (Render)
 

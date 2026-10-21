@@ -14,7 +14,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { dirname, extname, join, normalize, resolve } from 'node:path';
+import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BufferedIntent, Game, type Session } from '../src/game/Game';
 import { migrateSave, SAVE_VERSION } from '../src/game/save/migrate';
@@ -29,6 +29,7 @@ import { WsConnection } from './ws';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8080);
 const STATIC_DIR = resolve(process.env.STATIC_DIR ?? join(HERE, '..', 'dist'));
+const SITE_DIR = resolve(process.env.SITE_DIR ?? join(HERE, '..', 'site'));
 const DATA_FILE = resolve(process.env.DATA_FILE ?? join(HERE, 'data', 'characters.json'));
 const TICK = 1 / 20;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS ?? 50);
@@ -329,6 +330,8 @@ function onClose(c: Client): void {
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml', '.woff2': 'font/woff2',
 };
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -369,23 +372,50 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
     res.end(JSON.stringify({ online: game.sessions.size, players: game.players().map((p) => ({ name: p.name, level: p.level })) }));
     return;
   }
-  const rel = normalize(decodeURIComponent(url.pathname)).replace(/^([/\\])+/, '');
-  let file = resolve(STATIC_DIR, rel || 'index.html');
-  if (!file.startsWith(STATIC_DIR)) {
-    res.writeHead(403).end();
+  // The game lives under /play/ (Vite base '/play/'); /play without the slash is redirected so the
+  // page's relative URLs and email sign-in links (built from location.pathname) all resolve under /play/.
+  if (url.pathname === '/play') {
+    res.writeHead(301, { location: `/play/${url.search}` }).end();
     return;
   }
-  if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
-  if (!existsSync(file)) {
-    if (!existsSync(join(STATIC_DIR, 'index.html'))) {
-      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
-      res.end('Thornvale server is running, but the client is not built yet. Run "npm run build" first.');
-      return;
+  if (url.pathname.startsWith('/play/')) {
+    const file = staticFile(STATIC_DIR, url.pathname.slice('/play'.length));
+    if (file === 'forbidden') return void res.writeHead(403).end();
+    if (!file) {
+      if (!existsSync(join(STATIC_DIR, 'index.html'))) {
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('Thornvale server is running, but the client is not built yet. Run "npm run build" first.');
+        return;
+      }
+      return void res.writeHead(404).end('Not found');
     }
-    res.writeHead(404).end('Not found');
-    return;
+    return sendFile(res, file, 200);
   }
-  res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
+  // Everything else is the marketing website (static files in site/).
+  const page = staticFile(SITE_DIR, url.pathname);
+  if (page === 'forbidden') return void res.writeHead(403).end();
+  if (page) return sendFile(res, page, 200);
+  const missing = join(SITE_DIR, '404.html');
+  if (existsSync(missing)) return sendFile(res, missing, 404);
+  res.writeHead(404).end('Not found');
+}
+
+/** Maps a URL path onto a file inside root: folders serve their index.html. Refuses paths that escape root. */
+function staticFile(root: string, pathname: string): string | null | 'forbidden' {
+  let rel: string;
+  try {
+    rel = normalize(decodeURIComponent(pathname)).replace(/^([/\\])+/, '');
+  } catch {
+    return 'forbidden';
+  }
+  let file = resolve(root, rel || 'index.html');
+  if (file !== root && !file.startsWith(root + sep)) return 'forbidden';
+  if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
+  return existsSync(file) && statSync(file).isFile() ? file : null;
+}
+
+function sendFile(res: ServerResponse, file: string, status: number): void {
+  res.writeHead(status, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
   createReadStream(file).pipe(res);
 }
 

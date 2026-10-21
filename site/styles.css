@@ -1,0 +1,112 @@
+/* Thornvale website. Plain CSS, no build step: served as-is from site/ by server/server.ts. */
+:root {
+  --ground: #12160f;
+  --band: #171c13;
+  --card: #1c2219;
+  --line: #3a4230;
+  --text: #ece6d3;
+  --muted: #c9c3ae;
+  --faint: #a9a58f;
+  --head: #f4eedc;
+  --gold: #e3c27a;
+  --gold-hover: #f3dca6;
+  --ember: #f0a46e;
+  --ember-bg: #2a1a0e;
+  --ember-line: #5a3a1e;
+  --ember-text: #dccbb4;
+  --ink: #1a1408;
+  --live: #7bd46a;
+  --display: 'Cinzel', Georgia, serif;
+  --body: 'Alegreya Sans', system-ui, sans-serif;
+  --pixel: 'Silkscreen', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html { color-scheme: dark; scroll-behavior: smooth; }
+body { margin: 0; background: var(--ground); color: var(--text); font-family: var(--body); font-size: 18px; line-height: 1.55; }
+a { color: var(--gold); }
+a:hover { color: var(--gold-hover); }
+img { max-width: 100%; display: block; }
+h1, h2, h3 { font-family: var(--display); color: var(--head); line-height: 1.12; margin: 0; }
+p { margin: 0; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.kicker { font-family: var(--pixel); font-size: 13px; letter-spacing: 2px; color: var(--ember); text-transform: uppercase; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); font-size: 15px; }
+
+.banner { background: var(--ember-bg); border-bottom: 1px solid var(--ember-line); padding: 10px 16px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 16px; font-size: 15px; text-align: center; }
+.banner .kicker { font-size: 12px; letter-spacing: 1px; }
+
+.nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-top: 20px; padding-bottom: 20px; }
+.logo { font-family: var(--display); font-weight: 700; font-size: 28px; letter-spacing: 1px; color: var(--gold); text-decoration: none; }
+.nav-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px; }
+.nav-links a:not(.btn) { color: var(--text); text-decoration: none; }
+.nav-links a:not(.btn):hover { color: var(--gold); }
+
+.btn { display: inline-block; font-weight: 700; text-decoration: none; padding: 13px 26px; border-radius: 4px; background: var(--gold); color: var(--ink); border: 2px solid var(--ink); box-shadow: 0 0 0 1px var(--gold); }
+.btn:hover { background: var(--gold-hover); color: var(--ink); }
+.btn.big { font-size: 19px; padding: 15px 30px; }
+.btn.ghost { background: transparent; color: var(--text); border: 1px solid #5b6247; box-shadow: none; }
+.btn.ghost:hover { border-color: var(--gold); color: var(--gold); }
+.btns { display: flex; flex-wrap: wrap; gap: 14px; }
+
+.status { display: inline-flex; align-self: flex-start; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 15px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); }
+.status.online .dot { background: var(--live); }
+
+.hero { display: flex; flex-wrap: wrap; align-items: center; gap: 48px; padding-top: 56px; padding-bottom: 72px; }
+.hero-text { flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+.hero h1 { font-size: clamp(38px, 5vw, 60px); }
+.hero-text > p { font-size: 21px; color: var(--muted); max-width: 560px; }
+.hero-art { flex: 1 1 460px; min-width: 0; aspect-ratio: 4 / 3; background: radial-gradient(ellipse at 50% 40%, #2a3a22, #141911 75%); border: 2px solid var(--line); border-radius: 6px; box-shadow: 0 0 0 6px #0c0f0a, 0 24px 60px rgba(0, 0, 0, .5); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
+.hero-art .crest { font-family: var(--display); font-size: clamp(40px, 6vw, 72px); color: var(--gold); letter-spacing: 3px; }
+
+.stats { border-top: 1px solid #2b3224; border-bottom: 1px solid #2b3224; background: var(--band); }
+.stats .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 24px; padding-top: 28px; padding-bottom: 28px; }
+.stat { flex: 1 1 150px; display: flex; flex-direction: column; }
+.stat b { font-family: var(--display); font-size: 36px; color: var(--gold); }
+.stat span { color: var(--muted); }
+
+.section { padding-top: 88px; padding-bottom: 56px; display: flex; flex-direction: column; gap: 36px; }
+.section-head { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+.section-head h2 { font-size: clamp(30px, 4vw, 42px); }
+.section-head p { font-size: 19px; color: var(--muted); }
+.cards { display: flex; flex-wrap: wrap; gap: 20px; }
+.card { flex: 1 1 250px; min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+.card.wide { flex-basis: 320px; }
+.card h3 { font-size: 22px; }
+.card .gold { color: var(--gold); font-size: 24px; }
+.card p { color: var(--muted); }
+
+.steps { background: var(--band); border: 1px solid #2b3224; border-radius: 6px; padding: 40px; display: flex; flex-wrap: wrap; gap: 32px; }
+.step { flex: 1 1 260px; display: flex; flex-direction: column; gap: 8px; }
+.step .kicker { font-size: 14px; letter-spacing: 1px; }
+.step p { color: var(--muted); }
+
+.opening { background: var(--ember-bg); border-top: 1px solid var(--ember-line); border-bottom: 1px solid var(--ember-line); }
+.opening .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 48px; padding-top: 88px; padding-bottom: 88px; }
+.opening-text { flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.opening h2 { font-size: clamp(32px, 4.4vw, 46px); }
+.opening p { color: var(--ember-text); font-size: 19px; }
+.countdown { display: flex; flex-wrap: wrap; gap: 12px; }
+.countdown div { flex: 0 0 96px; background: #1a1008; border: 1px solid var(--ember-line); border-radius: 4px; padding: 14px 8px; display: flex; flex-direction: column; align-items: center; }
+.countdown b { font-family: var(--display); font-size: 36px; color: var(--gold); }
+.countdown span { font-size: 14px; color: var(--ember-text); }
+.signup { flex: 1 1 380px; min-width: 0; background: #1a1008; border: 1px solid var(--ember-line); border-radius: 6px; padding: 32px; display: flex; flex-direction: column; gap: 16px; }
+.signup h3 { font-size: 24px; }
+.signup ul { margin: 0; padding-left: 20px; color: var(--ember-text); display: flex; flex-direction: column; gap: 6px; }
+.signup .btn { text-align: center; font-size: 18px; }
+
+.post-list { display: flex; flex-direction: column; gap: 20px; }
+.article { max-width: 760px; display: flex; flex-direction: column; gap: 20px; padding-top: 48px; padding-bottom: 88px; }
+.article h1 { font-size: clamp(32px, 4.4vw, 46px); }
+.article p { color: var(--muted); font-size: 19px; }
+
+.footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 24px; padding-top: 48px; padding-bottom: 64px; color: var(--faint); font-size: 16px; border-top: 1px solid #2b3224; margin-top: 24px; }
+.footer .logo { font-size: 22px; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
+
+@media (max-width: 640px) {
+  body { font-size: 17px; }
+  .steps, .signup { padding: 24px; }
+  .countdown div { flex-basis: 80px; }
+}
