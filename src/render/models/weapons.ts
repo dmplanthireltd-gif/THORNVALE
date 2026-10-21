@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { ITEMS } from '../../game/inventory/items';
-import { box, cone, cyl, group, mat, sphere } from './parts';
+import { ITEMS, type ItemDef } from '../../game/inventory/items';
+import { gearLook, MAT, rampOf } from './gearLooks';
+import { group, matCache, sbox, scone, scyl, ssphere, storus, type MatFn } from './parts';
 
 /**
  * Hand-held weapon and shield models, built from each item's weapon type and a
@@ -78,139 +79,228 @@ export const LOOKS: Record<string, Look> = {
   darkstone_mace: { c: 0x3a2048, t: 0x8a6aa0, g: 0x200a30, s: 1.12 },
 };
 
-const wood = () => mat(0x7a5530);
-const leather = () => mat(0x3a2a1c);
-const m = (color: number, glow?: number) => mat(color, glow ? { emissive: glow } : {});
+export type WeaponStyle =
+  | 'dagger' | 'short' | 'long' | 'broad' | 'great' | 'curved'
+  | 'hatchet' | 'battle' | 'double' | 'cleaver'
+  | 'flanged' | 'morning' | 'hammer' | 'maul' | 'tusk' | 'plain';
 
-function haft(len: number, mm: THREE.Material = wood()): THREE.Mesh {
-  const h = cyl(0.028, 0.032, len, mm, 0, 0, len / 2 - 0.12, 6);
-  h.rotation.x = Math.PI / 2;
-  return h;
+/** Silhouette family of a weapon (shared by the icon and the 3D model). */
+export function weaponStyle(d: ItemDef): WeaponStyle {
+  const id = d.id;
+  switch (d.weaponType) {
+    case 'sword':
+      if (id.endsWith('_dagger')) return 'dagger';
+      if (id === 'short_sword') return 'short';
+      if (id === 'lizard_blade') return 'curved';
+      if (id === 'bastard_sword' || id === 'kings_edge' || id === 'vow_blade') return 'broad';
+      return d.twoHanded ? 'great' : 'long';
+    case 'axe':
+      if (id === 'hatchet') return 'hatchet';
+      if (id === 'double_axe' || id === 'demon_reaver') return 'double';
+      if (id === 'glacial_cleaver' || id === 'dragonbone_cleaver') return 'cleaver';
+      return 'battle';
+    case 'club':
+      if (id === 'morning_star') return 'morning';
+      if (id === 'tusk_club') return 'tusk';
+      if (id === 'war_hammer' || id === 'thunder_maul') return 'hammer';
+      if (id === 'stone_maul' || id === 'wardbreaker_maul') return 'maul';
+      return 'flanged';
+    default:
+      return 'plain';
+  }
 }
 
-function sword(l: Look): THREE.Group {
-  const s = l.s ?? 1;
+/** Weapon material ramps: the set/metal look, or the old single colours. */
+function weaponLook(d: ItemDef, l: Look): { blade: number; hi: number; trim: number; glow?: number; gem?: number } {
+  const lk = gearLook(d, l.c, l.t);
+  const metal = !!d.setId || /^(bronze|iron|steel|starsteel|darkstone|moonsilver|gilded|bone)_/.test(d.id);
+  const blade = metal ? lk.m[1] : l.c;
+  return { blade, hi: metal ? lk.m[0] : rampOf(l.c)[0], trim: l.t ?? lk.t[1], glow: l.g ?? lk.glow, gem: lk.gem ?? (l.g ? l.c : undefined) };
+}
+
+const X = (o: THREE.Mesh) => { o.rotation.x = Math.PI / 2; return o; };
+
+function haft(len: number, mm: THREE.Material, r = 0.03): THREE.Mesh {
+  return X(scyl(r * 0.92, r, len, mm, 0, 0, len / 2 - 0.12, 6));
+}
+
+function sword(d: ItemDef, l: Look, M: MatFn): THREE.Group {
+  const st = weaponStyle(d);
+  const s = l.s ?? (st === 'dagger' ? 0.55 : st === 'short' ? 0.75 : st === 'great' ? 1.25 : 1);
   const len = 0.78 * s;
-  const w = 0.08 * Math.sqrt(s);
-  const blade = m(l.c, l.g);
-  const guard = m(l.t ?? 0x6b7380);
-  return group(0, 0, 0,
-    cyl(0.03, 0.03, 0.2, leather(), 0, 0, -0.04, 6).rotateX(Math.PI / 2),
-    sphere(0.045, guard, 0, 0, -0.15, 1, 1, 1, 0),
-    box(w * 3.4, 0.05, 0.06, guard, 0, 0, 0.08),
-    box(w, 0.026, len, blade, 0, 0, 0.11 + len / 2),
-    cone(w / 2, 0.12, blade, 0, 0, 0.11 + len + 0.05, 4).rotateX(Math.PI / 2),
+  const w = (st === 'broad' ? 0.1 : 0.08) * Math.sqrt(s);
+  const c = weaponLook(d, l);
+  const blade = M(c.blade, c.glow);
+  const guard = M(c.trim);
+  const g = group(0, 0, 0,
+    X(scyl(0.03, 0.03, 0.2, M(MAT.leather[2]), 0, 0, -0.04, 6)),
+    ssphere(0.045, guard, 0, 0, -0.16, 1, 1, 1, 0),
+    sbox(w * 3.6, 0.05, 0.06, guard, 0, 0, 0.08),
+    ssphere(0.03, guard, w * 1.8, 0, 0.1), ssphere(0.03, guard, -w * 1.8, 0, 0.1),
+    sbox(w, 0.026, len, blade, 0, 0, 0.11 + len / 2),
+    sbox(w * 0.3, 0.03, len * 0.7, M(c.hi, c.glow), -w * 0.12, 0, 0.11 + len * 0.36),
+    X(scone(w / 2, 0.12, blade, 0, 0, 0.11 + len + 0.05, 4)),
   );
+  if (st === 'curved') { g.children[5].rotation.y = 0.06; g.children[7].position.x = 0.04; }
+  if (c.gem && d.rarity !== 'common') g.add(ssphere(0.03, M(c.gem, c.gem), 0, 0.03, 0.08));
+  return g;
 }
 
-function axe(id: string, l: Look): THREE.Group {
+function axe(d: ItemDef, l: Look, M: MatFn): THREE.Group {
+  const st = weaponStyle(d);
   const s = l.s ?? 1;
   const len = 0.62 + 0.3 * s;
-  const head = m(l.c, l.g);
-  const trim = m(l.t ?? 0x6b7380);
-  const g = group(0, 0, 0, haft(len, id === 'demon_reaver' ? mat(0x2a1a14) : wood()));
-  const blade = (side: number) => group(0, 0, len - 0.25,
-    box(0.05, 0.3 * s, 0.2 * s, head, side * 0.12 * s, -0.02, 0),
-    box(0.04, 0.36 * s, 0.06, trim, side * 0.21 * s, -0.04, 0),
-  );
+  const c = weaponLook(d, l);
+  const head = M(c.blade, c.glow);
+  const edge = M(c.hi, c.glow);
+  const trim = M(c.trim);
+  const g = group(0, 0, 0, haft(len, M(d.id === 'demon_reaver' ? 0x2a1a14 : MAT.wood[1])), X(scyl(0.036, 0.036, 0.14, M(MAT.leather[2]), 0, 0, 0.02, 6)));
+  const hz = len - 0.25;
+  const blade = (side: number) => st === 'cleaver'
+    ? group(0, 0, hz, sbox(0.045, 0.42 * s, 0.32 * s, head, side * 0.17 * s, -0.04, -0.04), sbox(0.04, 0.44 * s, 0.05, edge, side * 0.34 * s, -0.04, -0.04))
+    : group(0, 0, hz,
+      sbox(0.05, 0.22 * s, 0.18 * s, head, side * 0.1 * s, -0.01, 0),
+      sbox(0.05, 0.32 * s, 0.1 * s, head, side * 0.18 * s, -0.03, 0),
+      sbox(0.04, 0.38 * s, 0.05, edge, side * 0.24 * s, -0.04, 0),
+    );
   g.add(blade(1));
-  if (id === 'double_axe' || id === 'demon_reaver') g.add(blade(-1));
-  if (id === 'dragonbone_cleaver') g.add(box(0.05, 0.36, 0.8, head, 0, -0.12, 0.6));
-  g.add(box(0.07, 0.1, 0.12, trim, 0, 0, len - 0.25));
+  if (st === 'double') g.add(blade(-1));
+  else if (st === 'battle') g.add(rot(scone(0.035, 0.14, head, -0.1, 0, hz, 4), 0, 0, Math.PI / 2));
+  g.add(sbox(0.08, 0.1, 0.13, trim, 0, 0, hz), X(scone(0.03, 0.12, head, 0, 0, hz + 0.12, 4)));
+  if (c.gem && d.rarity !== 'common') g.add(ssphere(0.03, M(c.gem, c.gem), 0.045, 0, hz));
   return g;
 }
 
-function club(id: string, l: Look): THREE.Group {
+function club(d: ItemDef, l: Look, M: MatFn): THREE.Group {
+  const st = weaponStyle(d);
   const s = l.s ?? 1;
   const len = 0.55 + 0.3 * s;
-  const head = m(l.c, l.g);
-  const spikes = m(l.t ?? 0xc9d0da);
-  const g = group(0, 0, 0, haft(len));
-  if (id === 'war_hammer' || id === 'thunder_maul' || id === 'stone_maul') {
-    g.add(box(0.3 * s, 0.17 * s, 0.18 * s, head, 0, 0, len - 0.2));
-    g.add(cone(0.06, 0.18, spikes, -0.22 * s, 0, len - 0.2, 4).rotateZ(Math.PI / 2));
-    if (id === 'thunder_maul') g.add(sphere(0.06, m(0xf0f080, 0xa0a020), 0.18 * s, 0, len - 0.2));
-    return g;
+  const c = weaponLook(d, l);
+  const head = M(c.blade, c.glow);
+  const trim = M(c.trim);
+  const g = group(0, 0, 0, haft(len, st === 'flanged' && d.rarity !== 'common' ? trim : M(MAT.wood[1])), X(scyl(0.036, 0.036, 0.14, M(MAT.leather[2]), 0, 0, 0.02, 6)));
+  const hz = len - 0.18;
+  switch (st) {
+    case 'hammer':
+    case 'maul': {
+      const big = st === 'maul' ? 1.35 : 1;
+      g.add(sbox(0.3 * s * big, 0.17 * s * big, 0.18 * s * big, head, 0, 0, hz - 0.02));
+      g.add(sbox(0.31 * s * big, 0.04, 0.19 * s * big, trim, 0, 0.05 * big, hz - 0.02), sbox(0.31 * s * big, 0.04, 0.19 * s * big, trim, 0, -0.05 * big, hz - 0.02));
+      if (st === 'hammer') g.add(rot(scone(0.06, 0.18, trim, -0.22 * s, 0, hz - 0.02, 4), 0, 0, Math.PI / 2));
+      if (d.id === 'thunder_maul') g.add(ssphere(0.06, M(0xf0f080, 0xa0a020), 0.18 * s, 0, hz - 0.02));
+      if (c.gem && st === 'maul' && d.rarity === 'legendary') g.add(ssphere(0.045, M(c.gem, c.gem), 0, 0.13, hz - 0.02));
+      return g;
+    }
+    case 'tusk':
+      g.add(rot(scone(0.09 * s, 0.4 * s, M(MAT.bone[1]), 0.03, 0, hz, 6), -Math.PI / 2, 0, 0.2), sbox(0.08, 0.08, 0.05, M(MAT.leather[1]), 0, 0, hz - 0.18));
+      return g;
+    case 'morning': {
+      const h = group(0, 0, hz, ssphere(0.11 * s, head, 0, 0, 0, 1, 1, 1, 0));
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const dir = new THREE.Vector3(Math.cos(a), Math.sin(a), i % 2 ? 0.4 : -0.2).normalize();
+        const k = scone(0.035, 0.1, trim, dir.x * 0.12 * s, dir.y * 0.12 * s, dir.z * 0.12 * s, 4);
+        k.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        h.add(k);
+      }
+      h.add(X(scone(0.035, 0.12, trim, 0, 0, 0.14 * s, 4)));
+      g.add(h);
+      return g;
+    }
+    default: {
+      // flanged mace: six blades round a core
+      const h = group(0, 0, hz, ssphere(0.07 * s, head, 0, 0, 0, 1, 1, 1.3));
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        h.add(rot(sbox(0.03, 0.09 * s, 0.2 * s, head, Math.cos(a) * 0.075 * s, Math.sin(a) * 0.075 * s, 0), 0, 0, a + Math.PI / 2));
+      }
+      h.add(X(scone(0.03, 0.1, trim, 0, 0, 0.14 * s, 4)), X(scyl(0.045, 0.045, 0.04, trim, 0, 0, -0.13 * s, 8)));
+      if (c.gem && d.rarity !== 'common') h.add(ssphere(0.03, M(c.gem, c.gem), 0, 0, 0.1 * s));
+      g.add(h);
+      return g;
+    }
   }
-  const h = group(0, 0, len - 0.18, sphere(0.11 * s, head, 0, 0, 0, 1, 1, 1, 0));
-  const n = id === 'morning_star' ? 8 : 5;
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const dir = new THREE.Vector3(Math.cos(a), Math.sin(a), i % 2 ? 0.4 : -0.2).normalize();
-    const c = cone(0.035, 0.1, spikes, dir.x * 0.12 * s, dir.y * 0.12 * s, dir.z * 0.12 * s, 4);
-    c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-    h.add(c);
-  }
-  g.add(h);
-  return g;
 }
 
-function bow(l: Look): THREE.Group {
+function bow(d: ItemDef, l: Look, M: MatFn): THREE.Group {
   const s = l.s ?? 1;
-  const wd = m(l.c, l.g);
+  const c = weaponLook(d, l);
+  const wd = M(d.setId === 'skyfeather' ? MAT.sky[1] : l.c, c.glow);
   const g = group(0, 0, 0.05);
   // the bow is held upright in front of the hand
   const r = 0.45 * s;
-  const arc = new THREE.Mesh(new THREE.TorusGeometry(r, 0.03, 4, 12, Math.PI * 0.9), wd);
+  const arc = storus(r, 0.03, wd, Math.PI * 0.9, 4, 12);
   arc.rotation.set(0, Math.PI / 2, Math.PI / 2 + Math.PI * 0.05);
-  arc.castShadow = true;
   arc.position.z = -r * 0.55;
-  g.add(arc);
-  g.add(box(0.012, r * 1.95, 0.012, m(l.t ?? 0xe8e0c6), 0, 0, -r * 0.55 + r * 0.16));
+  g.add(arc, sbox(0.012, r * 1.95, 0.012, M(0xe8e0c6), 0, 0, -r * 0.55 + r * 0.16), sbox(0.06, 0.12, 0.06, M(MAT.leather[1]), 0, 0, r * 0.4));
+  for (const sy of [-1, 1]) g.add(ssphere(0.03, M(c.trim), 0, sy * r * 0.97, -r * 0.4));
+  if (d.setId === 'skyfeather' || d.rarity === 'rare' || d.rarity === 'legendary') for (const sy of [-1, 1]) g.add(rot(sbox(0.02, 0.18, 0.06, M(d.setId === 'skyfeather' ? 0xffffff : c.trim, c.glow), 0, sy * r * 0.55, r * 0.3), sy * 0.5, 0, 0));
+  if (c.gem && d.rarity !== 'common') g.add(ssphere(0.03, M(c.gem, c.gem), 0, 0, r * 0.47));
   g.rotation.x = -Math.PI / 2;
   return g;
 }
 
-function crossbow(l: Look): THREE.Group {
+function crossbow(d: ItemDef, l: Look, M: MatFn): THREE.Group {
   const s = l.s ?? 1;
-  const wd = m(l.c, l.g);
-  const metal = m(l.t ?? 0x9aa0a8);
+  const c = weaponLook(d, l);
+  const wd = M(l.c, c.glow);
+  const metal = M(c.trim);
   return group(0, 0, 0,
-    box(0.08, 0.08, 0.7 * s, wd, 0, 0, 0.25),
-    box(0.75 * s, 0.05, 0.06, metal, 0, 0.02, 0.5 * s),
-    box(0.012, 0.012, 0.36 * s, mat(0xe8e0c6), 0, 0.05, 0.38),
+    sbox(0.08, 0.08, 0.7 * s, wd, 0, 0, 0.25),
+    sbox(0.75 * s, 0.05, 0.06, metal, 0, 0.02, 0.5 * s),
+    sbox(0.012, 0.012, 0.36 * s, M(0xe8e0c6), 0, 0.05, 0.38),
+    sbox(0.1, 0.1, 0.08, metal, 0, 0, 0.5 * s),
+    X(scone(0.025, 0.08, M(MAT.steel[1]), 0, 0.06, 0.62 * s, 4)),
   );
 }
 
-function throwing(id: string, l: Look): THREE.Group {
-  const head = m(l.c, l.g);
-  if (id.endsWith('_star')) {
+function throwing(d: ItemDef, l: Look, M: MatFn): THREE.Group {
+  const head = M(l.c, l.g);
+  if (d.id.endsWith('_star')) {
     const g = group(0, 0, 0.08);
-    for (let i = 0; i < 4; i++) g.add(cone(0.04, 0.16, head, Math.cos(i * Math.PI / 2) * 0.08, 0, Math.sin(i * Math.PI / 2) * 0.08, 3).rotateZ(i * Math.PI / 2 + Math.PI / 2));
+    for (let i = 0; i < 4; i++) g.add(rot(scone(0.04, 0.16, head, Math.cos(i * Math.PI / 2) * 0.08, 0, Math.sin(i * Math.PI / 2) * 0.08, 3), 0, 0, i * Math.PI / 2 + Math.PI / 2));
     return g;
   }
-  return group(0, 0, 0, haft(1.15 * (l.s ?? 1), m(l.t ?? 0x7a5530)), cone(0.05, 0.2, head, 0, 0, 1.1 * (l.s ?? 1), 4).rotateX(Math.PI / 2));
+  return group(0, 0, 0, haft(1.15 * (l.s ?? 1), M(l.t ?? 0x7a5530)), X(scone(0.05, 0.2, head, 0, 0, 1.1 * (l.s ?? 1), 4)), X(scyl(0.035, 0.035, 0.05, M(MAT.leather[1]), 0, 0, 0.95 * (l.s ?? 1), 6)));
 }
 
-function wand(l: Look): THREE.Group {
-  return group(0, 0, 0,
-    cyl(0.022, 0.03, 0.45, m(l.t ?? 0x3a2a4a), 0, 0, 0.12, 6).rotateX(Math.PI / 2),
-    sphere(0.06, m(l.c, l.g ?? 0x404040), 0, 0, 0.38),
+function wand(l: Look, M: MatFn, staff: boolean): THREE.Group {
+  const shaft = M(l.t ?? 0x3a2a4a);
+  const orb = M(l.c, l.g ?? 0x404040);
+  const gold = M(MAT.gold[1]);
+  if (!staff) {
+    return group(0, 0, 0,
+      X(scyl(0.022, 0.03, 0.45, shaft, 0, 0, 0.12, 6)),
+      X(scyl(0.034, 0.034, 0.03, gold, 0, 0, 0.0, 8)), X(scyl(0.032, 0.032, 0.03, gold, 0, 0, 0.3, 8)),
+      ssphere(0.065, orb, 0, 0, 0.39),
+      rot(scone(0.015, 0.08, gold, 0.04, 0, 0.36, 4), 0.5, 0, 0), rot(scone(0.015, 0.08, gold, -0.04, 0, 0.36, 4), 0.5, 0, 0),
+    );
+  }
+  const g = group(0, 0, 0,
+    X(scyl(0.026, 0.032, 1.1, shaft, 0, 0, 0.3, 6)),
+    ssphere(0.085, orb, 0, 0, 0.9, 1, 1, 1.25),
   );
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    g.add(rot(scone(0.02, 0.16, shaft, Math.cos(a) * 0.07, Math.sin(a) * 0.07, 0.86, 4), Math.PI / 2 - Math.sin(a) * 0.4, Math.cos(a) * 0.4, 0));
+  }
+  return g;
 }
 
-function rod(l: Look): THREE.Group {
-  return group(0, 0, 0,
-    cyl(0.026, 0.032, 1.1, m(l.t ?? 0x5a3a20), 0, 0, 0.3, 6).rotateX(Math.PI / 2),
-    sphere(0.08, m(l.c, l.g ?? 0x404040), 0, 0, 0.88, 1, 1, 1.3),
-    cone(0.03, 0.12, m(l.t ?? 0x5a3a20), 0.06, 0, 0.82, 4).rotateZ(0.6),
-  );
-}
-
-export function makeWeapon(id: string | null): THREE.Group | null {
+export function makeWeapon(id: string | null, M: MatFn = matCache()): THREE.Group | null {
   if (!id) return null;
   const d = ITEMS[id];
   if (!d?.weaponType) return null;
   const l = LOOKS[id] ?? { c: 0xc9d0da };
   switch (d.weaponType) {
-    case 'sword': return sword(l);
-    case 'axe': return axe(id, l);
-    case 'club': return club(id, l);
-    case 'bow': return bow(l);
-    case 'crossbow': return crossbow(l);
-    case 'throwing': return throwing(id, l);
-    case 'wand': return wand(l);
-    case 'rod': return rod(l);
+    case 'sword': return sword(d, l, M);
+    case 'axe': return axe(d, l, M);
+    case 'club': return club(d, l, M);
+    case 'bow': return bow(d, l, M);
+    case 'crossbow': return crossbow(d, l, M);
+    case 'throwing': return throwing(d, l, M);
+    case 'wand': return wand(l, M, false);
+    case 'rod': return wand(l, M, true);
   }
 }
 
@@ -232,45 +322,84 @@ export const SHIELDS: Record<string, { face: number; rim: number; shape: 'round'
   darkstone_shield: { face: 0x3a2048, rim: 0x8a6aa0, shape: 'tower', boss: 0x6a3a7a, glow: 0x200a30 },
 };
 
-export function makeShield(id: string | null): THREE.Group | null {
+export function makeShield(id: string | null, M: MatFn = matCache()): THREE.Group | null {
+  const d = id ? ITEMS[id] : undefined;
   const s = id ? SHIELDS[id] : undefined;
-  if (!s) return null;
-  const face = m(s.face, s.glow);
-  const rim = m(s.rim);
+  if (!d || !s) return null;
+  const lk = gearLook(d, s.face, s.rim);
+  const wooden = id === 'wooden_shield';
+  const face = M(wooden ? MAT.wood[1] : lk.m[1], s.glow ?? lk.glow);
+  const rim = M(lk.t[1]);
+  const hi = M(lk.m[0], s.glow ?? lk.glow);
+  const gemM = lk.gem !== undefined ? M(lk.gem, lk.gem) : null;
+  const rivet = (y: number, z: number) => ssphere(0.022, rim, 0.04, y, z);
+  const emblem = (y: number): THREE.Object3D[] => {
+    if (lk.emblem === 'cross') return [sbox(0.02, 0.24, 0.05, rim, 0.04, y, 0), sbox(0.02, 0.05, 0.18, rim, 0.04, y + 0.04, 0)];
+    if (lk.emblem === 'none' || lk.emblem === 'bar') return [sbox(0.02, 0.3, 0.05, rim, 0.04, y, 0), sbox(0.02, 0.05, 0.26, rim, 0.04, y, 0)];
+    return [rot(sbox(0.02, 0.1, 0.1, rim, 0.042, y, 0), Math.PI / 4, 0, 0)];
+  };
   let g: THREE.Group;
-  switch (s.shape) {
+  switch (lk.shield) {
     case 'round':
       g = group(0, 0, 0,
-        cyl(0.29, 0.29, 0.06, face, 0, 0, 0, 12).rotateZ(Math.PI / 2),
-        cyl(0.31, 0.31, 0.03, rim, -0.005, 0, 0, 12).rotateZ(Math.PI / 2),
-        sphere(0.08, m(s.boss ?? 0xc9d0da), 0.05, 0, 0),
+        rot(scyl(0.29, 0.29, 0.06, face, 0, 0, 0, 12), 0, 0, Math.PI / 2),
+        rot(storus(0.29, 0.025, rim, Math.PI * 2, 4, 16), 0, Math.PI / 2, 0),
+        ssphere(0.08, M(wooden ? MAT.iron[1] : lk.t[1]), 0.05, 0, 0),
       );
-      break;
-    case 'kite':
-      g = group(0, 0, 0,
-        box(0.06, 0.48, 0.44, rim, 0, 0.06, 0),
-        box(0.065, 0.42, 0.36, face, 0.002, 0.06, 0),
-        box(0.07, 0.3, 0.06, m(s.boss ?? 0xe0b03c), 0.004, 0.06, 0),
-        cone(0.22, 0.28, rim, 0, -0.29, 0, 4).rotateZ(Math.PI),
-      );
-      break;
-    case 'tower':
-      g = group(0, 0, 0,
-        box(0.07, 0.86, 0.5, rim, 0, 0.0, 0),
-        box(0.075, 0.78, 0.42, face, 0.002, 0.0, 0),
-        sphere(0.07, m(s.boss ?? 0xc9d0da), 0.05, 0.05, 0),
-      );
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.add(rivet(Math.sin(a) * 0.24, Math.cos(a) * 0.24)); }
+      if (gemM) g.add(ssphere(0.03, gemM, 0.12, 0, 0));
       break;
     case 'book':
       g = group(0, 0.05, 0,
-        box(0.08, 0.32, 0.26, face, 0, 0, 0),
-        box(0.06, 0.3, 0.24, mat(0xf0e8d0), 0.012, 0, 0),
-        box(0.085, 0.06, 0.27, rim, 0, 0.08, 0),
+        sbox(0.08, 0.32, 0.26, face, 0, 0, 0),
+        sbox(0.06, 0.3, 0.24, M(0xf0e8d0), 0.012, 0, 0),
+        sbox(0.085, 0.32, 0.04, rim, 0, 0, -0.12),
+        sbox(0.09, 0.05, 0.05, rim, 0, 0.13, 0.11), sbox(0.09, 0.05, 0.05, rim, 0, -0.13, 0.11),
+        rot(sbox(0.02, 0.09, 0.09, rim, 0.045, 0, 0), Math.PI / 4, 0, 0),
       );
+      if (gemM) g.add(ssphere(0.03, gemM, 0.055, 0, 0));
       break;
+    case 'tower':
+      g = group(0, 0, 0,
+        sbox(0.07, 0.86, 0.5, rim, 0, 0, 0),
+        sbox(0.075, 0.78, 0.42, face, 0.002, 0, 0),
+        sbox(0.08, 0.04, 0.42, rim, 0.004, 0, 0), sbox(0.08, 0.78, 0.04, rim, 0.004, 0, 0),
+        ssphere(0.07, M(lk.t[1]), 0.05, 0.05, 0),
+        rivet(0.32, 0.16), rivet(0.32, -0.16), rivet(-0.32, 0.16), rivet(-0.32, -0.16),
+      );
+      if (lk.spikes) for (const z of [-0.2, 0.2]) g.add(scone(0.035, 0.14, rim, 0, 0.48, z, 4));
+      if (gemM) g.add(ssphere(0.035, gemM, 0.09, 0.05, 0));
+      break;
+    case 'skull':
+      g = group(0, 0, 0,
+        sbox(0.06, 0.5, 0.44, rim, 0, 0.06, 0),
+        X2(scone(0.22, 0.26, rim, 0, -0.32, 0, 4)),
+        ssphere(0.13, face, 0.04, 0.06, 0, 0.5, 1, 1),
+        sbox(0.02, 0.04, 0.05, M(0x140e0a), 0.1, 0.08, 0.05), sbox(0.02, 0.04, 0.05, M(0x140e0a), 0.1, 0.08, -0.05),
+      );
+      for (let i = -2; i <= 2; i++) g.add(scone(0.025, 0.1, face, 0, 0.35, i * 0.08, 4));
+      break;
+    default: {
+      // kite, heater, spiked
+      g = group(0, 0, 0,
+        sbox(0.06, 0.48, 0.44, rim, 0, 0.06, 0),
+        sbox(0.065, 0.42, 0.36, face, 0.002, 0.06, 0),
+        sbox(0.068, 0.04, 0.34, hi, 0.003, 0.25, 0),
+        X2(scone(0.22, lk.shield === 'kite' ? 0.28 : 0.18, rim, 0, -0.27, 0, 4)),
+        ...emblem(0.06),
+        rivet(0.26, 0.18), rivet(0.26, -0.18),
+      );
+      if (lk.shield === 'spiked') for (const [y, z] of [[0.3, 0.22], [0.3, -0.22], [-0.05, 0.24], [-0.05, -0.24]]) g.add(rot(scone(0.035, 0.14, rim, 0, y, z, 4), z > 0 ? Math.PI / 2 - 0.4 : -Math.PI / 2 + 0.4, 0, 0));
+      if (gemM) g.add(ssphere(0.035, gemM, 0.05, lk.emblem === 'cross' ? 0.1 : 0.06, 0));
+    }
   }
   g.rotation.y = -0.45;
   return g;
+}
+
+function X2(o: THREE.Mesh): THREE.Mesh {
+  o.rotation.z = Math.PI;
+  return o;
 }
 
 /** Shoulder plates show which body armour is worn. */
@@ -292,3 +421,15 @@ export const ARMOR_LOOK: Record<string, { color: number; size: number; plate?: b
   starsteel_plate: { color: 0x5a8ad8, size: 0.17, plate: true },
   darkstone_plate: { color: 0x4a2a5a, size: 0.18, plate: true },
 };
+
+function rot<T extends THREE.Object3D>(o: T, x: number, y: number, z: number): T {
+  o.rotation.set(x, y, z);
+  return o;
+}
+
+// every weapon, shield and body armour has a colour entry (older code and tests read these tables)
+for (const d of Object.values(ITEMS)) {
+  if (d.weaponType && !LOOKS[d.id]) { const lk = gearLook(d); LOOKS[d.id] = { c: lk.m[1], t: lk.t[1], g: lk.glow }; }
+  if (d.kind === 'shield' && !SHIELDS[d.id]) { const lk = gearLook(d); SHIELDS[d.id] = { face: lk.m[1], rim: lk.t[1], shape: lk.shield === 'book' ? 'book' : lk.shield === 'round' ? 'round' : lk.shield === 'tower' ? 'tower' : 'kite', glow: lk.glow }; }
+  if (d.kind === 'armor' && !ARMOR_LOOK[d.id]) { const lk = gearLook(d); ARMOR_LOOK[d.id] = { color: lk.m[1], size: 0.14 + lk.tier * 0.01, plate: lk.body === 'plate' || lk.body === 'scale' }; }
+}

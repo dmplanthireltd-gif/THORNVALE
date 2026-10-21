@@ -1,4 +1,5 @@
 import type { Vocation } from '../player/vocations';
+import { bonusParts, PIECE_SET, SET_BY_ID, SET_ITEM_SPECS, setSummary } from './sets';
 
 export type ItemKind =
   | 'gold' | 'consumable' | 'rune' | 'tool' | 'material'
@@ -114,6 +115,8 @@ export interface ItemDef {
   buff?: PotionBuff;
   /** Throwing weapons: chance a throw uses one up (default 0.85). */
   breakChance?: number;
+  /** Gear set this piece belongs to (see sets.ts SETS; filled in from that table). */
+  setId?: string;
 }
 
 const KNIGHT: Vocation[] = ['knight'];
@@ -125,6 +128,8 @@ const FIGHTERS: Vocation[] = ['knight', 'paladin'];
 
 type Partial2 = Omit<ItemDef, 'stackable' | 'maxStack' | 'rarity' | 'icon' | 'tint'> &
   Partial<Pick<ItemDef, 'stackable' | 'maxStack' | 'rarity' | 'icon' | 'tint'>>;
+/** An item definition before defaults (stack size, icon, tint) are filled in. */
+export type ItemSpec = Partial2;
 
 const ICONS: Record<string, string> = {
   gold: '●', consumable: '♥', rune: '◆', tool: '⚒', material: '◈', weapon: '†', shield: '◗', helmet: '∩',
@@ -283,9 +288,9 @@ const defs: ItemDef[] = [
   def({ id: 'scarab_shield', name: 'Scarab Shield', kind: 'shield', defense: 22, level: 28, vocations: FIGHTERS, weight: 55, value: 1000, rarity: 'uncommon', bonus: { resist: { earth: 4 } } }),
   def({ id: 'frostscale_shield', name: 'Frostscale Shield', kind: 'shield', defense: 30, level: 60, vocations: FIGHTERS, weight: 62, value: 5500, rarity: 'rare', bonus: { resist: { ice: 7 } } }),
   def({ id: 'tower_shield', name: 'Tower Shield', kind: 'shield', defense: 27, level: 30, vocations: KNIGHT, weight: 90, value: 900, rarity: 'uncommon' }),
-  def({ id: 'dragon_shield', name: 'Dragon Scale Shield', kind: 'shield', defense: 24, level: 35, vocations: FIGHTERS, weight: 60, value: 1200, rarity: 'uncommon', bonus: { resist: { fire: 5 } } }),
+  def({ id: 'dragon_shield', name: 'Dragonscale Shield', kind: 'shield', defense: 24, level: 35, vocations: FIGHTERS, weight: 60, value: 1200, rarity: 'uncommon', bonus: { resist: { fire: 5 } } }),
   def({ id: 'elven_aegis', name: 'Elven Aegis', kind: 'shield', defense: 29, level: 50, vocations: FIGHTERS, weight: 45, value: 3500, rarity: 'rare', bonus: { resist: { earth: 6 } } }),
-  def({ id: 'demon_shield', name: 'Demonwall Shield', kind: 'shield', defense: 36, level: 80, vocations: KNIGHT, weight: 75, value: 12000, rarity: 'legendary', bonus: { resist: { fire: 8, death: 8 } } }),
+  def({ id: 'demon_shield', name: 'Hellforged Bulwark', kind: 'shield', defense: 36, level: 80, vocations: KNIGHT, weight: 75, value: 12000, rarity: 'legendary', bonus: { resist: { fire: 8, death: 8 } } }),
   def({ id: 'apprentice_book', name: "Apprentice's Spellbook", kind: 'shield', defense: 10, vocations: MAGES, weight: 25, value: 40, icon: '▭', bonus: { magic: 3 } }),
   def({ id: 'storm_tome', name: 'Tome of Storms', kind: 'shield', defense: 16, level: 40, vocations: MAGES, weight: 25, value: 3000, icon: '▭', rarity: 'rare', bonus: { magic: 8, mana: 80, resist: { energy: 5 } } }),
 
@@ -296,12 +301,12 @@ const defs: ItemDef[] = [
   def({ id: 'fur_cap', name: 'Fur Cap', kind: 'helmet', armor: 1, weight: 12, value: 25, bonus: { resist: { ice: 3 } } }),
   def({ id: 'dwarven_helmet', name: 'Dwarven Helmet', kind: 'helmet', armor: 4, level: 15, weight: 42, value: 320, rarity: 'uncommon' }),
   def({ id: 'winged_helmet', name: 'Winged Helmet', kind: 'helmet', armor: 4, level: 22, vocations: FIGHTERS, weight: 34, value: 500, rarity: 'uncommon', bonus: { speed: 3 } }),
-  def({ id: 'frost_circlet', name: 'Rime Circlet', kind: 'helmet', armor: 2, level: 40, vocations: MAGES, weight: 9, value: 2200, rarity: 'rare', bonus: { mana: 60, magic: 3, resist: { ice: 4 } } }),
-  def({ id: 'frost_helm', name: 'Glacier Helm', kind: 'helmet', armor: 6, level: 50, vocations: FIGHTERS, weight: 52, value: 3200, rarity: 'rare', bonus: { resist: { ice: 6 } } }),
+  def({ id: 'frost_circlet', name: 'Rimeweave Circlet', kind: 'helmet', armor: 2, level: 40, vocations: MAGES, weight: 9, value: 2200, rarity: 'rare', bonus: { mana: 60, magic: 3, resist: { ice: 4 } } }),
+  def({ id: 'frost_helm', name: 'Frostforged Helm', kind: 'helmet', armor: 6, level: 50, vocations: FIGHTERS, weight: 52, value: 3200, rarity: 'rare', bonus: { resist: { ice: 6 } } }),
   def({ id: 'orc_warhelm', name: 'Orc Warhelm', kind: 'helmet', armor: 5, level: 20, vocations: FIGHTERS, weight: 45, value: 400, rarity: 'uncommon' }),
-  def({ id: 'elven_circlet', name: 'Elven Circlet', kind: 'helmet', armor: 2, level: 30, vocations: ['paladin', 'sorcerer', 'druid'], weight: 10, value: 1500, rarity: 'rare', bonus: { mana: 60, magic: 4, manaRegen: 1 } }),
-  def({ id: 'dragon_helm', name: 'Dragon Helm', kind: 'helmet', armor: 7, level: 60, vocations: FIGHTERS, weight: 60, value: 4000, rarity: 'rare', bonus: { resist: { fire: 6 } } }),
-  def({ id: 'demon_helm', name: 'Horned Demon Helm', kind: 'helmet', armor: 9, level: 90, vocations: KNIGHT, weight: 55, value: 14000, rarity: 'legendary', bonus: { resist: { death: 8, fire: 4 }, hp: 80 } }),
+  def({ id: 'elven_circlet', name: 'Silverbough Circlet', kind: 'helmet', armor: 2, level: 30, vocations: ['paladin', 'sorcerer', 'druid'], weight: 10, value: 1500, rarity: 'rare', bonus: { mana: 60, magic: 4, manaRegen: 1 } }),
+  def({ id: 'dragon_helm', name: 'Dragonscale Helm', kind: 'helmet', armor: 7, level: 60, vocations: FIGHTERS, weight: 60, value: 4000, rarity: 'rare', bonus: { resist: { fire: 6 } } }),
+  def({ id: 'demon_helm', name: 'Hellforged Helm', kind: 'helmet', armor: 9, level: 90, vocations: KNIGHT, weight: 55, value: 14000, rarity: 'legendary', bonus: { resist: { death: 8, fire: 4 }, hp: 80 } }),
 
   // --- body armour ----------------------------------------------------------------------------
   def({ id: 'leather_armor', name: 'Leather Armour', kind: 'armor', armor: 3, weight: 60, value: 8 }),
@@ -310,13 +315,13 @@ const defs: ItemDef[] = [
   def({ id: 'mage_robe', name: 'Mage Robe', kind: 'armor', armor: 3, level: 10, vocations: MAGES, weight: 35, value: 150, bonus: { mana: 60, manaRegen: 1 } }),
   def({ id: 'chain_armor', name: 'Chain Mail', kind: 'armor', armor: 6, weight: 100, value: 80 }),
   def({ id: 'plate_armor', name: 'Plate Armour', kind: 'armor', armor: 9, level: 20, vocations: FIGHTERS, weight: 120, value: 400 }),
-  def({ id: 'elven_mail', name: 'Elven Mail', kind: 'armor', armor: 9, level: 40, vocations: PALADIN, weight: 70, value: 2500, rarity: 'rare', bonus: { attack: 2, resist: { earth: 5 } } }),
+  def({ id: 'elven_mail', name: 'Silverbough Mail', kind: 'armor', armor: 9, level: 40, vocations: PALADIN, weight: 70, value: 2500, rarity: 'rare', bonus: { attack: 2, resist: { earth: 5 } } }),
   def({ id: 'arcane_robe', name: 'Robe of the Arcane', kind: 'armor', armor: 6, level: 50, vocations: MAGES, weight: 40, value: 4000, rarity: 'rare', bonus: { mana: 150, magic: 6, manaRegen: 2 } }),
   def({ id: 'lizardscale_armor', name: 'Lizardscale Armour', kind: 'armor', armor: 9, level: 45, vocations: PALADIN, weight: 65, value: 3000, rarity: 'rare', bonus: { attack: 1, resist: { earth: 6 } } }),
-  def({ id: 'glacier_robe', name: 'Glacier Robe', kind: 'armor', armor: 5, level: 40, vocations: MAGES, weight: 38, value: 3500, rarity: 'rare', bonus: { mana: 100, magic: 4, resist: { ice: 6 } } }),
+  def({ id: 'glacier_robe', name: 'Rimeweave Robe', kind: 'armor', armor: 5, level: 40, vocations: MAGES, weight: 38, value: 3500, rarity: 'rare', bonus: { mana: 100, magic: 4, resist: { ice: 6 } } }),
   def({ id: 'frost_plate', name: 'Frostforged Plate', kind: 'armor', armor: 12, level: 60, vocations: FIGHTERS, weight: 120, value: 6200, rarity: 'rare', bonus: { resist: { ice: 8 } } }),
-  def({ id: 'dragon_scale_mail', name: 'Dragon Scale Mail', kind: 'armor', armor: 12, level: 60, vocations: FIGHTERS, weight: 110, value: 6000, rarity: 'rare', bonus: { resist: { fire: 8 } } }),
-  def({ id: 'demonplate', name: 'Demonplate', kind: 'armor', armor: 15, level: 100, vocations: KNIGHT, weight: 150, value: 20000, rarity: 'legendary', bonus: { hp: 150, resist: { physical: 4, fire: 6, death: 6 } } }),
+  def({ id: 'dragon_scale_mail', name: 'Dragonscale Mail', kind: 'armor', armor: 12, level: 60, vocations: FIGHTERS, weight: 110, value: 6000, rarity: 'rare', bonus: { resist: { fire: 8 } } }),
+  def({ id: 'demonplate', name: 'Hellforged Plate', kind: 'armor', armor: 15, level: 100, vocations: KNIGHT, weight: 150, value: 20000, rarity: 'legendary', bonus: { hp: 150, resist: { physical: 4, fire: 6, death: 6 } } }),
 
   // --- legs -----------------------------------------------------------------------------------
   def({ id: 'leather_legs', name: 'Leather Legs', kind: 'legs', armor: 1, weight: 18, value: 5 }),
@@ -324,17 +329,17 @@ const defs: ItemDef[] = [
   def({ id: 'fur_legs', name: 'Fur Trousers', kind: 'legs', armor: 2, weight: 25, value: 40, bonus: { resist: { ice: 3 } } }),
   def({ id: 'dwarven_legs', name: 'Dwarven Legs', kind: 'legs', armor: 4, level: 20, weight: 55, value: 420, rarity: 'uncommon' }),
   def({ id: 'plate_legs', name: 'Plate Legs', kind: 'legs', armor: 6, level: 30, vocations: FIGHTERS, weight: 70, value: 900, rarity: 'uncommon' }),
-  def({ id: 'elven_leggings', name: 'Elven Leggings', kind: 'legs', armor: 5, level: 40, vocations: ['paladin', 'sorcerer', 'druid'], weight: 30, value: 2000, rarity: 'rare', bonus: { speed: 5, mana: 40 } }),
+  def({ id: 'elven_leggings', name: 'Silverbough Leggings', kind: 'legs', armor: 5, level: 40, vocations: ['paladin', 'sorcerer', 'druid'], weight: 30, value: 2000, rarity: 'rare', bonus: { speed: 5, mana: 40 } }),
   def({ id: 'hydra_legs', name: 'Hydrascale Legs', kind: 'legs', armor: 7, level: 60, weight: 55, value: 5000, rarity: 'rare', bonus: { resist: { ice: 6, earth: 6 } } }),
   def({ id: 'frost_legs', name: 'Frostforged Legs', kind: 'legs', armor: 7, level: 55, vocations: FIGHTERS, weight: 65, value: 4500, rarity: 'rare', bonus: { resist: { ice: 6 } } }),
-  def({ id: 'demon_legs', name: 'Infernal Greaves', kind: 'legs', armor: 9, level: 90, vocations: KNIGHT, weight: 75, value: 14000, rarity: 'legendary', bonus: { resist: { fire: 8 } } }),
+  def({ id: 'demon_legs', name: 'Hellforged Greaves', kind: 'legs', armor: 9, level: 90, vocations: KNIGHT, weight: 75, value: 14000, rarity: 'legendary', bonus: { resist: { fire: 8 } } }),
 
   // --- boots ----------------------------------------------------------------------------------
   def({ id: 'leather_boots', name: 'Leather Boots', kind: 'boots', armor: 1, weight: 9, value: 2 }),
   def({ id: 'fur_boots', name: 'Fur Boots', kind: 'boots', armor: 1, weight: 12, value: 50, bonus: { resist: { ice: 4 } } }),
   def({ id: 'traveler_boots', name: "Traveller's Boots", kind: 'boots', armor: 1, level: 10, weight: 9, value: 300, rarity: 'uncommon', bonus: { speed: 10 } }),
   def({ id: 'steel_boots', name: 'Steel Boots', kind: 'boots', armor: 3, level: 30, vocations: FIGHTERS, weight: 29, value: 1500, rarity: 'uncommon' }),
-  def({ id: 'glacier_boots', name: 'Glacier Boots', kind: 'boots', armor: 2, level: 40, weight: 16, value: 2600, rarity: 'rare', bonus: { speed: 5, resist: { ice: 8 } } }),
+  def({ id: 'glacier_boots', name: 'Rimeweave Boots', kind: 'boots', armor: 2, level: 40, weight: 16, value: 2600, rarity: 'rare', bonus: { speed: 5, resist: { ice: 8 } } }),
   def({ id: 'emberwalk_boots', name: 'Emberwalk Boots', kind: 'boots', armor: 2, level: 50, weight: 15, value: 3000, rarity: 'rare', bonus: { resist: { fire: 10 } }, note: 'Fire fields cannot burn you.' }),
   def({ id: 'windstride_boots', name: 'Windstride Boots', kind: 'boots', armor: 1, level: 60, weight: 7, value: 10000, rarity: 'legendary', bonus: { speed: 30 } }),
 
@@ -437,12 +442,16 @@ const defs: ItemDef[] = [
   def({ id: 'iron_legs', name: 'Iron Legs', kind: 'legs', armor: 4, level: 12, weight: 55, value: 70 }),
   def({ id: 'starsteel_legs', name: 'Starsteel Legs', kind: 'legs', armor: 7, level: 45, vocations: FIGHTERS, weight: 55, value: 1300, rarity: 'uncommon' }),
   def({ id: 'darkstone_legs', name: 'Darkstone Legs', kind: 'legs', armor: 8, level: 65, vocations: FIGHTERS, weight: 60, value: 3000, rarity: 'rare' }),
+
+  // --- gear sets: the pieces the sets were missing (sets.ts) ----------------------------------
+  ...SET_ITEM_SPECS.map(def),
 ];
 
 /** Logs from woodcutting, cheapest first. */
 export const LOG_ITEMS = ['logs', 'pine_logs', 'palm_logs', 'teak_logs'];
 
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(defs.map((d) => [d.id, d]));
+for (const [id, set] of Object.entries(PIECE_SET)) if (ITEMS[id]) ITEMS[id].setId = set;
 
 export function itemDef(id: string): ItemDef {
   const d = ITEMS[id];
@@ -507,20 +516,10 @@ export function describeItem(d: ItemDef): string {
   if (d.heal) parts.push(`heals ${d.heal}`);
   if (d.mana) parts.push(`restores ${d.mana} mana`);
   if (d.rune) parts.push(runeSummary(d.rune));
-  const b = d.bonus;
-  if (b) {
-    if (b.hp) parts.push(`+${b.hp} hp`);
-    if (b.mana) parts.push(`+${b.mana} mana`);
-    if (b.speed) parts.push(`speed +${b.speed}%`);
-    if (b.hpRegen) parts.push(`hp regen +${b.hpRegen}`);
-    if (b.manaRegen) parts.push(`mana regen +${b.manaRegen}`);
-    if (b.magic) parts.push(`magic +${b.magic}%`);
-    if (b.attack) parts.push(`attack +${b.attack}`);
-    if (b.light) parts.push(`light +${b.light}`);
-    if (b.resist) for (const [k, v] of Object.entries(b.resist)) parts.push(`${k} ${v}%`);
-  }
+  if (d.bonus) parts.push(...bonusParts(d.bonus));
   if (d.level) parts.push(`lvl ${d.level}+`);
   if (d.vocations) parts.push(d.vocations.map((v) => v[0].toUpperCase() + v.slice(1) + 's').join('/') + ' only');
   parts.push(`${d.weight} oz`);
-  return parts.join(' · ') + (d.note ? `. ${d.note}` : '');
+  const set = d.setId ? SET_BY_ID[d.setId] : undefined;
+  return parts.join(' · ') + (d.note ? `. ${d.note}` : '') + (set ? `. ${setSummary(set)}` : '');
 }

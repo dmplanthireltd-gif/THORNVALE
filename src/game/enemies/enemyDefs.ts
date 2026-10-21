@@ -1,5 +1,6 @@
 import type { Element } from '../inventory/items';
 import type { EnemyKind } from '../world/WorldMap';
+import { SET_DROPS } from '../inventory/sets';
 
 export interface LootEntry {
   id: string;
@@ -421,3 +422,9 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     ],
   }),
 };
+
+// gear-set pieces (inventory/sets.ts) join the loot tables of the monsters that wear them
+for (const [kind, drops] of Object.entries(SET_DROPS)) {
+  const e = ENEMIES[kind as EnemyKind];
+  if (e) for (const [id, chance] of drops) if (!e.loot.some((l) => l.id === id)) e.loot.push(L(id, chance));
+}

@@ -1,6 +1,7 @@
 import { ITEMS, LOG_ITEMS } from '../inventory/items';
 import { ORE_ITEMS } from '../gathering/mining';
 import { BAR_ITEMS } from '../production/smithing';
+import { SET_BUYS, SET_SELLS } from '../inventory/sets';
 import type { SpellId } from '../magic/spells';
 import type { ShopEntry } from './npcs';
 
@@ -68,6 +69,10 @@ export const EXTRA_BUYS: Record<string, string[]> = {
   mirella: ['glacier_robe', 'frost_circlet', 'frost_charm', 'crystal_shard', 'frozen_heart', 'mummy_wrapping', 'scarab_amulet'],
   orwin: ['scarab_coin', 'skull_trophy', 'cyclops_eye'],
 };
+
+// gear sets (inventory/sets.ts): the lower sets are on sale, every piece has a buyer
+for (const [npc, ids] of Object.entries(SET_SELLS)) EXTRA_SELLS[npc] = [...(EXTRA_SELLS[npc] ?? []), ...ids.map((id) => s(id))];
+for (const [npc, ids] of Object.entries(SET_BUYS)) EXTRA_BUYS[npc] = [...new Set([...(EXTRA_BUYS[npc] ?? []), ...ids])];
 
 /** Spells trainers teach in addition to their own list (merged in dialogue.ts). */
 export const EXTRA_SPELLS: Record<string, SpellId[]> = {
