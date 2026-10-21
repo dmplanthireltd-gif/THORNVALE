@@ -66,6 +66,8 @@ export const EXTRA_SELLS: Record<string, ShopEntry[]> = {
     s('berserk_potion', 400), s('bullseye_potion', 400), s('mastermind_potion', 600), s('glacier_robe', 9500), s('frost_circlet', 6000),
     // spells update: blank runes for rune spells, and every new rune ready-made
     s('blank_rune', 10), ...SPELL_RUNES.map((id) => s(id)),
+    // death protection
+    s('hearthward_amulet', 10000),
   ],
   zuri: [s('bullseye_potion', 420), s('viper_star', 22), s('onyx_arrow', 9), s('fish', 5), s('blank_rune', 12), s('antidote_rune'), s('venom_field_rune'), s('hatchet', 75), s('fishing_rod', 55), ...PRODUCTION_TOOLS],
   brann: [s('fur_cap', 75), s('fur_boots', 150), s('mead', 16), ...PRODUCTION_TOOLS],
@@ -78,7 +80,7 @@ export const EXTRA_BUYS: Record<string, string[]> = {
   zuri: NEW_MATERIALS,
   brunhild: [...NEW_GEAR, 'iron_ore', 'minotaur_leather', 'polar_bear_fur', 'frost_dragon_scale', 'lizard_scale', ...SMITH_MATERIALS, 'bronze_pickaxe', 'iron_pickaxe', 'steel_pickaxe', 'starsteel_pickaxe', 'smithing_hammer'],
   garrick: ['sylvan_bow', 'frostbite_crossbow', 'fur_bag', 'fur_backpack', 'winter_wolf_fur', 'polar_bear_fur', 'snakeskin', 'antlers', 'silver_fur', 'penguin_feather', 'bear_paw', ...LOG_ITEMS, ...PRODUCTION_GOODS],
-  mirella: ['glacier_robe', 'frost_circlet', 'frost_charm', 'crystal_shard', 'frozen_heart', 'mummy_wrapping', 'scarab_amulet'],
+  mirella: ['glacier_robe', 'frost_circlet', 'frost_charm', 'crystal_shard', 'frozen_heart', 'mummy_wrapping', 'scarab_amulet', 'hearthward_amulet'],
   orwin: ['scarab_coin', 'skull_trophy', 'cyclops_eye', ...CUT_GEMS],
 };
 

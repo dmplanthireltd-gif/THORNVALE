@@ -46,7 +46,7 @@ export function spellLight(b: Buffs): number {
 
 export type Pending =
   | { type: 'talk'; npcId: number }
-  | { type: 'bag'; bagId: number }
+  | { type: 'bag'; bagId: number; take?: number }  // take: stack index, -1 everything, -2 just walk up (corpse)
   | { type: 'use'; x: number; y: number; z: number }
   | { type: 'follow'; id: number };
 

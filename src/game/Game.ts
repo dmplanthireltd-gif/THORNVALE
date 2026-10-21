@@ -70,6 +70,8 @@ export interface GroundBag {
   z: number;
   items: ItemStack[];
   ttl: number;
+  /** Set for a player's dead body: their name. Opened and looted from a window, never picked up by walking over it. */
+  corpse?: string;
 }
 
 export interface TradeOffer {
@@ -240,6 +242,12 @@ export interface GameOptions {
 }
 
 export const BAG_LIFETIME = 180;
+/** Chance for each worn item (not the backpack) to drop when a player dies. */
+export const DEATH_ITEM_CHANCE = 0.25;
+/** Worn amulet that keeps all your items on death, then crumbles (not on a red skull). */
+export const DEATH_PROTECTION_AMULET = 'hearthward_amulet';
+/** Seconds a player's dead body stays on the floor. */
+export const PLAYER_CORPSE_LIFETIME = 300;
 
 /** A premium or founder outfit falls back to this free one when it may no longer be worn. */
 const OUTFIT_FALLBACK: Partial<Record<OutfitType, OutfitType>> = { warlord: 'knight', mystic: 'mage', warden: 'knight' };
@@ -928,7 +936,7 @@ export class Game implements AIContext {
       }
     }
     for (const b of [...this.bags]) {
-      if (b.x === p.x && b.y === p.y && b.z === p.z) this.pickupBag(s, b);
+      if (!b.corpse && b.x === p.x && b.y === p.y && b.z === p.z) this.pickupBag(s, b);
     }
     // entering a town makes its temple your home
     const r = this.world.regionAt(p.x, p.y, p.z);
@@ -1017,7 +1025,10 @@ export class Game implements AIContext {
       if (chebyshev(p.x, p.y, b.x, b.y) <= 1) {
         p.pending = null;
         p.path = [];
-        this.pickupBag(s, b);
+        p.faceTowards(b.x, b.y);
+        if (pend.take === -2) return;
+        if (pend.take !== undefined && pend.take >= 0) this.takeFromBag(s, b, pend.take);
+        else this.pickupBag(s, b);
         return;
       }
       if (!p.moving && p.path.length === 0) {
@@ -2179,7 +2190,7 @@ export class Game implements AIContext {
     killer.unjustKills.push(now);
     this.msg(killer.id, `Warning: that was an unjustified kill (${killer.unjustKills.length} in the last 24 hours).`, 'warn');
     if (killer.unjustKills.length >= UNJUST_KILLS_FOR_RED) {
-      if (killer.redSkullUntil <= now) this.msg(killer.id, 'You have a red skull! If you die you lose your whole backpack.', 'warn');
+      if (killer.redSkullUntil <= now) this.msg(killer.id, 'You have a red skull! If you die you lose your backpack and everything you wear.', 'warn');
       killer.redSkullUntil = now + RED_SKULL_MS;
     }
     const ks = this.sessions.get(killer.id);
@@ -2418,7 +2429,7 @@ export class Game implements AIContext {
   }
 
   private dropBag(x: number, y: number, z: number, items: ItemStack[]): GroundBag {
-    let bag = this.bags.find((b) => b.x === x && b.y === y && b.z === z);
+    let bag = this.bags.find((b) => b.x === x && b.y === y && b.z === z && !b.corpse);
     if (!bag) {
       bag = { id: this.nextId++, x, y, z, items: [], ttl: BAG_LIFETIME };
       this.bags.push(bag);
@@ -2680,23 +2691,61 @@ export class Game implements AIContext {
     this.events.emit({ type: 'death', id: p.id });
     if (byPlayer) this.msg(p.id, `You were killed by ${byPlayer.name}. You lost ${loss} experience.`, 'warn');
     else this.msg(p.id, `You were slain${killer ? ` by ${article(killer.name)}` : ''}. You lost ${loss} experience.`, 'warn');
-    // a red skull costs the whole backpack: it stays where you fell
-    if (skull === 2 && s) {
-      const dropped: ItemStack[] = [];
-      for (let i = 0; i < s.inventory.slots.length; i++) {
-        const st = s.inventory.slots[i];
-        if (!st) continue;
-        dropped.push({ ...st });
-        s.inventory.slots[i] = null;
-      }
-      if (dropped.length) {
-        this.dropBag(p.x, p.y, p.z, dropped);
-        this.msg(p.id, 'Your red skull cost you everything in your backpack.', 'warn');
+    // death loot: the backpack with everything in it always stays where you fell, and each worn piece
+    // has a DEATH_ITEM_CHANCE to drop too. A Hearthward Amulet (crumbles) saves it all, except on a red
+    // skull, which costs everything worn as well. Bots never drop anything (no farming).
+    if (s && !s.bot) {
+      const lost = this.deathLoss(s, skull === 2);
+      // the dead body stays where you fell (empty when an amulet saved everything)
+      const body: GroundBag = { id: this.nextId++, x: p.x, y: p.y, z: p.z, items: lost, ttl: PLAYER_CORPSE_LIFETIME, corpse: p.name };
+      this.bags.push(body);
+      this.events.emit({ type: 'bagCreated', bagId: body.id, x: body.x, y: body.y, z: body.z });
+      if (lost.length) {
         this.events.emit({ type: 'inventoryChanged', to: p.id });
+        this.refreshStats(s);
       }
+      s.wantsSave = true;
     }
     if (byPlayer) this.onPvpKill(byPlayer, p, skull);
-    if (s && (byPlayer || skull === 2)) s.wantsSave = true;
+  }
+
+  /** Takes the items a death costs out of the inventory and returns them (see killPlayer). */
+  private deathLoss(s: Session, redSkull: boolean): ItemStack[] {
+    const inv = s.inventory;
+    const p = s.player;
+    if (!redSkull && inv.equipment.amulet?.id === DEATH_PROTECTION_AMULET) {
+      inv.equipment.amulet = null;
+      this.events.emit({ type: 'inventoryChanged', to: p.id });
+      this.refreshStats(s);
+      this.msg(p.id, 'Your Hearthward Amulet crumbles to dust. Your belongings are safe.', 'info');
+      return [];
+    }
+    const lost: ItemStack[] = [];
+    if (inv.equipment.backpack) {
+      lost.push({ ...inv.equipment.backpack });
+      inv.equipment.backpack = null;
+    }
+    for (let i = 0; i < inv.slots.length; i++) {
+      const st = inv.slots[i];
+      if (!st) continue;
+      lost.push({ ...st });
+      inv.slots[i] = null;
+    }
+    const worn: string[] = [];
+    for (const slot of EQUIP_SLOTS) {
+      const st = inv.equipment[slot];
+      if (!st || slot === 'backpack') continue;
+      if (redSkull || Math.random() < DEATH_ITEM_CHANCE) {
+        lost.push({ ...st });
+        worn.push(itemDef(st.id)?.name ?? st.id);
+        inv.equipment[slot] = null;
+      }
+    }
+    if (lost.length) {
+      this.msg(p.id, redSkull ? 'Your red skull cost you your backpack and everything you wore.'
+        : `You dropped your backpack${worn.length ? ` and ${worn.join(', ')}` : ''}. Your belongings lie where you fell.`, 'warn');
+    }
+    return lost;
   }
 
   private respawnPlayer(s: Session): void {
@@ -2820,11 +2869,11 @@ export class Game implements AIContext {
     p.pending = { type: 'talk', npcId };
   }
 
-  commandPickup(pid: number, bagId: number): void {
+  commandPickup(pid: number, bagId: number, take?: number): void {
     const p = this.getPlayer(pid);
     if (!p || p.dead) return;
     p.path = [];
-    p.pending = { type: 'bag', bagId };
+    p.pending = { type: 'bag', bagId, take };
   }
 
   /** Walk to and use a map object: ladders, rope spots, loose stones, lockers, chests. */
@@ -3605,7 +3654,8 @@ export class Game implements AIContext {
     const n = Math.max(1, Math.min(top.qty, Math.floor(qty ?? top.qty)));
     top.qty -= n;
     if (top.qty <= 0) b.items.pop();
-    if (!b.items.length) {
+    if (b.corpse) this.events.emit({ type: 'bagChanged', bagId: b.id });
+    if (!b.items.length && !b.corpse) {
       const i = this.bags.indexOf(b);
       if (i >= 0) this.bags.splice(i, 1);
       this.events.emit({ type: 'bagRemoved', bagId: b.id });
@@ -3825,6 +3875,29 @@ export class Game implements AIContext {
     }
   }
 
+  /** Takes one stack out of a pile or dead body (loot window). */
+  private takeFromBag(s: Session, b: GroundBag, index: number): void {
+    const it = b.items[index];
+    if (!it) return;
+    const d = itemDef(it.id);
+    const capLeft = s.player.capacity - s.inventory.weight();
+    const want = Math.min(it.qty, d.weight > 0 ? Math.max(0, Math.floor(capLeft / d.weight)) : it.qty);
+    if (want <= 0) return this.msg(s.id, 'It is too heavy for you to carry.', 'warn');
+    const left = s.inventory.add(it.id, want);
+    const taken = want - left;
+    if (taken <= 0) return this.msg(s.id, 'Your backpack is full.', 'warn');
+    it.qty -= taken;
+    if (it.qty <= 0) b.items.splice(index, 1);
+    if (b.corpse) this.events.emit({ type: 'bagChanged', bagId: b.id });
+    this.msg(s.id, `You take ${describeStack({ id: it.id, qty: taken })}.`, 'loot');
+    this.events.emit({ type: 'inventoryChanged', to: s.id });
+    if (!b.items.length && !b.corpse) {
+      const i = this.bags.indexOf(b);
+      if (i >= 0) this.bags.splice(i, 1);
+      this.events.emit({ type: 'bagRemoved', bagId: b.id });
+    }
+  }
+
   private pickupBag(s: Session, b: GroundBag): void {
     const got: ItemStack[] = [];
     let full = false;
@@ -3842,13 +3915,14 @@ export class Game implements AIContext {
       it.qty -= taken;
     }
     b.items = b.items.filter((i) => i.qty > 0);
+    if (b.corpse && got.length) this.events.emit({ type: 'bagChanged', bagId: b.id });
     if (got.length) {
       this.msg(s.id, `You picked up ${got.map(describeStack).join(', ')}.`, 'loot');
       this.events.emit({ type: 'inventoryChanged', to: s.id });
     }
     if (heavy) this.msg(s.id, 'Some of it is too heavy for you to carry.', 'warn');
     else if (full) this.msg(s.id, 'Your backpack is full.', 'warn');
-    if (!b.items.length) {
+    if (!b.items.length && !b.corpse) {
       const i = this.bags.indexOf(b);
       if (i >= 0) this.bags.splice(i, 1);
       this.events.emit({ type: 'bagRemoved', bagId: b.id });

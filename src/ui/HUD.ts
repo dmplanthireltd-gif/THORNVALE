@@ -118,13 +118,14 @@ export class HUD {
   private partyEl!: HTMLDivElement;
   private friendsBtn!: HTMLButtonElement;
   private inspectId: number | null = null;
+  private corpseId: number | null = null;
   private inspectTimer = 0;
   private partyKey = '';
   private battleRows = new Map<number, { row: HTMLDivElement; fill: HTMLDivElement; name: HTMLSpanElement; skull: HTMLSpanElement }>();
   private battleTimer = 0;
   private worldMap!: WorldMapView;
   private lastRegion = '';
-  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'craft' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev' | 'inspect' | 'friends' | 'settings', Win> = {} as never;
+  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'craft' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev' | 'inspect' | 'friends' | 'settings' | 'corpse', Win> = {} as never;
   /** Station window state that survives redraws: chosen tab (metal) and the "Make X" amount. */
   private cw = { tab: '', qty: 10, station: '' };
   private skillsEl!: HTMLDivElement;
@@ -215,6 +216,10 @@ export class HUD {
       case 'announce':
         this.log(e.text, 'event');
         if (e.big) this.announce(e.title, e.text, e.style);
+        break;
+      case 'bagChanged':
+      case 'bagRemoved':
+        if (this.wins.corpse.open && e.bagId === this.corpseId) this.renderCorpse();
         break;
       case 'inventoryChanged':
         if (e.to !== me) break;
@@ -1248,6 +1253,7 @@ export class HUD {
     this.makeWin('dev', 'Test console', 'dev-win');
     this.makeWin('inspect', 'Inspect', 'inspect-win');
     this.makeWin('friends', 'Friends', 'friends-win');
+    this.makeWin('corpse', 'Dead body', 'corpse-win');
     this.renderHelp();
   }
 
@@ -2163,6 +2169,43 @@ export class HUD {
   }
 
   /** Inspect window: who someone is and what they wear. */
+  /** Opens a dead body's loot window (the server walks you up to it). */
+  openCorpse(id: number): void {
+    this.corpseId = id;
+    this.toggleWin('corpse', true);
+    this.renderCorpse();
+  }
+
+  private renderCorpse(): void {
+    const w = this.wins.corpse;
+    if (!w.open || this.corpseId === null) return;
+    const g = this.ctl.game;
+    const bag = g.bags.find((x) => x.id === this.corpseId);
+    const b = w.body;
+    b.replaceChildren();
+    if (!bag) {
+      this.closeWin('corpse');
+      return;
+    }
+    (w.root.querySelector('.win-title') as HTMLElement).textContent = `Dead body of ${bag.corpse ?? 'someone'}`;
+    if (!bag.items.length) {
+      el('p', 'hint', b, 'Nothing left on the body.');
+      return;
+    }
+    el('p', 'hint', b, 'Click an item to take it.');
+    const grid = el('div', 'bag-grid', b);
+    bag.items.forEach((it, i) => {
+      const d = el('div', 'slot', grid);
+      paintSlot(d, it);
+      d.title = describeItem(itemDef(it.id));
+      d.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        this.ctl.send({ c: 'pickup', id: bag.id, take: i });
+      });
+    });
+    button(b, 'Take all', () => this.ctl.send({ c: 'pickup', id: bag.id, take: -1 }), 'btn');
+  }
+
   inspect(id: number): void {
     this.inspectId = id;
     this.toggleWin('inspect', true);

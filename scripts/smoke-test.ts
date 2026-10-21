@@ -9,7 +9,7 @@ import { BufferedIntent, Game, type Session } from '../src/game/Game';
 import type { GameEvent } from '../src/game/core/events';
 import { Enemy } from '../src/game/enemies/Enemy';
 import { findPath } from '../src/game/movement/pathfinding';
-import { applySnapshot, buildSnapshot, executeCommand } from '../src/game/net/protocol';
+import { applySnapshot, buildSnapshot, executeCommand, PROTOCOL_VERSION } from '../src/game/net/protocol';
 import { SaveSystem, type KeyValueStore } from '../src/game/save/SaveSystem';
 import { ITEM_RENAMES, migrateSave, SAVE_VERSION } from '../src/game/save/migrate';
 import { floodFill3D } from '../src/game/world/worldGen';
@@ -2062,6 +2062,57 @@ console.log('Fletching, crafting, cooking and firemaking');
   check(t3.g.applySave(t3.pid, v8) && t3.s.gathering.cooking === 0 && t3.s.gathering.smithing === 99 && t3.s.inventory.count('longbow') === 1, 'a migrated v8 character loads with its items and skills');
   const snapS = buildSnapshot(g, s);
   if (snapS.t === 'snap') check(snapS.self.gx?.cooking === Math.floor(s.gathering.cooking) && snapS.self.gx?.firemaking === Math.floor(s.gathering.firemaking), 'the snapshot carries the new skills (gx)');
+}
+
+console.log('Death loot, dead bodies and the Hearthward Amulet');
+{
+  const { g, s, pid } = solo('knight');
+  const p = s.player;
+  const kill = () => (g as unknown as { killPlayer(p: unknown, k: null): void }).killPlayer(p, null);
+  const spot = g.world.temple;
+  // walk out of town so the body lies on open ground
+  s.inventory.equipment.backpack = { id: 'backpack', qty: 1 };
+  s.inventory.add('wolf_pelt', 3);
+  s.inventory.equipment.armor = { id: 'plate_armor', qty: 1 };
+  s.inventory.equipment.head = { id: 'iron_helmet', qty: 1 };
+  s.inventory.equipment.amulet = { id: 'hearthward_amulet', qty: 1 };
+  p.placeAt(spot.x, spot.y, spot.z ?? 0);
+  kill();
+  const body1 = g.bags.find((b) => b.corpse === p.name);
+  check(!!body1 && body1.items.length === 0 && s.inventory.equipment.amulet === null && s.inventory.count('wolf_pelt') === 3 && s.inventory.equipment.backpack?.id === 'backpack'
+    && s.inventory.equipment.armor?.id === 'plate_armor', 'the Hearthward Amulet crumbles and keeps every item; an empty body is left');
+  run(g, 6, () => !p.dead);
+  let lostWorn = 0;
+  for (let k = 0; k < 40; k++) {
+    s.inventory.equipment.backpack = { id: 'backpack', qty: 1 };
+    s.inventory.add('wolf_pelt', 1);
+    s.inventory.equipment.armor = { id: 'plate_armor', qty: 1 };
+    p.dead = false;
+    kill();
+    if (!s.inventory.equipment.armor) lostWorn++;
+    if (k === 0) {
+      const body = g.bags.filter((b) => b.corpse === p.name).pop()!;
+      check(s.inventory.equipment.backpack === null && s.inventory.slots.every((x) => !x) && body.items.some((i) => i.id === 'backpack') && body.items.some((i) => i.id === 'wolf_pelt'),
+        'without the amulet the backpack and everything in it stay in the dead body');
+    }
+  }
+  check(lostWorn >= 3 && lostWorn <= 20, `each worn item drops about a quarter of the time (${lostWorn}/40)`);
+  // looting the body: walking over it does not pick it up, the window takes one item or all
+  p.dead = false;
+  const body = g.bags.filter((b) => b.corpse === p.name && b.items.length > 1).pop()!;
+  const n0 = body.items.length;
+  p.placeAt(body.x, body.y, body.z);
+  run(g, 0.2);
+  check(body.items.length === n0 && g.bags.includes(body), 'standing on a dead body does not loot it');
+  executeCommand(g, pid, { c: 'pickup', id: body.id, take: 0 });
+  run(g, 0.5);
+  check(body.items.length === n0 - 1, 'the loot window takes a single item');
+  executeCommand(g, pid, { c: 'pickup', id: body.id, take: -1 });
+  run(g, 0.5);
+  check(body.items.length === 0 && g.bags.includes(body), 'take all empties the body, which stays until it decays');
+  const snap = buildSnapshot(g, s);
+  check(snap.t === 'snap' && (snap.b as Array<{ id: number; cp?: string }>).some((b) => b.cp === p.name), 'snapshots mark dead bodies with the name');
+  check(PROTOCOL_VERSION >= 19, 'protocol 19: dead bodies in snapshots');
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);

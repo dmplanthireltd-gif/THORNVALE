@@ -57,6 +57,8 @@ export type GameEvent =
   | { type: 'chat'; id: number; name: string; text: string }
   | { type: 'bagCreated'; bagId: number; x: number; y: number; z: number }
   | { type: 'bagRemoved'; bagId: number }
+  /** A dead body's contents changed (loot window refresh). */
+  | { type: 'bagChanged'; bagId: number }
   | { type: 'tileChanged'; x: number; y: number; z: number }
   | { type: 'playerJoined'; id: number }
   | { type: 'playerLeft'; id: number }

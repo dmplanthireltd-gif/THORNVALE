@@ -345,6 +345,7 @@ const defs: ItemDef[] = [
 
   // --- amulets & rings ----------------------------------------------------------------------
   def({ id: 'amulet_of_warding', name: 'Amulet of Warding', kind: 'amulet', weight: 6, value: 400, rarity: 'uncommon', bonus: { resist: { physical: 6 } } }),
+  def({ id: 'hearthward_amulet', name: 'Hearthward Amulet', kind: 'amulet', weight: 4, value: 4000, rarity: 'uncommon', note: 'Wear it and you keep all your items when you die. It crumbles to dust when it saves you. Does not help with a red skull.' }),
   def({ id: 'garnet_amulet', name: 'Garnet Amulet', kind: 'amulet', weight: 5, value: 600, rarity: 'uncommon', bonus: { resist: { fire: 10 } } }),
   def({ id: 'frost_pendant', name: 'Frost Pendant', kind: 'amulet', weight: 5, value: 600, rarity: 'uncommon', bonus: { resist: { ice: 10 } } }),
   def({ id: 'jade_amulet', name: 'Jade Amulet', kind: 'amulet', weight: 5, value: 600, rarity: 'uncommon', bonus: { resist: { earth: 10 } } }),

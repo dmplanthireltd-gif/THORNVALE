@@ -265,7 +265,43 @@ export class Renderer {
   }
 
   /** Rebuilds what a pile on the ground looks like: its top items, drawn big like classic item sprites. */
+  /** A fallen adventurer lying face down: shared geometry, drawn once per body. */
+  private static bodyParts: { geo: THREE.BufferGeometry; mat: THREE.Material; pos: [number, number, number]; rot: [number, number, number] }[] | null = null;
+
+  private paintCorpse(vis: THREE.Group): void {
+    if (!Renderer.bodyParts) {
+      const cloth = mat(0x5a4636);
+      const skin = mat(0xb08a70);
+      const dark = mat(0x3a2e26);
+      const blood = new THREE.MeshBasicMaterial({ color: 0x5c0a0a, transparent: true, opacity: 0.85, depthWrite: false });
+      const limb = new THREE.CylinderGeometry(0.055, 0.045, 0.42, 7);
+      Renderer.bodyParts = [
+        { geo: new THREE.CircleGeometry(0.42, 18), mat: blood, pos: [0.05, 0.012, 0.05], rot: [-Math.PI / 2, 0, 0] },
+        { geo: new THREE.CapsuleGeometry(0.12, 0.3, 4, 10), mat: cloth, pos: [0, 0.1, 0], rot: [Math.PI / 2, 0, 0.15] },
+        { geo: new THREE.SphereGeometry(0.1, 12, 10), mat: skin, pos: [0.04, 0.1, -0.33], rot: [0, 0, 0] },
+        { geo: limb, mat: cloth, pos: [-0.2, 0.06, -0.1], rot: [Math.PI / 2, 0, 0.7] },
+        { geo: limb, mat: cloth, pos: [0.22, 0.06, -0.05], rot: [Math.PI / 2, 0, -0.4] },
+        { geo: limb, mat: dark, pos: [-0.08, 0.06, 0.36], rot: [Math.PI / 2, 0, 0.15] },
+        { geo: limb, mat: dark, pos: [0.1, 0.06, 0.38], rot: [Math.PI / 2, 0, -0.25] },
+      ];
+    }
+    for (const part of Renderer.bodyParts) {
+      const m = new THREE.Mesh(part.geo, part.mat);
+      m.position.set(...part.pos);
+      m.rotation.set(...part.rot);
+      vis.add(m);
+    }
+    vis.rotation.y = 0.6;
+  }
+
   private paintPile(g: THREE.Group, b: GroundBag): void {
+    if (b.corpse) {
+      if (g.userData.sig === 'corpse') return;
+      g.userData.sig = 'corpse';
+      (g.userData.vis as THREE.Group).clear();
+      this.paintCorpse(g.userData.vis as THREE.Group);
+      return;
+    }
     const sig = b.items.slice(-3).map((i) => i.id).join(',');
     if (g.userData.sig === sig) return;
     g.userData.sig = sig;
@@ -749,6 +785,7 @@ export class Renderer {
     if (!h) return '';
     if (h.kind === 'bag') {
       const b = g.bags.find((x) => x.id === h.id);
+      if (b?.corpse) return `The dead body of ${b.corpse}${b.items.length ? ' — click to open' : ' (empty)'}`;
       return b && b.items.length ? `A bag: ${b.items.map((i) => itemDef(i.id).name).join(', ')}` : 'A bag.';
     }
     if (h.kind === 'tile') {

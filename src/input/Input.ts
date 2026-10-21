@@ -162,6 +162,12 @@ export class Input {
         break;
       case 'bag': {
         const id = hit.id;
+        // a dead body opens its loot window; you walk up to it
+        if (this.ctl.game.bags.find((x) => x.id === id)?.corpse) {
+          this.hud.openCorpse(id);
+          this.ctl.send({ c: 'pickup', id, take: -2 });
+          break;
+        }
         if (right) this.ctl.send({ c: 'pickup', id });
         else this.hud.startDrag({ kind: 'bag', id }, e, () => this.ctl.send({ c: 'pickup', id }));
         break;

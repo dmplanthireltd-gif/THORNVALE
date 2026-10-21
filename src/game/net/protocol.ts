@@ -23,7 +23,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 18;
+export const PROTOCOL_VERSION = 19;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -34,7 +34,7 @@ export type Command =
   | { c: 'turn'; dx: number; dy: number }
   | { c: 'targetNext' }
   | { c: 'talk'; id: number }
-  | { c: 'pickup'; id: number }
+  | { c: 'pickup'; id: number; take?: number }
   | { c: 'useTile'; x: number; y: number }
   | { c: 'cast'; spell: SpellId; param?: string }
   | { c: 'useSlot'; slot: number }
@@ -164,7 +164,7 @@ export interface SelfSnap {
 export type ServerMessage =
   | { t: 'welcome'; id: number; v: number; players: number }
   | {
-    t: 'snap'; time: number; c: CreatureSnap[]; b: Array<{ id: number; x: number; y: number; z: number; it?: string[] }>; holes: string[]; fields?: string[]; self: SelfSnap; st?: string[];
+    t: 'snap'; time: number; c: CreatureSnap[]; b: Array<{ id: number; x: number; y: number; z: number; it?: string[]; cp?: string; all?: Array<[string, number]> }>; holes: string[]; fields?: string[]; self: SelfSnap; st?: string[];
     /** Lit campfires near the player ("x,y,z"); only sent when the list changed (absent = unchanged). */
     fi?: string[];
     /** Active world boss and raid markers for the world map; only sent when they change. */
@@ -266,7 +266,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     return Math.abs(z - me.z) <= 1 && chebyshev(x, y, me.x, me.y) <= VIEW_RADIUS + 4;
   });
   return {
-    t: 'snap', time: r3(game.time), c, b: game.bags.map((b) => ({ id: b.id, x: b.x, y: b.y, z: b.z, it: b.items.slice(-3).map((i) => i.id) })), holes, fields, self,
+    t: 'snap', time: r3(game.time), c, b: game.bags.map((b) => (b.corpse ? { id: b.id, x: b.x, y: b.y, z: b.z, cp: b.corpse, all: b.items.map((i) => [i.id, i.qty] as [string, number]) } : { id: b.id, x: b.x, y: b.y, z: b.z, it: b.items.slice(-3).map((i) => i.id) })), holes, fields, self,
     st: game.stumpsNear(me.x, me.y, me.z, VIEW_RADIUS + 4),
     fi: onlyChanged(s, 'fires', game.firesNear(me.x, me.y, me.z, VIEW_RADIUS + 4)),
     wev: onlyChanged(s, 'wev', game.worldMarks()),
@@ -280,7 +280,7 @@ const marketSent = new WeakMap<Session, string>();
 export function eventAudience(e: GameEvent): number | null {
   switch (e.type) {
     // derived by clients from snapshots
-    case 'bagCreated': case 'bagRemoved': case 'playerJoined': case 'playerLeft': case 'tileChanged':
+    case 'bagCreated': case 'bagRemoved': case 'bagChanged': case 'playerJoined': case 'playerLeft': case 'tileChanged':
     case 'inventoryChanged': case 'questChanged': case 'dialogueOpened': case 'dialogueClosed':
     case 'gameLoaded': case 'equipmentChanged': case 'outfitChanged': case 'depotChanged': case 'tradeChanged': case 'partyChanged': case 'friendsChanged': case 'spellsChanged':
     case 'marketChanged': case 'craftChanged':
@@ -300,7 +300,7 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'turn': if (num(m.dx) && num(m.dy)) game.commandTurn(pid, m.dx, m.dy); break;
     case 'targetNext': game.commandTargetNext(pid); break;
     case 'talk': if (num(m.id)) game.commandTalk(pid, m.id); break;
-    case 'pickup': if (num(m.id)) game.commandPickup(pid, m.id); break;
+    case 'pickup': if (num(m.id)) game.commandPickup(pid, m.id, num(m.take) && m.take >= -2 && m.take < 200 ? Math.floor(m.take) : undefined); break;
     case 'useTile': if (num(m.x) && num(m.y)) game.commandUseTile(pid, Math.floor(m.x), Math.floor(m.y)); break;
     case 'cast': if (isSpellId(m.spell)) game.castSpell(pid, m.spell, typeof m.param === 'string' ? m.param.slice(0, 24) : null); break;
     case 'useSlot': if (num(m.slot)) game.useSlot(pid, Math.floor(m.slot)); break;
@@ -462,13 +462,17 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     }
   }
   for (const b of snap.b) {
-    const shown = (b.it ?? []).filter((id) => isItem(id)).map((id) => ({ id, qty: 1 }));
+    // piles: the client only needs the top items to draw them; dead bodies carry everything (loot window)
+    const shown = b.cp ? (b.all ?? []).filter(([id]) => isItem(id)).map(([id, qty]) => ({ id, qty })) : (b.it ?? []).filter((id) => isItem(id)).map((id) => ({ id, qty: 1 }));
     const have = game.bags.find((x) => x.id === b.id);
     if (have) {
-      // the client only needs the top items to draw the pile
-      if (have.items.map((i) => i.id).join() !== shown.map((i) => i.id).join()) have.items = shown;
+      const sig = (l: ItemStack[]) => l.map((i) => `${i.id}:${i.qty}`).join();
+      if (sig(have.items) !== sig(shown)) {
+        have.items = shown;
+        if (b.cp) ev.emit({ type: 'bagChanged', bagId: b.id });
+      }
     } else {
-      game.bags.push({ id: b.id, x: b.x, y: b.y, z: b.z, items: shown, ttl: 999 });
+      game.bags.push({ id: b.id, x: b.x, y: b.y, z: b.z, items: shown, ttl: 999, corpse: b.cp });
       ev.emit({ type: 'bagCreated', bagId: b.id, x: b.x, y: b.y, z: b.z });
     }
   }
