@@ -1,6 +1,8 @@
 import type { Game } from '../Game';
 
 const KEY = 'thornvale.save.v1';
+/** Single player keeps its market (your own offers in escrow) next to the save. */
+const MARKET_KEY = 'thornvale.market.v1';
 
 export interface KeyValueStore {
   getItem(key: string): string | null;
@@ -85,6 +87,26 @@ export class SaveSystem {
     } catch {
       return false;
     }
+  }
+
+  /** Loads the single-player market into the game and keeps it stored on every change. */
+  attachMarket(game: Game): void {
+    try {
+      const raw = this.store?.getItem(MARKET_KEY);
+      if (raw) {
+        const d = JSON.parse(raw) as { offers?: unknown[]; deliveries?: unknown[] };
+        game.market.load(Array.isArray(d.offers) ? d.offers : [], Array.isArray(d.deliveries) ? d.deliveries : []);
+      }
+    } catch {
+      /* unreadable: start empty, the raw text stays until the next change */
+    }
+    game.marketSink = () => {
+      try {
+        this.store?.setItem(MARKET_KEY, JSON.stringify(game.market.toJSON()));
+      } catch {
+        /* storage full or off */
+      }
+    };
   }
 
   clear(): void {

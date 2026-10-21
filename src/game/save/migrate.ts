@@ -1,5 +1,7 @@
 import { isItem, type ItemStack } from '../inventory/items';
 import type { SaveData } from '../Game';
+import { legacySkills } from '../player/skills';
+import { isVocation } from '../player/vocations';
 
 /**
  * Save-data versioning. Every save records the version that wrote it, and old
@@ -13,7 +15,7 @@ import type { SaveData } from '../Game';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -38,6 +40,15 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   },
   // v3 → v4 (PvP): every character starts unmarked, with secure mode on.
   3: (d) => ({ ...d, pvp: { secure: true, whiteSkullUntil: 0, redSkullUntil: 0, unjustKills: [] }, version: 4 }),
+  // v4 → v5 (skills, woodcutting, market): fighting skills and magic level are set from the
+  // vocation and level so every character hits and heals exactly as hard as before (rounded up);
+  // woodcutting starts at level 1 and no market deliveries have been received yet.
+  4: (d) => {
+    const pl = (d.player ?? {}) as { vocation?: unknown; level?: unknown };
+    const voc = isVocation(pl.vocation) ? pl.vocation : 'knight';
+    const level = Math.max(1, Math.floor(Number(pl.level)) || 1);
+    return { ...d, skills: legacySkills(voc, level), gathering: { woodcutting: 0 }, market: { claimed: [] }, version: 5 };
+  },
 };
 
 export interface MigrationResult {

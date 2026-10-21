@@ -5,7 +5,11 @@
  */
 import { SAVE_VERSION } from '../src/game/save/migrate';
 import { createServer } from 'node:http';
-import { SupabaseStorage } from '../server/storage';
+import { FileStorage, SupabaseStorage, type Storage } from '../server/storage';
+import type { MarketDelivery, MarketOffer } from '../src/game/market/market';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Game } from '../src/game/Game';
 
 const process = (globalThis as unknown as { process: { exit(code: number): never } }).process;
@@ -16,8 +20,8 @@ const check = (ok: unknown, label: string) => {
 };
 
 type Row = Record<string, unknown>;
-const tables: Record<string, Row[]> = { accounts: [], characters: [], character_backups: [] };
-const keys: Record<string, string> = { accounts: 'name_key', characters: 'name_key' };
+const tables: Record<string, Row[]> = { accounts: [], characters: [], character_backups: [], market_offers: [], market_deliveries: [] };
+const keys: Record<string, string> = { accounts: 'name_key', characters: 'name_key', market_offers: 'id', market_deliveries: 'id' };
 let sawApiKey = true;
 
 /** Access tokens the fake login service accepts: token → user. */
@@ -41,7 +45,9 @@ const mock = createServer((req, res) => {
     return;
   }
   const filters = [...url.searchParams.entries()].filter(([, v]) => v.startsWith('eq.')).map(([k, v]) => [k, decodeURIComponent(v.slice(3))]);
-  const match = (r: Row) => filters.every(([k, v]) => String(r[k]) === v);
+  // PostgREST "in" filters: id=in.("a","b")
+  const inFilters = [...url.searchParams.entries()].filter(([, v]) => v.startsWith('in.(')).map(([k, v]) => [k, v.slice(4, -1).split(',').map((x) => x.replace(/^"|"$/g, ''))] as const);
+  const match = (r: Row) => filters.every(([k, v]) => String(r[k]) === v) && inFilters.every(([k, list]) => list.includes(String(r[k])));
   let body = '';
   req.on('data', (d) => (body += d));
   req.on('end', () => {
@@ -53,16 +59,23 @@ const mock = createServer((req, res) => {
       return;
     }
     if (req.method === 'POST') {
-      const row = JSON.parse(body) as Row;
+      const parsed = JSON.parse(body) as Row | Row[];
       const pk = keys[table];
-      const existing = pk ? rows.find((r) => r[pk] === row[pk]) : undefined;
-      if (existing && !prefer.includes('merge-duplicates')) {
-        res.writeHead(409).end('{"message":"duplicate key"}');
-        return;
+      for (const row of Array.isArray(parsed) ? parsed : [parsed]) {
+        const existing = pk ? rows.find((r) => r[pk] === row[pk]) : undefined;
+        if (existing && !prefer.includes('merge-duplicates')) {
+          res.writeHead(409).end('{"message":"duplicate key"}');
+          return;
+        }
+        if (existing) Object.assign(existing, row);
+        else rows.push({ created_at: new Date().toISOString(), id: rows.length + 1, ...row });
       }
-      if (existing) Object.assign(existing, row);
-      else rows.push({ ...row, created_at: new Date().toISOString(), id: rows.length + 1 });
       res.writeHead(201).end();
+      return;
+    }
+    if (req.method === 'DELETE') {
+      for (let i = rows.length - 1; i >= 0; i--) if (match(rows[i])) rows.splice(i, 1);
+      res.writeHead(204).end();
       return;
     }
     if (req.method === 'PATCH') {
@@ -108,6 +121,50 @@ async function main(): Promise<void> {
   check(tables.character_backups.length === 1, 'backup row written');
   check((await st.allCharacters()).length === 1, 'all characters listed for export');
   check(sawApiKey, 'every request carries the API key');
+
+  // ---- player market, in Supabase (tables market_offers / market_deliveries) and in files
+  const offer = (id: string, qty: number): MarketOffer => ({ id, seller: 'dawid', sellerName: 'Dawid', item: 'wolf_pelt', qty, price: 120, created: 1_700_000_000_000, expires: 1_800_000_000_000 });
+  const delivery: MarketDelivery = { id: 'd-1', to: 'dawid', gold: 360, items: [{ id: 'bone', qty: 2 }], reason: 'test sale', created: 1_700_000_000_000 };
+  const marketChecks = async (st: Storage, label: string) => {
+    const empty = await st.loadMarket();
+    check(!!empty && empty.offers.length === 0 && empty.deliveries.length === 0, `${label}: an empty market loads`);
+    await st.putMarketOffers([offer('o-1', 5), offer('o-2', 1)]);
+    await st.putMarketOffers([offer('o-1', 3)]);
+    await st.putMarketDeliveries([delivery]);
+    let m = await st.loadMarket();
+    const o1 = m?.offers.find((o) => o.id === 'o-1');
+    check(m?.offers.length === 2 && o1?.qty === 3 && o1.price === 120 && o1.seller === 'dawid' && o1.expires === 1_800_000_000_000, `${label}: offers stored, updated by id and read back`);
+    const d = m?.deliveries[0];
+    check(m?.deliveries.length === 1 && d?.gold === 360 && d.items[0]?.id === 'bone' && d.to === 'dawid', `${label}: deliveries stored and read back`);
+    await st.deleteMarketOffers(['o-1', 'o-2']);
+    await st.deleteMarketDeliveries(['d-1']);
+    m = await st.loadMarket();
+    check(m?.offers.length === 0 && m?.deliveries.length === 0, `${label}: offers and deliveries deleted`);
+    // the market survives a restart: a game loads it and pays the delivery at login
+    await st.putMarketOffers([offer('o-3', 2)]);
+    await st.putMarketDeliveries([delivery]);
+    const loaded = (await st.loadMarket())!;
+    const game = new Game();
+    game.market.load(loaded.offers, loaded.deliveries);
+    const who = game.addPlayer('Dawid', { vocation: 'druid' });
+    const ok = game.applySave(who.id, ch!.data);
+    check(ok && game.market.offers.has('o-3') && who.bank === 360 && who.depot.some((x) => x?.id === 'bone'), `${label}: a restarted game has the offers and pays waiting deliveries at login`);
+    await st.deleteMarketOffers(['o-3']);
+    await st.deleteMarketDeliveries(['d-1']);
+  };
+  await marketChecks(st, 'Supabase');
+  const dir = mkdtempSync(join(tmpdir(), 'thornvale-market-'));
+  const fs1 = new FileStorage(join(dir, 'characters.json'));
+  await fs1.putMarketOffers([offer('f-1', 4)]);
+  const fs2 = new FileStorage(join(dir, 'characters.json'));
+  check((await fs2.loadMarket()).offers.some((o) => o.id === 'f-1' && o.qty === 4), 'files: the market file survives a restart');
+  await fs2.deleteMarketOffers(['f-1']);
+  await marketChecks(fs2, 'files');
+  rmSync(dir, { recursive: true, force: true });
+  // a Supabase project without the market tables keeps the market closed instead of failing
+  delete tables.market_offers;
+  check((await st.loadMarket()) === null, 'missing market tables: the market stays closed (server still starts)');
+  tables.market_offers = [];
   mock.close();
   console.log(failed ? `\n${failed} check(s) failed.` : '\nAll storage checks passed.');
   process.exit(failed ? 1 : 0);

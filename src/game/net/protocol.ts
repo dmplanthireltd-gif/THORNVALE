@@ -4,7 +4,9 @@ import { BufferedIntent, type Game, type Session, type PartyView, type TradeView
 import type { Inventory } from '../inventory/Inventory';
 import { EQUIP_SLOTS, isItem, type EquipSlot, type ItemStack } from '../inventory/items';
 import { isSpellId, type SpellId } from '../magic/spells';
+import type { MarketView } from '../market/market';
 import type { DialogueState } from '../npc/dialogue';
+import { COMBAT_SKILLS, parseSkills } from '../player/skills';
 import { isOutfit, type Outfit } from '../player/outfits';
 import { emptyBuffs, FIGHT_MODE, type Buffs, type FightMode } from '../player/Player';
 import { isVocation, type Vocation } from '../player/vocations';
@@ -16,7 +18,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 9;
+export const PROTOCOL_VERSION = 10;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -63,7 +65,12 @@ export type Command =
   | { c: 'partyLeader'; id: number }
   | { c: 'partyShare'; on: boolean }
   | { c: 'tradeAccept' }
-  | { c: 'tradeCancel' };
+  | { c: 'tradeCancel' }
+  /** Player market (at a market board). */
+  | { c: 'marketSell'; from: 'depot' | 'inv'; index: number; qty: number; price: number }
+  | { c: 'marketBuy'; id: string; qty: number }
+  | { c: 'marketCancel'; id: string }
+  | { c: 'marketClose' };
 
 export type ClientMessage =
   | { t: 'hello'; v: number; name: string; password?: string; token?: string; outfit?: Outfit; vocation?: Vocation }
@@ -117,11 +124,17 @@ export interface SelfSnap {
   sec: 0 | 1;
   pz: number;
   party: PartyView | null;
+  /** Combat skills: [level, tries] per skill (see player/skills.ts). */
+  skills: Record<string, [number, number]>;
+  /** Woodcutting experience. */
+  wc: number;
+  /** Market window contents; only sent when it changed (null = closed, absent = unchanged). */
+  mk?: MarketView | null;
 }
 
 export type ServerMessage =
   | { t: 'welcome'; id: number; v: number; players: number }
-  | { t: 'snap'; time: number; c: CreatureSnap[]; b: Array<{ id: number; x: number; y: number; z: number; it?: string[] }>; holes: string[]; fields?: string[]; self: SelfSnap }
+  | { t: 'snap'; time: number; c: CreatureSnap[]; b: Array<{ id: number; x: number; y: number; z: number; it?: string[] }>; holes: string[]; fields?: string[]; self: SelfSnap; st?: string[] }
   | { t: 'ev'; e: GameEvent }
   | { t: 'error'; text: string };
 
@@ -166,7 +179,14 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     inv: s.inventory.toJSON(), quests: s.quests.state, dialogue: s.dialogue, bank: s.bank, spells: [...s.spells],
     depot: s.depotOpen ? s.depot : null, trade: game.tradeView(s.id),
     pvp: game.pvp ? 1 : 0, sec: me.secure ? 1 : 0, pz: Math.ceil(me.pzLock), party: game.partyView(me.id),
+    skills: Object.fromEntries(COMBAT_SKILLS.map((k) => [k, [s.skills[k].level, Math.floor(s.skills[k].tries)]])), wc: Math.floor(s.woodcutting),
   };
+  // the market list is only sent when something in it (or in your depot or bank) changed
+  const mkKey = s.marketOpen ? `${game.market.version}|${s.bank}|${JSON.stringify(s.depot)}` : 'closed';
+  if (mkKey !== marketSent.get(s)) {
+    marketSent.set(s, mkKey);
+    self.mk = game.marketView(s.id);
+  }
   const holes: string[] = [];
   for (const k of game.dugHoles()) holes.push(k);
   // rune fields near the player (x,y,z,obj)
@@ -174,8 +194,14 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     const [x, y, z] = f.split(',').map(Number);
     return Math.abs(z - me.z) <= 1 && chebyshev(x, y, me.x, me.y) <= VIEW_RADIUS + 4;
   });
-  return { t: 'snap', time: r3(game.time), c, b: game.bags.map((b) => ({ id: b.id, x: b.x, y: b.y, z: b.z, it: b.items.slice(-3).map((i) => i.id) })), holes, fields, self };
+  return {
+    t: 'snap', time: r3(game.time), c, b: game.bags.map((b) => ({ id: b.id, x: b.x, y: b.y, z: b.z, it: b.items.slice(-3).map((i) => i.id) })), holes, fields, self,
+    st: game.stumpsNear(me.x, me.y, me.z, VIEW_RADIUS + 4),
+  };
 }
+
+/** What market view each session was last sent (so an unchanged market is not resent 20 times a second). */
+const marketSent = new WeakMap<Session, string>();
 
 /** Routes a simulation event: null = drop, otherwise the recipient (-1 = everyone). */
 export function eventAudience(e: GameEvent): number | null {
@@ -184,6 +210,7 @@ export function eventAudience(e: GameEvent): number | null {
     case 'bagCreated': case 'bagRemoved': case 'playerJoined': case 'playerLeft': case 'tileChanged':
     case 'inventoryChanged': case 'questChanged': case 'dialogueOpened': case 'dialogueClosed':
     case 'gameLoaded': case 'equipmentChanged': case 'outfitChanged': case 'depotChanged': case 'tradeChanged': case 'partyChanged': case 'spellsChanged':
+    case 'marketChanged':
       return null;
     default:
       return 'to' in e ? e.to : -1;
@@ -244,15 +271,22 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'partyShare': game.partyShare(pid, m.on === true); break;
     case 'tradeAccept': game.acceptTrade(pid); break;
     case 'tradeCancel': game.cancelTrade(pid); break;
+    case 'marketSell':
+      if ((m.from === 'depot' || m.from === 'inv') && num(m.index) && num(m.qty) && num(m.price)) game.marketSell(pid, m.from, Math.floor(m.index), Math.floor(m.qty), Math.floor(m.price));
+      break;
+    case 'marketBuy': if (typeof m.id === 'string' && num(m.qty)) game.marketBuy(pid, m.id.slice(0, 64), Math.floor(m.qty)); break;
+    case 'marketCancel': if (typeof m.id === 'string') game.marketCancel(pid, m.id.slice(0, 64)); break;
+    case 'marketClose': game.closeMarket(pid); break;
   }
 }
 
 // ------------------------------------------------------------------ client side
 
-/** Private state the client keeps for the HUD (depot, trade). */
+/** Private state the client keeps for the HUD (depot, trade, market). */
 export interface MirrorExtras {
   depot: (ItemStack | null)[] | null;
   trade: TradeView | null;
+  market?: MarketView | null;
 }
 
 /** Applies a server snapshot to a mirror game. Emits the state-change events the server held back. */
@@ -367,6 +401,10 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   p.secure = me.sec !== 0;
   p.pzLock = me.pz ?? 0;
   s.bank = me.bank;
+  // the Skills panel redraws itself when these change
+  if (me.skills) s.skills = parseSkills(Object.fromEntries(Object.entries(me.skills).map(([k, v]) => [k, { level: v[0], tries: v[1] }])));
+  if (typeof me.wc === 'number') s.woodcutting = me.wc;
+  if (snap.st) game.syncStumps(snap.st, p.x, p.y, p.z, VIEW_RADIUS + 4);
   const spellsBefore = [...s.spells].sort().join();
   const spellsAfter = [...me.spells].sort().join();
   if (spellsBefore !== spellsAfter) {
@@ -403,6 +441,11 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     if (JSON.stringify(game.netParty) !== JSON.stringify(me.party ?? null)) {
       game.netParty = me.party ?? null;
       ev.emit({ type: 'partyChanged', to: me.id });
+    }
+    if (me.mk !== undefined) {
+      extras.market = me.mk;
+      s.marketOpen = me.mk ? { x: p.x, y: p.y, z: p.z } : null;
+      ev.emit({ type: 'marketChanged', to: me.id });
     }
   }
 }

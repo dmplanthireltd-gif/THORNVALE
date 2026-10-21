@@ -17,9 +17,13 @@ export function applyResist(amount: number, resistPct: number | undefined): numb
   return Math.max(0, Math.round(amount * (1 - r / 100)));
 }
 
-/** Melee swing: weapon attack, level and vocation drive damage; target armour absorbs some. */
-export function rollMelee(level: number, attack: number, mult: number, targetArmor: number): Roll {
-  if (Math.random() < 0.08) return { amount: 0, result: 'miss' };
+/**
+ * Melee swing: weapon attack, power and vocation drive damage; target armour absorbs some.
+ * `level` is the power level (half character level, half weapon skill, see player/skills.ts);
+ * `hitBonus` (from the weapon skill) lowers the 8% miss chance.
+ */
+export function rollMelee(level: number, attack: number, mult: number, targetArmor: number, hitBonus = 0): Roll {
+  if (Math.random() < Math.max(0.02, 0.08 - hitBonus)) return { amount: 0, result: 'miss' };
   const max = Math.round((attack * 1.6 + level * 2.0) * mult);
   const min = Math.round((attack * 0.5 + level * 0.8) * mult);
   const dmg = randInt(min, Math.max(min, max)) - randInt(0, targetArmor);
@@ -27,9 +31,9 @@ export function rollMelee(level: number, attack: number, mult: number, targetArm
   return { amount: dmg, result: 'hit' };
 }
 
-/** Distance shot: misses more often at long range. */
-export function rollDistance(level: number, attack: number, mult: number, targetArmor: number, distance: number): Roll {
-  const missChance = 0.06 + Math.max(0, distance - 3) * 0.05;
+/** Distance shot: misses more often at long range, less often with a high distance skill. */
+export function rollDistance(level: number, attack: number, mult: number, targetArmor: number, distance: number, hitBonus = 0): Roll {
+  const missChance = Math.max(0.02, 0.06 + Math.max(0, distance - 3) * 0.05 - hitBonus);
   if (Math.random() < missChance) return { amount: 0, result: 'miss' };
   const max = Math.round((attack * 1.5 + level * 1.9) * mult);
   const min = Math.round((attack * 0.5 + level * 0.8) * mult);

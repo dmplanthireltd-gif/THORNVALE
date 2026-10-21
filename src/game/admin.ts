@@ -2,6 +2,8 @@ import type { Game, Session } from './Game';
 import { ITEMS, type ItemDef } from './inventory/items';
 import { SPELL_LIST } from './magic/spells';
 import { expForLevel } from './player/Player';
+import { gatherXpForLevel, WC_MAX_LEVEL } from './gathering/woodcutting';
+import { COMBAT_SKILLS, legacySkills, MAGIC_START, SKILL_MAX, SKILL_NAMES, SKILL_START, type CombatSkill } from './player/skills';
 import { isVocation, VOCATIONS } from './player/vocations';
 
 /**
@@ -10,7 +12,7 @@ import { isVocation, VOCATIONS } from './player/vocations';
  * (see ALLOW_ADMIN and ADMINS in server/server.ts).
  */
 export const ADMIN_HELP = [
-  '/level N — set your level (1–1000)',
+  '/level N — set your level (1–1000); skills rise to what that level usually has',
   '/exp N — gain N experience',
   '/gold N — get N gold (overflow goes to the bank)',
   '/item name [qty] — get an item by id or name',
@@ -20,7 +22,14 @@ export const ADMIN_HELP = [
   '/kill — kill your current target',
   '/goto place — teleport to a place (e.g. /goto caldera) or /goto x y z',
   '/vocation name — change vocation',
+  '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting)',
 ];
+
+/** Short names accepted by /skill. */
+const SKILL_ALIASES: Record<string, CombatSkill | 'woodcutting'> = {
+  fist: 'fist', club: 'club', sword: 'sword', axe: 'axe', distance: 'distance', dist: 'distance', shielding: 'shielding', shield: 'shielding',
+  magic: 'magic', ml: 'magic', mlvl: 'magic', woodcutting: 'woodcutting', wc: 'woodcutting', wood: 'woodcutting',
+};
 
 export function findItem(query: string): ItemDef | null | ItemDef[] {
   const q = query.trim().toLowerCase();
@@ -61,6 +70,9 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       const lvl = Math.max(1, Math.min(1000, num(rest[0], p.level)));
       p.level = lvl;
       p.exp = expForLevel(lvl);
+      // test characters get at least the skills a character of that level would have
+      const typical = legacySkills(p.vocation, lvl);
+      for (const k of COMBAT_SKILLS) if (s.skills[k].level < typical[k].level) s.skills[k] = { level: typical[k].level, tries: 0 };
       game.refreshStats(s);
       p.hp = p.maxHp;
       p.mana = p.maxMana;
@@ -165,6 +177,25 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       game.events.emit({ type: 'equipmentChanged', id: pid });
       s.wantsSave = true;
       say(`You are now a ${VOCATIONS[v].name.toLowerCase()}.`);
+      return;
+    }
+    case 'skill':
+    case 'skills': {
+      const which = SKILL_ALIASES[(rest[0] ?? '').toLowerCase()];
+      if (!which) return say(`Skills: ${[...COMBAT_SKILLS, 'woodcutting'].join(', ')}. Example: /skill sword 50`, 'warn');
+      if (which === 'woodcutting') {
+        const lvl = Math.max(1, Math.min(WC_MAX_LEVEL, num(rest[1], 1)));
+        s.woodcutting = gatherXpForLevel(lvl);
+        say(`Woodcutting is now level ${lvl}.`);
+      } else {
+        const min = which === 'magic' ? MAGIC_START : SKILL_START;
+        const lvl = Math.max(min, Math.min(SKILL_MAX, num(rest[1], min)));
+        s.skills[which] = { level: lvl, tries: 0 };
+        say(`${SKILL_NAMES[which]} is now ${lvl}.`);
+      }
+      game.events.emit({ type: 'skillUp', skill: which, level: 0, to: pid });
+      game.refreshStats(s);
+      s.wantsSave = true;
       return;
     }
     default:

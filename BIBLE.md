@@ -2,7 +2,7 @@
 
 **The single source of truth for Thornvale.** Every Claude (claude.ai chat, Claude Code, Claude in Chrome, sub-agents) and every human contributor works from this file. If code and this file disagree, stop and fix one of them in the same change — never leave them out of sync.
 
-- Bible version: **1.1** (2026-10-21)
+- Bible version: **1.2** (2026-10-21)
 - Canonical copies: `BIBLE.md` in the GitHub repo (authoritative) and `claude/THORNVALE-BIBLE.md` in the claude.ai Project "THORNVALE - GAME DEVELOPMENT" (mirror — update both together).
 
 ---
@@ -46,9 +46,10 @@ README.md             ← player/host-facing docs
 render.yaml           ← Render Blueprint
 site/                 ← marketing website (plain HTML/CSS/JS, no build): served at / — index, news/, guide/, highscores/, faq/, rules/, privacy/, 404, robots, sitemap; site.js = live status, countdown, highscores table
 supabase/schema.sql   ← database tables (keep in sync with migrations)
+supabase/migrations/  ← one SQL file per schema change (applied by hand / Supabase MCP, then listed in §5)
 server/
   server.ts           ← game server: tick 20 Hz, login, autosave, HTTP API, static files
-  storage.ts          ← Storage interface: FileStorage (local JSON) / SupabaseStorage
+  storage.ts          ← Storage interface: FileStorage (local JSON) / SupabaseStorage; characters, backups, market
   ws.ts               ← minimal WebSocket implementation
   data/               ← local JSON saves (dev only, git-ignored content)
 src/
@@ -58,9 +59,11 @@ src/
     Game.ts           ← world state, sessions, executeCommand, tick, events
     admin.ts          ← "/" test commands (gated by Session.admin)
     combat/ core/ enemies/ entities/ inventory/ magic/ movement/
+    gathering/        ← woodcutting.ts (1–99 curve, tree tiers, chop chance)
+    market/           ← market.ts (offers, deliveries, MarketChange, fee)
     net/protocol.ts   ← client⇄server messages, PROTOCOL_VERSION
     npc/              ← npcs.ts, dialogue.ts, stock.ts (shop lists)
-    player/           ← Player, vocations, outfits
+    player/           ← Player, vocations, outfits, skills.ts (combat skills, training, power level, migration values)
     quests/ save/ (SaveSystem.ts, migrate.ts)
     world/            ← WorldMap.ts (tiles, floors, EnemyKind), worldGen/terrain/towns…
   render/             ← Renderer, WorldView, CreatureView, Effects, PixelPass, CameraController, Overlay, models/, textures.ts
@@ -114,9 +117,12 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 | `accounts` | name_key PK, display_name, salt, hash, created_at, last_login | Only for name+password mode (no Supabase Auth) |
 | `characters` | name_key PK, owner_id uuid → auth.users (on delete set null), display_name, data jsonb (SaveData), save_version int, level, vocation, updated_at | One row per character; `data` is the whole save |
 | `character_backups` | id identity, name_key, data jsonb, save_version, reason, created_at | Written **before** every migration |
+| `market_offers` | id text PK, seller_key, seller_name, item_id, qty int >0, price bigint >0 (per piece), created_at, expires_at | Player market sell offers; the items are in escrow here. Migration `supabase/migrations/20261021_player_market.sql` (**not yet applied** — until it is, the server logs "Market: closed" and the market stays closed) |
+| `market_deliveries` | id text PK, name_key, gold bigint, items jsonb, reason, created_at | Gold from sales / items of expired offers for characters that were offline; handed out at their next login (or depot/market visit), then deleted |
 
 - Row Level Security is **on with no policies**: only the server (service key) can read/write. Never add public policies or let the browser talk to these tables.
 - `name_key` = lowercased character name. Max 5 characters per account.
+- **Market storage order (never lose anything):** every market change is a `MarketChange` stored in this order: (1) new offers + new deliveries, (2) save the characters involved, (3) shrink/delete offers and delete delivered deliveries. A crash can at worst hand something out twice, never lose it. Each save remembers received delivery ids (`market.claimed`), so a delivery left over after a crash is not paid twice. Never edit an offline character's save to pay them — use a delivery.
 - Schema changes: write a new Supabase migration **and** update `schema.sql` in the same commit. Additive only (new nullable columns, new tables). Never drop or rename columns holding player data.
 
 ---
@@ -127,7 +133,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 2. **Every player action is a `Command`** sent through `Controller.send(...)` → `Game.executeCommand`. UI/input never mutate game state directly. Offline = LocalController runs it locally; online = NetController sends it, the server is authoritative.
 3. **Game → view communication is via the event bus** (`core/events.ts`). Renderer, HUD and Sfx subscribe; they never poll internal fields they don't own.
 4. **Online:** server ticks at 20 Hz and sends snapshots (`VIEW_RADIUS = 20`). The client keeps a mirror Game (`simulate:false`) and applies snapshots. Messages arriving before the HUD exists go to the backlog.
-5. **Protocol:** `PROTOCOL_VERSION` (currently **9**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
+5. **Protocol:** `PROTOCOL_VERSION` (currently **10**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
 6. **PvP** (server option `PVP`, passed as `GameOptions.pvp`; off offline). Rules live in `Game` (`pvpProblem`, `onPvpAttack`, `onPvpKill`); every PvP hit passes `applyDamage`, which re-checks them:
    - Players block players, like monsters do, **except inside protection zones** (temples, depots, town doors) where they pass through each other. Logging in or teleporting onto an occupied tile is allowed.
    - No attacking from inside, or into, a protection zone. Attacker and target must both be level ≥ 8.
@@ -164,6 +170,10 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 | Music | `src/audio/Music.ts`: "The Open Road" (fields, 88 bpm), "Hearth and Lantern" (protection zones, 96 bpm), "Below the Stone" (z<0, 60 bpm); switches at phrase ends | audio/Music.ts |
 | Party | `PARTY_SHARE_RANGE = 30`, `PARTY_SHARE_BONUS = 1.2`, level rule lowest ≥ ⌈2/3 × highest⌉; parties are not saved (logout leaves the party) | Game.ts |
 | Autosave | every 30 s + on logout + on SIGTERM | server/server.ts |
+| Skills | start 10 (magic level 0); tries for next level = base × growth^(level−10) (magic: 1600 × growth^ML); base fist/club/sword/axe 50, distance 30, shielding 100. Growth knight 1.1 melee / 1.4 dist / 1.1 shield / 3.0 magic; paladin 1.2 / 1.1 / 1.1 / 1.4; mages 2.0 (fist 1.5) / 2.0 / 1.5 / 1.1. 1 try per attack made, 1 per attack received with a shield, 1 per mana point spent | player/skills.ts |
+| Skill effect | damage/healing formulas use **power level** = 0.5 × level + 0.5 + POWER[voc][skill] × (skill − start) instead of the level; POWER knight melee 0.8 / dist 1.6 / magic 5, paladin 1.2 / 0.8 / 2, mages 2.5 / 2.5 / 0.75. At the "typical" skill power = level (old balance). Miss chance −0.08% per skill point (min 2%); shielding +0.6% defence per point; magic level +0.3% wand/rod damage per point | player/skills.ts, combat.ts, Game.ts |
+| Woodcutting | levels 1–99, classic gathering curve (83 xp for 2, 13,034,431 for 99); chop every `CHOP_INTERVAL = 2` s; chance = tree base + 0.8%/level above requirement + 0.6%/axe attack above 12 (5–90%). Tree → logs (lvl 1, 25 xp, always falls, regrows 25–45 s); Pine → pine_logs (15, 45 xp, falls 1/4, 40–70 s); Palm → palm_logs (25, 70 xp, 1/5, 50–90 s); JungleTree → teak_logs (35, 90 xp, 1/6, 70–120 s). Stumps are not saved (regrow on restart) | gathering/woodcutting.ts |
+| Market | fee 1% of total (min 1 gold, bank first then backpack); max `MARKET_MAX_OFFERS = 20` offers per character; price 1–100,000,000 per piece; offers expire after 30 days (items return via delivery); stand within 2 tiles of the board | market/market.ts, Game.ts |
 | PvP min level | `PVP_MIN_LEVEL = 1` (owner: PvP from level 1) | Game.ts |
 | White skull | `WHITE_SKULL_MS` 15 min, refreshed per attack; self-defence window also 15 min | Game.ts |
 | Red skull | `UNJUST_KILLS_FOR_RED = 3` unjustified kills within `UNJUST_WINDOW_MS` 24 h → `RED_SKULL_MS` 24 h | Game.ts |
@@ -173,7 +183,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 
 ## 8. Save data and migration (PRIORITY)
 
-File: `src/game/save/migrate.ts`. Current **`SAVE_VERSION = 4`** (v2→v3: new world, everyone respawns at the Thornvale temple; v3→v4: `pvp` block — secure mode, skull expiry times, unjustified-kill timestamps — everyone starts unmarked with secure mode on).
+File: `src/game/save/migrate.ts`. Current **`SAVE_VERSION = 5`** (v2→v3: new world, everyone respawns at the Thornvale temple; v3→v4: `pvp` block — secure mode, skull expiry times, unjustified-kill timestamps — everyone starts unmarked with secure mode on; v4→v5: `skills` (from `legacySkills(vocation, level)`: every weapon skill and magic level at the value where power level ≥ character level, so nobody hits or heals less; shielding by vocation), `gathering.woodcutting = 0`, `market.claimed = []`).
 
 - Every save stores `version`. On load, `migrateSave()` upgrades it step by step: `MIGRATIONS[n]` turns version n into n+1.
 - **Changed the save shape?** → bump `SAVE_VERSION`, add `MIGRATIONS[old]`, add a case to the smoke test, note it in the Change Log below.
@@ -200,6 +210,9 @@ IDs are `snake_case`, English, stable forever once shipped (they live in saves).
   - *Conjuring:* exevo con, exevo con ferro, exevo con aquila, exevo lanca, exevo pan (food), exevo con flam (flaming arrows), exevo con pox (venom arrows), exevo con mort (bolts).
   - *Rune spells (1 `blank_rune` + mana + level → runes):* adori min vis → spark_rune, adori vis → thunderbolt_rune, adori flam → ember_rune, adori mas flam → fireball_rune, adori frigo → icicle_rune, adori mas frigo → avalanche_rune, adori tera → rockspike_rune, adori mas tera → stoneshower_rune, adori mas vis → stormcloud_rune, adori gran mort → death_rune, adori san → sunlance_rune, adevo mas hur → blast_rune, adura gran → soothing_rune, adura vita → healing_rune, adana pox → antidote_rune, adana ani → snare_rune, adevo grav flam/vis/pox → flame/static/venom_field_rune, adevo mas flam/vis/pox → firebloom/stormbloom/venombloom_rune, adevo mas grav flam/vis/pox → flame/static/venom_barrier_rune, adevo grav tera → arcane_wall_rune, adito grav → dispel_rune.
 - **Map objects added for rune fields:** `Obj.EnergyField = 42`, `Obj.PoisonField = 43`, `Obj.MagicWall = 44` (fire fields reuse `Obj.FireField`). Only ever placed temporarily by `Game.placeField`.
+- **Map objects for skills/market:** `Obj.MarketBoard = 45` (one in every town depot, placed by `placeMarketBoards` in worldGen), `Obj.Stump = 46` (felled tree, temporary, `Game.stumps`).
+- **Skills (save keys):** `fist`, `club`, `sword`, `axe`, `distance`, `shielding`, `magic`; gathering: `woodcutting` (xp in `gathering.woodcutting`). No fishing (fishing does not exist in the game yet).
+- **Woodcutting items:** `logs`, `pine_logs`, `palm_logs`, `teak_logs` (materials: general traders, quest givers and outfitters buy them). The existing `hatchet` (Woodcutter's Axe) is sold by smiths, outfitters and Zuri; any axe works for chopping (best usable one counts).
 - **Items:** `src/game/inventory/items.ts` is authoritative (~100+). Runes, potions, weapons, armour sets, tools, loot.
 - **Monsters:** `EnemyKind` in `world/WorldMap.ts`, stats in `enemies/enemyDefs.ts`. Includes the classic set plus the ice-region set (frost_dragon, ice_golem, crystal_spider, frost_giant, frost_giantess, ice_witch, barbarian_*, frostkin*, dire_penguin, silver_rabbit, winter_wolf, polar_bear) and scorpion, mummy, scarab, minotaur(+archer/mage), cyclops, dwarf(+soldier/guard), bandit, amazon, valkyrie, bear, deer, snake, lizard_sentinel/templar.
 - **NPCs:** `npc/npcs.ts`; shop lists in `npc/stock.ts` (EXTRA_SELLS / EXTRA_BUYS merged into NPCS). Services: shop, bank, depot, travel, quests.
@@ -209,7 +222,7 @@ IDs are `snake_case`, English, stable forever once shipped (they live in saves).
 
 ## 10. Controls (don't change without the owner)
 
-Arrows/WASD + numpad diagonals move · **Ctrl+direction** turns · **Ctrl+R** turns clockwise · click to walk (A*) · right-click = use/look/context menu · Atk/Bal/Def + Follow/Stand buttons · drag items (onto a player = trade; to ground = throw; ground items to another tile; onto lockers/tables; runes onto battle-list rows; to slots/containers) · **F1–F12** hotbar (12 slots) · runes aimed with a crosshair (area preview) · **M** world map · **H** help · **`** dev console · Enter/chat for spells and `/` commands. Worn equipment always shows on the character (owner decision 2026-10-21; the old "classic look" option was removed).
+Arrows/WASD + numpad diagonals move · **Ctrl+direction** turns · **Ctrl+R** turns clockwise · click to walk (A*) · right-click = use/look/context menu · Atk/Bal/Def + Follow/Stand buttons · drag items (onto a player = trade; to ground = throw; ground items to another tile; onto lockers/tables; runes onto battle-list rows; to slots/containers) · **F1–F12** hotbar (12 slots) · runes aimed with a crosshair (area preview) · **M** world map · **H** help · **`** dev console · Enter/chat for spells and `/` commands · click/right-click a tree with an axe = chop · use a market board (in depots) = Market window · Skills panel in the left side column (click its title to fold). Worn equipment always shows on the character (owner decision 2026-10-21; the old "classic look" option was removed).
 
 ---
 
@@ -262,8 +275,10 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [x] Trade items: drag an item onto a player (world or battle list) or into the trade window (`tradeItem`); click your offered item to take it back.
 - [x] Fight stance Atk/Bal/Def (+20% dealt & +15% taken / normal / −30% dealt & −25% taken, weapon attacks only) and Follow/Stand (`fightMode`, remembered per browser).
 - [x] Luring: monsters have no leash, never run home and never regenerate; when they lose their target they idle where they are (`Enemy.homeX/homeY`). Monster heal spells still exist.
-- [ ] Skills like the classic game (fist, club, sword, axe, distance, shielding, magic level, fishing) trained by use, shown in a left-side Skills panel — needs SAVE_VERSION bump. Do after PvP merges.
-- [ ] RuneScape-style gathering skills (woodcutting first: chop trees with an axe → logs, levels, sell) and a player market — after skills.
+- [x] Skills like the classic game (fist, club, sword, axe, distance, shielding, magic level) trained by use, shown in a left-side Skills panel (save v5). Fishing left out until fishing exists.
+- [x] Woodcutting (chop trees with an axe → logs, levels 1–99, sell to traders) and a player market (market board in every depot).
+- [ ] **Apply Supabase migration `supabase/migrations/20261021_player_market.sql`** (tables `market_offers`, `market_deliveries`), then restart the server and check the log line "Market: open". Until then the market says it is closed.
+- [ ] Later: more gathering skills (fishing, mining), a rare special tree, market buy offers and price history.
 - [x] Runes on the battle list: drag a rune onto a row, or pick a rune (hotkey/click) and click a row (`useRuneOn`).
 - [x] PvP: player collision outside protection zones, secure mode, white/red skulls, PZ lock, red-skull backpack loss (server env `PVP`).
 - [ ] PvP later (owner decision): logout block while PZ-locked / in a fight, skulls on the minimap, party/guild war marks, frags list.
@@ -304,3 +319,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Bigger/longer speech text; party system (invite/join/leave/pass leader via right-click, Party panel, no friendly fire) with shared experience (+20%, same floor within 30 tiles, lowest level ≥ 2/3 of highest; leader switches it on/off) | 4 | 9 |
 | 2026-10-21 | — | More blood on hits; blood splats and death pools stay on the floor (dry darker, vanish after 3 min) — `src/render/Blood.ts`, render-only | 4 | 9 |
 | 2026-10-21 | — | Website: guide, highscores (/api/highscores), FAQ, rules, privacy pages; byte-range file serving | 4 | 9 |
+| 2026-10-21 | — | Classic skills (fist/club/sword/axe/distance/shielding/magic level, trained by use, Skills panel, `/skill`), woodcutting (trees → logs, stumps regrow, levels 1–99), player market (market board in every depot, escrow, 1% fee, deliveries to offline sellers; new tables `market_offers`, `market_deliveries`). Old characters get skills that keep their damage | 5 | 10 |

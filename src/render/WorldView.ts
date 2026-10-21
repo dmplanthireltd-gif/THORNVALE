@@ -60,6 +60,13 @@ interface FadeLayer {
   proxyMat: THREE.Material;
 }
 
+/** Tree trunks by tile, so a felled tree can shrink to a stump (and grow back). */
+interface TrunkLayer {
+  mesh: THREE.InstancedMesh;
+  byTile: Map<number, number[]>;
+  original: THREE.Matrix4[];
+}
+
 interface RoofView {
   house: House;
   group: THREE.Group;
@@ -79,6 +86,9 @@ class FloorView {
   readonly group = new THREE.Group();
   readonly mats: Mat[] = [];
   fadeLayers: FadeLayer[] = [];
+  trunkLayers: TrunkLayer[] = [];
+  /** Tiles currently drawn as stumps. */
+  stumps = new Set<number>();
   roofs: RoofView[] = [];
   features = new Map<number, Feature>();
   dim = 1;
@@ -105,6 +115,8 @@ const tmpE = new THREE.Euler();
 const tmpS = new THREE.Vector3();
 const tmpP = new THREE.Vector3();
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
+/** A trunk cut down to a stump: short and a little wider. */
+const STUMP_SCALE = new THREE.Matrix4().makeScale(1.35, 0.24, 1.35);
 
 function compose(x: number, y: number, z: number, rotY = 0, sx = 1, sy = 1, sz = 1, rotX = 0, rotZ = 0): THREE.Matrix4 {
   tmpQ.setFromEuler(tmpE.set(rotX, rotY, rotZ));
@@ -135,7 +147,11 @@ export class WorldView {
   private flameMats: Mat[] = [];
   currentZ = 0;
 
-  constructor(private readonly world: WorldMap, scene: THREE.Scene) {
+  /**
+   * `stumpOf` tells which tree a stump tile was (felled trees grow back), so a
+   * view built while a tree lies felled still has that tree to restore.
+   */
+  constructor(private readonly world: WorldMap, scene: THREE.Scene, private readonly stumpOf: (x: number, y: number, z: number) => Obj | null = () => null) {
     scene.add(this.group);
     for (const z of [...world.floors.keys()].sort((a, b) => a - b)) {
       const fv = new FloorView(z);
@@ -257,7 +273,11 @@ export class WorldView {
     const trunkMat = M(0x7a5434, bark);
     const leafMat = M(0xffffff, leaves);
     const plainMat = M(0xffffff);
-    const trunks = B(geo(new THREE.CylinderGeometry(0.11, 0.17, 1.3, 6), 0.65), trunkMat);
+    const trunkGeo = geo(new THREE.CylinderGeometry(0.11, 0.17, 1.3, 6), 0.65);
+    const trunks = B(trunkGeo, trunkMat);
+    // living trees get their own trunk batch, indexed by tile, so they can be felled
+    const treeTrunks = B(trunkGeo, trunkMat);
+    const stumpTiles: number[] = [];
     const canopyLow = B(new THREE.IcosahedronGeometry(0.72, 0), leafMat);
     const canopyHigh = B(new THREE.IcosahedronGeometry(0.5, 0), leafMat);
     const pine1 = B(new THREE.ConeGeometry(0.78, 1.25, 7), leafMat);
@@ -318,16 +338,22 @@ export class WorldView {
 
     for (let y = 0; y < w.height; y++) {
       for (let x = 0; x < w.width; x++) {
-        const o = w.getObj(x, y, z);
+        let o = w.getObj(x, y, z);
         if (o === Obj.None) continue;
         const ti = w.idx(x, y);
+        if (o === Obj.Stump) {
+          const tree = this.stumpOf(x, y, z);
+          if (tree === null) continue;
+          o = tree;
+          stumpTiles.push(ti);
+        }
         const h = hash2(x, y, 3);
         const rot = hash2(x, y, 5) * Math.PI * 2;
         const c = new THREE.Color();
         switch (o) {
           case Obj.Tree: {
             const s = 0.9 + h * 0.35;
-            trunks.add(compose(x, 0, y, rot, s, s, s));
+            treeTrunks.add(compose(x, 0, y, rot, s, s, s), 0xffffff, ti);
             c.setHex(leafColors[Math.floor(hash2(x, y, 9) * 4)]);
             canopyLow.add(compose(x, 1.55 * s, y, rot, s, s * 0.9, s), c, ti);
             canopyHigh.add(compose(x + 0.12, 2.1 * s, y - 0.08, rot, s, s, s), c.clone().multiplyScalar(1.12), ti);
@@ -335,7 +361,7 @@ export class WorldView {
           }
           case Obj.Pine: {
             const s = 0.85 + h * 0.4;
-            trunks.add(compose(x, 0, y, rot, s * 0.8, s * 0.8, s * 0.8));
+            treeTrunks.add(compose(x, 0, y, rot, s * 0.8, s * 0.8, s * 0.8), 0xffffff, ti);
             c.setHex(pineColors[Math.floor(hash2(x, y, 9) * 4)]);
             pine1.add(compose(x, 1.15 * s, y, rot, s, s, s), c, ti);
             pine2.add(compose(x, 1.8 * s, y, rot, s, s, s), c.clone().multiplyScalar(1.08), ti);
@@ -344,14 +370,14 @@ export class WorldView {
           }
           case Obj.JungleTree: {
             const s = 1.0 + h * 0.4;
-            trunks.add(compose(x, 0, y, rot, s * 1.2, s * 1.3, s * 1.2));
+            treeTrunks.add(compose(x, 0, y, rot, s * 1.2, s * 1.3, s * 1.2), 0xffffff, ti);
             jungle1.add(compose(x, 2.0 * s, y, rot, s * 1.1, s * 0.75, s * 1.1), c.setHex(0x2f6a26).multiplyScalar(0.9 + h * 0.3), ti);
             canopyHigh.add(compose(x - 0.2, 2.5 * s, y + 0.1, rot, s * 1.2, s * 0.9, s * 1.2), c.clone().multiplyScalar(1.15), ti);
             break;
           }
           case Obj.Palm: {
             const lean = (h - 0.5) * 0.4;
-            palmTrunk.add(compose(x, 0, y, rot, 1, 1, 1, lean, 0));
+            palmTrunk.add(compose(x, 0, y, rot, 1, 1, 1, lean, 0), 0xffffff, ti);
             for (let i = 0; i < 6; i++) {
               const a = rot + (i / 6) * Math.PI * 2;
               frond.add(compose(x + Math.sin(a) * 0.45, 2.15, y + Math.cos(a) * 0.45 + lean * 0.8, a, 1, 1, 1, 0.45, 0), c.setHex(0x4a9a3a).multiplyScalar(0.85 + hash2(x, y, i) * 0.3), ti);
@@ -518,6 +544,9 @@ export class WorldView {
           case Obj.Locker:
             this.buildLocker(fv, x, y);
             break;
+          case Obj.MarketBoard:
+            this.buildMarketBoard(fv, x, y);
+            break;
           default:
             break;
         }
@@ -525,11 +554,24 @@ export class WorldView {
     }
 
     const all = [trunks, rocks, bushes, ferns, berry, flowers, stems, wheat, wallsWood, wallsStone, beams, doorPosts, lintels, fPosts, rails, railPosts,
-      headstones, mounds, barrels, hoops, crates, tableTop, tableLeg, hay, lampPost, lampGlow, deadBranch, palmTrunk, stakes, stakeTips,
+      headstones, mounds, barrels, hoops, crates, tableTop, tableLeg, hay, lampPost, lampGlow, deadBranch, stakes, stakeTips,
       stoneWalls, pillars, counters, altars, stalag, bones, skulls, flames, torchSticks, torchFlame];
     for (const b of all) {
       const im = b.build();
       if (im) fv.group.add(im);
+    }
+    for (const b of [treeTrunks, palmTrunk]) {
+      const im = b.build();
+      if (!im) continue;
+      fv.group.add(im);
+      const byTile = new Map<number, number[]>();
+      b.tiles.forEach((t, i) => {
+        if (t < 0) return;
+        const list = byTile.get(t);
+        if (list) list.push(i);
+        else byTile.set(t, [i]);
+      });
+      fv.trunkLayers.push({ mesh: im, byTile, original: b.matrices });
     }
     const fadeBatches: Array<[Batch, number]> = [[canopyLow, 0x4a8a38], [canopyHigh, 0x4a8a38], [pine1, 0x2f5e34], [pine2, 0x2f5e34], [pine3, 0x2f5e34], [jungle1, 0x2f6a26], [frond, 0x4a9a3a], [cliffs, 0x6a6058]];
     for (const [b, proxyColor] of fadeBatches) {
@@ -546,6 +588,58 @@ export class WorldView {
       const proxyMat = new THREE.MeshToonMaterial({ color: proxyColor, gradientMap: toonGradient(), transparent: true, opacity: 0.25, depthWrite: false });
       fv.fadeLayers.push({ mesh: im, byTile, original: b.matrices, proxyMat });
     }
+    for (const ti of stumpTiles) this.setStump(fv, ti, true);
+  }
+
+  /** Shows a tree as a stump (canopy gone, trunk cut short) or restores it. */
+  private setStump(fv: FloorView, ti: number, on: boolean): void {
+    if (on === fv.stumps.has(ti)) return;
+    if (on) fv.stumps.add(ti);
+    else fv.stumps.delete(ti);
+    const m = new THREE.Matrix4();
+    for (const L of fv.trunkLayers) {
+      for (const i of L.byTile.get(ti) ?? []) {
+        L.mesh.setMatrixAt(i, on ? m.copy(L.original[i]).multiply(STUMP_SCALE) : L.original[i]);
+        L.mesh.instanceMatrix.needsUpdate = true;
+      }
+    }
+    for (const L of fv.fadeLayers) {
+      for (const key of this.keysFor(L, ti)) {
+        const i = L.byTile.get(key);
+        if (i === undefined) continue;
+        L.mesh.setMatrixAt(i, on ? ZERO : L.original[i]);
+        L.mesh.instanceMatrix.needsUpdate = true;
+      }
+    }
+  }
+
+  private buildMarketBoard(fv: FloorView, x: number, y: number): void {
+    const g = new THREE.Group();
+    g.position.set(x, 0, y);
+    const wood = fv.m(0x6a4428, { map: objTex.logs() });
+    for (const px of [-0.36, 0.36]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 0.1), wood);
+      post.position.set(px, 0.75, 0);
+      g.add(post);
+    }
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.66, 0.08), fv.m(0x8a5e34, { map: objTex.logs() }));
+    board.position.set(0, 1.12, 0.02);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.07, 0.2), fv.m(0x4a2f1b));
+    cap.position.set(0, 1.48, 0.02);
+    g.add(board, cap);
+    // pinned notices and a gold coin sign
+    const paper = fv.m(0xefe6cf);
+    for (const [nx, ny, r] of [[-0.22, 1.2, 0.08], [0.05, 1.04, -0.06], [0.24, 1.22, 0.1], [-0.12, 0.95, -0.04]]) {
+      const note = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.22, 0.01), paper);
+      note.position.set(nx, ny, 0.07);
+      note.rotation.z = r;
+      g.add(note);
+    }
+    const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.03, 10), fv.m(0xe8b923, { emissive: 0x3a2a00 }));
+    coin.rotation.x = Math.PI / 2;
+    coin.position.set(0, 1.62, 0.02);
+    g.add(coin);
+    this.add(fv, g);
   }
 
   private add(fv: FloorView, ...meshes: THREE.Object3D[]): void {
@@ -751,9 +845,13 @@ export class WorldView {
 
   onTileChanged(x: number, y: number, z: number): void {
     const fv = this.floors.get(z);
-    const f = fv?.features.get(this.world.idx(x, y));
-    if (!f) return;
+    if (!fv) return;
+    const ti = this.world.idx(x, y);
     const o = this.world.getObj(x, y, z);
+    // woodcutting: a tree was felled or grew back
+    if (o === Obj.Stump || o === Obj.Tree || o === Obj.Pine || o === Obj.JungleTree || o === Obj.Palm) this.setStump(fv, ti, o === Obj.Stump);
+    const f = fv.features.get(ti);
+    if (!f) return;
     if (f.looseStone) f.looseStone.visible = o === Obj.LooseStone;
     if (f.hole) f.hole.visible = o === Obj.Hole;
   }
@@ -883,6 +981,8 @@ export class WorldView {
   }
 
   private restoreTile(fv: FloorView, ti: number): void {
+    // a stump keeps its canopy hidden
+    if (fv.stumps.has(ti)) return;
     for (const L of fv.fadeLayers) {
       for (const key of this.keysFor(L, ti)) {
         const i = L.byTile.get(key);

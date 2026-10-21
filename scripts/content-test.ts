@@ -9,11 +9,12 @@ declare const process: { exit(code: number): never };
 import { BufferedIntent, Game, type Session } from '../src/game/Game';
 import { Enemy } from '../src/game/enemies/Enemy';
 import { ENEMIES } from '../src/game/enemies/enemyDefs';
-import { equipSlotFor, ITEMS, POTION_BUFF_SECONDS } from '../src/game/inventory/items';
+import { equipSlotFor, ITEMS, LOG_ITEMS, POTION_BUFF_SECONDS } from '../src/game/inventory/items';
 import { exivaText, SPELLS, type SpellId } from '../src/game/magic/spells';
 import { facingFromDelta } from '../src/game/core/types';
 import { Ground, Obj } from '../src/game/world/WorldMap';
 import { SPELL_RUNES } from '../src/game/npc/stock';
+import { TREES } from '../src/game/gathering/woodcutting';
 import { buildDialogue } from '../src/game/npc/dialogue';
 import { NPCS } from '../src/game/npc/npcs';
 import { EXTRA_BUYS, EXTRA_SELLS, EXTRA_SPELLS } from '../src/game/npc/stock';
@@ -199,7 +200,10 @@ console.log('Buff potions');
       e.dead = false;
       e.hp = 1e9;
       const before = e.hp;
+      // keep the skills fixed: thousands of test swings would otherwise train them mid-measurement
+      const skills = JSON.stringify(s.skills);
       g.meleeAttack(s.player, e);
+      s.skills = JSON.parse(skills) as Session['skills'];
       total += before - e.hp;
     }
     return total / n;
@@ -734,6 +738,30 @@ console.log('Models');
   } catch (err) {
     console.log(`  skip models: ${(err as Error).message}`);
   }
+}
+
+
+// ---------------------------------------------------------------- woodcutting & market content
+console.log('Woodcutting and market');
+{
+  const logs = Object.values(TREES).map((t) => t!.log);
+  check(logs.every((id) => ITEMS[id]?.kind === 'material' && ITEMS[id].value > 0 && ITEMS[id].weight > 0), 'every tree gives an existing log item');
+  check(LOG_ITEMS.every((id) => logs.includes(id)), 'every log item comes from a tree');
+  const values = LOG_ITEMS.map((id) => ITEMS[id].value);
+  check(values.every((v, i) => i === 0 || v > values[i - 1]), 'better logs are worth more');
+  const bought = new Set(Object.values(NPCS).flatMap((n) => n.buys ?? []));
+  check(LOG_ITEMS.every((id) => bought.has(id)), 'traders buy every kind of log');
+  const outfitters = Object.values(NPCS).filter((n) => n.role.startsWith('Outfitter'));
+  check(outfitters.length > 5 && outfitters.every((n) => LOG_ITEMS.every((id) => n.buys?.includes(id)) && n.sells?.some((e) => e.id === 'hatchet')), `every outfitter (${outfitters.length}) sells hatchets and buys logs`);
+  check(ITEMS.hatchet.weaponType === 'axe' && !(ITEMS.hatchet.level! > 1), 'the hatchet is a level-1 axe');
+  const g = new Game();
+  const w = g.world;
+  const depots = w.houses.filter((h) => h.z === 0 && /depot/i.test(h.name));
+  const boards = depots.filter((h) => { for (let y = h.y; y < h.y + h.h; y++) for (let x = h.x; x < h.x + h.w; x++) if (w.getObj(x, y, 0) === Obj.MarketBoard) return true; return false; });
+  check(depots.length >= 14 && boards.length === depots.length, `every town depot has a market board (${boards.length}/${depots.length})`);
+    let trees = 0;
+  for (let y = 0; y < w.height; y += 2) for (let x = 0; x < w.width; x += 2) if (TREES[w.getObj(x, y, 0)]) trees++;
+  check(trees > 500, `plenty of trees to chop (${trees} sampled)`);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll content checks passed.');

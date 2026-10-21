@@ -1,6 +1,7 @@
 import type { GameEvent } from '../game/core/events';
 import { BufferedIntent, Game, type Session, type TradeView } from '../game/Game';
 import type { ItemStack } from '../game/inventory/items';
+import type { MarketView } from '../game/market/market';
 import {
   applySnapshot, executeCommand, PROTOCOL_VERSION, type ClientMessage, type Command, type MirrorExtras, type ServerMessage,
 } from '../game/net/protocol';
@@ -24,6 +25,8 @@ export interface Controller {
   tap(dx: number, dy: number): void;
   depot(): (ItemStack | null)[] | null;
   trade(): TradeView | null;
+  /** The market window's contents while a market board is in use. */
+  market(): MarketView | null;
   update(dt: number): void;
   /** Saves the character now; returns false when nowhere to save. */
   save(): boolean;
@@ -73,6 +76,7 @@ export class LocalController implements Controller {
     this.pid = s.id;
     game.localId = s.id;
     s.admin = true; // single player: test commands are always on
+    saves.attachMarket(game);
     if (opts.load && saves.load(game, s.id)) {
       game.msg(s.id, `Welcome back, ${s.player.name}. Your progress was restored.`, 'info');
     } else {
@@ -106,6 +110,10 @@ export class LocalController implements Controller {
 
   trade(): TradeView | null {
     return this.game.tradeView(this.pid);
+  }
+
+  market(): MarketView | null {
+    return this.game.marketView(this.pid);
   }
 
   save(): boolean {
@@ -144,7 +152,7 @@ export class NetController implements Controller {
   readonly game: Game;
   pid = -1;
   onDisconnect: ((why: string) => void) | null = null;
-  private extras: MirrorExtras = { depot: null, trade: null };
+  private extras: MirrorExtras = { depot: null, trade: null, market: null };
   private held = { dx: 0, dy: 0 };
   private closed = false;
 
@@ -260,6 +268,10 @@ export class NetController implements Controller {
 
   trade(): TradeView | null {
     return this.extras.trade;
+  }
+
+  market(): MarketView | null {
+    return this.extras.market ?? null;
   }
 
   save(): boolean {

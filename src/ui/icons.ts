@@ -446,6 +446,7 @@ const MATERIAL_SHAPE: Record<string, [string, string]> = {
   minotaur_leather: ['pelt', '#8a5a32'], cyclops_eye: ['eye', '#f0f0e8'], scorpion_tail: ['tail', '#c08a3a'], scarab_coin: ['coin', '#40c0a0'],
   mummy_wrapping: ['scroll', '#d8ccb0'], lizard_scale: ['scale', '#5a9a4a'], giant_beard: ['pelt', '#c8d8e8'], crystal_shard: ['crystal', '#9fe6ff'],
   frozen_heart: ['heart', '#6ac8ff'], frost_dragon_scale: ['scale', '#bfe6f5'],
+  logs: ['logs', '#9a6a3a'], pine_logs: ['logs', '#b08850'], palm_logs: ['logs', '#c8a870'], teak_logs: ['logs', '#7a4a28'],
 };
 
 function drawMaterial(x: Ctx, d: ItemDef): void {
@@ -600,6 +601,18 @@ function drawMaterial(x: Ctx, d: ItemDef): void {
       x.beginPath();
       x.ellipse(16, 18, 11, 8, 0.3, 0, Math.PI * 2);
       paint(x, c);
+      break;
+    case 'logs':
+      // three logs stacked, cut ends showing their rings
+      for (const [lx, ly] of [[5, 20], [13, 20], [9, 12]]) {
+        x.beginPath();
+        x.rect(lx, ly - 4, 14, 8);
+        paint(x, c);
+        x.beginPath();
+        x.ellipse(lx + 14, ly, 3, 4, 0, 0, Math.PI * 2);
+        paint(x, shade(c, 1.5), 1);
+        circle(x, lx + 14, ly, 1.3, shade(c, 0.8), 0);
+      }
       break;
     default:
       glow(x, 16, 16, 15, `${c}99`);

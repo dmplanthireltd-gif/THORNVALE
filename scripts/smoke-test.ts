@@ -16,8 +16,13 @@ import { floodFill3D } from '../src/game/world/worldGen';
 import { Obj, WorldMap } from '../src/game/world/WorldMap';
 import { ITEMS } from '../src/game/inventory/items';
 import { PVP_MIN_LEVEL } from '../src/game/Game';
+import { NPCS } from '../src/game/npc/npcs';
 import type { Vocation } from '../src/game/player/vocations';
 import { expForLevel } from '../src/game/player/Player';
+import { legacySkills, powerLevel, triesForNext, typicalSkill } from '../src/game/player/skills';
+import { rollMelee } from '../src/game/combat/combat';
+import { gatherLevelForXp, gatherXpForLevel, TREES } from '../src/game/gathering/woodcutting';
+import { MARKET_OFFER_MS, type MarketChange } from '../src/game/market/market';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -267,7 +272,7 @@ console.log('Spells & runes');
   p.hp = 20;
   g.say(pid, 'exura');
   check(p.hp > 20, 'exura heals');
-  p.level = 60; p.exp = 2_000_000; g.refreshStats(s); p.mana = p.maxMana;
+  p.level = 60; p.exp = 2_000_000; s.skills = legacySkills('sorcerer', 60); g.refreshStats(s); p.mana = p.maxMana;
   const spot = openStrip(g);
   g.teleport(p, spot.x, spot.y, 0);
   const w = enemyNear(g, 'orc', p, 2);
@@ -919,6 +924,371 @@ console.log('Party and shared experience');
   check(!g.partyView(a.id)?.sharedActive, 'sharing pauses when levels are too far apart');
   executeCommand(g, b.id, { c: 'partyLeave' });
   check(!g.partyOf(a.id) && !g.partyOf(b.id), 'a party of one disbands');
+}
+
+console.log('\nSkills (classic: trained by use)');
+{
+  const { g, s, pid } = solo('knight');
+  const p = s.player;
+  check(s.skills.sword.level === 10 && s.skills.axe.level === 10 && s.skills.fist.level === 10 && s.skills.magic.level === 0 && s.skills.shielding.level === 10, 'new characters start with skills 10 and magic level 0');
+  check(g.weaponPower(s) === 1 && g.magicPower(s) === 1, 'a fresh level-1 character fights exactly as before (power level = level)');
+  check(triesForNext('sword', 10, 'knight') === 50 && triesForNext('sword', 11, 'knight') === 55 && triesForNext('magic', 0, 'sorcerer') === 1600, 'tries per level grow exponentially');
+  check(triesForNext('sword', 30, 'knight') < triesForNext('sword', 30, 'paladin') && triesForNext('sword', 30, 'paladin') < triesForNext('sword', 30, 'sorcerer'), 'knights train melee fastest, mages slowest');
+  check(triesForNext('distance', 30, 'paladin') < triesForNext('distance', 30, 'knight'), 'paladins train distance fastest');
+  check(triesForNext('magic', 10, 'druid') < triesForNext('magic', 10, 'paladin') && triesForNext('magic', 10, 'paladin') < triesForNext('magic', 10, 'knight'), 'mages train magic level fastest');
+
+  // swings train the weapon skill
+  const spot = openStrip(g);
+  g.teleport(p, spot.x, spot.y, 0);
+  p.god = true;
+  const foe = enemyNear(g, 'orc_warrior', p, 1);
+  foe.hp = foe.maxHp = 1e9;
+  const msgs: string[] = [];
+  g.events.on((e) => { if (e.type === 'message' && e.to === pid) msgs.push(e.text); });
+  s.skills.sword.tries = 49;
+  g.commandAttack(pid, foe.id);
+  run(g, 2.5);
+  check(s.skills.sword.level >= 11 && msgs.some((m) => m === 'You advanced to sword fighting level 11.'), `attacking with a sword trains sword fighting (now ${s.skills.sword.level})`);
+  check(s.skills.shielding.tries > 0 || s.skills.shielding.level > 10, 'being attacked while holding a shield trains shielding');
+  const noShield = solo('knight');
+  noShield.s.inventory.equipment.shield = null;
+  g.teleport(noShield.s.player, spot.x, spot.y + 1, 0);
+  {
+    const ng = noShield.g;
+    const np = noShield.s.player;
+    ng.teleport(np, spot.x, spot.y, 0);
+    np.god = true;
+    const f2 = enemyNear(ng, 'orc_warrior', np, 1);
+    f2.hp = f2.maxHp = 1e9;
+    f2.targetId = np.id;
+    run(ng, 4);
+    check(noShield.s.skills.shielding.tries === 0, 'no shield, no shielding training');
+  }
+  g.commandClearTarget(pid);
+  p.god = false;
+
+  // higher skill → more damage at the same level (and the same weapon)
+  const avg = (power: number, skill: number) => {
+    let t = 0;
+    for (let i = 0; i < 4000; i++) {
+      const r = rollMelee(power, 20, 1, 0, 0);
+      t += r.amount;
+    }
+    void skill;
+    return t / 4000;
+  };
+  const lowP = powerLevel(40, 'sword', 20, 'knight');
+  const highP = powerLevel(40, 'sword', 60, 'knight');
+  check(avg(highP, 60) > avg(lowP, 20) * 1.15, `sword 60 hits harder than sword 20 at level 40 (power ${lowP.toFixed(1)} → ${highP.toFixed(1)})`);
+  const typ = typicalSkill('sword', 40, 'knight');
+  check(Math.abs(powerLevel(40, 'sword', typ, 'knight') - 40) < 1e-9, `at the typical skill (${typ.toFixed(1)}) a level-40 knight deals the old damage`);
+  // real game: damage goes up once the skill is raised
+  {
+    const kk = solo('knight');
+    kk.s.player.level = 40;
+    kk.g.refreshStats(kk.s);
+    const ks = openStrip(kk.g);
+    kk.g.teleport(kk.s.player, ks.x, ks.y, 0);
+    const dummy = enemyNear(kk.g, 'orc', kk.s.player, 1);
+    const swingAvg = () => {
+      let t = 0;
+      for (let i = 0; i < 1500; i++) {
+        dummy.dead = false; dummy.hp = 1e9;
+        kk.g.meleeAttack(kk.s.player, dummy);
+        t += 1e9 - dummy.hp;
+      }
+      return t / 1500;
+    };
+    kk.s.skills.sword = { level: 15, tries: 0 };
+    const d15 = swingAvg();
+    kk.s.skills.sword = { level: 70, tries: 0 };
+    const d70 = swingAvg();
+    check(d70 > d15 * 1.2, `in game, sword 70 deals more than sword 15 (${d15.toFixed(1)} → ${d70.toFixed(1)} per swing)`);
+    kk.s.skills.shielding = { level: 10, tries: 0 };
+    const def10 = kk.g.defense(kk.s);
+    kk.s.skills.shielding = { level: 60, tries: 0 };
+    check(kk.g.defense(kk.s) > def10, `shielding raises defence (${def10} → ${kk.g.defense(kk.s)})`);
+  }
+
+  // magic level from mana spent
+  const m = solo('sorcerer');
+  m.s.player.mana = m.s.player.maxMana;
+  m.s.player.hp = 10;
+  const before = m.s.skills.magic.tries;
+  m.g.say(m.pid, 'exura');
+  check(m.s.skills.magic.tries - before === 20 || m.s.skills.magic.tries - before > 0, `casting spends mana and trains magic level (+${m.s.skills.magic.tries - before})`);
+  m.s.skills.magic.tries = 1599;
+  m.s.player.hp = 10;
+  m.s.player.groupCooldowns.heal = 0;
+  m.s.player.spellCooldowns = {};
+  m.g.say(m.pid, 'exura');
+  check(m.s.skills.magic.level === 1, 'enough mana spent: magic level 1');
+  const healAt = (ml: number) => {
+    m.s.skills.magic.level = ml;
+    return m.g.magicPower(m.s);
+  };
+  check(healAt(30) > healAt(0), 'magic level raises the power of spells, runes and healing');
+  // wands: every shot spends mana and trains magic level
+  {
+    const ws = openStrip(m.g);
+    m.g.teleport(m.s.player, ws.x, ws.y, 0);
+    m.s.skills.magic = { level: 0, tries: 0 };
+    m.s.player.mana = m.s.player.maxMana;
+    m.s.player.god = true;
+    const t = enemyNear(m.g, 'orc_warrior', m.s.player, 2);
+    t.hp = t.maxHp = 1e9;
+    m.g.commandAttack(m.pid, t.id);
+    run(m.g, 3.2);
+    check(m.s.skills.magic.tries > 0, 'wand shots train magic level');
+  }
+
+  // admin command and help
+  s.admin = true;
+  g.say(pid, '/skill axe 55');
+  g.say(pid, '/skill ml 7');
+  g.say(pid, '/skill wc 30');
+  check(s.skills.axe.level === 55 && s.skills.magic.level === 7 && gatherLevelForXp(s.woodcutting) === 30, '/skill sets combat skills, magic level and woodcutting');
+  g.say(pid, '/help');
+  check(msgs.some((t) => t.startsWith('/skill')), '/help lists /skill');
+
+  // save, load and the snapshot (own player only)
+  const data = g.serialize(pid);
+  const t2 = solo('knight');
+  check(t2.g.applySave(t2.pid, data) && t2.s.skills.axe.level === 55 && t2.s.skills.sword.level === s.skills.sword.level && t2.s.skills.sword.tries === s.skills.sword.tries && t2.s.woodcutting === s.woodcutting, 'skills and woodcutting survive save and load');
+  const snap = buildSnapshot(g, s);
+  const mirror = new Game({ simulate: false });
+  if (snap.t === 'snap') {
+    applySnapshot(mirror, snap);
+    const ms = mirror.session(pid)!;
+    check(ms.skills.axe.level === 55 && ms.skills.magic.level === 7 && ms.woodcutting === s.woodcutting, 'skills reach the client in the snapshot');
+    const other = snap.c.find((c) => c.id === pid) as unknown as Record<string, unknown>;
+    check(other && !('skills' in other), 'skills are only sent for your own character');
+  }
+}
+
+console.log('Skills migration (save v4 → v5)');
+{
+  const old = (voc: Vocation, level: number) => {
+    const { g, pid, s } = solo(voc);
+    s.player.level = level;
+    s.player.exp = expForLevel(level);
+    const d = g.serialize(pid) as unknown as Record<string, unknown>;
+    delete d.skills;
+    delete d.gathering;
+    delete d.market;
+    d.version = 4;
+    return d;
+  };
+  const m1 = migrateSave(old('knight', 1));
+  check(typeof m1 !== 'string' && m1.from === 4 && m1.data.version === SAVE_VERSION, 'a v4 save migrates');
+  const k1 = solo('knight');
+  k1.g.applySave(k1.pid, old('knight', 1));
+  check(k1.s.skills.sword.level === 10 && k1.s.skills.magic.level === 0 && k1.s.woodcutting === 0, 'level 1: starting skills');
+  for (const [voc, lvl] of [['knight', 100], ['paladin', 80], ['sorcerer', 60], ['druid', 120], ['knight', 8]] as Array<[Vocation, number]>) {
+    const t = solo(voc);
+    t.g.applySave(t.pid, old(voc, lvl));
+    const sk = t.s.skills;
+    const wp = t.g.weaponPower(t.s, 'sword'), dp = t.g.weaponPower(t.s, 'distance'), mp = t.g.magicPower(t.s);
+    const ok = wp >= lvl && wp < lvl + 1.5 && dp >= lvl && dp < lvl + 2 && mp >= lvl && mp < lvl + 3;
+    check(ok, `${voc} ${lvl}: damage and healing stay where they were (sword ${sk.sword.level}, distance ${sk.distance.level}, magic ${sk.magic.level}, shielding ${sk.shielding.level}; power ${wp.toFixed(1)}/${dp.toFixed(1)}/${mp.toFixed(1)})`);
+  }
+  const k = legacySkills('knight', 100), so = legacySkills('sorcerer', 100), pa = legacySkills('paladin', 100);
+  check(k.sword.level > pa.sword.level && pa.sword.level > so.sword.level && so.magic.level > pa.magic.level && pa.magic.level > k.magic.level && pa.distance.level > k.distance.level, 'migrated skills follow the vocation (knights melee, paladins distance, mages magic)');
+  check(k.shielding.level > so.shielding.level, 'knights get more shielding than mages');
+}
+
+console.log('Woodcutting');
+{
+  const { g, s, pid } = solo('knight');
+  const p = s.player;
+  const w = g.world;
+  const msgs: string[] = [];
+  g.events.on((e) => { if (e.type === 'message' && e.to === pid) msgs.push(e.text); });
+  const findTree = (o: Obj): { x: number; y: number; sx: number; sy: number } | null => {
+    for (let y = 40; y < w.height - 40; y++) for (let x = 40; x < w.width - 40; x++) {
+      if (w.getObj(x, y, 0) !== o || w.isSafe(x, y, 0)) continue;
+      for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
+        if (w.isWalkable(x + dx, y + dy, 0) && !w.linkAt(x + dx, y + dy, 0) && !g.isOccupied(x + dx, y + dy, 0)) return { x, y, sx: x + dx, sy: y + dy };
+      }
+    }
+    return null;
+  };
+  check(gatherXpForLevel(2) === 83 && gatherXpForLevel(99) === 13034431 && gatherLevelForXp(0) === 1, 'woodcutting uses the 1–99 curve (83 xp for level 2, 13,034,431 for 99)');
+  const t = findTree(Obj.Tree)!;
+  g.teleport(p, t.sx, t.sy, 0);
+  p.god = true;
+  for (const e of g.enemies) if (!e.dead && Math.abs(e.x - p.x) < 12 && Math.abs(e.y - p.y) < 12) { e.dead = true; e.respawnTimer = 1e9; }
+  s.inventory.equipment.weapon = { id: 'short_sword', qty: 1 };
+  executeCommand(g, pid, { c: 'useTile', x: t.x, y: t.y });
+  run(g, 0.5);
+  check(msgs.some((m) => m.startsWith('You need an axe')), 'no axe, no chopping');
+  s.inventory.add('hatchet', 1);
+  g.localId = pid;
+  check(g.isUsable(t.x, t.y, 0), 'with an axe, trees can be used (chopped)');
+  const chops: boolean[] = [];
+  g.events.on((e) => { if (e.type === 'chop' && e.id === pid) chops.push(e.got); });
+  executeCommand(g, pid, { c: 'useTile', x: t.x, y: t.y });
+  run(g, 120, () => s.inventory.count('logs') > 0);
+  check(s.inventory.count('logs') === 1 && s.woodcutting === TREES[Obj.Tree]!.xp, `chopping gives logs and woodcutting experience (${chops.length} chops, ${s.woodcutting} xp)`);
+  check(w.getObj(t.x, t.y, 0) === Obj.Stump && !w.isWalkable(t.x, t.y, 0) && g.stumpOrigin(t.x, t.y, 0) === Obj.Tree && p.chop === null, 'the tree falls and leaves a stump');
+  // the stump is synced to clients near it
+  const snap = buildSnapshot(g, s);
+  const mirror = new Game({ simulate: false });
+  if (snap.t === 'snap') {
+    check(!!snap.st?.includes(`${t.x},${t.y},0`), 'the snapshot lists stumps nearby');
+    applySnapshot(mirror, snap);
+    check(mirror.world.getObj(t.x, t.y, 0) === Obj.Stump && mirror.stumpOrigin(t.x, t.y, 0) === Obj.Tree, 'clients show the stump');
+  }
+  run(g, 50, () => w.getObj(t.x, t.y, 0) === Obj.Tree);
+  check(w.getObj(t.x, t.y, 0) === Obj.Tree, 'the stump grows back into a tree');
+  const snap2 = buildSnapshot(g, s);
+  if (snap2.t === 'snap') {
+    applySnapshot(mirror, snap2);
+    check(mirror.world.getObj(t.x, t.y, 0) === Obj.Tree, 'clients see it grow back');
+  }
+  // moving stops chopping
+  executeCommand(g, pid, { c: 'useTile', x: t.x, y: t.y });
+  run(g, 0.3);
+  check(p.chop !== null, 'chopping again');
+  executeCommand(g, pid, { c: 'moveTo', x: p.x + (p.x - t.x || 1) * 3, y: p.y + (p.y - t.y) * 3 });
+  run(g, 0.3);
+  check(p.chop === null, 'walking away stops chopping');
+  // the level gate
+  const pine = findTree(Obj.Pine)!;
+  g.teleport(p, pine.sx, pine.sy, 0);
+  for (const e of g.enemies) if (!e.dead && Math.abs(e.x - p.x) < 12 && Math.abs(e.y - p.y) < 12) { e.dead = true; e.respawnTimer = 1e9; }
+  msgs.length = 0;
+  executeCommand(g, pid, { c: 'useTile', x: pine.x, y: pine.y });
+  run(g, 0.5);
+  check(msgs.some((m) => m === 'You need woodcutting level 15 to chop a pine.') && p.chop === null, 'pines need woodcutting level 15');
+  s.woodcutting = gatherXpForLevel(15);
+  executeCommand(g, pid, { c: 'useTile', x: pine.x, y: pine.y });
+  run(g, 200, () => s.inventory.count('pine_logs') > 0);
+  check(s.inventory.count('pine_logs') >= 1 && s.woodcutting === gatherXpForLevel(15) + TREES[Obj.Pine]!.xp, 'at level 15 pines give pine logs');
+  check(TREES[Obj.JungleTree]!.level === 35 && TREES[Obj.Palm]!.level === 25 && TREES[Obj.JungleTree]!.log === 'teak_logs', 'teak (35) and palm (25) tiers');
+  // attacking stops chopping
+  executeCommand(g, pid, { c: 'useTile', x: pine.x, y: pine.y });
+  run(g, 0.3);
+  if (w.getObj(pine.x, pine.y, 0) === Obj.Pine) {
+    const foe = enemyNear(g, 'rat', p, -1, 0);
+    executeCommand(g, pid, { c: 'attack', id: foe.id });
+    run(g, 0.2);
+    check(p.chop === null, 'attacking stops chopping');
+  } else check(true, 'attacking stops chopping (tree fell first, skipped)');
+  // selling logs to a trader
+  const aldric = g.npcs.find((n) => n.key === 'aldric')!;
+  g.teleport(p, aldric.x, aldric.y + 1, aldric.z);
+  s.inventory.removeById('logs', s.inventory.count('logs'));
+  s.inventory.add('logs', 10);
+  g.commandTalk(pid, aldric.id);
+  run(g, 2, () => !!s.dialogue);
+  const gold0 = s.inventory.count('gold');
+  g.dialogueAction(pid, 'sell:logs:10');
+  check(!!NPCS.aldric.buys?.includes('logs'), 'general traders list logs among what they buy');
+  check(s.inventory.count('logs') === 0 && s.inventory.count('gold') === gold0 + 10 * ITEMS.logs.value, `traders buy logs (${10 * ITEMS.logs.value} gold for 10)`);
+}
+
+console.log('Player market');
+{
+  const g = new Game();
+  const changes: MarketChange[] = [];
+  g.marketSink = (c) => changes.push(JSON.parse(JSON.stringify(c)) as MarketChange);
+  const w = g.world;
+  const board = (() => { for (let y = 0; y < w.height; y++) for (let x = 0; x < w.width; x++) if (w.getObj(x, y, 0) === Obj.MarketBoard) return { x, y }; return null; })()!;
+  check(!!board, 'there is a market board');
+  const stand = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]].map(([dx, dy]) => ({ x: board.x + dx, y: board.y + dy })).filter((t) => w.isWalkable(t.x, t.y, 0));
+  const a = g.addPlayer('Seller', { vocation: 'knight' });
+  const b = g.addPlayer('Buyer', { vocation: 'druid' });
+  g.teleport(a.player, stand[0].x, stand[0].y, 0);
+  g.teleport(b.player, stand[1 % stand.length].x, stand[1 % stand.length].y, 0);
+  const am: string[] = [], bm: string[] = [];
+  g.events.on((e) => { if (e.type === 'message') (e.to === a.id ? am : e.to === b.id ? bm : []).push(e.text); });
+  executeCommand(g, a.id, { c: 'useTile', x: board.x, y: board.y });
+  executeCommand(g, b.id, { c: 'useTile', x: board.x, y: board.y });
+  run(g, 1.5, () => !!a.marketOpen && !!b.marketOpen);
+  check(!!a.marketOpen && !!b.marketOpen && !!g.marketView(a.id), 'using the board opens the market');
+  a.bank = 1000;
+  a.depot[0] = { id: 'wolf_pelt', qty: 5 };
+  a.inventory.add('rat_tail', 3);
+  executeCommand(g, a.id, { c: 'marketSell', from: 'depot', index: 0, qty: 5, price: 100 });
+  const offer = [...g.market.offers.values()][0];
+  check(!!offer && offer.qty === 5 && offer.price === 100 && offer.seller === 'seller' && a.depot[0] === null, 'listing moves the items from the depot into escrow');
+  check(a.bank === 995, `the fee is 1% of the total, from the bank (bank ${a.bank})`);
+  check(changes.length === 1 && changes[0].putOffers.length === 1 && changes[0].save.includes(a.id), 'the new offer is stored before the seller is saved');
+  const ratSlot = a.inventory.slots.findIndex((x) => x?.id === 'rat_tail');
+  executeCommand(g, a.id, { c: 'marketSell', from: 'inv', index: ratSlot, qty: 1, price: 3 });
+  check(a.bank === 994 && a.inventory.count('rat_tail') === 2, 'small sales still cost 1 gold, from the backpack too');
+  executeCommand(g, a.id, { c: 'marketBuy', id: offer.id, qty: 1 });
+  check(am.some((m) => m.startsWith('That is your own offer')) && offer.qty === 5, 'you cannot buy your own offer');
+  // buyer pays from the bank, items go to the depot, seller (online) gets gold in the bank
+  b.bank = 300;
+  executeCommand(g, b.id, { c: 'marketBuy', id: offer.id, qty: 3 });
+  check(b.bank === 0 && b.depot.some((x) => x?.id === 'wolf_pelt' && x.qty === 3) && offer.qty === 2 && a.bank === 1294, `buying: gold from the bank, items into the depot, gold to the seller's bank (seller bank ${a.bank})`);
+  check(changes[changes.length - 1].shrinkOffers.length === 1 && changes[changes.length - 1].save.includes(b.id) && changes[changes.length - 1].save.includes(a.id), 'a partly bought offer is stored after both characters');
+  executeCommand(g, b.id, { c: 'marketBuy', id: offer.id, qty: 2 });
+  check(offer.qty === 2 && bm.some((m) => m.startsWith('That costs')), 'no gold, no purchase');
+  // cancel returns the items
+  const rat = [...g.market.offers.values()].find((o) => o.item === 'rat_tail')!;
+  executeCommand(g, a.id, { c: 'marketCancel', id: rat.id });
+  check(!g.market.offers.has(rat.id) && a.depot.some((x) => x?.id === 'rat_tail' && x.qty === 1), 'cancelling returns the items to the depot');
+  executeCommand(g, b.id, { c: 'marketCancel', id: offer.id });
+  check(g.market.offers.has(offer.id), 'only the seller can cancel');
+  // the market list reaches the client only when it changes
+  const s1 = buildSnapshot(g, b), s2 = buildSnapshot(g, b);
+  if (s1.t === 'snap' && s2.t === 'snap') {
+    check(!!s1.self.mk?.offers.some((o) => o.id === offer.id && !o.mine) && s2.self.mk === undefined, 'market view is sent once, then only on changes');
+    const mirror = new Game({ simulate: false });
+    const extras = { depot: null, trade: null, market: null as unknown };
+    applySnapshot(mirror, buildSnapshot(g, b) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>, extras as never);
+  }
+  // the seller goes offline; a sale is paid out at the next login
+  const saved = g.serialize(a.id);
+  g.removePlayer(a.id);
+  b.inventory.add('gold', 200);
+  const carriedBefore = b.inventory.count('gold');
+  executeCommand(g, b.id, { c: 'marketBuy', id: offer.id, qty: 2 });
+  const del = [...g.market.deliveries.values()][0];
+  check(!g.market.offers.has(offer.id) && b.inventory.count('gold') === carriedBefore - 200 && !!del && del.to === 'seller' && del.gold === 200, 'an offline seller is owed the gold as a delivery (carried gold used when the bank is short)');
+  const last = changes[changes.length - 1];
+  check(last.putDeliveries.length === 1 && last.dropOffers.includes(offer.id), 'the delivery is stored, and the sold-out offer removed after saving');
+  const a2 = g.addPlayer('Seller', { vocation: 'knight' });
+  g.applySave(a2.id, saved);
+  check(a2.bank === 1294 + 200 && a2.marketClaimed.includes(del.id) && !g.market.deliveries.has(del.id), `the seller gets the gold at login (bank ${a2.bank})`);
+  check(changes[changes.length - 1].dropDeliveries.includes(del.id) && changes[changes.length - 1].save.includes(a2.id), 'the delivery is removed only after the seller is saved');
+  // a delivery that survived a crash is never paid twice
+  g.market.deliveries.set(del.id, { ...del });
+  g.claimMarketDeliveries(a2.id);
+  check(a2.bank === 1494 && !g.market.deliveries.has(del.id), 'a delivery already received is not paid out twice');
+  const after = g.serialize(a2.id);
+  check(!!after.market?.claimed?.includes(del.id), 'received deliveries are remembered in the save');
+  // expired offers come back (offline: as a delivery to the depot)
+  let clock = Date.now();
+  g.now = () => clock;
+  b.depot[5] = { id: 'bone', qty: 4 };
+  b.bank = 50;
+  executeCommand(g, b.id, { c: 'marketSell', from: 'depot', index: 5, qty: 4, price: 10 });
+  const bone = [...g.market.offers.values()].find((o) => o.item === 'bone')!;
+  const bSave = g.serialize(b.id);
+  g.removePlayer(b.id);
+  clock += MARKET_OFFER_MS + 1000;
+  run(g, 11);
+  const back = [...g.market.deliveries.values()].find((d) => d.to === 'buyer');
+  check(!g.market.offers.has(bone.id) && !!back && back.items[0]?.id === 'bone' && back.items[0].qty === 4, 'expired offers turn into a delivery for an offline seller');
+  const b2 = g.addPlayer('Buyer', { vocation: 'druid' });
+  g.applySave(b2.id, bSave);
+  check(b2.depot.some((x) => x?.id === 'bone' && x.qty === 4), 'the items arrive in the depot at the next login');
+  // closed market
+  g.market.enabled = false;
+  g.teleport(b2.player, stand[0].x, stand[0].y, 0);
+  executeCommand(g, b2.id, { c: 'useTile', x: board.x, y: board.y });
+  run(g, 1);
+  b2.depot[6] = { id: 'bone', qty: 1 };
+  executeCommand(g, b2.id, { c: 'marketSell', from: 'depot', index: 6, qty: 1, price: 10 });
+  check(b2.depot[6]?.qty === 1, 'while the market is closed nothing can be listed');
+  // walking away closes it
+  g.market.enabled = true;
+  g.teleport(b2.player, stand[0].x + 6, stand[0].y + 6, 0);
+  check(!b2.marketOpen, 'moving away closes the market');
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);

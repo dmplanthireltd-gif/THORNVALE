@@ -76,13 +76,17 @@ export enum Obj {
   EnergyField = 42,
   PoisonField = 43,
   MagicWall = 44,
+  /** Player market notice board (in every depot). */
+  MarketBoard = 45,
+  /** A felled tree (woodcutting); it grows back into the tree it was. */
+  Stump = 46,
 }
 
 const SOLID = new Set<number>([
   Obj.Tree, Obj.Pine, Obj.DeadTree, Obj.Rock, Obj.Bush, Obj.Wall, Obj.Fence,
   Obj.Grave, Obj.Well, Obj.Barrel, Obj.Crate, Obj.Table, Obj.Hay, Obj.Lamp,
   Obj.Cliff, Obj.Palisade, Obj.Campfire, Obj.Chest, Obj.Locker, Obj.Palm, Obj.Pillar,
-  Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall, Obj.MagicWall,
+  Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall, Obj.MagicWall, Obj.MarketBoard, Obj.Stump,
 ]);
 
 /** Objects that stop arrows and spells. Trees and fences do not. */

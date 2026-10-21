@@ -17,6 +17,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BufferedIntent, Game, type Session } from '../src/game/Game';
+import type { MarketChange } from '../src/game/market/market';
 import { migrateSave, SAVE_VERSION } from '../src/game/save/migrate';
 import {
   buildSnapshot, eventAudience, executeCommand, PROTOCOL_VERSION, type ClientMessage, type ServerMessage,
@@ -107,12 +108,16 @@ function send(c: Client, m: ServerMessage): void {
   c.ws.send(JSON.stringify(m));
 }
 
-/** Saves a character; saves of the same character run one after another. */
-function saveCharacter(s: Session): Promise<void> {
+/**
+ * Saves a character as it is right now; saves of the same character run one
+ * after another. `after` holds the write back until something else is stored
+ * first (a market change).
+ */
+function saveCharacter(s: Session, after?: Promise<void>): Promise<void> {
   const key = s.player.name.toLowerCase();
   const data = game.serialize(s.id);
   const prev = pendingSaves.get(key) ?? Promise.resolve();
-  const next = prev
+  const next = Promise.all([prev, after])
     .then(() => storage.saveCharacter(key, s.player.name, data, sessionOwner.get(s.id) ?? null))
     .catch((err) => console.error(`Saving ${s.player.name} failed:`, err));
   pendingSaves.set(key, next);
@@ -121,6 +126,47 @@ function saveCharacter(s: Session): Promise<void> {
   });
   return next;
 }
+
+// ------------------------------------------------------------------ market storage
+
+/** Market changes are stored one after another, in the order they happened. */
+let marketTail: Promise<void> = Promise.resolve();
+
+async function retry(what: string, fn: () => Promise<void>): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt >= 4) throw err;
+      console.warn(`${what} failed (attempt ${attempt}), retrying:`, (err as Error).message);
+      await new Promise((r) => setTimeout(r, 400 * attempt));
+    }
+  }
+}
+
+/**
+ * Stores a market change so that a crash can at worst hand something out twice,
+ * never lose it: new offers and deliveries first, then the characters involved
+ * (as they are now), then the removals.
+ */
+function persistMarket(c: MarketChange): void {
+  const step1 = marketTail.then(async () => {
+    if (c.putOffers.length) await retry('Storing market offers', () => storage.putMarketOffers(c.putOffers));
+    if (c.putDeliveries.length) await retry('Storing market deliveries', () => storage.putMarketDeliveries(c.putDeliveries));
+  });
+  const saves = c.save.map((id) => game.sessions.get(id)).filter((s): s is Session => !!s).map((s) => saveCharacter(s, step1));
+  const done = Promise.all([step1, ...saves]).then(async () => {
+    if (c.shrinkOffers.length) await retry('Updating market offers', () => storage.putMarketOffers(c.shrinkOffers));
+    if (c.dropOffers.length) await retry('Removing market offers', () => storage.deleteMarketOffers(c.dropOffers));
+    if (c.dropDeliveries.length) await retry('Removing market deliveries', () => storage.deleteMarketDeliveries(c.dropDeliveries));
+  });
+  marketTail = done.catch((err) => {
+    // keep what is in memory; close the market so nothing more depends on storage that fails
+    console.error('MARKET STORAGE FAILED — market closed until restart:', err);
+    game.market.enabled = false;
+  });
+}
+game.marketSink = persistMarket;
 
 game.events.on((e) => {
   const to = eventAudience(e);
@@ -516,6 +562,7 @@ async function shutdown(): Promise<void> {
   console.log('Saving everyone before shutting down…');
   // Render and similar hosts send SIGTERM before a redeploy: make sure every save lands first
   await Promise.all([...game.sessions.values()].map((s) => saveCharacter(s)));
+  await marketTail;
   await Promise.all([...pendingSaves.values()]);
   await storage.flush().catch((err) => console.error(err));
   process.exit(0);
@@ -524,7 +571,14 @@ process.on('SIGINT', () => void shutdown());
 process.on('SIGTERM', () => void shutdown());
 
 storage = await openStorage(DATA_FILE);
+const market = await storage.loadMarket().catch((err) => {
+  console.error('Loading the market failed:', err);
+  return null;
+});
+if (market) game.market.load(market.offers, market.deliveries);
+else game.market.enabled = false;
 console.log(`Login: ${EMAIL_AUTH ? 'email (Supabase Auth)' : 'character name + password'}`);
+console.log(market ? `Market: open (${market.offers.length} offers, ${market.deliveries.length} deliveries waiting)` : 'Market: closed (no market tables in storage yet)');
 console.log(`Saves: ${storage.kind === 'supabase' ? 'Supabase database' : `files in ${dirname(DATA_FILE)}`} (save format v${SAVE_VERSION})`);
 console.log(`PvP: ${PVP ? 'on' : 'off'}`);
 if (storage.kind !== 'supabase' && process.env.RENDER) {

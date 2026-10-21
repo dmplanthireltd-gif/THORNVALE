@@ -69,6 +69,7 @@ html, body {
 .float.heal { color: #5aff7a; }
 .float.mana { color: #6aa2ff; }
 .float.xp { color: #ffffff; font-size: 12px; }
+.float.xp.skill { color: #c8f08a; }
 .float.level { color: #ffe27a; font-size: 16px; }
 .float.speech { color: #ffe23a; font-size: 16px; font-weight: 700; max-width: 340px; white-space: normal; text-align: center; line-height: 1.25;
   text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000, 0 2px 3px rgba(0,0,0,0.8); }
@@ -454,3 +455,24 @@ select.text-input { flex: 1; }
 .nameplate.party-invite .np-name::before { content: '\25C7 '; color: #ffe23a; }
 .battle-row.party .battle-name { color: #8fd0ff; }
 .battle-row.party .battle-dot { background: #5ab4ff; }
+
+/* ---------------------------------------------------------------- skills panel (left side column) */
+.skills { padding: 5px 6px; }
+.skills-title { cursor: pointer; user-select: none; }
+.skills-title::after { content: ' \25BE'; color: var(--muted); }
+.skills.folded .skills-title::after { content: ' \25B8'; }
+.skills.folded .skills-list { display: none; }
+.skills-list { display: flex; flex-direction: column; gap: 3px; }
+.skill-row { display: flex; flex-direction: column; gap: 1px; }
+.skill-top { display: flex; justify-content: space-between; font: 600 12px var(--pixel); }
+.skill-level { color: var(--gold); }
+.skill-bar { height: 3px; background: #0c0a08; border: 1px solid #000; }
+.skill-fill { height: 100%; background: #4fbf5a; }
+.skill-head { margin-top: 4px; font: 700 11px var(--pixel); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+
+/* ---------------------------------------------------------------- market */
+.market-tabs { display: flex; gap: 4px; }
+.market-list { display: flex; flex-direction: column; gap: 3px; max-height: 380px; overflow-y: auto; }
+.market-pick { grid-template-columns: repeat(auto-fill, 50px); justify-content: start; max-height: 240px; overflow-y: auto; }
+.market-form { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: rgba(0, 0, 0, 0.2); }
+.num-input.qty { width: 64px; }

@@ -29,7 +29,12 @@ export type GameEvent =
   | { type: 'death'; id: number }
   | { type: 'spawn'; id: number }
   | { type: 'teleport'; id: number }
-  | { type: 'xp'; amount: number; atId: number; to: number }
+  /** Experience gained; `skill` names a gathering skill (otherwise character experience). */
+  | { type: 'xp'; amount: number; atId: number; to: number; skill?: string }
+  /** A player swings an axe at a tree; `got` = a log came loose, `felled` = the tree fell. */
+  | { type: 'chop'; id: number; x: number; y: number; z: number; got: boolean; felled: boolean }
+  /** A skill advanced (shown in the Skills panel). */
+  | { type: 'skillUp'; skill: string; level: number; to: number }
   | { type: 'levelUp'; id: number; level: number }
   | { type: 'message'; text: string; kind: MessageKind; to: number }
   | { type: 'chat'; id: number; name: string; text: string }
@@ -49,6 +54,7 @@ export type GameEvent =
   | { type: 'tradeChanged'; to: number }
   | { type: 'partyChanged'; to: number }
   | { type: 'spellsChanged'; to: number }
+  | { type: 'marketChanged'; to: number }
   | { type: 'gameLoaded'; to: number };
 
 type Listener = (e: GameEvent) => void;

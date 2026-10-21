@@ -9,6 +9,10 @@ import { OUTFIT_PARTS, OUTFIT_TYPES, PALETTE, PALETTE_COLS, PALETTE_ROWS, type O
 import { Enemy } from '../game/enemies/Enemy';
 import { expForLevel, type FightMode } from '../game/player/Player';
 import { VOCATIONS } from '../game/player/vocations';
+import { COMBAT_SKILLS, SKILL_NAMES, skillProgress, triesForNext } from '../game/player/skills';
+import { gatherLevelForXp, gatherProgress, gatherXpForLevel, WC_MAX_LEVEL } from '../game/gathering/woodcutting';
+import { marketFee, MARKET_MAX_PRICE, type MarketView } from '../game/market/market';
+import { Obj } from '../game/world/WorldMap';
 import { QUESTS } from '../game/quests/quests';
 import { hpColor } from '../render/Overlay';
 import type { Renderer } from '../render/Renderer';
@@ -105,7 +109,12 @@ export class HUD {
   private battleTimer = 0;
   private worldMap!: WorldMapView;
   private lastRegion = '';
-  private wins: Record<'dialog' | 'depot' | 'trade' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev', Win> = {} as never;
+  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev', Win> = {} as never;
+  private skillsEl!: HTMLDivElement;
+  private skillsKey = '';
+  private skillsTimer = 0;
+  /** Market window state that survives redraws. */
+  private mk = { tab: 'browse' as 'browse' | 'sell' | 'mine', search: '', sel: null as null | { from: 'depot' | 'inv'; index: number }, qty: 1, price: 0, buyQty: new Map<string, number>(), dirty: false };
   private outfitDraft: Outfit | null = null;
   private outfitPart: OutfitPart = 'head';
   private preview: OutfitPreview | null = null;
@@ -193,15 +202,24 @@ export class HUD {
       case 'partyChanged':
         if (e.to === me) this.partyKey = '';
         break;
+      case 'marketChanged':
+        if (e.to === me) this.renderMarket();
+        break;
+      case 'skillUp':
+        if (e.to === me) this.skillsKey = '';
+        break;
       case 'spellsChanged':
         if (e.to === me) {
           if (this.wins.spells.open) this.renderSpells();
           if (this.wins.dialog.open) this.renderDialog();
         }
         break;
-      case 'tileChanged':
-        this.minimap.invalidate(e.z);
+      case 'tileChanged': {
+        // felled and regrowing trees do not change the map enough to redraw a whole floor
+        const o = this.ctl.game.world.getObj(e.x, e.y, e.z);
+        if (o !== Obj.Stump && o !== Obj.Tree && o !== Obj.Pine && o !== Obj.Palm && o !== Obj.JungleTree) this.minimap.invalidate(e.z);
         break;
+      }
       case 'gameLoaded':
         if (e.to !== me) break;
         this.renderInventory();
@@ -346,6 +364,19 @@ export class HUD {
       this.equipEls.set(e.slot, d);
     }
     this.statsEl = el('div', 'stats', eqp);
+
+    // classic skills window: every skill with a thin bar to the next level; click the title to fold
+    const sk = el('div', 'panel skills', col);
+    const st = el('div', 'panel-title skills-title', sk, 'Skills');
+    st.title = 'Click to fold or unfold. Skills rise by using them: fight with a weapon, block with a shield, spend mana, chop trees.';
+    this.skillsEl = el('div', 'skills-list', sk);
+    try {
+      if (localStorage.getItem('thornvale.skillsFolded') === '1') sk.classList.add('folded');
+    } catch { /* storage off */ }
+    st.addEventListener('click', () => {
+      sk.classList.toggle('folded');
+      try { localStorage.setItem('thornvale.skillsFolded', sk.classList.contains('folded') ? '1' : '0'); } catch { /* storage off */ }
+    });
 
     const battle = el('div', 'panel battle', this.colB);
     const bt = el('div', 'panel-title battle-title', battle, 'Battle');
@@ -1013,6 +1044,7 @@ export class HUD {
     this.makeWin('dialog', 'Conversation', 'dialog-win');
     this.makeWin('depot', 'Depot', 'depot-win');
     this.makeWin('trade', 'Trade', 'trade-win');
+    this.makeWin('market', 'Market', 'market-win');
     this.makeWin('outfit', 'Outfit', 'outfit-win');
     this.makeWin('spells', 'Spellbook', 'spells-win');
     this.makeWin('quests', 'Quest Log', 'quests-win');
@@ -1042,6 +1074,7 @@ export class HUD {
     if (key === 'dialog' && this.s.dialogue) this.ctl.send({ c: 'closeDialogue' });
     if (key === 'depot' && this.ctl.depot()) this.ctl.send({ c: 'closeDepot' });
     if (key === 'trade' && this.ctl.trade()) this.ctl.send({ c: 'tradeCancel' });
+    if (key === 'market' && this.ctl.market()) this.ctl.send({ c: 'marketClose' });
     if (key === 'outfit') {
       this.preview?.dispose();
       this.preview = null;
@@ -1081,7 +1114,7 @@ export class HUD {
       this.root.classList.remove('assigning');
       return true;
     }
-    for (const k of ['dev', 'help', 'outfit', 'spells', 'quests', 'trade', 'depot', 'dialog'] as const) {
+    for (const k of ['dev', 'help', 'outfit', 'spells', 'quests', 'market', 'trade', 'depot', 'dialog'] as const) {
       if (this.wins[k].open) {
         this.closeWin(k);
         return true;
@@ -1220,6 +1253,209 @@ export class HUD {
         ev.preventDefault();
         if (depot[i]) this.ctl.send({ c: 'withdraw', index: i });
       });
+    }
+  }
+
+  // ---------------------------------------------------------------- skills
+
+  private renderSkills(): void {
+    const s = this.s;
+    const voc = s.player.vocation;
+    const key = `${voc}|${JSON.stringify(s.skills)}|${Math.floor(s.woodcutting)}`;
+    if (key === this.skillsKey) return;
+    this.skillsKey = key;
+    const box = this.skillsEl;
+    box.replaceChildren();
+    const row = (name: string, level: number, frac: number, tip: string) => {
+      const r = el('div', 'skill-row', box);
+      r.title = tip;
+      const top = el('div', 'skill-top', r);
+      el('span', 'skill-name', top, name);
+      el('span', 'skill-level', top, String(level));
+      const bar = el('div', 'skill-bar', r);
+      el('div', 'skill-fill', bar).style.width = `${Math.round(frac * 100)}%`;
+    };
+    for (const k of COMBAT_SKILLS) {
+      const p = s.skills[k];
+      const need = triesForNext(k, p.level, voc);
+      const pct = Math.floor(skillProgress(k, p, voc) * 100);
+      const how = k === 'magic' ? 'mana to spend' : k === 'shielding' ? 'blows to block' : 'attacks';
+      row(SKILL_NAMES[k], p.level, skillProgress(k, p, voc), `${SKILL_NAMES[k]} ${p.level} — ${pct}% to the next level (${fmtGold(Math.max(0, Math.ceil(need - p.tries)))} more ${how})`);
+    }
+    el('div', 'skill-head', box, 'Gathering');
+    const wl = gatherLevelForXp(s.woodcutting);
+    const left = wl >= WC_MAX_LEVEL ? 0 : gatherXpForLevel(wl + 1) - s.woodcutting;
+    row(SKILL_NAMES.woodcutting, wl, gatherProgress(s.woodcutting), `Woodcutting ${wl} — ${fmtGold(Math.floor(s.woodcutting))} xp${wl < WC_MAX_LEVEL ? `, ${fmtGold(Math.ceil(left))} to level ${wl + 1}` : ' (maximum)'}. Chop trees with an axe.`);
+  }
+
+  // ---------------------------------------------------------------- market
+
+  private renderMarket(): void {
+    const w = this.wins.market;
+    const view = this.ctl.market();
+    if (!view) {
+      w.open = false;
+      w.root.hidden = true;
+      this.mk.sel = null;
+      return;
+    }
+    if (!w.open) {
+      w.open = true;
+      w.root.hidden = false;
+      w.root.style.zIndex = String(++this.zTop);
+    }
+    // don't pull the rug from under someone typing a price
+    const a = document.activeElement;
+    if (a instanceof HTMLInputElement && w.root.contains(a)) {
+      if (!this.mk.dirty) {
+        this.mk.dirty = true;
+        a.addEventListener('blur', () => {
+          this.mk.dirty = false;
+          this.renderMarket();
+        }, { once: true });
+      }
+      return;
+    }
+    this.drawMarket(view);
+  }
+
+  private drawMarket(view: MarketView): void {
+    const b = this.wins.market.body;
+    const st = this.mk;
+    b.replaceChildren();
+    const carried = this.s.inventory.count('gold');
+    el('div', 'shop-gold', b, `Bank ${fmtGold(view.bank)} gold · carrying ${fmtGold(carried)} gold. Purchases are paid from the bank (then from your backpack) and delivered to your depot.`);
+    if (!view.enabled) el('p', 'hint warn', b, 'The market is closed for now. Your offers and items are safe.');
+    const tabs = el('div', 'market-tabs', b);
+    const mine = view.offers.filter((o) => o.mine);
+    for (const [id, label] of [['browse', 'Buy'], ['sell', 'Sell'], ['mine', `My offers (${mine.length})`]] as const) {
+      button(tabs, label, () => {
+        st.tab = id;
+        this.drawMarket(view);
+      }, `btn small${st.tab === id ? ' on' : ''}`);
+    }
+    const stop = (i: HTMLInputElement) => i.addEventListener('keydown', (e) => e.stopPropagation());
+    const numInput = (parent: HTMLElement, value: number, min: number, max: number, onInput: (n: number) => void) => {
+      const i = el('input', 'num-input', parent);
+      i.type = 'number';
+      i.min = String(min);
+      i.max = String(max);
+      i.value = String(value);
+      stop(i);
+      i.addEventListener('input', () => onInput(Math.max(min, Math.min(max, Math.floor(Number(i.value) || min)))));
+      return i;
+    };
+    const itemCell = (parent: HTMLElement, id: string, qty: number) => {
+      const ic = el('div', 'slot mini', parent);
+      paintSlot(ic, { id, qty });
+      return ic;
+    };
+
+    if (st.tab === 'browse') {
+      const sr = el('div', 'bank-row', b);
+      const q = el('input', 'text-input', sr);
+      q.placeholder = 'Search items…';
+      q.value = st.search;
+      stop(q);
+      const list = el('div', 'market-list', b);
+      const fill = () => {
+        list.replaceChildren();
+        const needle = st.search.trim().toLowerCase();
+        const shown = view.offers.filter((o) => !needle || itemDef(o.item).name.toLowerCase().includes(needle));
+        if (!shown.length) el('div', 'shop-empty', list, view.offers.length ? 'No offers match.' : 'Nobody is selling anything yet.');
+        for (const o of shown.slice(0, 200)) {
+          const d = itemDef(o.item);
+          const r = el('div', 'shop-row', list);
+          itemCell(r, o.item, o.qty);
+          const info = el('div', 'shop-info', r);
+          el('div', 'shop-name', info, `${o.qty}× ${d.name}`);
+          el('div', 'shop-desc', info, `${fmtGold(o.price)} gold each · from ${o.seller}${o.mine ? ' (you)' : ''}`);
+          const btns = el('div', 'shop-btns', r);
+          if (o.mine) {
+            el('span', 'shop-empty', btns, 'your offer');
+            continue;
+          }
+          let n = Math.min(o.qty, st.buyQty.get(o.id) ?? 1);
+          const buy = button(btns, '', () => this.ctl.send({ c: 'marketBuy', id: o.id, qty: n }), 'btn small');
+          const label = () => {
+            buy.textContent = `Buy ${n} · ${fmtGold(n * o.price)}`;
+            buy.disabled = !view.enabled || n * o.price > view.bank + carried;
+          };
+          if (o.qty > 1) numInput(btns, n, 1, o.qty, (v) => { n = v; st.buyQty.set(o.id, v); label(); }).classList.add('qty');
+          label();
+        }
+      };
+      q.addEventListener('input', () => {
+        st.search = q.value;
+        fill();
+      });
+      fill();
+    } else if (st.tab === 'sell') {
+      el('p', 'hint', b, `Pick an item from your depot or backpack, then set how many and the price for each. Listing costs 1% of the total (at least 1 gold) from your bank. The items wait in the market until someone buys them; the gold goes to your bank, even while you are away.`);
+      const cols = el('div', 'shop-cols', b);
+      const pick = (title: string, from: 'depot' | 'inv', stacks: Array<ItemStack | null>) => {
+        const c = el('div', 'shop-col', cols);
+        el('div', 'panel-title', c, title);
+        const grid = el('div', 'bag-grid market-pick', c);
+        let any = false;
+        stacks.forEach((x, i) => {
+          if (!x || x.id === 'gold' || !ITEMS[x.id]) return;
+          any = true;
+          const d = el('div', 'slot', grid);
+          paintSlot(d, x);
+          if (st.sel && st.sel.from === from && st.sel.index === i) d.classList.add('offered');
+          d.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            st.sel = { from, index: i };
+            st.qty = x.qty;
+            if (!st.price) st.price = Math.max(1, itemDef(x.id).value);
+            this.drawMarket(view);
+          });
+        });
+        if (!any) el('div', 'shop-empty', c, 'Nothing to sell here.');
+      };
+      pick('Depot', 'depot', view.depot);
+      const inv = this.s.inventory;
+      pick('Backpack', 'inv', inv.slots.slice(0, inv.size()));
+      const sel = st.sel;
+      const stack = sel ? (sel.from === 'depot' ? view.depot[sel.index] : inv.slots[sel.index]) : null;
+      const form = el('div', 'market-form', b);
+      if (!sel || !stack) {
+        el('div', 'shop-empty', form, 'Select an item to sell.');
+      } else {
+        const d = itemDef(stack.id);
+        const r = el('div', 'bank-row', form);
+        itemCell(r, stack.id, stack.qty);
+        el('span', 'shop-name', r, d.name);
+        el('span', 'dev-label', r, 'Amount');
+        st.qty = Math.max(1, Math.min(stack.qty, st.qty));
+        const summary = el('div', 'shop-desc', form);
+        const go = button(form, 'Create offer', () => this.ctl.send({ c: 'marketSell', from: sel.from, index: sel.index, qty: st.qty, price: st.price }), 'btn');
+        const update = () => {
+          const total = st.qty * st.price;
+          const fee = marketFee(total);
+          summary.textContent = `${st.qty}× ${d.name} at ${fmtGold(st.price)} gold each = ${fmtGold(total)} gold. Listing fee: ${fmtGold(fee)} gold. Traders would pay ${fmtGold(d.value)} each.`;
+          go.disabled = !view.enabled || st.price < 1 || fee > view.bank + carried;
+        };
+        numInput(r, st.qty, 1, stack.qty, (v) => { st.qty = v; update(); });
+        el('span', 'dev-label', r, 'Price each');
+        numInput(r, st.price, 1, MARKET_MAX_PRICE, (v) => { st.price = v; update(); });
+        update();
+      }
+    } else {
+      const list = el('div', 'market-list', b);
+      if (!mine.length) el('div', 'shop-empty', list, 'You have no offers. Use the Sell tab to list something.');
+      for (const o of mine) {
+        const d = itemDef(o.item);
+        const r = el('div', 'shop-row', list);
+        itemCell(r, o.item, o.qty);
+        const info = el('div', 'shop-info', r);
+        el('div', 'shop-name', info, `${o.qty}× ${d.name}`);
+        const days = Math.max(0, Math.ceil((o.expires - Date.now()) / 86_400_000));
+        el('div', 'shop-desc', info, `${fmtGold(o.price)} gold each · ends in ${days} day${days === 1 ? '' : 's'}`);
+        const bb = button(r, 'Cancel', () => this.ctl.send({ c: 'marketCancel', id: o.id }), 'btn small');
+        bb.disabled = !view.enabled;
+      }
     }
   }
 
@@ -1509,6 +1745,8 @@ export class HUD {
       ['Ctrl + direction / Ctrl+R', 'Turn without moving'],
       ['` (key under Esc)', 'Test console: levels, gold, items, teleports (also /help in chat)'],
       ['Ctrl-click item', 'Store in depot while a locker is open'],
+      ['Click a tree (with an axe)', 'Chop it: logs and woodcutting experience (higher trees need higher woodcutting)'],
+      ['Market board (in depots)', 'Buy from and sell to other players; gold goes to the bank, items to the depot'],
     ];
     for (const [k, v] of rows) {
       el('div', 'help-key', grid, k);
@@ -1654,6 +1892,11 @@ export class HUD {
     }
 
     this.updateHotbarCooldowns();
+    this.skillsTimer -= dt;
+    if (this.skillsTimer <= 0) {
+      this.skillsTimer = 0.25;
+      this.renderSkills();
+    }
     this.battleTimer -= dt;
     if (this.battleTimer <= 0) {
       this.battleTimer = 0.2;

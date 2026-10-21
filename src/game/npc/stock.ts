@@ -1,4 +1,4 @@
-import { ITEMS } from '../inventory/items';
+import { ITEMS, LOG_ITEMS } from '../inventory/items';
 import type { SpellId } from '../magic/spells';
 import type { ShopEntry } from './npcs';
 
@@ -38,14 +38,14 @@ export const EXTRA_SELLS: Record<string, ShopEntry[]> = {
   garrick: [
     s('fur_bag', 70), s('fur_backpack', 250), s('sylvan_bow', 3900),
     s('onyx_arrow', 8), s('hawkeye_arrow', 13), s('royal_spear', 16), s('enchanted_spear', 50), s('viper_star', 20), s('shadow_star', 65),
-    s('fish', 5), s('mead', 15),
+    s('fish', 5), s('mead', 15), s('hatchet', 70),
   ],
   mirella: [
     s('berserk_potion', 400), s('bullseye_potion', 400), s('mastermind_potion', 600), s('glacier_robe', 9500), s('frost_circlet', 6000),
     // spells update: blank runes for rune spells, and every new rune ready-made
     s('blank_rune', 10), ...SPELL_RUNES.map((id) => s(id)),
   ],
-  zuri: [s('bullseye_potion', 420), s('viper_star', 22), s('onyx_arrow', 9), s('fish', 5), s('blank_rune', 12), s('antidote_rune'), s('venom_field_rune')],
+  zuri: [s('bullseye_potion', 420), s('viper_star', 22), s('onyx_arrow', 9), s('fish', 5), s('blank_rune', 12), s('antidote_rune'), s('venom_field_rune'), s('hatchet', 75)],
   brann: [s('fur_cap', 75), s('fur_boots', 150), s('mead', 16)],
   aldric: [s('berserk_potion', 420)],
 };
@@ -55,7 +55,7 @@ export const EXTRA_BUYS: Record<string, string[]> = {
   brann: NEW_MATERIALS,
   zuri: NEW_MATERIALS,
   brunhild: [...NEW_GEAR, 'iron_ore', 'minotaur_leather', 'polar_bear_fur', 'frost_dragon_scale', 'lizard_scale'],
-  garrick: ['sylvan_bow', 'frostbite_crossbow', 'fur_bag', 'fur_backpack', 'winter_wolf_fur', 'polar_bear_fur', 'snakeskin', 'antlers', 'silver_fur', 'penguin_feather', 'bear_paw'],
+  garrick: ['sylvan_bow', 'frostbite_crossbow', 'fur_bag', 'fur_backpack', 'winter_wolf_fur', 'polar_bear_fur', 'snakeskin', 'antlers', 'silver_fur', 'penguin_feather', 'bear_paw', ...LOG_ITEMS],
   mirella: ['glacier_robe', 'frost_circlet', 'frost_charm', 'crystal_shard', 'frozen_heart', 'mummy_wrapping', 'scarab_amulet'],
   orwin: ['scarab_coin', 'skull_trophy', 'cyclops_eye'],
 };

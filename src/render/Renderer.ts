@@ -6,6 +6,7 @@ import { Enemy } from '../game/enemies/Enemy';
 import type { Creature } from '../game/entities/Creature';
 import type { GroundBag } from '../game/Game';
 import { itemDef, type Element } from '../game/inventory/items';
+import { treeAt } from '../game/gathering/woodcutting';
 import { NPCS } from '../game/npc/npcs';
 import { Npc } from '../game/npc/Npc';
 import { Player, spellLight } from '../game/player/Player';
@@ -90,7 +91,7 @@ export class Renderer {
 
     const p = this.me;
     this.cam = new CameraController(p.x, p.y);
-    this.worldView = new WorldView(ctl.game.world, this.scene);
+    this.worldView = new WorldView(ctl.game.world, this.scene, (x, y, z) => ctl.game.stumpOrigin(x, y, z));
     this.effects = new Effects(this.scene);
     this.blood = new Blood(this.scene, (z) => this.worldView.floorOffset(z));
     this.overlay = new Overlay(container, this.cam.camera);
@@ -495,8 +496,17 @@ export class Renderer {
         break;
       }
       case 'xp':
-        if (e.to === me) this.float(e.atId, `+${e.amount} exp`, 'xp', 1.4, 0.3);
+        if (e.to === me) this.float(e.atId, e.skill ? `+${e.amount} ${e.skill} xp` : `+${e.amount} exp`, e.skill ? 'xp skill' : 'xp', 1.4, 0.3);
         break;
+      case 'chop': {
+        // reuse the attack swing; wood chips fly, and leaves when the tree falls
+        this.visibleView(e.id)?.onAttack();
+        const off = this.worldView.floorOffset(e.z);
+        if (off === null || chebyshev(e.x, e.y, this.me.x, this.me.y) > VIEW_RANGE + 2) break;
+        this.effects.burst(new THREE.Vector3(e.x, off + 0.5, e.y), 0xc8a070, e.got ? 10 : 5, 1.8, 7, 0.06);
+        if (e.felled) this.effects.burst(new THREE.Vector3(e.x, off + 1.6, e.y), 0x4a8a38, 26, 2.4, 4, 0.09);
+        break;
+      }
       case 'levelUp': {
         const v = this.visibleView(e.id);
         if (!v) break;
@@ -657,7 +667,14 @@ export class Renderer {
       const b = g.bags.find((x) => x.id === h.id);
       return b && b.items.length ? `A bag: ${b.items.map((i) => itemDef(i.id).name).join(', ')}` : 'A bag.';
     }
-    if (h.kind === 'tile') return '';
+    if (h.kind === 'tile') {
+      const o = g.world.getObj(h.x, h.y, this.me.z);
+      const tree = treeAt(o);
+      if (tree) return `A ${tree.name}${tree.level > 1 ? ` (woodcutting ${tree.level})` : ''}${h.usable ? ' — click to chop' : ''}`;
+      if (o === Obj.Stump) return 'A tree stump. It will grow back.';
+      if (o === Obj.MarketBoard) return 'Market board — buy from and sell to other players';
+      return '';
+    }
     const c = g.getCreature(h.id);
     if (!c) return '';
     if (c instanceof Player) return `${c.name} — level ${c.level} ${c.vocation}`;

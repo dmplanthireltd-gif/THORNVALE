@@ -369,7 +369,16 @@ const defs: ItemDef[] = [
     ['lizard_scale', 'Lizard Scale', 70], ['giant_beard', 'Frost Giant Beard', 180], ['crystal_shard', 'Ice Crystal Shard', 150],
     ['frozen_heart', 'Frozen Heart', 500], ['frost_dragon_scale', 'Frost Dragon Scale', 220],
   ] as Array<[string, string, number]>).map(([id, name, value]) => def({ id, name, kind: 'material', weight: id === 'golden_goblet' ? 30 : id === 'iron_ore' ? 12 : id === 'skull_trophy' ? 20 : id === 'polar_bear_fur' ? 15 : 2, value })),
+
+  // --- woodcutting: logs from felled trees (traders buy them) ------------------------------
+  def({ id: 'logs', name: 'Logs', kind: 'material', weight: 8, value: 4, tint: '#9a6a3a', note: 'Cut from an ordinary tree.' }),
+  def({ id: 'pine_logs', name: 'Pine Logs', kind: 'material', weight: 8, value: 12, tint: '#b08850', note: 'Resinous pine wood. Woodcutting 15.' }),
+  def({ id: 'palm_logs', name: 'Palm Logs', kind: 'material', weight: 8, value: 22, tint: '#c8a870', note: 'Light, fibrous palm wood. Woodcutting 25.' }),
+  def({ id: 'teak_logs', name: 'Teak Logs', kind: 'material', weight: 9, value: 38, tint: '#7a4a28', rarity: 'uncommon', note: 'Hard jungle teak. Woodcutting 35.' }),
 ];
+
+/** Logs from woodcutting, cheapest first. */
+export const LOG_ITEMS = ['logs', 'pine_logs', 'palm_logs', 'teak_logs'];
 
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(defs.map((d) => [d.id, d]));
 

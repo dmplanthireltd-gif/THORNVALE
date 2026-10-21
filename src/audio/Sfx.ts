@@ -2,6 +2,7 @@ import type { Controller } from '../client/Controller';
 import type { Effect, GameEvent } from '../game/core/events';
 import { chebyshev } from '../game/core/types';
 import { itemDef } from '../game/inventory/items';
+import { Obj } from '../game/world/WorldMap';
 
 /**
  * Small synthesized sound effects (Web Audio, no sound files). Sounds near the
@@ -11,7 +12,7 @@ type Sound =
   | 'hit' | 'hitHard' | 'miss' | 'block' | 'swing' | 'bow' | 'throw'
   | 'fire' | 'energy' | 'ice' | 'earth' | 'death' | 'holy'
   | 'heal' | 'mana' | 'buff' | 'shield' | 'levelUp' | 'die' | 'monsterDie'
-  | 'coins' | 'pickup' | 'drink' | 'click' | 'teleport' | 'dig' | 'error' | 'explosion';
+  | 'coins' | 'pickup' | 'drink' | 'click' | 'teleport' | 'dig' | 'error' | 'explosion' | 'chop' | 'treeFall' | 'skillUp';
 
 const HEARING = 11;
 
@@ -244,6 +245,19 @@ export class Sfx {
       case 'error':
         this.tone(out, 'square', 180, 160, t, 0.12, 0.08);
         break;
+      case 'chop':
+        // an axe biting into wood: a dull knock with a woody ring
+        this.noise(out, 'bandpass', r(500, 650), 220, t, 0.09, 0.7, 2.5);
+        this.tone(out, 'triangle', r(190, 230), 110, t, 0.1, 0.35);
+        break;
+      case 'treeFall':
+        this.noise(out, 'bandpass', 1400, 400, t, 0.35, 0.35, 1.5, 0.05);
+        this.noise(out, 'lowpass', 500, 80, t + 0.35, 0.45, 0.8, 0.8);
+        this.tone(out, 'sine', 80, 40, t + 0.35, 0.4, 0.5);
+        break;
+      case 'skillUp':
+        [659, 784, 988].forEach((f, i) => this.tone(out, 'triangle', f, f, t + i * 0.07, 0.18, 0.12, 0.01));
+        break;
     }
   }
 
@@ -337,8 +351,20 @@ export class Sfx {
       case 'teleport':
         if (e.id === me) this.play('teleport', 0.6);
         break;
-      case 'tileChanged':
-        this.play('dig', this.at(e.x, e.y, e.z));
+      case 'tileChanged': {
+        // holes being dug; felled and regrowing trees make their own sounds (chop events)
+        const o = this.ctl.game.world.getObj(e.x, e.y, e.z);
+        if (o === Obj.Hole || o === Obj.LooseStone) this.play('dig', this.at(e.x, e.y, e.z));
+        break;
+      }
+      case 'chop': {
+        const v = this.at(e.x, e.y, e.z);
+        this.play('chop', v);
+        if (e.felled) this.play('treeFall', v);
+        break;
+      }
+      case 'skillUp':
+        if (e.to === me && e.level > 0) this.play('skillUp', 0.7);
         break;
       case 'message':
         if (e.to !== me) break;

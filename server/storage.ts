@@ -11,6 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { SaveData } from '../src/game/Game';
+import { cleanDelivery, cleanOffer, type MarketDelivery, type MarketOffer } from '../src/game/market/market';
 
 export interface Account {
   /** Name as typed at creation (for display). */
@@ -50,6 +51,17 @@ export interface Storage {
   /** Every character (for export / migration scripts). */
   allCharacters(): Promise<Array<{ key: string } & StoredCharacter>>;
   flush(): Promise<void>;
+  /**
+   * Player market: every offer and every pending delivery. Null when this
+   * storage has no market tables yet (the market then stays closed).
+   */
+  loadMarket(): Promise<{ offers: MarketOffer[]; deliveries: MarketDelivery[] } | null>;
+  /** Inserts or updates offers (by id). */
+  putMarketOffers(offers: MarketOffer[]): Promise<void>;
+  deleteMarketOffers(ids: string[]): Promise<void>;
+  /** Inserts or updates deliveries (by id). */
+  putMarketDeliveries(deliveries: MarketDelivery[]): Promise<void>;
+  deleteMarketDeliveries(ids: string[]): Promise<void>;
 }
 
 // ------------------------------------------------------------------ files
@@ -59,12 +71,20 @@ export class FileStorage implements Storage {
   private chars: Record<string, SaveData>;
   private accounts: Record<string, Account>;
   private backups: Array<{ key: string; data: unknown; version: number; reason: string; at: number }>;
+  private market: { offers: Record<string, MarketOffer>; deliveries: Record<string, MarketDelivery> };
   private dirty = false;
 
-  constructor(private readonly charFile: string, private readonly accountFile = join(dirname(charFile), 'accounts.json'), private readonly backupFile = join(dirname(charFile), 'backups.json')) {
+  constructor(
+    private readonly charFile: string,
+    private readonly accountFile = join(dirname(charFile), 'accounts.json'),
+    private readonly backupFile = join(dirname(charFile), 'backups.json'),
+    private readonly marketFile = join(dirname(charFile), 'market.json'),
+  ) {
     this.chars = FileStorage.read(charFile, {});
     this.accounts = FileStorage.read(accountFile, {});
     this.backups = FileStorage.read(backupFile, []);
+    const m = FileStorage.read<{ offers?: Record<string, MarketOffer>; deliveries?: Record<string, MarketDelivery> }>(marketFile, {});
+    this.market = { offers: m.offers ?? {}, deliveries: m.deliveries ?? {} };
   }
 
   private static read<T>(file: string, fallback: T): T {
@@ -145,6 +165,35 @@ export class FileStorage implements Storage {
     if (!this.dirty) return;
     FileStorage.write(this.charFile, this.chars);
     this.dirty = false;
+  }
+
+  // the market file is written on every change: escrowed items must never wait for a flush
+
+  async loadMarket(): Promise<{ offers: MarketOffer[]; deliveries: MarketDelivery[] }> {
+    return {
+      offers: Object.values(this.market.offers).map(cleanOffer).filter((o): o is MarketOffer => !!o),
+      deliveries: Object.values(this.market.deliveries).map(cleanDelivery).filter((d): d is MarketDelivery => !!d),
+    };
+  }
+
+  async putMarketOffers(offers: MarketOffer[]): Promise<void> {
+    for (const o of offers) this.market.offers[o.id] = { ...o };
+    FileStorage.write(this.marketFile, this.market);
+  }
+
+  async deleteMarketOffers(ids: string[]): Promise<void> {
+    for (const id of ids) delete this.market.offers[id];
+    FileStorage.write(this.marketFile, this.market);
+  }
+
+  async putMarketDeliveries(deliveries: MarketDelivery[]): Promise<void> {
+    for (const d of deliveries) this.market.deliveries[d.id] = { ...d, items: d.items.map((i) => ({ ...i })) };
+    FileStorage.write(this.marketFile, this.market);
+  }
+
+  async deleteMarketDeliveries(ids: string[]): Promise<void> {
+    for (const id of ids) delete this.market.deliveries[id];
+    FileStorage.write(this.marketFile, this.market);
   }
 }
 
@@ -247,6 +296,67 @@ export class SupabaseStorage implements Storage {
 
   async flush(): Promise<void> {
     /* every save is written immediately */
+  }
+
+  // ---------------------------------------------------------------- market (tables market_offers, market_deliveries)
+
+  private static iso(ms: number): string {
+    return new Date(Math.min(8.64e15, Math.max(0, ms))).toISOString();
+  }
+
+  private static idList(ids: string[]): string {
+    return `in.(${ids.map((id) => `"${id.replace(/[^A-Za-z0-9_-]/g, '')}"`).join(',')})`;
+  }
+
+  async loadMarket(): Promise<{ offers: MarketOffer[]; deliveries: MarketDelivery[] } | null> {
+    try {
+      await this.req('GET', 'market_offers?select=id&limit=1');
+      await this.req('GET', 'market_deliveries?select=id&limit=1');
+    } catch (err) {
+      console.warn(`Market tables not found (${String((err as Error).message).slice(0, 120)}). The market stays closed until the migration is applied.`);
+      return null;
+    }
+    const all = async (table: string): Promise<Array<Record<string, unknown>>> => {
+      const out: Array<Record<string, unknown>> = [];
+      for (let from = 0; ; from += 1000) {
+        const rows = (await this.req('GET', `${table}?select=*&order=id&offset=${from}&limit=1000`)) as Array<Record<string, unknown>>;
+        out.push(...rows);
+        if (rows.length < 1000) return out;
+      }
+    };
+    const offers = (await all('market_offers')).map((r) => cleanOffer({
+      id: r.id, seller: r.seller_key, sellerName: r.seller_name, item: r.item_id, qty: Number(r.qty), price: Number(r.price),
+      created: Date.parse(String(r.created_at)) || 0, expires: Date.parse(String(r.expires_at)) || Number.MAX_SAFE_INTEGER,
+    })).filter((o): o is MarketOffer => !!o);
+    const deliveries = (await all('market_deliveries')).map((r) => cleanDelivery({
+      id: r.id, to: r.name_key, gold: Number(r.gold), items: r.items, reason: r.reason, created: Date.parse(String(r.created_at)) || 0,
+    } as unknown as MarketDelivery)).filter((d): d is MarketDelivery => !!d);
+    return { offers, deliveries };
+  }
+
+  async putMarketOffers(offers: MarketOffer[]): Promise<void> {
+    if (!offers.length) return;
+    await this.req('POST', 'market_offers?on_conflict=id', offers.map((o) => ({
+      id: o.id, seller_key: o.seller, seller_name: o.sellerName, item_id: o.item, qty: o.qty, price: o.price,
+      created_at: SupabaseStorage.iso(o.created), expires_at: SupabaseStorage.iso(o.expires),
+    })), 'resolution=merge-duplicates,return=minimal');
+  }
+
+  async deleteMarketOffers(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    await this.req('DELETE', `market_offers?id=${encodeURIComponent(SupabaseStorage.idList(ids))}`, undefined, 'return=minimal');
+  }
+
+  async putMarketDeliveries(deliveries: MarketDelivery[]): Promise<void> {
+    if (!deliveries.length) return;
+    await this.req('POST', 'market_deliveries?on_conflict=id', deliveries.map((d) => ({
+      id: d.id, name_key: d.to, gold: d.gold, items: d.items, reason: d.reason, created_at: SupabaseStorage.iso(d.created),
+    })), 'resolution=merge-duplicates,return=minimal');
+  }
+
+  async deleteMarketDeliveries(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    await this.req('DELETE', `market_deliveries?id=${encodeURIComponent(SupabaseStorage.idList(ids))}`, undefined, 'return=minimal');
   }
 }
 

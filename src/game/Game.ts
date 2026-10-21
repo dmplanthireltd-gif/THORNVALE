@@ -9,9 +9,18 @@ import { onEnemyDamaged, updateEnemyAI, type AIContext } from './enemies/EnemyAI
 import type { Ability } from './enemies/enemyDefs';
 import type { Creature } from './entities/Creature';
 import { addToList, DEPOT_SLOTS, Inventory } from './inventory/Inventory';
-import { describeItem, EQUIP_SLOTS, equipSlotFor, itemDef, POTION_BUFF_POWER, POTION_BUFF_SECONDS, runeGroup, type Element, type EquipSlot, type FieldKind, type ItemDef, type ItemStack } from './inventory/items';
+import { describeItem, EQUIP_SLOTS, equipSlotFor, isItem, itemDef, POTION_BUFF_POWER, POTION_BUFF_SECONDS, runeGroup, type Element, type EquipSlot, type FieldKind, type ItemDef, type ItemStack } from './inventory/items';
 import { ENEMIES } from './enemies/enemyDefs';
 import { beamTiles, exivaText, facingDir, GROUP_COOLDOWN, isSpellId, parseSpellWords, SPELLS, startingSpells, waveTiles, type SpellDef, type SpellId } from './magic/spells';
+import { CHOP_INTERVAL, chopChance, gatherLevelForXp, treeAt } from './gathering/woodcutting';
+import {
+  emptyChange, MARKET_CLAIMS_KEPT, MARKET_MAX_OFFERS, MARKET_MAX_PRICE, MARKET_OFFER_MS, MarketBook, marketFee, marketId,
+  type MarketChange, type MarketDelivery, type MarketOffer, type MarketView,
+} from './market/market';
+import {
+  addTries, legacySkills, parseSkills, powerLevel, shieldingFactor, SKILL_NAMES, skillForWeapon, skillHitBonus, startSkills, wandFactor,
+  type CombatSkill, type Skills,
+} from './player/skills';
 import { findPath } from './movement/pathfinding';
 import { buildDialogue, type DialogueState, type DialogueView } from './npc/dialogue';
 import { Npc } from './npc/Npc';
@@ -107,6 +116,14 @@ export interface Session {
   admin: boolean;
   /** Items from older versions that no longer exist (kept with the save). */
   lostItems: ItemStack[];
+  /** Combat skills (fist … magic level). */
+  skills: Skills;
+  /** Woodcutting experience (level 1–99 from the curve in gathering/woodcutting.ts). */
+  woodcutting: number;
+  /** Market board the player is using, if any. */
+  marketOpen: { x: number; y: number; z: number } | null;
+  /** Ids of market deliveries this character already received (saved; makes hand-outs idempotent). */
+  marketClaimed: string[];
 }
 
 export interface CharacterData {
@@ -141,6 +158,12 @@ export interface SaveData {
   lostItems?: ItemStack[];
   /** PvP marks (save v4+). Times are wall-clock ms. */
   pvp?: { secure?: boolean; whiteSkullUntil?: number; redSkullUntil?: number; unjustKills?: number[] };
+  /** Combat skills (save v5+): level and tries towards the next level. */
+  skills?: Partial<Record<CombatSkill, { level: number; tries: number }>>;
+  /** Gathering skills (save v5+): total experience. */
+  gathering?: { woodcutting?: number };
+  /** Market deliveries already received (save v5+). */
+  market?: { claimed?: string[] };
 }
 
 export interface GameOptions {
@@ -182,6 +205,8 @@ interface TempField {
 const FIELD_OBJ: Record<FieldKind, Obj> = { fire: Obj.FireField, energy: Obj.EnergyField, poison: Obj.PoisonField, wall: Obj.MagicWall };
 const FIELD_ELEMENT: Partial<Record<Obj, Element>> = { [Obj.FireField]: 'fire', [Obj.EnergyField]: 'energy', [Obj.PoisonField]: 'earth' };
 const TRADE_RANGE = 3;
+/** You must stand this close to a market board to use it. */
+const MARKET_RANGE = 2;
 
 /**
  * The authoritative simulation. Render-agnostic: it advances in seconds, talks
@@ -205,6 +230,16 @@ export class Game implements AIContext {
   private openHoles = new Map<string, number>();
   /** Rune fields and magic walls: "x,y,z" → field. */
   private fields = new Map<string, TempField>();
+  /** Felled trees: key → the tree that grows back and seconds left (mirror games: until the server says otherwise). */
+  private stumps = new Map<string, { obj: Obj; left: number }>();
+  /** The player market (sell offers, escrow, deliveries to offline sellers). */
+  readonly market = new MarketBook();
+  /**
+   * Called with every market change that must be stored (server: storage, in
+   * the order MarketChange describes; single player: browser storage).
+   */
+  marketSink: ((c: MarketChange) => void) | null = null;
+  private marketTimer = 0;
   time = 0;
   localId: number | null = null;
   readonly parties: Party[] = [];
@@ -244,6 +279,7 @@ export class Game implements AIContext {
       id, player, inventory: new Inventory(), quests: new QuestLog(), dialogue: null,
       intent: opts.intent ?? new BufferedIntent(), depot: new Array(DEPOT_SLOTS).fill(null), depotOpen: null,
       bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
+      skills: startSkills(), woodcutting: 0, marketOpen: null, marketClaimed: [],
     };
     if (opts.starter !== false) giveStarterKit(session.inventory, voc);
     this.sessions.set(id, session);
@@ -332,10 +368,58 @@ export class Game implements AIContext {
     return this.equippedDefs(s).reduce((n, d) => n + (d.armor ?? 0), 0);
   }
 
+  /** Shield defence plus half the weapon's, raised by the shielding skill. */
   defense(s: Session): number {
     const sh = s.inventory.equipped('shield');
     const w = s.inventory.equipped('weapon');
-    return (sh ? itemDef(sh).defense ?? 0 : 0) + Math.floor((w ? itemDef(w).defense ?? 0 : 0) / 2);
+    const base = (sh ? itemDef(sh).defense ?? 0 : 0) + Math.floor((w ? itemDef(w).defense ?? 0 : 0) / 2);
+    return Math.round(base * shieldingFactor(s.skills.shielding.level));
+  }
+
+  // ================================================================ skills
+
+  /** The skill the held weapon trains and uses (fist without one, magic level for wands and rods). */
+  weaponSkill(s: Session): CombatSkill {
+    const w = s.inventory.equipped('weapon');
+    return skillForWeapon(w ? itemDef(w).weaponType : undefined);
+  }
+
+  /** Level used by weapon damage formulas: half character level, half weapon skill. */
+  weaponPower(s: Session, skill: CombatSkill = this.weaponSkill(s)): number {
+    const p = s.player;
+    return powerLevel(p.level, skill, s.skills[skill].level, p.vocation);
+  }
+
+  /** Level used by spell, rune and healing formulas: half character level, half magic level. */
+  magicPower(s: Session): number {
+    const p = s.player;
+    return powerLevel(p.level, 'magic', s.skills.magic.level, p.vocation);
+  }
+
+  /** Adds tries to a skill and announces new levels. */
+  trainSkill(s: Session, skill: CombatSkill, tries: number): void {
+    if (!this.simulate || tries <= 0) return;
+    const gained = addTries(s.skills, skill, tries, s.player.vocation);
+    if (!gained) return;
+    const lvl = s.skills[skill].level;
+    this.msg(s.id, skill === 'magic' ? `You advanced to magic level ${lvl}.` : `You advanced to ${SKILL_NAMES[skill].toLowerCase()} level ${lvl}.`, 'level');
+    this.events.emit({ type: 'skillUp', skill, level: lvl, to: s.id });
+    s.wantsSave = true;
+  }
+
+  /** Spends mana (spells, wands, rods); every point spent trains magic level. */
+  spendMana(s: Session, amount: number): void {
+    const n = Math.max(0, Math.min(s.player.mana, amount));
+    s.player.mana -= n;
+    this.trainSkill(s, 'magic', n);
+  }
+
+  /** Being attacked with a shield in hand trains shielding. */
+  private trainShield(target: Player): void {
+    const s = this.sessions.get(target.id);
+    if (!s) return;
+    const sh = s.inventory.equipped('shield');
+    if (sh && (itemDef(sh).defense ?? 0) > 0) this.trainSkill(s, 'shielding', 1);
   }
 
   resist(s: Session, el: Element): number {
@@ -506,8 +590,10 @@ export class Game implements AIContext {
     const s = this.sessions.get(p.id);
     if (s) {
       if (s.depotOpen) this.closeDepot(s.id);
+      if (s.marketOpen) this.closeMarket(s.id);
       this.closeDialogue(s.id);
     }
+    p.chop = null;
     this.cancelTrade(p.id, 'moved away');
     this.events.emit({ type: 'teleport', id: p.id });
   }
@@ -527,7 +613,14 @@ export class Game implements AIContext {
     this.updateBags(dt);
     this.updateHoles(dt);
     this.updateFields(dt);
+    this.updateStumps(dt);
+    this.marketTimer -= dt;
+    if (this.marketTimer <= 0) {
+      this.marketTimer = 10;
+      this.expireMarketOffers();
+    }
     for (const s of this.sessions.values()) {
+      if (s.marketOpen && (s.player.dead || s.player.z !== s.marketOpen.z || chebyshev(s.player.x, s.player.y, s.marketOpen.x, s.marketOpen.y) > MARKET_RANGE)) this.closeMarket(s.id);
       if (s.dialogue) {
         const n = this.npcs.find((x) => x.id === s.dialogue!.npcId);
         if (!n || s.player.dead || this.dist(n, s.player) > 3) this.closeDialogue(s.id);
@@ -609,6 +702,7 @@ export class Game implements AIContext {
 
     this.updateHazards(s);
     this.updatePending(s);
+    this.updateChop(s, dt);
     this.updatePlayerCombat(s);
   }
 
@@ -968,6 +1062,127 @@ export class Game implements AIContext {
     }
   }
 
+  // ================================================================ woodcutting
+
+  /** Woodcutting level (1–99). */
+  woodcuttingLevel(s: Session): number {
+    return gatherLevelForXp(s.woodcutting);
+  }
+
+  /** The strongest axe the player carries (held or in the backpack) and is high enough level to use. */
+  bestAxe(s: Session): ItemDef | null {
+    let best: ItemDef | null = null;
+    const consider = (st: ItemStack | null | undefined) => {
+      if (!st || !isItem(st.id)) return;
+      const d = itemDef(st.id);
+      if (d.weaponType !== 'axe' || (d.level ?? 0) > s.player.level) return;
+      if (!best || (d.attack ?? 0) > (best.attack ?? 0)) best = d;
+    };
+    consider(s.inventory.equipment.weapon);
+    for (let i = 0; i < s.inventory.size(); i++) consider(s.inventory.slots[i]);
+    return best;
+  }
+
+  private startChop(s: Session, x: number, y: number, z: number): void {
+    const p = s.player;
+    const tree = treeAt(this.world.getObj(x, y, z));
+    if (!tree) return;
+    const lvl = this.woodcuttingLevel(s);
+    if (lvl < tree.level) return this.msg(s.id, `You need woodcutting level ${tree.level} to chop a ${tree.name}.`, 'warn');
+    if (!this.bestAxe(s)) {
+      const any = [s.inventory.equipment.weapon, ...s.inventory.slots].some((st) => st && isItem(st.id) && itemDef(st.id).weaponType === 'axe');
+      return this.msg(s.id, any ? 'Your axe is too heavy for you. A plain hatchet will do.' : 'You need an axe to chop trees. Outfitters and smiths sell hatchets.', 'warn');
+    }
+    const log = itemDef(tree.log);
+    if (!s.inventory.canFit(tree.log, 1)) return this.msg(s.id, 'Your backpack is full.', 'warn');
+    if (s.inventory.weight() + log.weight > p.capacity) return this.msg(s.id, 'You cannot carry any more.', 'warn');
+    p.targetId = null;
+    p.faceTowards(x, y);
+    if (!p.chop || p.chop.x !== x || p.chop.y !== y) this.msg(s.id, `You swing your axe at the ${tree.name}.`, 'info');
+    p.chop = { x, y, z, timer: CHOP_INTERVAL / 2 };
+  }
+
+  /** One chop every CHOP_INTERVAL while you stand by the tree; walking or attacking stops it. */
+  private updateChop(s: Session, dt: number): void {
+    const p = s.player;
+    const c = p.chop;
+    if (!c) return;
+    if (p.dead || p.moving || p.path.length || p.pending || p.targetId !== null || p.z !== c.z || chebyshev(p.x, p.y, c.x, c.y) > 1) {
+      p.chop = null;
+      return;
+    }
+    const tree = treeAt(this.world.getObj(c.x, c.y, c.z));
+    if (!tree) {
+      // someone else felled it
+      p.chop = null;
+      return;
+    }
+    c.timer -= dt;
+    if (c.timer > 0) return;
+    c.timer += CHOP_INTERVAL;
+    p.faceTowards(c.x, c.y);
+    const axe = this.bestAxe(s);
+    if (!axe) {
+      p.chop = null;
+      return this.msg(s.id, 'You need an axe to chop trees.', 'warn');
+    }
+    const got = Math.random() < chopChance(this.woodcuttingLevel(s), tree, axe.attack ?? 0);
+    let felled = false;
+    if (got) {
+      const log = itemDef(tree.log);
+      if (!s.inventory.canFit(tree.log, 1) || s.inventory.weight() + log.weight > p.capacity) {
+        p.chop = null;
+        this.events.emit({ type: 'chop', id: p.id, x: c.x, y: c.y, z: c.z, got: false, felled: false });
+        return this.msg(s.id, s.inventory.canFit(tree.log, 1) ? 'You cannot carry any more logs.' : 'Your backpack is full.', 'warn');
+      }
+      s.inventory.add(tree.log, 1);
+      this.events.emit({ type: 'inventoryChanged', to: s.id });
+      this.msg(s.id, `You get some ${log.name.toLowerCase()}.`, 'loot');
+      this.gainWoodcutting(s, tree.xp, p.id);
+      felled = Math.random() < tree.fall;
+    }
+    this.events.emit({ type: 'chop', id: p.id, x: c.x, y: c.y, z: c.z, got, felled });
+    if (felled) {
+      this.fellTree(c.x, c.y, c.z);
+      p.chop = null;
+    }
+  }
+
+  /** Adds woodcutting experience and announces new levels. */
+  gainWoodcutting(s: Session, xp: number, atId: number): void {
+    const before = this.woodcuttingLevel(s);
+    s.woodcutting = Math.min(200_000_000, s.woodcutting + Math.max(0, xp));
+    this.events.emit({ type: 'xp', amount: xp, atId, to: s.id, skill: 'woodcutting' });
+    const after = this.woodcuttingLevel(s);
+    if (after > before) {
+      this.msg(s.id, `You advanced to woodcutting level ${after}.`, 'level');
+      this.events.emit({ type: 'skillUp', skill: 'woodcutting', level: after, to: s.id });
+      s.wantsSave = true;
+    }
+  }
+
+  /** Turns a tree into a stump that grows back later. */
+  fellTree(x: number, y: number, z: number): void {
+    const o = this.world.getObj(x, y, z);
+    const tree = treeAt(o);
+    if (!tree) return;
+    const [a, b] = tree.regrow;
+    this.stumps.set(WorldMap.key(x, y, z), { obj: o, left: a + Math.random() * (b - a) });
+    this.world.setObj(x, y, Obj.Stump, z);
+    this.events.emit({ type: 'tileChanged', x, y, z });
+  }
+
+  private updateStumps(dt: number): void {
+    for (const [k, st] of this.stumps) {
+      st.left -= dt;
+      if (st.left > 0) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      this.stumps.delete(k);
+      this.world.setObj(x, y, st.obj, z);
+      this.events.emit({ type: 'tileChanged', x, y, z });
+    }
+  }
+
   private updateFields(dt: number): void {
     for (const [k, f] of [...this.fields]) {
       f.ttl -= dt;
@@ -1013,6 +1228,46 @@ export class Game implements AIContext {
     this.msg(p.id, 'You are cured of poison.', 'info');
   }
 
+  /** The tree a stump will grow back into (null when the tile is no stump). */
+  stumpOrigin(x: number, y: number, z: number): Obj | null {
+    return this.stumps.get(WorldMap.key(x, y, z))?.obj ?? null;
+  }
+
+  /** Felled trees near a spot (snapshot: only what a player can see). */
+  stumpsNear(x: number, y: number, z: number, radius: number): string[] {
+    const out: string[] = [];
+    for (const k of this.stumps.keys()) {
+      const [sx, sy, sz] = k.split(',').map(Number);
+      if (Math.abs(sz - z) <= 2 && chebyshev(sx, sy, x, y) <= radius) out.push(k);
+    }
+    return out;
+  }
+
+  /**
+   * Mirror mode: matches stumps around (x, y) to the server's list. Stumps
+   * further away are left alone until the player comes close again.
+   */
+  syncStumps(keys: string[], x: number, y: number, z: number, radius: number): void {
+    const want = new Set(keys);
+    for (const [k, st] of [...this.stumps]) {
+      if (want.has(k)) continue;
+      const [sx, sy, sz] = k.split(',').map(Number);
+      if (Math.abs(sz - z) > 2 || chebyshev(sx, sy, x, y) > radius) continue;
+      this.stumps.delete(k);
+      this.world.setObj(sx, sy, st.obj, sz);
+      this.events.emit({ type: 'tileChanged', x: sx, y: sy, z: sz });
+    }
+    for (const k of want) {
+      if (this.stumps.has(k)) continue;
+      const [sx, sy, sz] = k.split(',').map(Number);
+      const o = this.world.getObj(sx, sy, sz);
+      if (!treeAt(o)) continue;
+      this.stumps.set(k, { obj: o, left: Infinity });
+      this.world.setObj(sx, sy, Obj.Stump, sz);
+      this.events.emit({ type: 'tileChanged', x: sx, y: sy, z: sz });
+    }
+  }
+
   // ================================================================ combat
 
   meleeAttack(attacker: Creature, target: Creature): void {
@@ -1024,9 +1279,13 @@ export class Game implements AIContext {
       const w = s.inventory.equipped('weapon');
       const wd = w ? itemDef(w) : null;
       const atk = (wd?.attack ?? FIST_ATTACK) + this.attackBonus(s) + this.potionAttack(s, 'melee');
-      const roll = rollMelee(attacker.level, atk, VOCATIONS[attacker.vocation].melee, this.targetArmor(target));
+      const skill = this.weaponSkill(s);
+      const roll = rollMelee(this.weaponPower(s, skill), atk, VOCATIONS[attacker.vocation].melee, this.targetArmor(target), skillHitBonus(s.skills[skill].level));
       roll.amount = applyResist(Math.round(roll.amount * this.stanceFactor(attacker, target)), this.targetResist(target, 'physical'));
+      if (target instanceof Player) this.trainShield(target);
       this.applyDamage(target, attacker, roll, 'physical');
+      // every swing trains the skill of the weapon in hand (fist fighting without one)
+      this.trainSkill(s, skill, 1);
       if (roll.result === 'hit' && wd?.element && wd.elementDamage && !target.dead) {
         const extra = applyResist(Math.round(wd.elementDamage * (1 + attacker.level / 60) * (0.6 + Math.random() * 0.8)), this.targetResist(target, wd.element));
         if (extra > 0) this.applyDamage(target, attacker, { amount: extra, result: 'hit' }, wd.element);
@@ -1036,6 +1295,7 @@ export class Game implements AIContext {
       if (!s || this.isProtected(target)) return;
       const roll = rollMonsterMelee(attacker.def.minDmg, attacker.def.maxDmg, this.armor(s), this.defense(s));
       roll.amount = applyResist(Math.round(roll.amount * FIGHT_MODE[target.fightMode].taken), this.resist(s, 'physical'));
+      this.trainShield(target);
       this.applyDamage(target, attacker, roll, 'physical');
     }
   }
@@ -1054,11 +1314,12 @@ export class Game implements AIContext {
         p.attackTimer = 2;
         return;
       }
-      p.mana -= cost;
+      this.spendMana(s, cost);
       const el = wd.element ?? 'energy';
       this.events.emit({ type: 'projectile', fromId: p.id, toId: t.id, effect: el as Effect });
       const raw = randInt(wd.magicDamage[0], wd.magicDamage[1]);
-      this.applyDamage(t, p, { amount: applyResist(Math.round(raw * (1 + this.magicBonus(s) / 100)), this.targetResist(t, el)), result: 'hit' }, el);
+      const amount = Math.round(raw * (1 + this.magicBonus(s) / 100) * wandFactor(s.skills.magic.level));
+      this.applyDamage(t, p, { amount: applyResist(amount, this.targetResist(t, el)), result: 'hit' }, el);
       return;
     }
     let atk = this.attackBonus(s) + this.potionAttack(s, 'distance');
@@ -1103,9 +1364,11 @@ export class Game implements AIContext {
     this.events.emit({ type: 'projectile', fromId: p.id, toId: t.id, effect });
     // a steady hand (Potion of the Hawk) shoots as if two tiles closer
     const aimD = p.buffs.bullseye > 0 ? Math.max(1, d - 2) : d;
-    const roll = rollDistance(p.level, atk, VOCATIONS[p.vocation].distance, this.targetArmor(t), aimD);
+    const roll = rollDistance(this.weaponPower(s, 'distance'), atk, VOCATIONS[p.vocation].distance, this.targetArmor(t), aimD, skillHitBonus(s.skills.distance.level));
     roll.amount = applyResist(Math.round(roll.amount * this.stanceFactor(p, t)), this.targetResist(t, 'physical'));
+    if (t instanceof Player) this.trainShield(t);
     this.applyDamage(t, p, roll, 'physical');
+    this.trainSkill(s, 'distance', 1);
     if (roll.result === 'hit' && element && elementDamage && !t.dead) {
       const extra = applyResist(Math.round(elementDamage * (1 + p.level / 60)), this.targetResist(t, element));
       if (extra > 0) this.applyDamage(t, p, { amount: extra, result: 'hit' }, element);
@@ -1135,6 +1398,7 @@ export class Game implements AIContext {
     };
     if (a.kind === 'ranged') {
       this.events.emit({ type: 'projectile', fromId: e.id, toId: target.id, effect: a.effect as Effect });
+      if (a.element === 'physical' && !this.isProtected(target)) this.trainShield(target);
       hit(target);
       return;
     }
@@ -1672,7 +1936,12 @@ export class Game implements AIContext {
   /** Whether a tile has something to use (for cursors and clicks). */
   isUsable(x: number, y: number, z: number): boolean {
     const o = this.world.getObj(x, y, z);
-    return o === Obj.Ladder || o === Obj.RopeSpot || o === Obj.LooseStone || o === Obj.Locker || o === Obj.Chest;
+    if (treeAt(o)) {
+      // trees are "usable" (chop) for whoever carries an axe
+      const s = this.session(this.localId);
+      return !!s && !!this.bestAxe(s);
+    }
+    return o === Obj.Ladder || o === Obj.RopeSpot || o === Obj.LooseStone || o === Obj.Locker || o === Obj.Chest || o === Obj.MarketBoard;
   }
 
   private useTileNow(s: Session, x: number, y: number, z: number): void {
@@ -1705,7 +1974,20 @@ export class Game implements AIContext {
         return;
       case Obj.Locker:
         s.depotOpen = { x, y, z };
+        this.claimMarketDeliveries(s.id);
         this.events.emit({ type: 'depotChanged', to: s.id });
+        return;
+      case Obj.MarketBoard:
+        this.openMarket(s, x, y, z);
+        return;
+      case Obj.Tree:
+      case Obj.Pine:
+      case Obj.Palm:
+      case Obj.JungleTree:
+        this.startChop(s, x, y, z);
+        return;
+      case Obj.Stump:
+        this.msg(s.id, 'Only a stump is left. It will grow back.', 'info');
         return;
       case Obj.Chest: {
         const c = this.world.chests.find((ch) => ch.x === x && ch.y === y && ch.z === z);
@@ -1753,7 +2035,7 @@ export class Game implements AIContext {
     const magicMult = voc.magic * (1 + this.magicBonus(s) / 100);
 
     const spend = () => {
-      p.mana -= sp.mana;
+      this.spendMana(s, sp.mana);
       p.spellCooldowns[id] = sp.cooldown;
       p.groupCooldowns[sp.group] = GROUP_COOLDOWN[sp.group];
       this.events.emit({ type: 'cast', casterId: p.id, words: param ? `${sp.words} "${param}"` : sp.words });
@@ -1763,7 +2045,7 @@ export class Game implements AIContext {
       case 'heal': {
         if (p.hp >= p.maxHp) return fail('You are already at full health.');
         spend();
-        const amount = Math.min(p.maxHp - p.hp, rollFormula(sp.min!, sp.max!, sp.perLevel!, p.level, voc.healing));
+        const amount = Math.min(p.maxHp - p.hp, rollFormula(sp.min!, sp.max!, sp.perLevel!, this.magicPower(s), voc.healing));
         p.hp += amount;
         this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'heal' });
         this.events.emit({ type: 'heal', targetId: p.id, amount });
@@ -1775,7 +2057,7 @@ export class Game implements AIContext {
         if (target.id === p.id) return fail('You cannot cast Heal Friend on yourself.');
         if (this.dist(p, target) > (sp.range ?? 7) || !this.canSee(p, target)) return fail(`${target.name} is too far away.`);
         spend();
-        const amount = Math.min(target.maxHp - target.hp, rollFormula(sp.min!, sp.max!, sp.perLevel!, p.level, voc.healing));
+        const amount = Math.min(target.maxHp - target.hp, rollFormula(sp.min!, sp.max!, sp.perLevel!, this.magicPower(s), voc.healing));
         target.hp += amount;
         this.events.emit({ type: 'projectile', fromId: p.id, toId: target.id, effect: 'heal' });
         this.events.emit({ type: 'heal', targetId: target.id, amount });
@@ -1804,7 +2086,7 @@ export class Game implements AIContext {
         spend();
         this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: r, effect: 'heal' });
         for (const o of who) {
-          const amount = Math.min(o.maxHp - o.hp, rollFormula(sp.min!, sp.max!, sp.perLevel!, p.level, voc.healing));
+          const amount = Math.min(o.maxHp - o.hp, rollFormula(sp.min!, sp.max!, sp.perLevel!, this.magicPower(s), voc.healing));
           if (amount <= 0) continue;
           o.hp += amount;
           this.events.emit({ type: 'heal', targetId: o.id, amount });
@@ -1975,10 +2257,13 @@ export class Game implements AIContext {
       const w = s.inventory.equipped('weapon');
       const atk = (w ? itemDef(w).attack ?? FIST_ATTACK : FIST_ATTACK) + this.attackBonus(s) + this.potionAttack(s, 'melee') + this.potionAttack(s, 'distance');
       const voc = VOCATIONS[p.vocation];
-      const mult = sp.element === 'physical' ? Math.max(voc.melee, voc.distance) : magicMult;
-      return rollFormula(sp.min! + atk * sp.weaponScale, sp.max! + atk * sp.weaponScale * 1.6, sp.perLevel!, p.level, mult);
+      const physical = sp.element === 'physical';
+      const mult = physical ? Math.max(voc.melee, voc.distance) : magicMult;
+      // weapon spells grow with the skill of the weapon in hand (physical) or with magic level (elemental)
+      const power = physical ? this.weaponPower(s, voc.distance > voc.melee ? 'distance' : this.weaponSkill(s) === 'magic' ? 'fist' : this.weaponSkill(s)) : this.magicPower(s);
+      return rollFormula(sp.min! + atk * sp.weaponScale, sp.max! + atk * sp.weaponScale * 1.6, sp.perLevel!, power, mult);
     }
-    return rollFormula(sp.min!, sp.max!, sp.perLevel!, p.level, magicMult);
+    return rollFormula(sp.min!, sp.max!, sp.perLevel!, this.magicPower(s), magicMult);
   }
 
   private mostWoundedAlly(p: Player, range: number): Player | null {
@@ -2023,7 +2308,7 @@ export class Game implements AIContext {
       const who = c instanceof Player ? c : null;
       if (!who) return this.msg(pid, 'You can only use this rune on a player.', 'warn');
       if (who.hp >= who.maxHp) return this.msg(pid, who === p ? 'You are already at full health.' : `${who.name} is not wounded.`, 'warn');
-      const amount = Math.min(who.maxHp - who.hp, rollFormula(r.min, r.max, r.perLevel, p.level, voc.healing));
+      const amount = Math.min(who.maxHp - who.hp, rollFormula(r.min, r.max, r.perLevel, this.magicPower(s), voc.healing));
       who.hp += amount;
       p.groupCooldowns.heal = GROUP_COOLDOWN.heal;
       if (who !== p) this.events.emit({ type: 'projectile', fromId: p.id, toId: who.id, effect: 'heal' });
@@ -2089,7 +2374,8 @@ export class Game implements AIContext {
       if (this.isProtected(p)) return this.msg(pid, 'You may not attack from inside a protection zone.', 'warn');
       const el = r.element ?? 'energy';
       const mult = voc.magic * (1 + this.magicBonus(s) / 100);
-      const roll = (e: Enemy | Player) => ({ amount: applyResist(rollFormula(r.min, r.max, r.perLevel, p.level, mult), this.targetResist(e, el)), result: 'hit' as const });
+      const power = this.magicPower(s);
+      const roll = (e: Enemy | Player) => ({ amount: applyResist(rollFormula(r.min, r.max, r.perLevel, power, mult), this.targetResist(e, el)), result: 'hit' as const });
       if (r.radius > 0) {
         // area rune: centred on the aimed tile, or on the target
         let cx: number, cy: number;
@@ -2491,6 +2777,242 @@ export class Game implements AIContext {
     this.events.emit({ type: 'depotChanged', to: pid });
   }
 
+  // ---------------------------------------------------------------- player market
+
+  private marketKey(s: Session): string {
+    return s.player.name.toLowerCase();
+  }
+
+  private sessionByKey(key: string): Session | null {
+    for (const o of this.sessions.values()) if (o.player.name.toLowerCase() === key) return o;
+    return null;
+  }
+
+  /** Publishes a market change: storage first (marketSink), then every open market window. */
+  private commitMarket(c: MarketChange): void {
+    this.market.version++;
+    for (const id of c.save) {
+      const o = this.sessions.get(id);
+      if (o) o.wantsSave = true;
+    }
+    this.marketSink?.(c);
+    for (const o of this.sessions.values()) if (o.marketOpen) this.events.emit({ type: 'marketChanged', to: o.id });
+  }
+
+  private openMarket(s: Session, x: number, y: number, z: number): void {
+    s.marketOpen = { x, y, z };
+    this.claimMarketDeliveries(s.id);
+    if (!this.market.enabled) this.msg(s.id, 'The market is closed for now. Your offers are safe.', 'warn');
+    this.events.emit({ type: 'marketChanged', to: s.id });
+  }
+
+  closeMarket(pid: number): void {
+    const s = this.sessions.get(pid);
+    if (!s || !s.marketOpen) return;
+    s.marketOpen = null;
+    this.events.emit({ type: 'marketChanged', to: pid });
+  }
+
+  /** What the market window shows this player (null while it is closed). */
+  marketView(pid: number): MarketView | null {
+    const s = this.sessions.get(pid);
+    if (!s || !s.marketOpen) return null;
+    const me = this.marketKey(s);
+    const offers = [...this.market.offers.values()]
+      .filter((o) => isItem(o.item))
+      .sort((a, b) => (a.item === b.item ? a.price - b.price || a.created - b.created : itemDef(a.item).name.localeCompare(itemDef(b.item).name)))
+      .map((o) => ({ id: o.id, item: o.item, qty: o.qty, price: o.price, seller: o.sellerName, mine: o.seller === me, expires: o.expires }));
+    return { offers, depot: s.depot.map((x) => (x ? { ...x } : null)), bank: s.bank, enabled: this.market.enabled };
+  }
+
+  /** Takes gold from the bank first, then from the backpack. Returns false (taking nothing) when both together are short. */
+  private payFromBank(s: Session, amount: number): boolean {
+    const carried = s.inventory.count('gold');
+    if (s.bank + carried < amount) return false;
+    const fromBank = Math.min(s.bank, amount);
+    s.bank -= fromBank;
+    if (amount > fromBank) {
+      s.inventory.removeById('gold', amount - fromBank);
+      this.events.emit({ type: 'inventoryChanged', to: s.id });
+    }
+    return true;
+  }
+
+  /**
+   * Lists items for sale: `from` a depot index or backpack slot, `qty` pieces at
+   * `price` gold each. The fee (1%, at least 1 gold) comes from the bank (or the
+   * backpack when the bank is short); the items go into escrow.
+   */
+  marketSell(pid: number, from: 'depot' | 'inv', index: number, qty: number, price: number): void {
+    const s = this.sessions.get(pid);
+    if (!s || !s.marketOpen || s.player.dead) return;
+    const fail = (t: string) => this.msg(pid, t, 'warn');
+    if (!this.market.enabled) return fail('The market is closed for now.');
+    const list = from === 'depot' ? s.depot : s.inventory.slots;
+    if (!Number.isInteger(index) || index < 0 || index >= (from === 'depot' ? list.length : s.inventory.size())) return;
+    const st = list[index];
+    if (!st || !isItem(st.id)) return;
+    if (st.id === 'gold') return fail('Gold cannot be sold on the market.');
+    const n = Math.floor(qty);
+    const each = Math.floor(price);
+    if (!(n >= 1) || n > st.qty) return fail(`You only have ${st.qty} there.`);
+    if (!(each >= 1) || each > MARKET_MAX_PRICE) return fail(`Prices go from 1 to ${MARKET_MAX_PRICE.toLocaleString('en')} gold a piece.`);
+    const me = this.marketKey(s);
+    if (this.market.offersBy(me).length >= MARKET_MAX_OFFERS) return fail(`You can have at most ${MARKET_MAX_OFFERS} offers at once.`);
+    const fee = marketFee(each * n);
+    if (!this.payFromBank(s, fee)) return fail(`The listing fee is ${fee} gold, and you do not have that much.`);
+    st.qty -= n;
+    if (st.qty <= 0) list[index] = null;
+    const now = this.now();
+    const offer: MarketOffer = { id: marketId(now), seller: me, sellerName: s.player.name, item: st.id, qty: n, price: each, created: now, expires: now + MARKET_OFFER_MS };
+    this.market.offers.set(offer.id, offer);
+    this.msg(pid, `You offer ${describeStack({ id: offer.item, qty: n })} for ${each} gold each (fee ${fee} gold).`, 'trade');
+    this.events.emit({ type: from === 'depot' ? 'depotChanged' : 'inventoryChanged', to: pid });
+    const c = emptyChange();
+    c.putOffers.push({ ...offer });
+    c.save.push(pid);
+    this.commitMarket(c);
+  }
+
+  /** Buys `qty` pieces of an offer. Gold comes from the bank (or the backpack), the items go to the depot. */
+  marketBuy(pid: number, offerId: string, qty: number): void {
+    const s = this.sessions.get(pid);
+    if (!s || !s.marketOpen || s.player.dead) return;
+    const fail = (t: string) => this.msg(pid, t, 'warn');
+    if (!this.market.enabled) return fail('The market is closed for now.');
+    const o = this.market.offers.get(offerId);
+    if (!o || !isItem(o.item)) return fail('That offer is gone.');
+    const me = this.marketKey(s);
+    if (o.seller === me) return fail('That is your own offer. Cancel it to get the items back.');
+    const n = Math.max(1, Math.min(o.qty, Math.floor(qty) || 1));
+    const cost = o.price * n;
+    if (s.bank + s.inventory.count('gold') < cost) return fail(`That costs ${cost} gold, more than you have in the bank and your backpack.`);
+    const room = s.depot.map((x) => (x ? { ...x } : null));
+    if (addToList(room, o.item, n) > 0) return fail('Your depot has no room for that.');
+    this.payFromBank(s, cost);
+    addToList(s.depot, o.item, n);
+    o.qty -= n;
+    const c = emptyChange();
+    c.save.push(pid);
+    if (o.qty <= 0) {
+      this.market.offers.delete(o.id);
+      c.dropOffers.push(o.id);
+    } else c.shrinkOffers.push({ ...o });
+    const what = describeStack({ id: o.item, qty: n });
+    const seller = this.sessionByKey(o.seller);
+    if (seller) {
+      seller.bank += cost;
+      c.save.push(seller.id);
+      this.msg(seller.id, `Market: ${s.player.name} bought ${what} from you. ${cost} gold went to your bank.`, 'trade');
+    } else {
+      const d: MarketDelivery = { id: marketId(this.now()), to: o.seller, gold: cost, items: [], reason: `${s.player.name} bought ${what} from you`, created: this.now() };
+      this.market.deliveries.set(d.id, d);
+      c.putDeliveries.push({ ...d, items: [] });
+    }
+    this.msg(pid, `You bought ${what} for ${cost} gold. It is waiting in your depot.`, 'trade');
+    if (s.depotOpen) this.events.emit({ type: 'depotChanged', to: pid });
+    this.commitMarket(c);
+  }
+
+  /** Withdraws one of your offers; the items go back to your depot. */
+  marketCancel(pid: number, offerId: string): void {
+    const s = this.sessions.get(pid);
+    if (!s || !s.marketOpen) return;
+    const fail = (t: string) => this.msg(pid, t, 'warn');
+    if (!this.market.enabled) return fail('The market is closed for now.');
+    const o = this.market.offers.get(offerId);
+    if (!o || o.seller !== this.marketKey(s)) return fail('That offer is gone.');
+    if (isItem(o.item)) {
+      const room = s.depot.map((x) => (x ? { ...x } : null));
+      if (addToList(room, o.item, o.qty) > 0) return fail('Make room in your depot first.');
+      addToList(s.depot, o.item, o.qty);
+    } else {
+      s.lostItems.push({ id: o.item, qty: o.qty });
+    }
+    this.market.offers.delete(o.id);
+    this.msg(pid, `Offer withdrawn: ${isItem(o.item) ? describeStack({ id: o.item, qty: o.qty }) : o.item} went back to your depot.`, 'trade');
+    if (s.depotOpen) this.events.emit({ type: 'depotChanged', to: pid });
+    const c = emptyChange();
+    c.save.push(pid);
+    c.dropOffers.push(o.id);
+    this.commitMarket(c);
+  }
+
+  /**
+   * Hands out gold and items waiting for this character (sales made while
+   * they were away, expired offers). Runs at login and whenever a depot or
+   * market board is used. Items that do not fit stay waiting.
+   */
+  claimMarketDeliveries(pid: number): void {
+    const s = this.sessions.get(pid);
+    if (!s || !this.simulate) return;
+    const list = this.market.deliveriesFor(this.marketKey(s));
+    if (!list.length) return;
+    const c = emptyChange();
+    let gold = 0;
+    const got: ItemStack[] = [];
+    let waiting = false;
+    for (const d of list) {
+      this.market.deliveries.delete(d.id);
+      c.dropDeliveries.push(d.id);
+      // already received before a restart: only the record was left
+      if (s.marketClaimed.includes(d.id)) continue;
+      s.bank += d.gold;
+      gold += d.gold;
+      const left: ItemStack[] = [];
+      for (const it of d.items) {
+        if (!isItem(it.id)) {
+          s.lostItems.push({ ...it });
+          continue;
+        }
+        const rest = addToList(s.depot, it.id, it.qty);
+        if (it.qty - rest > 0) got.push({ id: it.id, qty: it.qty - rest });
+        if (rest > 0) left.push({ id: it.id, qty: rest });
+      }
+      if (left.length) {
+        waiting = true;
+        const nd: MarketDelivery = { id: marketId(this.now()), to: d.to, gold: 0, items: left, reason: d.reason, created: d.created };
+        this.market.deliveries.set(nd.id, nd);
+        c.putDeliveries.push({ ...nd, items: left.map((x) => ({ ...x })) });
+      }
+      s.marketClaimed.push(d.id);
+      if (d.gold || d.items.length) this.msg(pid, `Market: ${d.reason}.`, 'trade');
+    }
+    if (s.marketClaimed.length > MARKET_CLAIMS_KEPT) s.marketClaimed.splice(0, s.marketClaimed.length - MARKET_CLAIMS_KEPT);
+    if (gold) this.msg(pid, `Market: ${gold} gold was paid into your bank account.`, 'trade');
+    if (got.length) this.msg(pid, `Market: ${got.map(describeStack).join(', ')} ${got.length > 1 || got[0].qty > 1 ? 'are' : 'is'} waiting in your depot.`, 'trade');
+    if (waiting) this.msg(pid, 'Market: your depot is full, the rest is kept for you. Make room and visit a depot again.', 'warn');
+    c.save.push(pid);
+    if (s.depotOpen) this.events.emit({ type: 'depotChanged', to: pid });
+    this.commitMarket(c);
+  }
+
+  /** Offers older than MARKET_OFFER_DAYS go back to their sellers. */
+  private expireMarketOffers(): void {
+    if (!this.market.enabled || !this.market.offers.size) return;
+    const now = this.now();
+    const c = emptyChange();
+    for (const o of [...this.market.offers.values()]) {
+      if (o.expires > now) continue;
+      this.market.offers.delete(o.id);
+      c.dropOffers.push(o.id);
+      const items = [{ id: o.item, qty: o.qty }];
+      const seller = this.sessionByKey(o.seller);
+      const room = seller ? seller.depot.map((x) => (x ? { ...x } : null)) : null;
+      if (seller && room && isItem(o.item) && addToList(room, o.item, o.qty) === 0) {
+        addToList(seller.depot, o.item, o.qty);
+        c.save.push(seller.id);
+        this.msg(seller.id, `Market: your offer of ${describeStack(items[0])} expired. The items are back in your depot.`, 'trade');
+        if (seller.depotOpen) this.events.emit({ type: 'depotChanged', to: seller.id });
+        continue;
+      }
+      const d: MarketDelivery = { id: marketId(now), to: o.seller, gold: 0, items, reason: `your offer of ${isItem(o.item) ? describeStack(items[0]) : o.item} expired and came back`, created: now };
+      this.market.deliveries.set(d.id, d);
+      c.putDeliveries.push({ ...d, items: items.map((x) => ({ ...x })) });
+    }
+    if (c.dropOffers.length) this.commitMarket(c);
+  }
+
   // ---------------------------------------------------------------- player trade
 
   tradeOf(pid: number): Trade | null {
@@ -2726,8 +3248,9 @@ export class Game implements AIContext {
         const value = buyPrice(arg) * qty;
         inv.removeById(arg, qty);
         inv.add('gold', value);
-        d.text = `${value} gold for ${qty} ${itemDef(arg).name.toLowerCase()}${qty > 1 ? 's' : ''}.`;
-        this.msg(pid, `You sold ${qty} ${itemDef(arg).name.toLowerCase()}${qty > 1 ? 's' : ''} for ${value} gold.`, 'loot');
+        const what = qty > 1 ? plural(itemDef(arg).name.toLowerCase()) : itemDef(arg).name.toLowerCase();
+        d.text = `${value} gold for ${qty} ${what}.`;
+        this.msg(pid, `You sold ${qty} ${what} for ${value} gold.`, 'loot');
         this.events.emit({ type: 'inventoryChanged', to: pid });
         break;
       }
@@ -2838,6 +3361,9 @@ export class Game implements AIContext {
       chests: [...s.chests],
       lostItems: s.lostItems.map((x) => ({ ...x })),
       pvp: { secure: p.secure, whiteSkullUntil: p.whiteSkullUntil, redSkullUntil: p.redSkullUntil, unjustKills: [...p.unjustKills] },
+      skills: Object.fromEntries(Object.entries(s.skills).map(([k, v]) => [k, { level: v.level, tries: v.tries }])),
+      gathering: { woodcutting: s.woodcutting },
+      market: { claimed: [...s.marketClaimed] },
     };
   }
 
@@ -2882,6 +3408,13 @@ export class Game implements AIContext {
     p.whiteSkullUntil = finiteOr0(pv.whiteSkullUntil);
     p.redSkullUntil = finiteOr0(pv.redSkullUntil);
     p.unjustKills = Array.isArray(pv.unjustKills) ? pv.unjustKills.filter((t) => typeof t === 'number' && Number.isFinite(t)).slice(-20) : [];
+    // saves before v5 are given skills by the migration; this only fills gaps
+    s.skills = data.skills ? parseSkills(data.skills) : legacySkills(p.vocation, p.level);
+    const wc = Number(data.gathering?.woodcutting);
+    s.woodcutting = Number.isFinite(wc) && wc > 0 ? Math.min(200_000_000, wc) : 0;
+    s.marketClaimed = Array.isArray(data.market?.claimed) ? data.market!.claimed!.filter((x) => typeof x === 'string').slice(-MARKET_CLAIMS_KEPT) : [];
+    s.marketOpen = null;
+    this.refreshStats(s);
     this.events.emit({ type: 'outfitChanged', id: pid });
     this.events.emit({ type: 'equipmentChanged', id: pid });
     this.events.emit({ type: 'teleport', id: pid });
@@ -2892,6 +3425,8 @@ export class Game implements AIContext {
       else this.msg(pid, `${describeStack(it)} from an older version of the game is waiting in your depot.`, 'loot');
     }
     if (m.lost.length) this.msg(pid, `Some of your items no longer exist in this version. They are kept safe and will come back if they return.`, 'warn');
+    if (m.from < 5) this.msg(pid, 'Skills have arrived: your fighting skills and magic level were set from your level, so you hit just as hard as before. Train them by fighting (see the Skills panel).', 'info');
+    this.claimMarketDeliveries(pid);
     this.events.emit({ type: 'gameLoaded', to: pid });
     return true;
   }
@@ -2916,6 +3451,9 @@ export class Game implements AIContext {
     s.bank = 0;
     s.spells = new Set(startingSpells());
     s.chests = new Set();
+    s.skills = startSkills();
+    s.woodcutting = 0;
+    s.marketOpen = null;
     this.refreshStats(s);
     p.hp = p.maxHp;
     p.mana = p.maxMana;
@@ -2985,6 +3523,7 @@ function resetPlayerState(p: Player): void {
   p.whiteSkullUntil = 0;
   p.redSkullUntil = 0;
   p.unjustKills = [];
+  p.chop = null;
 }
 
 /** Each vocation starts with gear it can actually use. */
@@ -3041,7 +3580,12 @@ export function article(name: string): string {
 export function describeStack(s: ItemStack): string {
   const d = itemDef(s.id);
   if (d.id === 'gold') return `${s.qty} gold`;
-  return s.qty > 1 ? `${s.qty} ${d.name.toLowerCase()}s` : article(d.name);
+  return s.qty > 1 ? `${s.qty} ${plural(d.name.toLowerCase())}` : article(d.name);
+}
+
+/** "logs" stays "logs", "orc tooth" becomes "orc tooths" (good enough for loot lines). */
+export function plural(name: string): string {
+  return name.endsWith('s') ? name : `${name}s`;
 }
 
 function finiteOr0(v: unknown): number {
