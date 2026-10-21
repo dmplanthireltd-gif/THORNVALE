@@ -641,7 +641,7 @@ html.layout-full .flank, html.layout-full .bottom, html.layout-full .sidebar-edg
 html.layout-full .hotbar-move, html.layout-full .panel-grip, html.layout-full .panel-resize { display: none; }
 .dock .panel { box-shadow: inset 0 0 0 1px #4a4034, 0 4px 14px rgba(0, 0, 0, 0.55); }
 .dock-tl { left: 14px; top: calc(var(--top) + 14px); width: 290px; max-height: calc(50% - 44px); overflow-y: auto; }
-.dock-tr { right: 14px; top: calc(var(--top) + 14px); width: 262px; max-height: calc(50% - 30px); overflow-y: auto; }
+.dock-tr { right: 14px; top: calc(var(--top) + 14px); width: 262px; max-height: calc(50% - 50px); overflow-y: auto; }
 .dock-bl { left: 14px; bottom: 14px; width: 440px; height: 236px; }
 .dock-bl .console { flex: 1; min-height: 0; }
 .dock-bc { left: 50%; bottom: 14px; transform: translateX(-50%); align-items: center; }
@@ -651,7 +651,7 @@ html.layout-full .hotbar-move, html.layout-full .panel-grip, html.layout-full .p
 .dock-bc .fm-grid { grid-template-columns: repeat(6, auto); }
 .dock-bc .fight-modes .panel-title { display: none; }
 .dock-bc .fight-modes .btn.fm { padding: 6px 12px; }
-.dock-br { right: 14px; bottom: 14px; width: 300px; max-height: calc(50% - 30px); overflow-y: auto; }
+.dock-br { right: 14px; bottom: 14px; width: 300px; max-height: calc(50% - 40px); overflow-y: auto; }
 .dock-br .hover-line { background: rgba(13, 11, 9, 0.75); padding: 3px 6px; }
 @media (max-width: 1600px) { .dock-bl { width: 340px; } }
 @media (max-width: 1300px) { .dock-bl { width: 280px; } .dock-br { width: 260px; } .dock-tl { width: 250px; } }
