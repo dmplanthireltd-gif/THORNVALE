@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Atlas – Thornvale</title>
+<meta name="description" content="A map of the Thornvale archipelago with all 14 towns.">
+<link rel="canonical" href="https://thornvaleonline.com/atlas/">
+<meta property="og:title" content="Atlas – Thornvale">
+<meta property="og:description" content="A map of the Thornvale archipelago with all 14 towns.">
+<meta property="og:url" content="https://thornvaleonline.com/atlas/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Thornvale">
+<meta property="og:image" content="https://thornvaleonline.com/media/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1d1915">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css">
+<script src="/site.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="/" aria-label="Thornvale home"><svg class="crest" width="30" height="30" viewBox="0 0 20 20" aria-hidden="true">
+<rect x="3" y="3" width="14" height="14" transform="rotate(45 10 10)" fill="#2b2621" stroke="#c9a24a" stroke-width="1.5"/>
+<path d="M6.5 6.5h7v2h-2.5v6h-2v-6H6.5z" fill="#e8c26a"/></svg><span>Thornvale</span></a>
+    <nav class="nav" aria-label="Main"><a href="/news/">News</a><a href="/guide/">Guide</a><a href="/bestiary/">Bestiary</a><a href="/atlas/" aria-current="page">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/faq/">FAQ</a></nav>
+    <span class="realm" data-status><i aria-hidden="true"></i><span data-status-text>Realm</span></span>
+    <a class="btn ember" href="/play/">Play free</a>
+  </div>
+</header>
+<main id="main">
+<section class="band">
+  <div class="band-in">
+    <p class="kicker"><span>The known world</span></p>
+    <h1>Atlas of Thornvale</h1>
+    <p class="lede">The surface of the archipelago, painted from the game's own map. Drag to look around, use the buttons or your mouse wheel to zoom, and pick a town to fly to it.</p>
+  </div>
+</section>
+<section class="sec tight">
+  <div class="sec-in atlas">
+    <div class="atlas-view plate" data-atlas>
+      <div class="atlas-zoom" data-atlas-inner>
+        <img src="/media/atlas.webp" alt="Map of the Thornvale archipelago" width="1280" height="1600" draggable="false">
+        <div class="pins"><button class="pin" type="button" data-town="thornvale" style="left:31.87%;top:39.00%"><i aria-hidden="true"></i><b>Thornvale</b></button><button class="pin" type="button" data-town="westmarch" style="left:33.75%;top:61.50%"><i aria-hidden="true"></i><b>Westmarch</b></button><button class="pin" type="button" data-town="elderglen" style="left:66.88%;top:39.75%"><i aria-hidden="true"></i><b>Elderglen</b></button><button class="pin" type="button" data-town="stonedeep" style="left:46.88%;top:45.75%"><i aria-hidden="true"></i><b>Stonedeep</b></button><button class="pin" type="button" data-town="highmoor" style="left:71.56%;top:53.50%"><i aria-hidden="true"></i><b>Highmoor</b></button><button class="pin" type="button" data-town="millbrook" style="left:56.56%;top:63.25%"><i aria-hidden="true"></i><b>Millbrook</b></button><button class="pin" type="button" data-town="valdrheim" style="left:25.00%;top:6.00%"><i aria-hidden="true"></i><b>Valdrheim</b></button><button class="pin" type="button" data-town="aurelion" style="left:61.25%;top:10.00%"><i aria-hidden="true"></i><b>Aurelion</b></button><button class="pin" type="button" data-town="briarwatch" style="left:89.38%;top:19.00%"><i aria-hidden="true"></i><b>Briarwatch</b></button><button class="pin" type="button" data-town="corvane" style="left:86.88%;top:39.75%"><i aria-hidden="true"></i><b>Corvane</b></button><button class="pin" type="button" data-town="saltmere" style="left:27.50%;top:85.50%"><i aria-hidden="true"></i><b>Saltmere</b></button><button class="pin" type="button" data-town="palmreach" style="left:50.31%;top:86.25%"><i aria-hidden="true"></i><b>Palmreach</b></button><button class="pin" type="button" data-town="sunspire" style="left:83.75%;top:93.00%"><i aria-hidden="true"></i><b>Sunspire</b></button><button class="pin" type="button" data-town="dunewatch" style="left:89.38%;top:70.00%"><i aria-hidden="true"></i><b>Dunewatch</b></button></div>
+      </div>
+      <div class="atlas-tools"><button class="btn iron sq" type="button" data-zoom="1" aria-label="Zoom in">+</button><button class="btn iron sq" type="button" data-zoom="-1" aria-label="Zoom out">−</button><button class="btn iron sq" type="button" data-zoom="0" aria-label="Show the whole map">⤢</button></div>
+    </div>
+    <aside class="atlas-side plate">
+      <h2 class="side-h">Towns</h2>
+      <ol class="towns"><li><button type="button" data-goto="thornvale"><b>Thornvale</b><span>The old village of Thornvale · by ship</span></button></li><li><button type="button" data-goto="westmarch"><b>Westmarch</b><span>The walled city of Westmarch · by ship</span></button></li><li><button type="button" data-goto="elderglen"><b>Elderglen</b><span>Elderglen under the old trees · by ship</span></button></li><li><button type="button" data-goto="stonedeep"><b>Stonedeep</b><span>The dwarf-halls of Stonedeep · by cart</span></button></li><li><button type="button" data-goto="highmoor"><b>Highmoor</b><span>The hill town of Highmoor · by ship</span></button></li><li><button type="button" data-goto="millbrook"><b>Millbrook</b><span>The farming village of Millbrook · by ship</span></button></li><li><button type="button" data-goto="valdrheim"><b>Valdrheim</b><span>Valdrheim of the frozen north · by ship</span></button></li><li><button type="button" data-goto="aurelion"><b>Aurelion</b><span>Aurelion, the crown city · by ship</span></button></li><li><button type="button" data-goto="briarwatch"><b>Briarwatch</b><span>The frontier town of Briarwatch · by ship</span></button></li><li><button type="button" data-goto="corvane"><b>Corvane</b><span>The island town of Corvane · by ship</span></button></li><li><button type="button" data-goto="saltmere"><b>Saltmere</b><span>Saltmere by the old ruins · by ship</span></button></li><li><button type="button" data-goto="palmreach"><b>Palmreach</b><span>Palmreach on the jungle delta · by ship</span></button></li><li><button type="button" data-goto="sunspire"><b>Sunspire</b><span>Golden Sunspire of the dunes · by ship</span></button></li><li><button type="button" data-goto="dunewatch"><b>Dunewatch</b><span>The desert outpost of Dunewatch · by ship</span></button></li></ol>
+      <h2 class="side-h">Legend</h2>
+      <ul class="legend">
+        <li><i style="background:#46683a"></i>Grassland and forest</li><li><i style="background:#2c5626"></i>Jungle</li><li><i style="background:#c4ac74"></i>Desert</li>
+        <li><i style="background:#dee2e4"></i>Snow and ice</li><li><i style="background:#e25c1e"></i>Lava</li><li><i style="background:#8c7652"></i>Roads</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+</main>
+<footer class="foot">
+  <div class="foot-in">
+    <div class="foot-brand">
+      <a class="brand" href="/"><svg class="crest" width="36" height="36" viewBox="0 0 20 20" aria-hidden="true">
+<rect x="3" y="3" width="14" height="14" transform="rotate(45 10 10)" fill="#2b2621" stroke="#c9a24a" stroke-width="1.5"/>
+<path d="M6.5 6.5h7v2h-2.5v6h-2v-6H6.5z" fill="#e8c26a"/></svg><span>Thornvale</span></a>
+      <p>A free fantasy MMORPG you play in your browser. Every town, creature, song and line of text is original.</p>
+      <p class="faint">© 2026 Thornvale</p>
+    </div>
+    <nav class="foot-col" aria-label="Play">
+      <h2>Play</h2>
+      <a href="/play/">Enter the realm</a><a href="/guide/">Game guide</a><a href="/faq/">FAQ</a><a href="/rules/">Rules</a>
+    </nav>
+    <nav class="foot-col" aria-label="The world">
+      <h2>The world</h2>
+      <a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/news/">News</a>
+    </nav>
+    <div class="foot-col">
+      <h2>Contact</h2>
+      <span class="sel">support@thornvaleonline.com</span>
+      <a href="/privacy/">Privacy</a>
+    </div>
+  </div>
+</footer>
+<dialog class="trailer" data-trailer aria-label="Thornvale trailer">
+  <form method="dialog"><button class="x" aria-label="Close the trailer">×</button></form>
+  <video controls playsinline preload="none" poster="/media/trailer-full-poster.jpg">
+    <source src="/media/trailer-full.webm" type="video/webm">
+    <source src="/media/trailer-full.mp4" type="video/mp4">
+  </video>
+</dialog>
+</body>
+</html>

@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Thornvale – free fantasy MMORPG in your browser</title>
-<meta name="description" content="Thornvale is a free 3D fantasy MMORPG you play in your browser. Pick a vocation, hunt through towers and dungeons and trade with other players. Grand opening 1 January 2027.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thornvale – a free dark-fantasy MMORPG in your browser</title>
+<meta name="description" content="Thornvale is a free 3D fantasy MMORPG you play in your browser. 14 towns, 59 kinds of monster, four vocations, open PvP, crafting and an original soundtrack. Grand opening 1 January 2027.">
 <link rel="canonical" href="https://thornvaleonline.com/">
-<meta property="og:title" content="Thornvale – free fantasy MMORPG in your browser">
-<meta property="og:description" content="Pick a vocation, hunt through towers and dungeons and trade with other players. No download. Grand opening 1 January 2027.">
+<meta property="og:title" content="Thornvale – a free dark-fantasy MMORPG in your browser">
+<meta property="og:description" content="Thornvale is a free 3D fantasy MMORPG you play in your browser. 14 towns, 59 kinds of monster, four vocations, open PvP, crafting and an original soundtrack. Grand opening 1 January 2027.">
 <meta property="og:url" content="https://thornvaleonline.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Thornvale">
@@ -15,162 +15,282 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#12160f">
+<meta name="theme-color" content="#1d1915">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&amp;family=Alegreya+Sans:wght@400;500;700&amp;family=Silkscreen&amp;display=swap">
 <link rel="stylesheet" href="/styles.css">
 <script src="/site.js" defer></script>
 </head>
-<body>
-
-<div class="banner">
-  <span class="kicker">Grand opening</span>
-  <span>Thornvale opens to everyone on 1 January 2027. Create your account now and claim your character names.</span>
-  <a href="#opening"><b>Join the opening</b></a>
-</div>
-
-<header class="wrap nav">
-  <a class="logo" href="/">Thornvale</a>
-  <nav class="nav-links" aria-label="Main">
-    <a href="/guide/">Guide</a>
-    <a href="/highscores/">Highscores</a>
-    <a href="/news/">News</a>
-    <a href="/faq/">FAQ</a>
-    <a class="btn" href="/play/">Play now</a>
-  </nav>
+<body class="home">
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="/" aria-label="Thornvale home"><svg class="crest" width="30" height="30" viewBox="0 0 20 20" aria-hidden="true">
+<rect x="3" y="3" width="14" height="14" transform="rotate(45 10 10)" fill="#2b2621" stroke="#c9a24a" stroke-width="1.5"/>
+<path d="M6.5 6.5h7v2h-2.5v6h-2v-6H6.5z" fill="#e8c26a"/></svg><span>Thornvale</span></a>
+    <nav class="nav" aria-label="Main"><a href="/news/">News</a><a href="/guide/">Guide</a><a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/faq/">FAQ</a></nav>
+    <span class="realm" data-status><i aria-hidden="true"></i><span data-status-text>Realm</span></span>
+    <a class="btn ember" href="/play/">Play free</a>
+  </div>
 </header>
+<main id="main">
 
-<main>
-  <section class="wrap hero">
-    <div class="hero-text">
-      <div class="status" data-status><span class="dot" aria-hidden="true"></span><span data-status-text>Checking the server…</span></div>
-      <h1>A world of thorn and stone, one tile at a time.</h1>
-      <p>Thornvale is a free fantasy MMORPG that runs in your browser. Pick a vocation, hunt through towers and dungeons, and trade with other players. No download, no install.</p>
-      <div class="btns">
-        <a class="btn big" href="/play/">Play free now</a>
-        <a class="btn big ghost" href="#opening">Create free account</a>
-        <button type="button" class="btn big ghost play-trailer" data-open-trailer><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>Watch the trailer</button>
+<section class="hero">
+  <video class="hero-video" autoplay muted loop playsinline preload="metadata" poster="/media/trailer-poster.jpg" aria-hidden="true">
+    <source src="/media/trailer.webm" type="video/webm"><source src="/media/trailer.mp4" type="video/mp4">
+  </video>
+  <canvas class="embers" data-embers aria-hidden="true"></canvas>
+  <div class="hero-in">
+    <svg class="crest hero-crest" width="108" height="108" viewBox="0 0 20 20" aria-hidden="true">
+<rect x="3" y="3" width="14" height="14" transform="rotate(45 10 10)" fill="#2b2621" stroke="#c9a24a" stroke-width="1.5"/>
+<path d="M6.5 6.5h7v2h-2.5v6h-2v-6H6.5z" fill="#e8c26a"/></svg>
+    <h1 class="mega"><span class="sr">Thornvale: </span><span aria-hidden="true">Thornvale</span></h1>
+    <p class="motto">A realm of thorn, stone and gold</p>
+    <p class="hero-lede">A free 3D fantasy MMORPG that plays in your browser. Choose a vocation, hunt across 14 towns and 10 wild regions, and carve your name into the hall of heroes.</p>
+    <div class="cta">
+      <a class="btn ember big" href="/play/">Play free now</a>
+      <button class="btn iron big" type="button" data-open-trailer><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>Watch the trailer</button>
+    </div>
+    <div class="gate plate" data-countdown data-opening="2027-01-01T00:00:00Z">
+      <p class="gate-k">The gates open · 1 January 2027 · midnight UK time</p>
+      <div class="clock" role="timer" aria-label="Time until the grand opening">
+        <div><b data-days>–</b><span>days</span></div>
+        <div><b data-hours>–</b><span>hours</span></div>
+        <div><b data-minutes>–</b><span>minutes</span></div>
+        <div><b data-seconds>–</b><span>seconds</span></div>
       </div>
-      <p class="faint">Works in Chrome, Edge, Firefox and Safari on a computer.</p>
+      <p class="gate-note">The test realm is open now. Accounts and names you claim today carry over to launch.</p>
     </div>
-    <figure class="hero-art has-video">
-      <video autoplay muted loop playsinline preload="metadata" poster="/media/trailer-poster.jpg" aria-label="Thornvale gameplay trailer: walking through a town, then a sorcerer fighting a frost dragon, amazons, frost giants in a torch-lit cave and desert monsters with spells">
-        <source src="/media/trailer.webm" type="video/webm">
-        <source src="/media/trailer.mp4" type="video/mp4">
-      </video>
-      <button type="button" class="hero-play" data-open-trailer aria-label="Watch the full trailer with sound"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg></button>
-    </figure>
-  </section>
+  </div>
+  <a class="scroll-cue" href="#paths" aria-label="Scroll down"><span aria-hidden="true"></span></a>
+</section>
 
-  <section class="stats" aria-label="Thornvale in numbers">
-    <div class="wrap">
-      <div class="stat"><b>4</b><span>vocations</span></div>
-      <div class="stat"><b>7</b><span>floors, towers to dungeons</span></div>
-      <div class="stat"><b>25+</b><span>spells, cast by their words</span></div>
-      <div class="stat"><b>100+</b><span>items, runes and potions</span></div>
-      <div class="stat"><b>0</b><span>downloads needed</span></div>
-    </div>
-  </section>
+<div class="ticker" aria-label="Thornvale in numbers"><div class="ticker-track"><span>14 towns</span><span>10 regions with their own music</span><span>59 kinds of monster</span><span>79 spells and runes</span><span>274 items</span><span>Mining · smithing · fishing · woodcutting</span><span>Open PvP with skulls</span><span>Player market</span><span>No download</span><span>Free to play</span><span>14 towns</span><span>10 regions with their own music</span><span>59 kinds of monster</span><span>79 spells and runes</span><span>274 items</span><span>Mining · smithing · fishing · woodcutting</span><span>Open PvP with skulls</span><span>Player market</span><span>No download</span><span>Free to play</span></div></div>
 
-  <section id="world" class="wrap section">
-    <div class="section-head">
-      <span class="kicker">The world</span>
-      <h2>Towers above. Dungeons below. Danger everywhere in between.</h2>
-      <p>Every creature, wall and sword is built in real 3D and drawn in a crisp pixel-art style. Climb ladders, use a rope to escape caves, dig through loose stones with a shovel and sail between ports.</p>
-    </div>
-    <div class="cards">
-      <article class="card wide"><img class="card-img" src="/media/world-towns.jpg" alt="A town temple with its courtyard, houses and streets" width="800" height="450" loading="lazy"><h3>Towns and trade</h3><p>Shops, banks, a depot you can reach from any locker, and safe trading between players.</p></article>
-      <article class="card wide"><img class="card-img" src="/media/world-hunting.jpg" alt="An adventurer fighting amazons and valkyries outside a fortified camp" width="800" height="450" loading="lazy"><h3>Fortresses and hunting grounds</h3><p>Walls, gates and archer towers to storm, with monsters that kite, heal and shoot back.</p></article>
-      <article class="card wide"><img class="card-img" src="/media/world-dungeons.jpg" alt="Frost giants closing in on an adventurer in a torch-lit cave" width="800" height="450" loading="lazy"><h3>The deep dungeons</h3><p>Floor after floor underground, where the only light is the one you carry.</p></article>
-    </div>
-  </section>
-
-  <section id="vocations" class="wrap section">
-    <div class="section-head">
-      <span class="kicker">Vocations</span>
-      <h2>Choose how you fight.</h2>
-      <p>Each vocation grows differently in health, mana and carrying strength, and has its own weapons and spells.</p>
-    </div>
-    <div class="cards">
-      <article class="card"><h3 class="gold">Knight</h3><p>Heavy armour, swords and axes. Stands at the front and takes the hits.</p></article>
-      <article class="card"><h3 class="gold">Paladin</h3><p>Bows, crossbows and spears. Strikes from range and keeps moving.</p></article>
-      <article class="card"><h3 class="gold">Sorcerer</h3><p>Wands and destructive spells. Burns whole packs of monsters at once.</p></article>
-      <article class="card"><h3 class="gold">Druid</h3><p>Rods and healing magic. Keeps the whole party standing.</p></article>
-    </div>
-  </section>
-
-  <section class="wrap section" aria-label="How to start">
-    <div class="steps">
-      <div class="step"><span class="kicker">Step 1</span><h3>Create your hero</h3><p>Pick a name, a vocation and your outfit colours.</p></div>
-      <div class="step"><span class="kicker">Step 2</span><h3>Learn the ropes</h3><p>Hunt the creatures outside town and take on your first quest.</p></div>
-      <div class="step"><span class="kicker">Step 3</span><h3>Team up</h3><p>Share experience, heal friends and trade loot with other players.</p></div>
-    </div>
-  </section>
-
-  <section id="news" class="wrap section">
-    <div class="section-head">
-      <span class="kicker">News</span>
-      <h2>From the town crier</h2>
-    </div>
-    <div class="cards">
-      <article class="card wide news-card">
-        <img class="card-img" src="/media/news-server-live.jpg" alt="A frost dragon, ice golem and winter wolf on a snowy glacier" width="800" height="450" loading="lazy">
-        <span class="faint">21 October 2026</span>
-        <h3><a href="/news/the-thornvale-server-is-live/">The Thornvale server is live</a></h3>
-        <p>Thornvale's first online server is up. Create an account, make up to five characters and start exploring right now.</p>
+<section class="sec" id="paths">
+  <div class="sec-in">
+    <header class="sec-head"><p class="kicker"><span>Four vocations</span></p><h2>Choose your path</h2><p class="lede">Every hero begins in a town with a name and a calling. What you become after that is up to you, your skills and the company you keep.</p></header>
+    <div class="paths">
+      <article class="path plate" data-voc="knight">
+        <div class="emblem"><svg width="72" height="72" viewBox="0 0 64 64" aria-hidden="true"><path d="M32 6l18 7v14c0 13-8 22-18 27C22 49 14 40 14 27V13z" fill="none" stroke="currentColor" stroke-width="3"/><path d="M32 16v30M24 24h16" stroke="currentColor" stroke-width="3" fill="none"/></svg></div>
+        <h3>Knight</h3>
+        <p class="path-line">Stands in the fire so others don't have to.</p>
+        <p>Heavy armour, swords, axes and clubs. Huge health, little mana.</p>
+        <dl class="stats"><div><dt>Might</dt><dd><span class="pips" style="--v:5" aria-label="5 of 5"></span></dd></div><div><dt>Magic</dt><dd><span class="pips" style="--v:1" aria-label="1 of 5"></span></dd></div><div><dt>Range</dt><dd><span class="pips" style="--v:1" aria-label="1 of 5"></span></dd></div><div><dt>Healing</dt><dd><span class="pips" style="--v:1" aria-label="1 of 5"></span></dd></div></dl>
+      </article><article class="path plate" data-voc="paladin">
+        <div class="emblem"><svg width="72" height="72" viewBox="0 0 64 64" aria-hidden="true"><path d="M18 52C40 46 46 26 40 10" fill="none" stroke="currentColor" stroke-width="3"/><path d="M18 52L40 10" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M14 30h34M48 30l-7-5M48 30l-7 5M14 30l4-4M14 30l4 4" stroke="currentColor" stroke-width="3" fill="none"/></svg></div>
+        <h3>Paladin</h3>
+        <p class="path-line">Picks the fight from forty paces away.</p>
+        <p>Bows, crossbows and spears from range, with holy magic.</p>
+        <dl class="stats"><div><dt>Might</dt><dd><span class="pips" style="--v:3" aria-label="3 of 5"></span></dd></div><div><dt>Magic</dt><dd><span class="pips" style="--v:2" aria-label="2 of 5"></span></dd></div><div><dt>Range</dt><dd><span class="pips" style="--v:5" aria-label="5 of 5"></span></dd></div><div><dt>Healing</dt><dd><span class="pips" style="--v:2" aria-label="2 of 5"></span></dd></div></dl>
+      </article><article class="path plate" data-voc="sorcerer">
+        <div class="emblem"><svg width="72" height="72" viewBox="0 0 64 64" aria-hidden="true"><path d="M32 8c6 10 14 15 14 27a14 14 0 0 1-28 0c0-7 4-11 7-15 1 6 4 8 6 8-2-8 1-15 1-20z" fill="none" stroke="currentColor" stroke-width="3"/><path d="M32 52v6" stroke="currentColor" stroke-width="3"/></svg></div>
+        <h3>Sorcerer</h3>
+        <p class="path-line">Turns a crowded cave into an empty one.</p>
+        <p>Wands, fire and energy. Devastating area spells, fragile body.</p>
+        <dl class="stats"><div><dt>Might</dt><dd><span class="pips" style="--v:1" aria-label="1 of 5"></span></dd></div><div><dt>Magic</dt><dd><span class="pips" style="--v:5" aria-label="5 of 5"></span></dd></div><div><dt>Range</dt><dd><span class="pips" style="--v:4" aria-label="4 of 5"></span></dd></div><div><dt>Healing</dt><dd><span class="pips" style="--v:1" aria-label="1 of 5"></span></dd></div></dl>
+      </article><article class="path plate" data-voc="druid">
+        <div class="emblem"><svg width="72" height="72" viewBox="0 0 64 64" aria-hidden="true"><path d="M32 56V30M32 30C20 30 12 20 12 8c12 0 20 8 20 22zM32 38c10 0 18-8 18-20-10 0-18 8-18 20z" fill="none" stroke="currentColor" stroke-width="3"/></svg></div>
+        <h3>Druid</h3>
+        <p class="path-line">Keeps the warband standing, then freezes what's left.</p>
+        <p>Rods, ice and earth. The strongest healer, able to heal others.</p>
+        <dl class="stats"><div><dt>Might</dt><dd><span class="pips" style="--v:1" aria-label="1 of 5"></span></dd></div><div><dt>Magic</dt><dd><span class="pips" style="--v:4" aria-label="4 of 5"></span></dd></div><div><dt>Range</dt><dd><span class="pips" style="--v:3" aria-label="3 of 5"></span></dd></div><div><dt>Healing</dt><dd><span class="pips" style="--v:5" aria-label="5 of 5"></span></dd></div></dl>
       </article>
     </div>
-    <p><a href="/news/"><b>All news</b></a></p>
-  </section>
+  </div>
+</section>
 
-  <section id="opening" class="opening">
-    <div class="wrap">
-      <div class="opening-text">
-        <span class="kicker">Grand opening · 1 January 2027 · midnight UK time</span>
-        <h2>Be there when the gates open.</h2>
-        <p>Create your free account now and claim up to 5 character names before anyone else can take them. Everything you make carries over to launch.</p>
-        <div class="countdown" data-countdown role="timer" aria-label="Time until the grand opening">
-          <div><b data-days>–</b><span>days</span></div>
-          <div><b data-hours>–</b><span>hours</span></div>
-          <div><b data-minutes>–</b><span>minutes</span></div>
-        </div>
-      </div>
-      <div class="signup">
-        <h3>Create your account</h3>
-        <ul>
-          <li>Sign up with your email and a password.</li>
-          <li>Up to 5 characters per account.</li>
-          <li>Your progress is saved on the server.</li>
-        </ul>
-        <a class="btn" href="/play/">Create account and play</a>
-        <p class="faint">Free. Opens the game, where you sign up or sign in.</p>
-      </div>
+<section class="sec sec-dark">
+  <div class="sec-in split">
+    <div>
+      <header class="sec-head left"><p class="kicker"><span>The world</span></p><h2>An archipelago of 14 towns</h2><p class="lede">Ride the ferries from the crown city of Aurelion to the frozen halls of Valdrheim, the dunes of Sunspire and the dwarf mines below Stonedeep. Seven floors deep, from rooftops to lava caves.</p></header>
+      <ul class="facts">
+        <li><b>14</b> towns with smiths, mages, banks and quests</li>
+        <li><b>7</b> floors from the towers to the deepest caves</li>
+        <li><b>10</b> regions, each with its own song</li>
+      </ul>
+      <a class="btn iron" href="/atlas/">Open the atlas</a>
     </div>
-  </section>
-</main>
+    <a class="map-frame plate" href="/atlas/" aria-label="Open the atlas of Thornvale">
+      <img src="/media/atlas-small.jpg" alt="Map of the Thornvale archipelago: green islands with towns and roads, snowfields in the north, desert in the south-east and lava in the north" width="640" height="800" loading="lazy">
+      <div class="pins" aria-hidden="true"><span class="pin" style="left:31.87%;top:39.00%"><i aria-hidden="true"></i><b>Thornvale</b></span><span class="pin" style="left:33.75%;top:61.50%"><i aria-hidden="true"></i><b>Westmarch</b></span><span class="pin" style="left:66.88%;top:39.75%"><i aria-hidden="true"></i><b>Elderglen</b></span><span class="pin" style="left:46.88%;top:45.75%"><i aria-hidden="true"></i><b>Stonedeep</b></span><span class="pin" style="left:71.56%;top:53.50%"><i aria-hidden="true"></i><b>Highmoor</b></span><span class="pin" style="left:56.56%;top:63.25%"><i aria-hidden="true"></i><b>Millbrook</b></span><span class="pin" style="left:25.00%;top:6.00%"><i aria-hidden="true"></i><b>Valdrheim</b></span><span class="pin" style="left:61.25%;top:10.00%"><i aria-hidden="true"></i><b>Aurelion</b></span><span class="pin" style="left:89.38%;top:19.00%"><i aria-hidden="true"></i><b>Briarwatch</b></span><span class="pin" style="left:86.88%;top:39.75%"><i aria-hidden="true"></i><b>Corvane</b></span><span class="pin" style="left:27.50%;top:85.50%"><i aria-hidden="true"></i><b>Saltmere</b></span><span class="pin" style="left:50.31%;top:86.25%"><i aria-hidden="true"></i><b>Palmreach</b></span><span class="pin" style="left:83.75%;top:93.00%"><i aria-hidden="true"></i><b>Sunspire</b></span><span class="pin" style="left:89.38%;top:70.00%"><i aria-hidden="true"></i><b>Dunewatch</b></span></div>
+    </a>
+  </div>
+</section>
 
-<dialog class="trailer-dialog" aria-label="Thornvale trailer">
-  <form method="dialog" class="trailer-close-row"><button class="trailer-close" aria-label="Close the trailer">✕</button></form>
+<section class="sec">
+  <div class="sec-in">
+    <header class="sec-head"><p class="kicker"><span>Original soundtrack</span></p><h2>Hear the realm</h2><p class="lede">Every region has its own theme, played by its own band of instruments. Walk from the fields into the jungle and the music changes with you.</p></header>
+    <ol class="songs" data-songs>
+      <li><button class="song plate" type="button" data-song="/play/audio/music/town.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>Hearth and Lantern</b><span>Towns and temples</span><small>Fiddle, lute, recorder, accordion, bodhrán</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li><li><button class="song plate" type="button" data-song="/play/audio/music/fields.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>The Open Road</b><span>Grassland, roads and farmland</span><small>Tin whistle, strummed guitar, strings</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li><li><button class="song plate" type="button" data-song="/play/audio/music/forest.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>Whispering Pines</b><span>Old woods and dark forests</span><small>Flute and fiddle over finger-picked harp</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li><li><button class="song plate" type="button" data-song="/play/audio/music/jungle.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>The Green Deep</b><span>Jungles</span><small>Pan pipes, marimba, kalimba, hand drums</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li><li><button class="song plate" type="button" data-song="/play/audio/music/swamp.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>Mirewater</b><span>Swamps and bogs</span><small>A lonely cello and ocarina over low voices</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li><li><button class="song plate" type="button" data-song="/play/audio/music/snow.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>Frostfang</b><span>Snowfields and glaciers</span><small>Celesta and flute over harp and slow strings</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li><li><button class="song plate" type="button" data-song="/play/audio/music/desert.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>Sunspire</b><span>Deserts and tombs</span><small>Oud, ney flute, dulcimer and darbuka</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li><li><button class="song plate" type="button" data-song="/play/audio/music/volcano.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>Cinderfall</b><span>Lava fields and fire caves</span><small>Horns, driving cellos, choir and taiko</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li><li><button class="song plate" type="button" data-song="/play/audio/music/deep.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>Below the Stone</b><span>Caves and dungeons</span><small>Music box and ocarina over choir and harp</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li><li><button class="song plate" type="button" data-song="/play/audio/music/sea.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>Saltwind</b><span>Coasts and open water</span><small>Concertina, fiddle and whistle, a sea waltz</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li><li><button class="song plate" type="button" data-song="/play/audio/music/battle.m4a" aria-pressed="false">
+        <span class="song-play" aria-hidden="true"></span>
+        <span class="song-txt"><b>Steel and Thunder</b><span>Every fight outside town</span><small>Brass, marcato strings, timpani and snare</small></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button></li>
+    </ol>
+    <p class="center"><a class="link" href="/soundtrack/">The full soundtrack</a></p>
+  </div>
+</section>
+
+<section class="sec sec-blood">
+  <div class="sec-in">
+    <header class="sec-head"><p class="kicker"><span>59 kinds of monster</span></p><h2>What waits in the dark</h2><p class="lede">From rats in the sewers to dragon lords in their lairs. Learn what each one fears before it learns what you're made of.</p></header>
+    <div class="beasts"><article class="beast plate t-legendary" data-name="demon" data-tier="Legendary" data-exp="6000" data-hp="8200" data-weak="holy ice">
+  <header><h3>Demon</h3><span class="tier">Legendary</span></header>
+  <dl class="nums"><div><dt>Health</dt><dd>8,200</dd></div><div><dt>Experience</dt><dd>6,000</dd></div><div><dt>Hits</dt><dd>80–420</dd></div></dl>
+  <ul class="res"><li><span class="el el-holy">Holy</span><small>weak</small></li><li><span class="el el-ice">Ice</span><small>weak</small></li><li><span class="el el-physical">Physical</span><small>resists</small></li><li><span class="el el-energy">Energy</span><small>resists</small></li><li><span class="el el-death">Death</span><small>resists</small></li><li><span class="el el-fire">Fire</span><small>immune</small></li></ul>
+  
+</article><article class="beast plate t-deadly" data-name="frost dragon" data-tier="Deadly" data-exp="3100" data-hp="3600" data-weak="fire energy">
+  <header><h3>Frost Dragon</h3><span class="tier">Deadly</span></header>
+  <dl class="nums"><div><dt>Health</dt><dd>3,600</dd></div><div><dt>Experience</dt><dd>3,100</dd></div><div><dt>Hits</dt><dd>50–200</dd></div></dl>
+  <ul class="res"><li><span class="el el-fire">Fire</span><small>weak</small></li><li><span class="el el-energy">Energy</span><small>weak</small></li><li><span class="el el-earth">Earth</span><small>resists</small></li><li><span class="el el-death">Death</span><small>resists</small></li><li><span class="el el-ice">Ice</span><small>immune</small></li></ul>
+  
+</article><article class="beast plate t-deadly" data-name="behemoth" data-tier="Deadly" data-exp="2600" data-hp="4000" data-weak="">
+  <header><h3>Behemoth</h3><span class="tier">Deadly</span></header>
+  <dl class="nums"><div><dt>Health</dt><dd>4,000</dd></div><div><dt>Experience</dt><dd>2,600</dd></div><div><dt>Hits</dt><dd>60–280</dd></div></dl>
+  <ul class="res"><li><span class="el el-physical">Physical</span><small>resists</small></li><li><span class="el el-fire">Fire</span><small>resists</small></li><li><span class="el el-holy">Holy</span><small>resists</small></li></ul>
+  
+</article><article class="beast plate t-deadly" data-name="hydra" data-tier="Deadly" data-exp="2100" data-hp="2350" data-weak="fire">
+  <header><h3>Hydra</h3><span class="tier">Deadly</span></header>
+  <dl class="nums"><div><dt>Health</dt><dd>2,350</dd></div><div><dt>Experience</dt><dd>2,100</dd></div><div><dt>Hits</dt><dd>40–150</dd></div></dl>
+  <ul class="res"><li><span class="el el-fire">Fire</span><small>weak</small></li><li><span class="el el-ice">Ice</span><small>resists</small></li><li><span class="el el-energy">Energy</span><small>resists</small></li><li><span class="el el-earth">Earth</span><small>immune</small></li></ul>
+  
+</article><article class="beast plate t-deadly" data-name="dragon lord" data-tier="Deadly" data-exp="2100" data-hp="1900" data-weak="ice">
+  <header><h3>Dragon Lord</h3><span class="tier">Deadly</span></header>
+  <dl class="nums"><div><dt>Health</dt><dd>1,900</dd></div><div><dt>Experience</dt><dd>2,100</dd></div><div><dt>Hits</dt><dd>25–110</dd></div></dl>
+  <ul class="res"><li><span class="el el-ice">Ice</span><small>weak</small></li><li><span class="el el-earth">Earth</span><small>resists</small></li><li><span class="el el-fire">Fire</span><small>immune</small></li></ul>
+  
+</article><article class="beast plate t-tough" data-name="ice golem" data-tier="Tough" data-exp="1350" data-hp="1900" data-weak="fire energy">
+  <header><h3>Ice Golem</h3><span class="tier">Tough</span></header>
+  <dl class="nums"><div><dt>Health</dt><dd>1,900</dd></div><div><dt>Experience</dt><dd>1,350</dd></div><div><dt>Hits</dt><dd>40–150</dd></div></dl>
+  <ul class="res"><li><span class="el el-fire">Fire</span><small>weak</small></li><li><span class="el el-energy">Energy</span><small>weak</small></li><li><span class="el el-physical">Physical</span><small>resists</small></li><li><span class="el el-death">Death</span><small>resists</small></li><li><span class="el el-earth">Earth</span><small>resists</small></li><li><span class="el el-ice">Ice</span><small>immune</small></li></ul>
+  
+</article></div>
+    <p class="center"><a class="btn iron" href="/bestiary/">Open the bestiary</a></p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="sec-in">
+    <header class="sec-head"><p class="kicker"><span>Life in Thornvale</span></p><h2>More than a hunt</h2></header>
+    <div class="feats">
+      <article class="feat plate"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40L30 18M22 10c8-2 16 0 20 6M30 18c4-4 10-6 16-4" fill="none" stroke="currentColor" stroke-width="3"/></svg><h3>Gather and forge</h3><p>Mine copper to starsteel, smelt bars and hammer out your own armour. Fish the rivers, fell the forests.</p></article>
+      <article class="feat plate"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 8c-9 0-15 6-15 15 0 6 3 9 6 11v6h18v-6c3-2 6-5 6-11 0-9-6-15-15-15z" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="18" cy="23" r="3" fill="currentColor"/><circle cx="30" cy="23" r="3" fill="currentColor"/><path d="M20 40v-5M24 40v-5M28 40v-5" stroke="currentColor" stroke-width="2"/></svg><h3>Open PvP</h3><p>Fight anyone outside town. Skulls mark the killers, protection zones keep the peace, secure mode keeps you honest.</p></article>
+      <article class="feat plate"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><path d="M12 6v38M12 8h24l-6 8 6 8H12" fill="none" stroke="currentColor" stroke-width="3"/></svg><h3>Warbands and friends</h3><p>Form a party, share the spoils and the experience, and keep your friends one click away.</p></article>
+      <article class="feat plate"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6v36M14 42h20M8 14h32M8 14l-5 12h10zM40 14l-5 12h10z" fill="none" stroke="currentColor" stroke-width="3"/></svg><h3>A player market</h3><p>Post offers on the market boards and trade face to face. Every coin in the realm is earned by a player.</p></article>
+      <article class="feat plate"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4l16 10v20L24 44 8 34V14z" fill="none" stroke="currentColor" stroke-width="3"/><path d="M24 14v20M17 20l14 8M31 20l-14 8" stroke="currentColor" stroke-width="2.5"/></svg><h3>79 spells and runes</h3><p>Waves of fire, beams of energy, walls of magic and runes that turn a fight. Learn them from the mages in town.</p></article>
+      <article class="feat plate"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="9" width="36" height="30" rx="2" fill="none" stroke="currentColor" stroke-width="3"/><path d="M6 17h36" stroke="currentColor" stroke-width="3"/><path d="M20 24l10 5-10 5z" fill="currentColor"/></svg><h3>Nothing to install</h3><p>Open the page and play. Your character is saved on the server, so you can pick it up from any computer.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec-dark">
+  <div class="sec-in">
+    <header class="sec-head"><p class="kicker"><span>From the realm</span></p><h2>See it for yourself</h2></header>
+    <div class="gallery">
+      <button class="shot shot-big plate" type="button" data-open-trailer><img src="/media/trailer-poster.jpg" alt="" width="1280" height="720" loading="lazy"><span class="shot-play"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>Watch the trailer</span></button>
+      <figure class="shot plate"><img src="/media/world-towns.jpg" alt="A walled town with houses, a market and a temple" width="1200" height="675" loading="lazy"><figcaption>Towns</figcaption></figure>
+      <figure class="shot plate"><img src="/media/world-hunting.jpg" alt="A hunter fighting monsters in the wilds" width="1200" height="675" loading="lazy"><figcaption>The hunt</figcaption></figure>
+      <figure class="shot plate"><img src="/media/world-dungeons.jpg" alt="A torch-lit dungeon corridor" width="1200" height="675" loading="lazy"><figcaption>Below the stone</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="sec-in duo">
+    <a class="news-card plate" href="/news/the-thornvale-server-is-live/">
+      <img src="/media/news-server-live.jpg" alt="" width="800" height="450" loading="lazy">
+      <div><p class="kicker left"><span>Latest news · 21 October 2026</span></p><h3>The Thornvale server is live</h3><p>Create an account, make up to five characters and start exploring right now.</p></div>
+    </a>
+    <a class="hall plate" href="/highscores/">
+      <svg class="crest" width="64" height="64" viewBox="0 0 20 20" aria-hidden="true">
+<rect x="3" y="3" width="14" height="14" transform="rotate(45 10 10)" fill="#2b2621" stroke="#c9a24a" stroke-width="1.5"/>
+<path d="M6.5 6.5h7v2h-2.5v6h-2v-6H6.5z" fill="#e8c26a"/></svg>
+      <h3>The hall of heroes</h3>
+      <p>The highest-levelled adventurers of the realm, updated every minute. Is your name up there yet?</p>
+      <span class="btn iron">See the highscores</span>
+    </a>
+  </div>
+</section>
+
+<section class="final">
+  <canvas class="embers" data-embers aria-hidden="true"></canvas>
+  <div class="final-in">
+    <h2 class="mega small">Your legend starts tonight</h2>
+    <p class="lede">Free in your browser. No download. The gates open fully on 1 January 2027.</p>
+    <div class="cta"><a class="btn ember big" href="/play/">Enter Thornvale</a><a class="btn iron big" href="/guide/">Read the guide</a></div>
+  </div>
+</section>
+</main>
+<footer class="foot">
+  <div class="foot-in">
+    <div class="foot-brand">
+      <a class="brand" href="/"><svg class="crest" width="36" height="36" viewBox="0 0 20 20" aria-hidden="true">
+<rect x="3" y="3" width="14" height="14" transform="rotate(45 10 10)" fill="#2b2621" stroke="#c9a24a" stroke-width="1.5"/>
+<path d="M6.5 6.5h7v2h-2.5v6h-2v-6H6.5z" fill="#e8c26a"/></svg><span>Thornvale</span></a>
+      <p>A free fantasy MMORPG you play in your browser. Every town, creature, song and line of text is original.</p>
+      <p class="faint">© 2026 Thornvale</p>
+    </div>
+    <nav class="foot-col" aria-label="Play">
+      <h2>Play</h2>
+      <a href="/play/">Enter the realm</a><a href="/guide/">Game guide</a><a href="/faq/">FAQ</a><a href="/rules/">Rules</a>
+    </nav>
+    <nav class="foot-col" aria-label="The world">
+      <h2>The world</h2>
+      <a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/news/">News</a>
+    </nav>
+    <div class="foot-col">
+      <h2>Contact</h2>
+      <span class="sel">support@thornvaleonline.com</span>
+      <a href="/privacy/">Privacy</a>
+    </div>
+  </div>
+</footer>
+<dialog class="trailer" data-trailer aria-label="Thornvale trailer">
+  <form method="dialog"><button class="x" aria-label="Close the trailer">×</button></form>
   <video controls playsinline preload="none" poster="/media/trailer-full-poster.jpg">
     <source src="/media/trailer-full.webm" type="video/webm">
     <source src="/media/trailer-full.mp4" type="video/mp4">
   </video>
 </dialog>
-
-<footer class="wrap footer">
-  <div><a class="logo" href="/">Thornvale</a><br>© 2026 Thornvale. All designs are original.</div>
-  <div class="footer-links">
-    <a href="/play/">Play</a>
-    <a href="/guide/">Guide</a>
-    <a href="/highscores/">Highscores</a>
-    <a href="/news/">News</a>
-    <a href="/faq/">FAQ</a>
-    <a href="/rules/">Rules</a>
-    <a href="/privacy/">Privacy</a>
-    <a href="mailto:support@thornvaleonline.com">support@thornvaleonline.com</a>
-  </div>
-</footer>
 </body>
 </html>

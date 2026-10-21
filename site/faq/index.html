@@ -2,37 +2,38 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FAQ – Thornvale</title>
-<meta name="description" content="Answers to common questions about Thornvale: price, browsers, accounts, saving, the grand opening and getting help.">
+<meta name="description" content="Answers to common questions about Thornvale.">
 <link rel="canonical" href="https://thornvaleonline.com/faq/">
-<meta property="og:description" content="Answers to common questions about Thornvale: price, browsers, accounts, saving, the grand opening and getting help.">
 <meta property="og:title" content="FAQ – Thornvale">
+<meta property="og:description" content="Answers to common questions about Thornvale.">
+<meta property="og:url" content="https://thornvaleonline.com/faq/">
+<meta property="og:type" content="website">
 <meta property="og:site_name" content="Thornvale">
 <meta property="og:image" content="https://thornvaleonline.com/media/og-image.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#12160f">
+<meta name="theme-color" content="#1d1915">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&amp;family=Alegreya+Sans:wght@400;500;700&amp;family=Silkscreen&amp;display=swap">
 <link rel="stylesheet" href="/styles.css">
+<script src="/site.js" defer></script>
 </head>
 <body>
-
-<header class="wrap nav">
-  <a class="logo" href="/">Thornvale</a>
-  <nav class="nav-links" aria-label="Main">
-    <a href="/guide/">Guide</a>
-    <a href="/highscores/">Highscores</a>
-    <a href="/news/">News</a>
-    <a href="/faq/" aria-current="page">FAQ</a>
-    <a class="btn" href="/play/">Play now</a>
-  </nav>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="/" aria-label="Thornvale home"><svg class="crest" width="30" height="30" viewBox="0 0 20 20" aria-hidden="true">
+<rect x="3" y="3" width="14" height="14" transform="rotate(45 10 10)" fill="#2b2621" stroke="#c9a24a" stroke-width="1.5"/>
+<path d="M6.5 6.5h7v2h-2.5v6h-2v-6H6.5z" fill="#e8c26a"/></svg><span>Thornvale</span></a>
+    <nav class="nav" aria-label="Main"><a href="/news/">News</a><a href="/guide/">Guide</a><a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/faq/" aria-current="page">FAQ</a></nav>
+    <span class="realm" data-status><i aria-hidden="true"></i><span data-status-text>Realm</span></span>
+    <a class="btn ember" href="/play/">Play free</a>
+  </div>
 </header>
-
-<main class="wrap">
-  <div class="article doc">
+<main id="main">
+<section class="sec doc-sec"><div class="sec-in"><div class="doc plate"><div class="article doc">
     <span class="kicker">FAQ</span>
     <h1>Questions and answers</h1>
 
@@ -75,20 +76,38 @@
 
     <p>Still stuck? Read the <a href="/guide/">game guide</a> or email <a href="mailto:support@thornvaleonline.com">support@thornvaleonline.com</a>.</p>
   </div>
+</div></div></section>
 </main>
-
-<footer class="wrap footer">
-  <div><a class="logo" href="/">Thornvale</a><br>© 2026 Thornvale. All designs are original.</div>
-  <div class="footer-links">
-    <a href="/play/">Play</a>
-    <a href="/guide/">Guide</a>
-    <a href="/highscores/">Highscores</a>
-    <a href="/news/">News</a>
-    <a href="/faq/">FAQ</a>
-    <a href="/rules/">Rules</a>
-    <a href="/privacy/">Privacy</a>
-    <a href="mailto:support@thornvaleonline.com">support@thornvaleonline.com</a>
+<footer class="foot">
+  <div class="foot-in">
+    <div class="foot-brand">
+      <a class="brand" href="/"><svg class="crest" width="36" height="36" viewBox="0 0 20 20" aria-hidden="true">
+<rect x="3" y="3" width="14" height="14" transform="rotate(45 10 10)" fill="#2b2621" stroke="#c9a24a" stroke-width="1.5"/>
+<path d="M6.5 6.5h7v2h-2.5v6h-2v-6H6.5z" fill="#e8c26a"/></svg><span>Thornvale</span></a>
+      <p>A free fantasy MMORPG you play in your browser. Every town, creature, song and line of text is original.</p>
+      <p class="faint">© 2026 Thornvale</p>
+    </div>
+    <nav class="foot-col" aria-label="Play">
+      <h2>Play</h2>
+      <a href="/play/">Enter the realm</a><a href="/guide/">Game guide</a><a href="/faq/">FAQ</a><a href="/rules/">Rules</a>
+    </nav>
+    <nav class="foot-col" aria-label="The world">
+      <h2>The world</h2>
+      <a href="/bestiary/">Bestiary</a><a href="/atlas/">Atlas</a><a href="/soundtrack/">Soundtrack</a><a href="/highscores/">Highscores</a><a href="/news/">News</a>
+    </nav>
+    <div class="foot-col">
+      <h2>Contact</h2>
+      <span class="sel">support@thornvaleonline.com</span>
+      <a href="/privacy/">Privacy</a>
+    </div>
   </div>
 </footer>
+<dialog class="trailer" data-trailer aria-label="Thornvale trailer">
+  <form method="dialog"><button class="x" aria-label="Close the trailer">×</button></form>
+  <video controls playsinline preload="none" poster="/media/trailer-full-poster.jpg">
+    <source src="/media/trailer-full.webm" type="video/webm">
+    <source src="/media/trailer-full.mp4" type="video/mp4">
+  </video>
+</dialog>
 </body>
 </html>
