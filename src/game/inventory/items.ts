@@ -198,7 +198,7 @@ const defs: ItemDef[] = [
   def({ id: 'flame_barrier_rune', name: 'Flame Barrier Rune', kind: 'rune', weight: 0.7, value: 18, level: 33, tint: '#ff7a1a', icon: '☰', rune: { type: 'field', field: 'fire', shape: 'wall', element: 'fire', radius: 2, min: 0, max: 0, perLevel: 0, range: 6, duration: 45 }, rarity: 'uncommon' }),
   def({ id: 'static_barrier_rune', name: 'Static Barrier Rune', kind: 'rune', weight: 0.7, value: 22, level: 41, tint: '#c890ff', icon: '☰', rune: { type: 'field', field: 'energy', shape: 'wall', element: 'energy', radius: 2, min: 0, max: 0, perLevel: 0, range: 6, duration: 30 }, rarity: 'uncommon' }),
   def({ id: 'venom_barrier_rune', name: 'Venom Barrier Rune', kind: 'rune', weight: 0.7, value: 15, level: 29, tint: '#6ad040', icon: '☰', rune: { type: 'field', field: 'poison', shape: 'wall', element: 'earth', radius: 2, min: 0, max: 0, perLevel: 0, range: 6, duration: 60 }, rarity: 'uncommon' }),
-  def({ id: 'arcane_wall_rune', name: 'Arcane Wall Rune', kind: 'rune', weight: 0.7, value: 40, level: 32, tint: '#7fb2ff', icon: '▣', rune: { type: 'field', field: 'wall', shape: 'tile', radius: 0, min: 0, max: 0, perLevel: 0, range: 6, duration: 20 }, rarity: 'rare' }),
+  def({ id: 'arcane_wall_rune', name: 'Magic Wall Rune', kind: 'rune', weight: 0.7, value: 40, level: 32, tint: '#7fb2ff', icon: '▣', rune: { type: 'field', field: 'wall', shape: 'tile', radius: 0, min: 0, max: 0, perLevel: 0, range: 6, duration: 20 }, rarity: 'rare' }),
   def({ id: 'dispel_rune', name: 'Dispel Rune', kind: 'rune', weight: 0.7, value: 5, level: 17, tint: '#d8d8e8', icon: '⊘', rune: { type: 'destroyField', radius: 0, min: 0, max: 0, perLevel: 0, range: 6 } }),
 
   // --- tools -----------------------------------------------------------------------

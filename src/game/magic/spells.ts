@@ -345,7 +345,7 @@ export const SPELLS: Record<SpellId, SpellDef> = {
   adevo_mas_grav_flam: rune('adevo_mas_grav_flam', 'Flame Barrier Rune', 'adevo mas grav flam', 'flame_barrier_rune', 2, 33, 780, MAGES, 1800),
   adevo_mas_grav_vis: rune('adevo_mas_grav_vis', 'Static Barrier Rune', 'adevo mas grav vis', 'static_barrier_rune', 2, 41, 1000, MAGES, 2500),
   adevo_mas_grav_pox: rune('adevo_mas_grav_pox', 'Venom Barrier Rune', 'adevo mas grav pox', 'venom_barrier_rune', 2, 29, 640, MAGES, 1500),
-  adevo_grav_tera: rune('adevo_grav_tera', 'Arcane Wall Rune', 'adevo grav tera', 'arcane_wall_rune', 2, 32, 750, ['sorcerer'], 2100),
+  adevo_grav_tera: rune('adevo_grav_tera', 'Magic Wall Rune', 'adevo grav tera', 'arcane_wall_rune', 2, 32, 750, ['sorcerer'], 2100),
   adito_grav: rune('adito_grav', 'Dispel Rune', 'adito grav', 'dispel_rune', 3, 17, 120, ['paladin', 'sorcerer', 'druid'], 500),
 };
 

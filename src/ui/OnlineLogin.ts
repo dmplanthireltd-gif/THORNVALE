@@ -311,7 +311,29 @@ export class OnlineLogin {
       const list = el('div', 'char-list', b);
       for (const c of data.characters) {
         const voc = VOCATIONS[c.vocation as Vocation]?.name ?? c.vocation;
-        button(list, `${c.name} — level ${c.level} ${voc}`, () => play(c.name), 'btn big');
+        const row = el('div', 'char-row', list);
+        button(row, `${c.name} — level ${c.level} ${voc}`, () => play(c.name), 'btn big');
+        const del = button(row, 'Delete', () => {
+          // confirm in the page: type the name
+          row.replaceChildren();
+          el('span', 'hint', row, `Delete ${c.name} for good? Type the name to confirm:`);
+          const inp = this.input(row, c.name);
+          button(row, 'Delete forever', async () => {
+            if (inp.value.trim().toLowerCase() !== c.name.toLowerCase()) return this.h.message('The name does not match.');
+            if (!(await this.ensureFresh())) return this.renderSignIn('Your login expired. Please log in again.');
+            const r = await fetch(`${httpBase(this.h.serverUrl)}/api/characters/delete`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${this.session!.access_token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: c.name }),
+            }).catch(() => null);
+            const j = r ? await r.json().catch(() => ({})) : {};
+            if (!r || !r.ok) return this.h.message((j as { error?: string }).error ?? 'Could not delete the character.');
+            this.h.message(`${c.name} was deleted.`);
+            void this.renderCharacters();
+          }, 'btn small danger');
+          button(row, 'Cancel', () => void this.renderCharacters(), 'btn small');
+        }, 'btn small');
+        del.title = `Delete ${c.name} to free the slot`;
       }
     } else {
       el('div', 'hint', b, 'You have no characters yet.');

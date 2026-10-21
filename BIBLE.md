@@ -96,7 +96,7 @@ scripts/              ← smoke-test, net-test, storage-test, auth-test, content
 - Never print env vars in logs. Never echo a key back to the user.
 - Publishable key and URL are public by design.
 
-**Render environment variables:** `TEST_MODE` (default ON in code when unset: test commands for everyone except /god and /kill, and START_LEVEL defaults to 20 — set `TEST_MODE=0` before the grand opening), `START_LEVEL` (test servers: every character is raised to at least this level at login; currently "20" for testing — set to "1" before the grand opening), `NODE_VERSION=20`, `MAX_PLAYERS=50`, `ALLOW_ADMIN=1` (testing phase = test mode: everyone may use the `/` commands and the ` console except `/god` and `/kill`; names in `ADMINS` get everything — set back to 0 before the grand opening), `ADMINS=""` (comma-separated character names allowed to use `/` commands online), `PVP=1` (player-versus-player on; `0` turns it off — offline single-player never has PvP), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_KEY` (secret), optional `MAX_CHARACTERS` (default 5).
+**Render environment variables:** `BOTS` (computer players; default 6 in test mode, 0 otherwise; never saved, left out of /status and highscores, names end in [Bot]), `BOT_LEVEL` (default 500), `TEST_MODE` (default ON in code when unset: test commands for everyone except /god and /kill, and START_LEVEL defaults to 20 — set `TEST_MODE=0` before the grand opening), `START_LEVEL` (test servers: every character is raised to at least this level at login; currently "20" for testing — set to "1" before the grand opening), `NODE_VERSION=20`, `MAX_PLAYERS=50`, `ALLOW_ADMIN=1` (testing phase = test mode: everyone may use the `/` commands and the ` console except `/god` and `/kill`; names in `ADMINS` get everything — set back to 0 before the grand opening), `ADMINS=""` (comma-separated character names allowed to use `/` commands online), `PVP=1` (player-versus-player on; `0` turns it off — offline single-player never has PvP), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_KEY` (secret), optional `MAX_CHARACTERS` (default 5).
 
 **Startup log lines to check after a deploy:**
 - `Login: email (Supabase Auth)` — email accounts active (else "name + password").
@@ -289,7 +289,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Integrate, test all, push, refresh artifact.
 - [ ] Owner decision: upgrade the thornvale service from Free to a paid instance (Starter is enough for ~50 players) so the server never sleeps; then set `plan:` in render.yaml.
 - [ ] **Graphics overhaul (owner decision 2026-10-21):** replace the whole look with a darker, "brutal" dark-fantasy style. Gameplay, controls, camera, tiles, systems and saves stay exactly the same — visuals only (`src/render/**`, `ui/icons.ts`, textures, models, effects, HUD skin). Start after the new map is live, with a side-by-side test area for the owner to approve. Style direction still to be chosen.
-- [ ] Before the grand opening: set `TEST_MODE=0`, `ALLOW_ADMIN` back to "0" and `START_LEVEL` back to "1" (render.yaml and Render dashboard).
+- [ ] Before the grand opening: set `TEST_MODE=0` (also turns bots off), `ALLOW_ADMIN` back to "0" and `START_LEVEL` back to "1" (render.yaml and Render dashboard).
 - [ ] Later: custom SMTP for recovery mails; more map/game polish.
 - [x] Website at thornvaleonline.com from `site/`, game at `/play/` (2026-10-21).
 - [x] Website pages: guide, highscores, FAQ, rules, privacy (2026-10-21).
@@ -333,3 +333,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Test mode: with `ALLOW_ADMIN=1` everyone gets the test commands except `/god` and `/kill` (`Session.testOnly`); `ADMINS` names keep everything | — | — |
 | 2026-10-21 | — | Website: hero trailer replaced with real gameplay footage (29 s, WebM + MP4) | — | — |
 | 2026-10-21 | — | `TEST_MODE` env, ON by default in code (no dashboard change needed): test commands for everyone (not /god, /kill), START_LEVEL default 20 | — | — |
+| 2026-10-21 | — | Delete a character from the account screen (type the name to confirm; backup kept in `character_backups`; `POST /api/characters/delete`); test bots (`server/bots.ts`); game-master pop-ups `/warn Name, text` and `/broadcast` (full admins only, `adminNotice` event); Arcane Wall Rune shown as "Magic Wall Rune" (id unchanged) | — | — |

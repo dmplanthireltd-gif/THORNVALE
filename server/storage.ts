@@ -45,6 +45,8 @@ export interface Storage {
   saveCharacter(key: string, name: string, data: SaveData, owner?: string | null): Promise<void>;
   /** Characters owned by an email-login user. */
   listCharacters(owner: string): Promise<CharacterSummary[]>;
+  /** Removes a character (callers back it up first). */
+  deleteCharacter(key: string): Promise<void>;
   /** The highest-level characters, best first (public highscores). */
   topCharacters(limit: number): Promise<CharacterSummary[]>;
   backupCharacter(key: string, data: unknown, version: number, reason: string): Promise<void>;
@@ -130,6 +132,13 @@ export class FileStorage implements Storage {
     this.chars[key] = data;
     if (owner) this.owners[key] = owner;
     this.dirty = true;
+  }
+
+  async deleteCharacter(key: string): Promise<void> {
+    delete this.chars[key];
+    delete this.owners[key];
+    this.dirty = true;
+    await this.flush();
   }
 
   async listCharacters(owner: string): Promise<CharacterSummary[]> {
@@ -253,6 +262,10 @@ export class SupabaseStorage implements Storage {
     const r = rows?.[0];
     if (!r) return null;
     return { name: String(r.display_name), data: r.data as SaveData, version: Number(r.save_version) || 1, updated: Date.parse(String(r.updated_at)) || 0, owner: (r.owner_id as string | null) ?? null };
+  }
+
+  async deleteCharacter(key: string): Promise<void> {
+    await this.req('DELETE', `characters?name_key=eq.${encodeURIComponent(key)}`, undefined, 'return=minimal');
   }
 
   async listCharacters(owner: string): Promise<CharacterSummary[]> {

@@ -24,6 +24,7 @@ import {
 } from '../src/game/net/protocol';
 import { isOutfit } from '../src/game/player/outfits';
 import { setLevel } from '../src/game/admin';
+import { Bots } from './bots';
 import { isVocation } from '../src/game/player/vocations';
 import { openStorage, type Storage } from './storage';
 import { WsConnection } from './ws';
@@ -44,6 +45,9 @@ const TEST_MODE = process.env.TEST_MODE !== '0';
 const ALLOW_ADMIN = process.env.ALLOW_ADMIN === '1' || TEST_MODE;
 /** Test servers: every character is raised to at least this level when it logs in (1 = off). */
 const START_LEVEL = Math.max(1, Math.min(1000, Math.floor(Number(process.env.START_LEVEL ?? (TEST_MODE ? 20 : 1))) || 1));
+/** Computer-controlled adventurers walking around (test servers). BOTS=0 turns them off. */
+const BOT_COUNT = Math.max(0, Math.min(12, Math.floor(Number(process.env.BOTS ?? (TEST_MODE ? 6 : 0))) || 0));
+const BOT_LEVEL = Math.max(1, Math.min(1000, Math.floor(Number(process.env.BOT_LEVEL ?? 500)) || 500));
 /** Email login with password recovery (Supabase Auth). Without it, players log in with name + password. */
 const SUPABASE_URL = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
 const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? '';
@@ -122,6 +126,7 @@ function send(c: Client, m: ServerMessage): void {
  * first (a market change).
  */
 function saveCharacter(s: Session, after?: Promise<void>): Promise<void> {
+  if (s.bot) return Promise.resolve();
   const key = s.player.name.toLowerCase();
   const data = game.serialize(s.id);
   const prev = pendingSaves.get(key) ?? Promise.resolve();
@@ -280,7 +285,7 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
     c.ws.close(4002);
     return;
   }
-  if (game.sessions.size >= MAX_PLAYERS) {
+  if ([...game.sessions.values()].filter((x) => !x.bot).length >= MAX_PLAYERS) {
     send(c, { t: 'error', text: 'The world is full. Try again later.' });
     c.ws.close(4003);
     return;
@@ -439,6 +444,36 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): P
   if (url.pathname === '/api/highscores') {
     return json(res, 200, await highscores());
   }
+  if (url.pathname === '/api/characters/delete' && req.method === 'POST') {
+    if (!EMAIL_AUTH) return json(res, 404, { error: 'Email login is not enabled on this server.' });
+    const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    const user = await verifyToken(token);
+    if (!user) return json(res, 401, { error: 'Not logged in.' });
+    let body: { name?: unknown } = {};
+    try {
+      const chunks: Buffer[] = [];
+      for await (const ch of req) { chunks.push(ch as Buffer); if (chunks.length > 64) break; }
+      body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+    } catch {
+      return json(res, 400, { error: 'Bad request.' });
+    }
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const key = name.toLowerCase();
+    if (!key) return json(res, 400, { error: 'Which character?' });
+    try {
+      const stored = await storage.getCharacter(key);
+      if (!stored || stored.owner !== user.id) return json(res, 404, { error: 'That character is not on your account.' });
+      if ([...game.sessions.values()].some((s) => s.player.name.toLowerCase() === key)) return json(res, 409, { error: `${stored.name} is online. Log out first.` });
+      // keep a copy, so a deleted character can still be restored by hand
+      await storage.backupCharacter(key, stored.data, stored.version, `deleted by owner ${user.id}`);
+      await storage.deleteCharacter(key);
+      console.log(`- deleted character ${stored.name} (backup kept)`);
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      console.error('Deleting a character failed:', err);
+      return json(res, 500, { error: 'Could not delete the character.' });
+    }
+  }
   if (url.pathname === '/api/characters') {
     if (!EMAIL_AUTH) return json(res, 404, { error: 'Email login is not enabled on this server.' });
     const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
@@ -462,7 +497,9 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   }
   if (url.pathname === '/status') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ online: game.sessions.size, players: game.players().map((p) => ({ name: p.name, level: p.level })) }));
+    // bots are not real players: left out of the public count and list
+    const real = [...game.sessions.values()].filter((x) => !x.bot).map((x) => x.player);
+    res.end(JSON.stringify({ online: real.length, players: real.map((p) => ({ name: p.name, level: p.level })) }));
     return;
   }
   // The game lives under /play/ (Vite base '/play/'); /play without the slash is redirected so the
@@ -548,12 +585,15 @@ http.on('upgrade', (req, socket) => {
 
 let last = performance.now();
 let acc = 0;
+const bots = BOT_COUNT > 0 ? new Bots(game, BOT_COUNT, BOT_LEVEL) : null;
+if (bots) console.log(`Bots: ${BOT_COUNT} at level ${BOT_LEVEL}`);
 setInterval(() => {
   const now = performance.now();
   acc += Math.min(0.5, (now - last) / 1000);
   last = now;
   while (acc >= TICK) {
     game.update(TICK);
+    bots?.update(TICK);
     acc -= TICK;
   }
   for (const c of clients) if (c.session) send(c, buildSnapshot(game, c.session));

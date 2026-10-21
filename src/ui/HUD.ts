@@ -181,6 +181,9 @@ export class HUD {
       case 'chat':
         this.log(`${e.name}: ${e.text}`, 'chat');
         break;
+      case 'adminNotice':
+        if (e.to === me) this.adminNotice(e.title, e.text);
+        break;
       case 'inventoryChanged':
         if (e.to !== me) break;
         this.renderInventory();
@@ -1814,6 +1817,17 @@ export class HUD {
   }
 
   // ================================================================ per frame
+
+  /** A game master's pop-up: stays until the player clicks OK. */
+  private adminNotice(title: string, text: string): void {
+    const box = el('div', 'admin-notice', this.root);
+    const card = el('div', 'admin-card', box);
+    el('div', 'admin-title', card, `⚠ ${title}`);
+    el('div', 'admin-text', card, text);
+    const ok = button(card, 'OK, understood', () => box.remove(), 'btn');
+    ok.focus();
+    this.log(`${title}: ${text}`, 'warn');
+  }
 
   /** Friends window: online first; friend requests at the top. */
   private renderFriends(): void {

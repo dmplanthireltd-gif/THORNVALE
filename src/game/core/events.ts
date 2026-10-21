@@ -39,6 +39,8 @@ export type GameEvent =
   | { type: 'skillUp'; skill: string; level: number; to: number }
   | { type: 'levelUp'; id: number; level: number }
   | { type: 'message'; text: string; kind: MessageKind; to: number }
+  /** A pop-up from a game master that the player has to acknowledge. */
+  | { type: 'adminNotice'; title: string; text: string; to: number }
   | { type: 'chat'; id: number; name: string; text: string }
   | { type: 'bagCreated'; bagId: number; x: number; y: number; z: number }
   | { type: 'bagRemoved'; bagId: number }

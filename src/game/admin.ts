@@ -18,6 +18,8 @@ export const ADMIN_HELP = [
   '/item name [qty] — get an item by id or name',
   '/spells — learn every spell of your vocation',
   '/heal — full health and mana',
+  '/warn Name, message — pop-up warning to a player (game masters only)',
+  '/broadcast message — pop-up message to everyone online (game masters only)',
   '/god — toggle invulnerability (full admins only, not in test mode)',
   '/kill — kill your current target (full admins only, not in test mode)',
   '/goto place — teleport to a place (e.g. /goto caldera) or /goto x y z',
@@ -143,6 +145,25 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       p.mana = p.maxMana;
       game.events.emit({ type: 'heal', targetId: pid, amount: p.maxHp });
       return;
+    case 'warn':
+    case 'broadcast': {
+      if (s.testOnly) return say('Only game masters can send warnings.', 'warn');
+      const all = rest.join(' ').trim();
+      if (cmd === 'broadcast') {
+        if (!all) return say('Usage: /broadcast message', 'warn');
+        for (const o of game.sessions.values()) game.events.emit({ type: 'adminNotice', title: 'Message from the Admin', text: all, to: o.id });
+        return say('Broadcast sent to everyone online.');
+      }
+      // "/warn Name, message" (or "/warn Name message" for one-word names)
+      const comma = all.indexOf(',');
+      const name = (comma >= 0 ? all.slice(0, comma) : all.split(/\s+/)[0] ?? '').trim();
+      const text = (comma >= 0 ? all.slice(comma + 1) : all.slice(name.length)).trim() || 'Please follow the rules.';
+      const target = [...game.sessions.values()].find((o) => o.player.name.toLowerCase() === name.toLowerCase());
+      if (!target) return say(`${name || 'That player'} is not online.`, 'warn');
+      game.events.emit({ type: 'adminNotice', title: 'Warning from the Admin', text, to: target.id });
+      game.msg(target.id, `Warning from the Admin: ${text}`, 'warn');
+      return say(`Warning sent to ${target.player.name}.`);
+    }
     case 'god':
       if (s.testOnly) return say('God mode is not available in test mode.', 'warn');
       p.god = !p.god;

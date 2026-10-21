@@ -1476,5 +1476,21 @@ console.log('Test mode (server ALLOW_ADMIN): everything but god mode');
   check(s.player.god, 'full admins still have god mode');
 }
 
+console.log('Game master warnings');
+{
+  const g = new Game();
+  const gm = g.addPlayer('Keeper', { vocation: 'knight' });
+  const oscar = g.addPlayer('Oscar', { vocation: 'druid' });
+  gm.admin = true;
+  const got: string[] = [];
+  g.events.on((e) => { if (e.type === 'adminNotice' && e.to === oscar.id) got.push(e.title + ': ' + e.text); });
+  gm.testOnly = true;
+  g.say(gm.id, '/warn Oscar, corrupt behaviour');
+  check(got.length === 0, 'test-mode players cannot send warnings');
+  gm.testOnly = false;
+  g.say(gm.id, '/warn Oscar, This is a warning from the Admin for corrupt behaviour.');
+  check(got.length === 1 && got[0].includes('corrupt behaviour') && got[0].startsWith('Warning from the Admin'), 'a game master warning pops up for that player');
+}
+
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);
