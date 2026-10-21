@@ -2,6 +2,7 @@ import { sessionOf, type Controller } from '../client/Controller';
 import type { GameEvent, MessageKind } from '../game/core/events';
 import type { Session } from '../game/Game';
 import { DEPOT_SLOTS, POCKET_SLOTS } from '../game/inventory/Inventory';
+import { bonusParts } from '../game/inventory/sets';
 import { describeItem, equipSlotFor, ITEMS, itemDef, runeGroup, runeIsAimed, type EquipSlot, type ItemStack } from '../game/inventory/items';
 import { GROUP_COOLDOWN, isSpellId, SPELL_LIST, SPELLS, type CooldownGroup, type SpellDef, type SpellId } from '../game/magic/spells';
 import { NPCS } from '../game/npc/npcs';
@@ -2067,6 +2068,11 @@ export class HUD {
         const d = el('div', 'slot', grid);
         paintSlot(d, st, e.ph);
         if (st) d.title = itemDef(st.id).name;
+      }
+      const sets = g.activeSets(sess);
+      if (sets.length) {
+        el('div', 'panel-title', b, 'Set bonuses');
+        for (const a of sets) el('div', 'hint', b, `${a.set.name} (${a.count}/${a.set.pieces.length}): ${a.bonuses.flatMap(bonusParts).join(', ')}`);
       }
     }
     if (pl && pl.id !== this.ctl.pid) {

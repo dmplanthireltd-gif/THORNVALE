@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { PALETTE, type Outfit } from '../../game/player/outfits';
-import { box, collectMaterials, cone, cyl, group, mat, sphere, type Mat } from './parts';
+import { ITEMS } from '../../game/inventory/items';
+import { buildArmour, buildBoot, buildHelm, buildLegArmour } from './gear3d';
+import { gearLook } from './gearLooks';
+import { box, collectMaterials, cone, cyl, group, mat, matCache, sphere, type Mat } from './parts';
 import type { BipedRig } from './rigs';
 import { ARMOR_LOOK, makeShield, makeWeapon } from './weapons';
 
@@ -491,53 +494,53 @@ export function applyGear(rig: BipedRig, eq: GearLook): void {
     g.extras.push(o);
   };
 
-  const w = makeWeapon(eq.weapon);
+  // one material per colour for this character's gear (each character keeps its own, so hit flashes stay per creature)
+  const M = matCache();
+  const w = makeWeapon(eq.weapon, M);
   if (w) g.weaponMount.add(w);
-  const s = makeShield(eq.shield);
+  const s = makeShield(eq.shield, M);
   if (s) g.shieldMount.add(s);
 
-  // body armour: shoulder plates plus a breastplate for heavy armour
-  const look = eq.armor ? ARMOR_LOOK[eq.armor] : undefined;
-  g.pads.visible = !!look;
-  if (look) {
-    g.padMat.color.setHex(look.color);
-    const k = look.size / 0.14;
-    g.pads.children.forEach((c) => c.scale.set(1.15 * k, 0.7 * k, 1.15 * k));
-    if (look.plate) {
-      const m = mat(look.color);
-      attach(rig.torso, group(0, 0, 0,
-        box(0.5, 0.36, 0.06, m, 0, 0.32, 0.185),
-        box(0.5, 0.36, 0.06, m, 0, 0.32, -0.185),
-        box(0.12, 0.06, 0.07, mat(0xe0b03c), 0, 0.42, 0.22),
-      ));
-    }
+  // body armour: plates, pauldrons, belt, cape, sleeves and gauntlets
+  const armor = eq.armor ? ITEMS[eq.armor] : undefined;
+  g.pads.visible = false;
+  if (armor) {
+    const parts = buildArmour(gearLook(armor, ARMOR_LOOK[armor.id]?.color), M);
+    for (const o of parts.torso) attach(rig.torso, o);
+    for (const o of parts.armL) attach(rig.armL, o);
+    for (const o of parts.armR) attach(rig.armR, o);
   }
 
   // helmet replaces the outfit's headgear while worn
-  const helm = eq.head ? HELMETS[eq.head] : undefined;
+  const helmDef = eq.head ? ITEMS[eq.head] : undefined;
   for (const c of rig.head.children) {
-    if (!c.userData.face) c.visible = !helm;
+    if (!c.userData.face) c.visible = !helmDef;
   }
-  if (helm) {
+  if (helmDef) {
     const hasFace = rig.head.children.some((c) => c.userData.face);
-    const hg = buildHelmet(helm);
+    const h = HELMETS[helmDef.id];
+    const hg = buildHelm(gearLook(helmDef, h?.color, h?.trim), M);
     if (!hasFace) {
       hg.add(sphere(0.19, g.skin, 0, 0, 0, 1, 1.02, 1));
-      hg.add(box(0.05, 0.05, 0.03, mat(0x14100c), 0.075, 0.02, 0.18));
-      hg.add(box(0.05, 0.05, 0.03, mat(0x14100c), -0.075, 0.02, 0.18));
+      hg.add(box(0.05, 0.05, 0.03, M(0x14100c), 0.075, 0.02, 0.18));
+      hg.add(box(0.05, 0.05, 0.03, M(0x14100c), -0.075, 0.02, 0.18));
     }
     attach(rig.head, hg);
   }
 
-  // greaves and boots
-  const legLook = eq.legs ? LEGS[eq.legs] : undefined;
-  const bootLook = eq.feet ? BOOTS[eq.feet] : undefined;
+  // leg armour and boots
+  const legDef = eq.legs ? ITEMS[eq.legs] : undefined;
+  const bootDef = eq.feet ? ITEMS[eq.feet] : undefined;
+  const legLook = legDef ? gearLook(legDef, LEGS[legDef.id]) : undefined;
+  const bootLook = bootDef ? gearLook(bootDef, BOOTS[bootDef.id]) : undefined;
   for (const leg of [rig.legL, rig.legR]) {
+    const side = leg.position.x >= 0 ? 1 : -1;
     if (legLook) {
-      const m = mat(legLook);
-      attach(leg, group(0, 0, 0, box(0.19, 0.3, 0.22, m, 0, -0.17, 0), box(0.12, 0.08, 0.04, m, 0, -0.24, 0.12)));
+      const p = buildLegArmour(legLook, M, side);
+      for (const o of p.leg) attach(leg, o);
+      for (const o of p.torso) attach(rig.torso, o);
     }
-    if (bootLook) attach(leg, box(0.22, 0.22, 0.33, mat(bootLook), 0, -0.52, 0.045));
+    if (bootLook) for (const o of buildBoot(bootLook, M, side)) attach(leg, o);
   }
 
   rig.root.traverse((o) => {
@@ -588,55 +591,11 @@ export const BOOTS: Record<string, number> = {
   tidecrest_boots: 0x3a6ad0,
 };
 
-function buildHelmet(h: HelmLook): THREE.Group {
-  const m = mat(h.color);
-  const t = mat(h.trim ?? 0x3a3028);
-  const g = group();
-  switch (h.shape) {
-    case 'cap':
-      g.add(sphere(0.215, m, 0, 0.07, -0.01, 1, 0.75, 1.02));
-      g.add(cyl(0.22, 0.22, 0.05, t, 0, 0.03, 0, 10));
-      break;
-    case 'coif':
-      g.add(sphere(0.225, m, 0, 0.05, -0.03, 1, 0.85, 1.05));
-      g.add(box(0.36, 0.16, 0.2, m, 0, -0.12, -0.08));
-      break;
-    case 'helm':
-      g.add(cyl(0.21, 0.22, 0.3, m, 0, 0.02, 0, 10));
-      g.add(sphere(0.21, m, 0, 0.16, 0, 1, 0.6, 1));
-      g.add(box(0.04, 0.2, 0.06, t, 0, 0.0, 0.21));
-      break;
-    case 'horned':
-      g.add(sphere(0.225, m, 0, 0.09, 0, 1, 0.75, 1));
-      g.add(cyl(0.23, 0.23, 0.06, t, 0, 0.03, 0, 10));
-      for (const sx of [-1, 1]) {
-        const horn = cone(0.06, 0.34, t, sx * 0.25, 0.24, 0, 6);
-        horn.rotation.z = -sx * 0.8;
-        g.add(horn);
-      }
-      break;
-    case 'circlet':
-      g.add(cyl(0.215, 0.215, 0.05, m, 0, 0.1, 0, 12));
-      g.add(sphere(0.045, t, 0, 0.12, 0.21));
-      break;
-    case 'winged':
-      g.add(cyl(0.21, 0.22, 0.28, m, 0, 0.03, 0, 10));
-      g.add(sphere(0.21, m, 0, 0.16, 0, 1, 0.6, 1));
-      for (const sx of [-1, 1]) {
-        const wing = box(0.03, 0.2, 0.26, t, sx * 0.23, 0.2, -0.04);
-        wing.rotation.z = -sx * 0.5;
-        wing.rotation.x = -0.3;
-        g.add(wing);
-      }
-      break;
-    case 'crested':
-      g.add(cyl(0.21, 0.22, 0.3, m, 0, 0.02, 0, 10));
-      g.add(sphere(0.21, m, 0, 0.16, 0, 1, 0.6, 1));
-      g.add(box(0.06, 0.2, 0.44, t, 0, 0.3, -0.04));
-      for (let i = 0; i < 3; i++) g.add(cone(0.035, 0.14, t, 0, 0.36, 0.12 - i * 0.14, 4));
-      break;
-  }
-  return g;
+// every helmet, legs and boots item has a colour entry (older code and tests read these tables)
+for (const d of Object.values(ITEMS)) {
+  if (d.kind === 'helmet' && !HELMETS[d.id]) HELMETS[d.id] = { color: gearLook(d).m[1], trim: gearLook(d).t[1], shape: 'helm' };
+  if (d.kind === 'legs' && LEGS[d.id] === undefined) LEGS[d.id] = gearLook(d).m[1];
+  if (d.kind === 'boots' && BOOTS[d.id] === undefined) BOOTS[d.id] = gearLook(d).m[1];
 }
 
 /** Attaches an arbitrary held object (an NPC's halberd, a shaman's staff). */

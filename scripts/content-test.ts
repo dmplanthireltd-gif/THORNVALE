@@ -9,7 +9,8 @@ declare const process: { exit(code: number): never };
 import { BufferedIntent, Game, type Session } from '../src/game/Game';
 import { Enemy } from '../src/game/enemies/Enemy';
 import { ENEMIES } from '../src/game/enemies/enemyDefs';
-import { equipSlotFor, ITEMS, LOG_ITEMS, POTION_BUFF_SECONDS } from '../src/game/inventory/items';
+import { describeItem, equipSlotFor, ITEMS, LOG_ITEMS, POTION_BUFF_SECONDS } from '../src/game/inventory/items';
+const describeItemText = (id: string) => describeItem(ITEMS[id]);
 import { exivaText, SPELLS, type SpellId } from '../src/game/magic/spells';
 import { facingFromDelta } from '../src/game/core/types';
 import { Ground, Obj } from '../src/game/world/WorldMap';
@@ -36,6 +37,7 @@ import { FIREMAKING_RECIPES } from '../src/game/production/firemaking';
 import { STATIONS, stationForItem } from '../src/game/production/recipes';
 import { RAW_FISH_ITEMS } from '../src/game/gathering/fishing';
 import { floodFill3D } from '../src/game/world/worldGen';
+import { activeSets, SETS, SET_BY_ID } from '../src/game/inventory/sets';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -962,6 +964,73 @@ console.log('Fletching, crafting, cooking and firemaking');
   } catch (err) {
     console.log(`  skip looks: ${(err as Error).message}`);
   }
+}
+
+// ---------------------------------------------------------------- gear sets
+console.log('Gear sets');
+{
+  const GEAR_KINDS = ['weapon', 'shield', 'helmet', 'armor', 'legs', 'boots', 'amulet', 'ring', 'backpack'];
+  const noIcon = Object.values(ITEMS).filter((d) => !d.icon || !d.tint || (d.kind === 'material' && !MATERIAL_SHAPE[d.id] && d.id !== 'blank_rune' && !d.id.endsWith('_rune')));
+  check(noIcon.length === 0, `every item has an icon${noIcon.length ? ` (${noIcon.map((d) => d.id).slice(0, 10).join(' ')})` : ''}`);
+  const pieces = SETS.flatMap((st) => st.pieces);
+  check(new Set(pieces).size === pieces.length, 'no item is in two sets');
+  check(pieces.every((id) => ITEMS[id] && GEAR_KINDS.includes(ITEMS[id].kind) && ITEMS[id].setId && SET_BY_ID[ITEMS[id].setId!]?.pieces.includes(id)), 'every set piece is a wearable item that knows its set');
+  check(SETS.length >= 20 && SETS.every((st) => st.pieces.length >= 4 && Object.keys(st.two).length > 0 && Object.keys(st.four).length > 0), `${SETS.length} sets, each with 4+ pieces and a 2- and 4-piece bonus`);
+  const kinds = (st: typeof SETS[number]) => new Set(st.pieces.map((id) => ITEMS[id].kind));
+  check(SETS.every((st) => ['helmet', 'armor', 'legs', 'boots'].every((k) => kinds(st).has(k as never))), 'every set has a helmet, armour, legs and boots');
+  const badLevel = SETS.filter((st) => st.level !== Math.min(...st.pieces.map((id) => ITEMS[id].level ?? 1)));
+  check(badLevel.length === 0, `set levels match their lightest piece${badLevel.length ? ` (${badLevel.map((st) => st.id).join(' ')})` : ''}`);
+  check(pieces.every((id) => describeItemText(id).includes('set (')), 'item descriptions show the set bonus');
+  // a source and a buyer for every piece
+  const dropped = new Set(Object.values(ENEMIES).flatMap((e) => e.loot.map((l) => l.id)));
+  const sold = new Set(Object.values(NPCS).flatMap((n) => (n.sells ?? []).map((e) => e.id)));
+  const made = new Set(RECIPES.map((r) => r.output.id));
+  const bought = new Set(Object.values(NPCS).flatMap((n) => n.buys ?? []));
+  const sourceless = pieces.filter((id) => !dropped.has(id) && !sold.has(id) && !made.has(id));
+  check(sourceless.length === 0, `every set piece drops, is sold or is smithed${sourceless.length ? ` (${sourceless.join(' ')})` : ''}`);
+  const unbought = pieces.filter((id) => !bought.has(id));
+  check(unbought.length === 0, `every set piece has a buyer${unbought.length ? ` (${unbought.join(' ')})` : ''}`);
+  check(['bronze', 'iron', 'steel', 'silver', 'starsteel', 'gold', 'darkstone'].every((m) => ['helm', 'boots', 'legs', 'shield'].length && SMITHING_RECIPES.some((r) => r.group.toLowerCase() === m && ITEMS[r.output.id].kind === 'boots')), 'every metal smiths boots (full metal sets at the anvil)');
+  check(['smith:chain_helmet', 'smith:chain_armor', 'smith:chain_legs', 'smith:plate_armor', 'smith:plate_legs'].every((id) => RECIPES.some((r) => r.id === id)), 'old anvil recipes are kept');
+  // bonuses at 2 and 4 pieces, gone when taken off
+  const { g, s } = solo('knight');
+  setLevel(g, s, 120);
+  const eq = s.inventory.equipment;
+  for (const k of Object.keys(eq) as Array<keyof typeof eq>) eq[k] = null;
+  g.refreshStats(s);
+  const base = s.player.maxHp;
+  const baseRes = g.resist(s, 'physical');
+  eq.head = { id: 'bronze_helmet', qty: 1 };
+  g.refreshStats(s);
+  check(s.player.maxHp === base && g.activeSets(s).length === 0, 'one piece gives no set bonus');
+  eq.armor = { id: 'bronze_armor', qty: 1 };
+  g.refreshStats(s);
+  check(s.player.maxHp === base + 15 && g.activeSets(s)[0]?.count === 2, '2 bronze pieces: +15 hp');
+  eq.legs = { id: 'bronze_legs', qty: 1 };
+  eq.feet = { id: 'bronze_boots', qty: 1 };
+  g.refreshStats(s);
+  check(s.player.maxHp === base + 40 && s.player.hpRegen === 1, '4 bronze pieces: +40 hp and hp regen (2- and 4-piece bonuses stack)');
+  eq.legs = null;
+  eq.feet = null;
+  eq.armor = null;
+  g.refreshStats(s);
+  check(s.player.maxHp === base && s.player.hpRegen === 0, 'taking pieces off removes the set bonus');
+  for (const id of SET_BY_ID.plate.pieces) eq[equipSlotFor(ITEMS[id])!] = { id, qty: 1 };
+  g.refreshStats(s);
+  check(g.resist(s, 'physical') === baseRes + 4 && s.player.maxHp === base + 80, 'a full plate set adds physical resistance and hp');
+  for (const id of SET_BY_ID.skyfeather.pieces) eq[equipSlotFor(ITEMS[id])!] = { id, qty: 1 };
+  g.refreshStats(s);
+  check(g.attackBonus(s) === 1 + 2 + 3 + 2 + 3 && activeSets(Object.values(eq).filter(Boolean).map((e) => e!.id)).length === 1, 'set attack bonuses add to the pieces\' own');
+  // saves keep every id: old items and all set pieces survive a save round trip untouched
+  for (const k of Object.keys(eq) as Array<keyof typeof eq>) eq[k] = null;
+  eq.armor = { id: 'demonplate', qty: 1 };
+  eq.head = { id: 'dragon_helm', qty: 1 };
+  pieces.forEach((id, i) => { if (i < s.depot.length) s.depot[i] = { id, qty: 1 }; });
+  const data = g.serialize(s.id);
+  const t2 = solo('knight');
+  const okLoad = t2.g.applySave(t2.pid, JSON.parse(JSON.stringify(data)));
+  const kept = pieces.slice(0, s.depot.length).every((id, i) => t2.s.depot[i]?.id === id);
+  check(okLoad && kept && t2.s.inventory.equipment.armor?.id === 'demonplate' && t2.s.inventory.equipment.head?.id === 'dragon_helm' && (t2.s.lostItems ?? []).length === 0, 'old and new gear ids survive save and load (nothing lost)');
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll content checks passed.');

@@ -1,12 +1,12 @@
 import { ITEMS, type ItemDef } from '../game/inventory/items';
 import { SPELLS, type SpellDef, type SpellId } from '../game/magic/spells';
-import { BOOTS, HELMETS, LEGS } from '../render/models/humanoid';
-import { ARMOR_LOOK, LOOKS, SHIELDS } from '../render/models/weapons';
+import { drawGear } from './gearIcons';
 
 /**
  * Hand-drawn item and spell icons, painted once on a canvas and cached as
  * image URLs. Drawn in a 32×32 coordinate space at 2× resolution with a dark
- * outline, so they stay readable at any slot size.
+ * outline, so they stay readable at any slot size. Equipment (weapons, armour,
+ * jewellery, backpacks) is painted in detail by gearIcons.ts.
  */
 const SIZE = 64;
 const cache = new Map<string, string>();
@@ -14,7 +14,6 @@ const OUT = '#120e0a';
 
 type Ctx = CanvasRenderingContext2D;
 
-const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
 function shade(color: string, k: number): string {
   const n = parseInt(color.slice(1), 16);
@@ -93,218 +92,6 @@ function glyph(x: Ctx, text: string, cx: number, cy: number, size: number, fill:
   x.strokeText(text, cx, cy + 0.5);
   x.fillStyle = fill;
   x.fillText(text, cx, cy + 0.5);
-}
-
-// ------------------------------------------------------------------ weapons
-
-function drawWeapon(x: Ctx, d: ItemDef): void {
-  const l = LOOKS[d.id] ?? { c: 0xc9d0da };
-  const main = hex(l.c);
-  const trim = hex(l.t ?? 0x6b7380);
-  if (l.g) glow(x, 18, 14, 14, shade(hex(l.g), 1.6).replace('rgb', 'rgba').replace(')', ',0.55)'));
-  switch (d.weaponType) {
-    case 'sword': {
-      const s = l.s ?? 1;
-      const tip = 4 + (1 - s) * 8;
-      poly(x, [tip, tip, tip + 4, tip - 1, 21, 17, 17, 21, tip - 1, tip + 4], main);
-      bar(x, tip + 2, tip + 2, 18, 18, 0.8, shade(main, 1.3));
-      bar(x, 15, 23, 23, 15, 2.6, trim);
-      bar(x, 21, 21, 26, 26, 2.6, '#5a3a22');
-      circle(x, 27, 27, 2, trim);
-      break;
-    }
-    case 'axe': {
-      bar(x, 7, 27, 24, 6, 2.6, '#7a5530');
-      const twin = d.id === 'double_axe' || d.id === 'demon_reaver';
-      poly(x, [18, 6, 22, 2, 29, 8, 29, 16, 24, 14, 20, 10], main);
-      if (twin) poly(x, [18, 6, 14, 3, 10, 6, 12, 13, 16, 12], main);
-      bar(x, 21, 9, 26, 13, 0.8, shade(main, 1.35));
-      circle(x, 21, 9, 1.6, trim);
-      break;
-    }
-    case 'club': {
-      bar(x, 6, 27, 20, 12, 2.8, '#7a5530');
-      if (d.id === 'war_hammer' || d.id === 'thunder_maul' || d.id === 'stone_maul') {
-        poly(x, [14, 6, 22, 1, 30, 9, 22, 14], main);
-        bar(x, 17, 6, 23, 3, 0.8, shade(main, 1.35));
-        if (d.id === 'thunder_maul') glyph(x, 'ϟ', 22, 8, 9, '#fff27a');
-      } else {
-        const n = d.id === 'morning_star' ? 8 : 6;
-        for (let i = 0; i < n; i++) {
-          const a = (i / n) * Math.PI * 2;
-          poly(x, [22 + Math.cos(a) * 5, 10 + Math.sin(a) * 5, 22 + Math.cos(a + 0.25) * 9, 10 + Math.sin(a + 0.25) * 9, 22 + Math.cos(a + 0.5) * 5, 10 + Math.sin(a + 0.5) * 5], trim, 1);
-        }
-        circle(x, 22, 10, 6, main);
-        circle(x, 20, 8, 1.8, shade(main, 1.4), 0);
-      }
-      break;
-    }
-    case 'bow': {
-      x.beginPath();
-      x.arc(4, 28, 25, -Math.PI / 2 + 0.05, -0.05);
-      x.strokeStyle = OUT;
-      x.lineWidth = 4.4;
-      x.stroke();
-      x.strokeStyle = main;
-      x.lineWidth = 2.2;
-      x.stroke();
-      bar(x, 4.5, 3.5, 28.5, 27.5, 0.5, hex(l.t ?? 0xe8e0c6));
-      bar(x, 9, 23, 22, 10, 1, '#c9b28a');
-      poly(x, [22, 10, 25, 6, 26, 11], '#d8dde6', 1);
-      break;
-    }
-    case 'crossbow':
-      bar(x, 6, 26, 24, 8, 3.6, main);
-      x.beginPath();
-      x.arc(23, 9, 11, Math.PI * 0.25, Math.PI * 1.25);
-      x.strokeStyle = OUT;
-      x.lineWidth = 4.4;
-      x.stroke();
-      x.strokeStyle = trim;
-      x.lineWidth = 2.2;
-      x.stroke();
-      bar(x, 15, 1, 31, 17, 0.5, '#e8e0c6');
-      break;
-    case 'throwing':
-      if (d.id.endsWith('_star')) {
-        poly(x, [16, 2, 19, 13, 30, 16, 19, 19, 16, 30, 13, 19, 2, 16, 13, 13], main);
-        circle(x, 16, 16, 2.4, trim);
-      } else {
-        bar(x, 4, 28, 23, 9, 2.2, trim);
-        poly(x, [21, 11, 21, 6, 29, 3, 26, 11], main);
-        if (d.id === 'royal_spear') poly(x, [17, 13, 15, 11, 19, 15], '#e0b03c', 1);
-      }
-      break;
-    case 'wand':
-      bar(x, 7, 26, 21, 12, 2.4, trim);
-      glow(x, 23, 9, 9, shade(main, 1.2).replace('rgb', 'rgba').replace(')', ',0.7)'));
-      circle(x, 23, 9, 4.2, main);
-      circle(x, 22, 8, 1.4, '#ffffff', 0);
-      break;
-    case 'rod':
-      bar(x, 4, 29, 21, 12, 2.4, trim);
-      bar(x, 21, 12, 27, 8, 1.6, trim);
-      glow(x, 23, 8, 10, shade(main, 1.2).replace('rgb', 'rgba').replace(')', ',0.7)'));
-      circle(x, 23, 8, 5, main);
-      circle(x, 21.5, 6.5, 1.6, '#ffffff', 0);
-      break;
-    default:
-      break;
-  }
-}
-
-// ------------------------------------------------------------------ armour
-
-function drawShield(x: Ctx, d: ItemDef): void {
-  const s = SHIELDS[d.id];
-  const face = hex(s?.face ?? 0x8a5a2c);
-  const rim = hex(s?.rim ?? 0x6b7380);
-  const boss = hex(s?.boss ?? 0xc9d0da);
-  switch (s?.shape) {
-    case 'round':
-      circle(x, 16, 16, 13, rim);
-      circle(x, 16, 16, 10.5, face, 1);
-      for (const a of [0, Math.PI / 2]) bar(x, 16 + Math.cos(a) * 10, 16 + Math.sin(a) * 10, 16 - Math.cos(a) * 10, 16 - Math.sin(a) * 10, 1, shade(face, 0.7));
-      circle(x, 16, 16, 3.5, boss);
-      break;
-    case 'tower':
-      poly(x, [5, 3, 27, 3, 27, 24, 16, 30, 5, 24], rim);
-      poly(x, [8, 6, 24, 6, 24, 22, 16, 27, 8, 22], face, 1);
-      circle(x, 16, 15, 3, boss);
-      break;
-    case 'book':
-      rect(x, 6, 4, 21, 25, face);
-      rect(x, 9, 6, 16, 21, '#efe6cf', 1);
-      bar(x, 7, 4, 7, 29, 2, rim);
-      glyph(x, '✦', 17, 16, 10, rim);
-      break;
-    default:
-      poly(x, [4, 4, 28, 4, 27, 17, 16, 30, 5, 17], rim);
-      poly(x, [7, 7, 25, 7, 24, 16, 16, 26, 8, 16], face, 1);
-      bar(x, 16, 8, 16, 24, 2, boss);
-      bar(x, 9, 13, 23, 13, 2, boss);
-  }
-}
-
-function drawHelmet(x: Ctx, d: ItemDef): void {
-  const h = HELMETS[d.id];
-  const c = hex(h?.color ?? 0x8a5a32);
-  const t = hex(h?.trim ?? 0x3a3028);
-  switch (h?.shape) {
-    case 'circlet':
-      x.beginPath();
-      x.ellipse(16, 18, 12, 6, 0, 0, Math.PI * 2);
-      x.strokeStyle = OUT;
-      x.lineWidth = 5;
-      x.stroke();
-      x.strokeStyle = c;
-      x.lineWidth = 2.6;
-      x.stroke();
-      poly(x, [16, 6, 20, 12, 16, 15, 12, 12], t);
-      return;
-    case 'horned':
-      poly(x, [7, 16, 2, 4, 6, 6, 10, 13], '#e8dcc0');
-      poly(x, [25, 16, 30, 4, 26, 6, 22, 13], '#e8dcc0');
-      break;
-    case 'crested':
-      poly(x, [9, 8, 16, 1, 23, 8, 16, 6], t);
-      break;
-    case 'winged':
-      poly(x, [6, 14, 1, 5, 4, 4, 9, 11], t);
-      poly(x, [26, 14, 31, 5, 28, 4, 23, 11], t);
-      break;
-    default:
-      break;
-  }
-  x.beginPath();
-  x.moveTo(5, 24);
-  x.bezierCurveTo(5, 6, 27, 6, 27, 24);
-  x.closePath();
-  paint(x, c);
-  bar(x, 9, 12, 13, 9, 1, shade(c, 1.4));
-  if (h?.shape === 'cap') rect(x, 4, 21, 24, 4, t);
-  else if (h?.shape === 'coif') rect(x, 5, 22, 22, 6, c);
-  else {
-    rect(x, 4, 21, 24, 5, t);
-    rect(x, 9, 15, 14, 3, '#1a1612', 1);
-  }
-}
-
-function drawArmor(x: Ctx, d: ItemDef): void {
-  const look = ARMOR_LOOK[d.id];
-  const c = hex(look?.color ?? 0x8a5a32);
-  const robe = d.id.includes('robe');
-  if (robe) {
-    poly(x, [10, 3, 22, 3, 27, 8, 24, 12, 23, 29, 9, 29, 8, 12, 5, 8], c);
-    bar(x, 16, 5, 16, 28, 2, '#e0c060');
-    return;
-  }
-  poly(x, [9, 3, 23, 3, 30, 8, 27, 15, 24, 13, 24, 28, 8, 28, 8, 13, 5, 15, 2, 8], c);
-  poly(x, [12, 3, 20, 3, 16, 8], shade(c, 0.6), 1);
-  if (look?.plate) {
-    bar(x, 11, 13, 21, 13, 1, shade(c, 0.7));
-    bar(x, 11, 19, 21, 19, 1, shade(c, 0.7));
-    bar(x, 12, 9, 14, 7, 1, shade(c, 1.45));
-  } else {
-    for (let yy = 12; yy < 27; yy += 4) bar(x, 10, yy, 22, yy, 0.6, shade(c, 0.75));
-  }
-}
-
-function drawLegs(x: Ctx, d: ItemDef): void {
-  const c = hex(LEGS[d.id] ?? 0x8a5a32);
-  poly(x, [7, 3, 25, 3, 26, 29, 18, 29, 16, 12, 14, 29, 6, 29], c);
-  rect(x, 7, 3, 18, 4, shade(c, 0.65), 1);
-  bar(x, 9, 18, 13, 18, 1.2, shade(c, 1.35));
-  bar(x, 19, 18, 23, 18, 1.2, shade(c, 1.35));
-}
-
-function drawBoots(x: Ctx, d: ItemDef): void {
-  const c = hex(BOOTS[d.id] ?? 0x6a4426);
-  const boot = (ox: number) => poly(x, [ox, 4, ox + 7, 4, ox + 7, 20, ox + 12, 23, ox + 12, 28, ox - 1, 28, ox, 20], c);
-  boot(4);
-  boot(16);
-  if (d.id === 'windstride_boots') glyph(x, '≈', 16, 12, 10, '#ffffff');
-  if (d.id === 'emberwalk_boots') glyph(x, '♨', 16, 12, 9, '#ffd84a');
 }
 
 // ------------------------------------------------------------------ other items
@@ -447,22 +234,6 @@ function drawRune(x: Ctx, d: ItemDef): void {
     x.fillStyle = '#ffffff';
     x.fillText(label, 16, 26.3);
   }
-}
-
-function drawBackpack(x: Ctx, d: ItemDef): void {
-  const c = d.id === 'dragonhide_pack' ? '#a8281f' : d.id === 'explorer_pack' ? '#4a6a3a' : d.id === 'bag' ? '#a8743f'
-    : d.id.startsWith('fur_') ? '#d8ccb4' : '#8a5a32';
-  if (d.id !== 'bag' && d.id !== 'fur_bag') bar(x, 10, 10, 10, 4, 1.6, '#5a3a22');
-  x.beginPath();
-  x.moveTo(6, 12);
-  x.quadraticCurveTo(16, 4, 26, 12);
-  x.lineTo(27, 27);
-  x.quadraticCurveTo(16, 31, 5, 27);
-  x.closePath();
-  paint(x, c);
-  poly(x, [7, 12, 25, 12, 24, 19, 8, 19], shade(c, 0.75), 1);
-  circle(x, 16, 19, 1.6, '#e0b03c', 1);
-  if (d.id.startsWith('fur_')) for (let i = 0; i < 4; i++) bar(x, 9 + i * 5, 21, 8 + i * 5, 26, 0.6, '#a89878');
 }
 
 function drawGold(x: Ctx): void {
@@ -887,41 +658,6 @@ function drawMaterial(x: Ctx, d: ItemDef): void {
   }
 }
 
-function drawJewel(x: Ctx, d: ItemDef): void {
-  const gem = d.bonus?.resist?.fire ? '#e8243a' : d.bonus?.resist?.ice || d.bonus?.manaRegen ? '#3a8ae8' : d.bonus?.resist?.earth ? '#24c060'
-    : d.bonus?.light ? '#ffd84a' : d.bonus?.speed ? '#9fe8ff' : d.bonus?.attack ? '#c0281f' : d.bonus?.hpRegen ? '#ff6a8a' : d.tint;
-  if (d.kind === 'ring') {
-    x.beginPath();
-    x.ellipse(16, 20, 9, 7, 0, 0, Math.PI * 2);
-    x.strokeStyle = OUT;
-    x.lineWidth = 5.4;
-    x.stroke();
-    x.strokeStyle = '#e8b923';
-    x.lineWidth = 3;
-    x.stroke();
-    glow(x, 16, 11, 9, `${gem}aa`);
-    poly(x, [16, 6, 21, 11, 16, 16, 11, 11], gem);
-    return;
-  }
-  x.beginPath();
-  x.moveTo(5, 3);
-  x.quadraticCurveTo(16, 22, 27, 3);
-  x.strokeStyle = OUT;
-  x.lineWidth = 3.6;
-  x.stroke();
-  x.strokeStyle = '#d8c070';
-  x.lineWidth = 1.6;
-  x.stroke();
-  glow(x, 16, 21, 11, `${gem}aa`);
-  if (d.id === 'demonbone_amulet') {
-    circle(x, 16, 21, 7, '#efe6cc');
-    glyph(x, '☠', 16, 21, 9, '#5a1010');
-  } else {
-    circle(x, 16, 21, 6.5, '#e8b923');
-    circle(x, 16, 21, 4, gem, 1);
-  }
-}
-
 function drawAmmo(x: Ctx, d: ItemDef): void {
   const head = d.element === 'fire' ? '#ff7a1a' : d.element === 'earth' ? '#6ad040' : d.element === 'ice' ? '#9fe6ff'
     : d.id === 'onyx_arrow' ? '#3a3a4a' : d.id === 'hawkeye_arrow' ? '#6ad0a0' : d.id === 'piercing_bolt' ? '#a8b0c0'
@@ -935,7 +671,7 @@ function drawAmmo(x: Ctx, d: ItemDef): void {
 }
 
 function draw(x: Ctx, d: ItemDef): void {
-  if (d.weaponType) return drawWeapon(x, d);
+  if (drawGear(x, d)) return;
   switch (d.kind) {
     case 'gold': return drawGold(x);
     case 'consumable':
@@ -943,14 +679,6 @@ function draw(x: Ctx, d: ItemDef): void {
       return d.heal && !d.mana && !d.id.includes('potion') ? drawFood(x, d) : drawPotion(x, d);
     case 'rune': return drawRune(x, d);
     case 'tool': return drawTool(x, d);
-    case 'shield': return drawShield(x, d);
-    case 'helmet': return drawHelmet(x, d);
-    case 'armor': return drawArmor(x, d);
-    case 'legs': return drawLegs(x, d);
-    case 'boots': return drawBoots(x, d);
-    case 'amulet':
-    case 'ring': return drawJewel(x, d);
-    case 'backpack': return drawBackpack(x, d);
     case 'ammo': return drawAmmo(x, d);
     case 'material': return d.id === 'blank_rune' ? drawRune(x, d) : drawMaterial(x, d);
     default: glyph(x, d.icon, 16, 16, 18, d.tint);

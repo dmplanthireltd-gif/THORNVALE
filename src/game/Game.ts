@@ -9,7 +9,8 @@ import { onEnemyDamaged, updateEnemyAI, type AIContext } from './enemies/EnemyAI
 import type { Ability } from './enemies/enemyDefs';
 import type { Creature } from './entities/Creature';
 import { addToList, DEPOT_SLOTS, Inventory } from './inventory/Inventory';
-import { describeItem, EQUIP_SLOTS, equipSlotFor, isItem, itemDef, POTION_BUFF_POWER, POTION_BUFF_SECONDS, runeGroup, type Element, type EquipSlot, type FieldKind, type ItemDef, type ItemStack } from './inventory/items';
+import { activeSets, type ActiveSet } from './inventory/sets';
+import { describeItem, EQUIP_SLOTS, equipSlotFor, isItem, itemDef, POTION_BUFF_POWER, POTION_BUFF_SECONDS, runeGroup, type Bonus, type Element, type EquipSlot, type FieldKind, type ItemDef, type ItemStack } from './inventory/items';
 import { ENEMIES } from './enemies/enemyDefs';
 import { beamTiles, exivaText, facingDir, GROUP_COOLDOWN, isSpellId, parseSpellWords, SPELLS, startingSpells, waveTiles, type SpellDef, type SpellId } from './magic/spells';
 import { CHOP_INTERVAL, chopChance, gatherLevelForXp, treeAt } from './gathering/woodcutting';
@@ -384,9 +385,7 @@ export class Game implements AIContext {
     const p = s.player;
     const voc = VOCATIONS[p.vocation];
     let hp = 0, mana = 0, speed = 0, hpRegen = 0, manaRegen = 0;
-    for (const def of this.equippedDefs(s)) {
-      const b = def.bonus;
-      if (!b) continue;
+    for (const b of this.gearBonuses(s)) {
       hp += b.hp ?? 0;
       mana += b.mana ?? 0;
       speed += b.speed ?? 0;
@@ -414,6 +413,20 @@ export class Game implements AIContext {
       // ammunition only counts while a matching launcher is held
       if (e && k !== 'ammo') out.push(itemDef(e.id));
     }
+    return out;
+  }
+
+  /** Gear sets with 2+ pieces worn (their bonuses apply at 2 and at 4 pieces). */
+  activeSets(s: Session): ActiveSet[] {
+    return activeSets(this.equippedDefs(s).map((d) => d.id));
+  }
+
+  /** Every bonus the worn gear gives: each item's own, then the active set bonuses. */
+  gearBonuses(s: Session): Bonus[] {
+    const defs = this.equippedDefs(s);
+    const out: Bonus[] = [];
+    for (const d of defs) if (d.bonus) out.push(d.bonus);
+    for (const a of activeSets(defs.map((d) => d.id))) out.push(...a.bonuses);
     return out;
   }
 
@@ -477,13 +490,13 @@ export class Game implements AIContext {
 
   resist(s: Session, el: Element): number {
     let r = 0;
-    for (const d of this.equippedDefs(s)) r += d.bonus?.resist?.[el] ?? 0;
+    for (const b of this.gearBonuses(s)) r += b.resist?.[el] ?? 0;
     return Math.min(80, r);
   }
 
   magicBonus(s: Session): number {
     const potion = s.player.buffs.mastermind > 0 ? POTION_BUFF_POWER.mastermind : 0;
-    return this.equippedDefs(s).reduce((n, d) => n + (d.bonus?.magic ?? 0), 0) + potion;
+    return this.gearBonuses(s).reduce((n, b) => n + (b.magic ?? 0), 0) + potion;
   }
 
   /** Extra attack from a fighting-style potion (Potion of Fury / of the Hawk). */
@@ -494,7 +507,7 @@ export class Game implements AIContext {
   }
 
   attackBonus(s: Session): number {
-    return this.equippedDefs(s).reduce((n, d) => n + (d.bonus?.attack ?? 0), 0);
+    return this.gearBonuses(s).reduce((n, b) => n + (b.attack ?? 0), 0);
   }
 
   /** Attack value for display: weapon attack (+ ammo for launchers). */
