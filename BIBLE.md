@@ -96,7 +96,7 @@ scripts/              ← smoke-test, net-test, storage-test, auth-test, content
 - Never print env vars in logs. Never echo a key back to the user.
 - Publishable key and URL are public by design.
 
-**Render environment variables:** `NODE_VERSION=20`, `MAX_PLAYERS=50`, `ALLOW_ADMIN=0`, `ADMINS=""` (comma-separated character names allowed to use `/` commands online), `PVP=1` (player-versus-player on; `0` turns it off — offline single-player never has PvP), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_KEY` (secret), optional `MAX_CHARACTERS` (default 5).
+**Render environment variables:** `START_LEVEL` (test servers: every character is raised to at least this level at login; currently "20" for testing — set to "1" before the grand opening), `NODE_VERSION=20`, `MAX_PLAYERS=50`, `ALLOW_ADMIN=0`, `ADMINS=""` (comma-separated character names allowed to use `/` commands online), `PVP=1` (player-versus-player on; `0` turns it off — offline single-player never has PvP), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_KEY` (secret), optional `MAX_CHARACTERS` (default 5).
 
 **Startup log lines to check after a deploy:**
 - `Login: email (Supabase Auth)` — email accounts active (else "name + password").
@@ -286,6 +286,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Integrate, test all, push, refresh artifact.
 - [ ] Owner decision: upgrade the thornvale service from Free to a paid instance (Starter is enough for ~50 players) so the server never sleeps; then set `plan:` in render.yaml.
 - [ ] **Graphics overhaul (owner decision 2026-10-21):** replace the whole look with a darker, "brutal" dark-fantasy style. Gameplay, controls, camera, tiles, systems and saves stay exactly the same — visuals only (`src/render/**`, `ui/icons.ts`, textures, models, effects, HUD skin). Start after the new map is live, with a side-by-side test area for the owner to approve. Style direction still to be chosen.
+- [ ] Before the grand opening: set `START_LEVEL` back to "1" (render.yaml and Render dashboard).
 - [ ] Later: custom SMTP for recovery mails; more map/game polish.
 - [x] Website at thornvaleonline.com from `site/`, game at `/play/` (2026-10-21).
 - [x] Website pages: guide, highscores, FAQ, rules, privacy (2026-10-21).
@@ -323,3 +324,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Classic skills (fist/club/sword/axe/distance/shielding/magic level, trained by use, Skills panel, `/skill`), woodcutting (trees → logs, stumps regrow, levels 1–99), player market (market board in every depot, escrow, 1% fee, deliveries to offline sellers; new tables `market_offers`, `market_deliveries`). Old characters get skills that keep their damage | 5 | 10 |
 | 2026-10-21 | — | Follow (right-click any creature), Inspect window (level, vocation, health, skull, party, worn equipment), friends list with requests/accept/online status (saved: save v6 `friends`), bigger name tags (14 px) | 6 | 11 |
 | 2026-10-21 | — | Website graphics: hero trailer video, world-card/news pictures, share image and social tags on every page | 6 | 11 |
+| 2026-10-21 | — | Test server: `START_LEVEL` env (render.yaml "20") raises characters to that level at login; `setLevel` shared by `/level` | 6 | 11 |

@@ -23,6 +23,7 @@ import {
   buildSnapshot, eventAudience, executeCommand, PROTOCOL_VERSION, type ClientMessage, type ServerMessage,
 } from '../src/game/net/protocol';
 import { isOutfit } from '../src/game/player/outfits';
+import { setLevel } from '../src/game/admin';
 import { isVocation } from '../src/game/player/vocations';
 import { openStorage, type Storage } from './storage';
 import { WsConnection } from './ws';
@@ -36,6 +37,8 @@ const TICK = 1 / 20;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS ?? 50);
 /** Test commands (/level, /item, …): ALLOW_ADMIN=1 for everyone, or ADMINS="Name One,Name Two". */
 const ALLOW_ADMIN = process.env.ALLOW_ADMIN === '1';
+/** Test servers: every character is raised to at least this level when it logs in (1 = off). */
+const START_LEVEL = Math.max(1, Math.min(1000, Math.floor(Number(process.env.START_LEVEL ?? 1)) || 1));
 /** Email login with password recovery (Supabase Auth). Without it, players log in with name + password. */
 const SUPABASE_URL = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
 const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? '';
@@ -327,6 +330,11 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
     if (isOutfit(m.outfit)) game.setOutfit(s.id, m.outfit);
     void saveCharacter(s);
   }
+  if (s.player.level < START_LEVEL) {
+    setLevel(game, s, START_LEVEL);
+    game.msg(s.id, `Test server: your character has been raised to level ${START_LEVEL}.`, 'info');
+    void saveCharacter(s);
+  }
   send(c, { t: 'welcome', id: s.id, v: PROTOCOL_VERSION, players: game.sessions.size });
   game.msg(s.id, saved ? `Welcome back to Thornvale, ${name}.` : `Welcome to Thornvale, ${name}. Captain Aldric waits on the plaza.`, 'info');
   for (const other of game.sessions.values()) {
@@ -581,6 +589,7 @@ console.log(`Login: ${EMAIL_AUTH ? 'email (Supabase Auth)' : 'character name + p
 console.log(market ? `Market: open (${market.offers.length} offers, ${market.deliveries.length} deliveries waiting)` : 'Market: closed (no market tables in storage yet)');
 console.log(`Saves: ${storage.kind === 'supabase' ? 'Supabase database' : `files in ${dirname(DATA_FILE)}`} (save format v${SAVE_VERSION})`);
 console.log(`PvP: ${PVP ? 'on' : 'off'}`);
+if (START_LEVEL > 1) console.log(`Test server: characters start at level ${START_LEVEL}`);
 if (storage.kind !== 'supabase' && process.env.RENDER) {
   console.warn('WARNING: running on Render without SUPABASE_URL / SUPABASE_SERVICE_KEY — characters are lost on every restart.');
 }

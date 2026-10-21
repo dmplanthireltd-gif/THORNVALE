@@ -44,6 +44,21 @@ export function findItem(query: string): ItemDef | null | ItemDef[] {
   return partial.length ? partial.slice(0, 8) : null;
 }
 
+/** Sets a character's level (with matching experience and at least the usual skills for it). */
+export function setLevel(game: Game, s: Session, lvl: number): void {
+  const p = s.player;
+  p.level = lvl;
+  p.exp = expForLevel(lvl);
+  // characters get at least the skills a character of that level would have
+  const typical = legacySkills(p.vocation, lvl);
+  for (const k of COMBAT_SKILLS) if (s.skills[k].level < typical[k].level) s.skills[k] = { level: typical[k].level, tries: 0 };
+  game.refreshStats(s);
+  p.hp = p.maxHp;
+  p.mana = p.maxMana;
+  game.events.emit({ type: 'levelUp', id: p.id, level: lvl });
+  s.wantsSave = true;
+}
+
 export function runAdminCommand(game: Game, s: Session, text: string): void {
   const pid = s.id;
   const p = s.player;
@@ -68,16 +83,7 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
     case 'level':
     case 'lvl': {
       const lvl = Math.max(1, Math.min(1000, num(rest[0], p.level)));
-      p.level = lvl;
-      p.exp = expForLevel(lvl);
-      // test characters get at least the skills a character of that level would have
-      const typical = legacySkills(p.vocation, lvl);
-      for (const k of COMBAT_SKILLS) if (s.skills[k].level < typical[k].level) s.skills[k] = { level: typical[k].level, tries: 0 };
-      game.refreshStats(s);
-      p.hp = p.maxHp;
-      p.mana = p.maxMana;
-      game.events.emit({ type: 'levelUp', id: pid, level: lvl });
-      s.wantsSave = true;
+      setLevel(game, s, lvl);
       say(`You are now level ${lvl}.`);
       return;
     }

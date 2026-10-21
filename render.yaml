@@ -27,6 +27,9 @@ services:
       # player-versus-player combat: "1" on (skulls, secure mode, PZ lock), "0" off
       - key: PVP
         value: "1"
+      # testing: every character is raised to at least this level at login ("1" = off)
+      - key: START_LEVEL
+        value: "20"
       # Supabase keeps accounts and characters safe across restarts and updates.
       # Render asks for these two values when you create or sync the Blueprint
       # (Supabase dashboard → Project Settings → API / API Keys). Run supabase/schema.sql first.
