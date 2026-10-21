@@ -24,7 +24,10 @@ import { makeBottomResizable, makePanelsMovable, resetPanelLayout } from './pane
 import type { Renderer } from '../render/Renderer';
 import { button, el, fmtGold, paintSlot } from './dom';
 import { itemIcon, spellIcon } from './icons';
-import type { Sfx } from '../audio/Sfx';
+import { SFX_CATS, type Sfx } from '../audio/Sfx';
+
+/** HUD layout presets: "Two flanks" (design 2c) or "Full view" (design 3c). */
+type HudLayout = 'flanks' | 'full';
 import type { Music } from '../audio/Music';
 import { Minimap } from './Minimap';
 import { WorldMapView } from './WorldMapView';
@@ -135,6 +138,14 @@ export class HUD {
   private pixelBtn!: HTMLButtonElement;
   private pvpBtn!: HTMLButtonElement;
   private lvlBadge!: HTMLDivElement;
+  /** Current layout preset (remembered in this browser). */
+  private layout: HudLayout = (() => {
+    try { return localStorage.getItem('thornvale.hudLayout') === 'full' ? 'full' : 'flanks'; } catch { return 'flanks'; }
+  })();
+  /** Full-view docks (top-left, top-right, bottom-left, bottom-centre, bottom-right). */
+  private docks: Record<'tl' | 'tr' | 'bl' | 'bc' | 'br', HTMLDivElement> | null = null;
+  /** Where each panel came from, so switching back to "Two flanks" puts everything exactly back. */
+  private moved: Array<[HTMLElement, HTMLElement, Node | null]> = [];
   private topLoc!: HTMLSpanElement;
   private disconnectEl!: HTMLDivElement;
 
@@ -153,6 +164,7 @@ export class HUD {
     this.buildHotbar();
     this.buildConsole();
     makeBottomResizable(this.root, this.bottom, this.bottom.querySelector('.hotbar') as HTMLElement);
+    if (this.layout === 'full') this.setLayout('full');
     this.buildWindows();
     this.worldMap = new WorldMapView(this.root, this.ctl, this.minimap);
     this.regionEl = el('div', 'region-banner', this.root);
@@ -341,30 +353,109 @@ export class HUD {
   }
 
   /** Settings window: display, sound and test tools that used to crowd the side bar. */
+  /**
+   * Switches between the layout presets. "Full view" moves the existing panels (same elements,
+   * same behaviour) into five floating docks over a full-screen game view; "Two flanks" puts every
+   * panel back exactly where it was.
+   */
+  setLayout(mode: HudLayout): void {
+    if (!this.docks) {
+      const d = (k: string) => el('div', `dock dock-${k}`, this.root);
+      this.docks = { tl: d('tl'), tr: d('tr'), bl: d('bl'), bc: d('bc'), br: d('br') };
+    }
+    const docks = this.docks;
+    // always start from "Two flanks" so the moves can be undone in reverse order
+    for (let i = this.moved.length - 1; i >= 0; i--) {
+      const [node, parent, next] = this.moved[i];
+      parent.insertBefore(node, next && next.parentNode === parent ? next : null);
+    }
+    this.moved = [];
+    if (mode === 'full') {
+      const move = (sel: string, dock: HTMLElement) => {
+        const node = this.root.querySelector(sel) as HTMLElement | null;
+        if (!node || !node.parentElement) return;
+        this.moved.push([node, node.parentElement, node.nextSibling]);
+        dock.appendChild(node);
+      };
+      move('.panel.status', docks.tl);
+      move('.panel.skills', docks.tl);
+      move('.panel.minimap-panel', docks.tr);
+      move('.panel.battle', docks.tr);
+      move('.panel.party', docks.tr);
+      move('.panel.console', docks.bl);
+      move('.panel.toolbar', docks.bc);
+      move('.hotbar', docks.bc);
+      move('.panel.fight-modes', docks.bc);
+      move('.panel.equipment', docks.br);
+      move('.panel.inventory', docks.br);
+      move('.hover-line', docks.br);
+    }
+    this.layout = mode;
+    document.documentElement.classList.toggle('layout-full', mode === 'full');
+    try { localStorage.setItem('thornvale.hudLayout', mode); } catch { /* storage off */ }
+    // the game view changed size
+    window.dispatchEvent(new Event('resize'));
+  }
+
   private buildSettings(): void {
     const b = this.makeWin('settings', 'Settings', 'settings-win').body;
     const sec = (title: string) => {
       el('div', 'panel-title', b, title);
       return el('div', 'set-row', b);
     };
+    // layout presets: "Two flanks" (side columns) or "Full view" (game fills the screen, floating docks)
+    const lay = sec('Layout');
+    const lb: Array<[HTMLButtonElement, HudLayout]> = [];
+    const layBtn = (label: string, mode: HudLayout, tip: string) => {
+      const x = button(lay, label, () => {
+        this.setLayout(mode);
+        for (const [bb, m] of lb) bb.classList.toggle('on', m === this.layout);
+      }, 'btn');
+      x.title = tip;
+      lb.push([x, mode]);
+    };
+    layBtn('Two flanks', 'flanks', 'Character and combat on the left, map and inventory on the right, the game view in the middle');
+    layBtn('Full view', 'full', 'The game view fills the screen; panels float in its corners');
+    for (const [bb, m] of lb) bb.classList.toggle('on', m === this.layout);
+
     const disp = sec('Display');
     this.pixelBtn = button(disp, 'Pixels: on', () => this.togglePixels(), 'btn');
     this.pixelBtn.title = 'Pixel-art look on or off';
-    const slider = (parent: HTMLElement, value: number, title: string, set: (v: number) => void) => {
+    const slider = (parent: HTMLElement, value: number, title: string, set: (v: number) => void, max = 100) => {
       const s = el('input', 'vol-slider', parent);
       s.type = 'range';
       s.min = '0';
-      s.max = '100';
+      s.max = String(max);
       s.value = String(Math.round(value * 100));
       s.title = title;
+      s.setAttribute('aria-label', title);
       s.addEventListener('input', () => set(Number(s.value) / 100));
       s.addEventListener('keydown', (e) => e.stopPropagation());
+      return s;
     };
     const snd = sec('Sound effects');
     const sb = button(snd, this.sfx.muted ? 'Sound: off' : 'Sound: on', () => {
       sb.textContent = this.sfx.toggleMute() ? 'Sound: off' : 'Sound: on';
     }, 'btn');
     slider(snd, this.sfx.volume, 'Volume', (v) => this.sfx.setVolume(v));
+
+    // each kind of sound on its own slider (0–150 %), on top of the main volume
+    el('div', 'panel-title', b, 'Sound mix');
+    const mix = el('div', 'mix-grid', b);
+    for (const c of SFX_CATS) {
+      const name = el('span', 'mix-name', mix, c.name);
+      name.title = c.hint;
+      const val = el('span', 'mix-val', mix);
+      const show = (v: number) => { val.textContent = `${Math.round(v * 100)}%`; };
+      const s = slider(mix, this.sfx.mix[c.id], c.name, (v) => { this.sfx.setMix(c.id, v); show(v); }, 150);
+      s.title = c.hint;
+      show(this.sfx.mix[c.id]);
+    }
+    button(b, 'Reset sound mix', () => {
+      for (const c of SFX_CATS) this.sfx.setMix(c.id, 1);
+      mix.querySelectorAll<HTMLInputElement>('input').forEach((i) => { i.value = '100'; });
+      mix.querySelectorAll<HTMLSpanElement>('.mix-val').forEach((v) => { v.textContent = '100%'; });
+    }, 'btn small mix-reset');
     if (this.music) {
       const mu = this.music;
       const mus = sec('Music');

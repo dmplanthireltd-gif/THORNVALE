@@ -139,6 +139,7 @@ All of these exist in code (`src/style.css`, `site/styles.css`); reuse, don't re
 
 ## 6. Layout
 
+- **Game layout presets (Settings → Layout):** "Two Flanks" is the default (below). "Full View" (design 3c, owner-approved 2026-10-21) is the alternative: the game view fills the screen under the title strip and the same panels float in five framed docks (status top-left, map + battle top-right, chat bottom-left, menu + action bar + combat bottom-centre, equipment + inventory bottom-right), each a normal panel with the drop shadow `0 4px 14px rgba(0,0,0,.55)`.
 - **Game:** "Two Flanks". The title strip sits on top. The **left flank** holds character, Combat, Skills, Battle and Party. The **game view** is centred with gold corner brackets and a soft vignette, with the target bar hanging from its top. Hotbar and chat sit under the view. The **right flank** holds Map, menu, Equipment, Pockets and Backpack. Controls and layout don't change without the owner (BIBLE §10).
 - **Login / start screen (chosen 2026-10-21: "A · The Gatehouse")** has these parts:
   - **Background:** a darkened gameplay still filling the screen.

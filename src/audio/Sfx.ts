@@ -18,6 +18,31 @@ type Sound = SoundName;
 
 const HEARING = 11;
 
+/** Sound groups with their own volume slider (Settings → Sound mix). */
+export type SfxCat = 'steps' | 'creatures' | 'combat' | 'magic' | 'world' | 'ui' | 'ambience';
+export const SFX_CATS: ReadonlyArray<{ id: SfxCat; name: string; hint: string }> = [
+  { id: 'steps', name: 'Your footsteps', hint: 'Your own steps, stairs and ladders' },
+  { id: 'creatures', name: 'Creatures', hint: 'Monster voices, cries and heavy footsteps' },
+  { id: 'combat', name: 'Weapons and hits', hint: 'Swings, hits, blocks, misses, bows and thrown weapons' },
+  { id: 'magic', name: 'Spells and magic', hint: 'Spells, runes, explosions, healing and buffs' },
+  { id: 'world', name: 'Items and world', hint: 'Loot, coins, doors, chests, gear, eating, gathering and crafting' },
+  { id: 'ui', name: 'Interface and alerts', hint: 'Button clicks, chat, level-ups, quests and warnings' },
+  { id: 'ambience', name: 'Ambience', hint: 'Wind, birds, water and other background sounds' },
+];
+
+/** Which group each library sound belongs to (anything not listed counts as items and world). */
+const SOUND_CAT: Partial<Record<SoundName, SfxCat>> = {
+  hit: 'combat', hitHard: 'combat', miss: 'combat', block: 'combat', blockWood: 'combat',
+  swing: 'combat', swingBlade: 'combat', swingHeavy: 'combat', swingBlunt: 'combat', swingFist: 'combat',
+  bow: 'combat', crossbow: 'combat', throw: 'combat', die: 'combat', monsterDie: 'creatures',
+  swingMagic: 'magic', fire: 'magic', energy: 'magic', ice: 'magic', earth: 'magic', death: 'magic', holy: 'magic',
+  explosion: 'magic', boom: 'magic', roar: 'magic', thunder: 'magic', shatter: 'magic', quake: 'magic', implode: 'magic',
+  heal: 'magic', healBig: 'magic', mana: 'magic', buff: 'magic', shield: 'magic', spellCast: 'magic', teleport: 'magic', respawn: 'magic',
+  levelUp: 'ui', skillUp: 'ui', quest: 'ui', click: 'ui', uiOpen: 'ui', error: 'ui', chat: 'ui', crafted: 'ui',
+};
+
+const MIX_MAX = 1.5;
+
 function storage(): Storage | null {
   try {
     return (globalThis as { localStorage?: Storage }).localStorage ?? null;
@@ -38,14 +63,22 @@ export class Sfx {
   private myZ: number | null = null;
   private lastChat = 0;
   private gear = new Map<string, string | null>();
+  private buses = new Map<SfxCat, GainNode>();
   volume = 0.6;
   muted = false;
+  /** Per-group volume, 0 … 1.5 (1 = normal). Remembered in this browser. */
+  readonly mix: Record<SfxCat, number> = { steps: 1, creatures: 1, combat: 1, magic: 1, world: 1, ui: 1, ambience: 1 };
 
   constructor(private readonly ctl: Controller) {
     try {
       const v = storage()?.getItem('thornvale.volume');
       if (v !== null && v !== undefined) this.volume = Math.max(0, Math.min(1, Number(v)));
       this.muted = storage()?.getItem('thornvale.muted') === '1';
+      const m = JSON.parse(storage()?.getItem('thornvale.sfxMix') ?? '{}') as Partial<Record<SfxCat, number>>;
+      for (const c of SFX_CATS) {
+        const x = m[c.id];
+        if (typeof x === 'number' && isFinite(x)) this.mix[c.id] = Math.max(0, Math.min(MIX_MAX, x));
+      }
     } catch {
       /* defaults */
     }
@@ -101,8 +134,33 @@ export class Sfx {
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    this.ambience = new Ambience(this.ctx, this.master, this.noiseBuf);
+    this.ambience = new Ambience(this.ctx, this.bus('ambience')!, this.noiseBuf);
     return this.ctx;
+  }
+
+  /** The gain stage of a sound group, between its sounds and the master volume. */
+  private bus(cat: SfxCat): GainNode | null {
+    if (!this.ctx || !this.master) return null;
+    let b = this.buses.get(cat);
+    if (!b) {
+      b = this.ctx.createGain();
+      b.gain.value = this.mix[cat];
+      b.connect(this.master);
+      this.buses.set(cat, b);
+    }
+    return b;
+  }
+
+  /** Sets one sound group's volume (0 … 1.5) and remembers it. */
+  setMix(cat: SfxCat, v: number): void {
+    this.mix[cat] = Math.max(0, Math.min(MIX_MAX, v));
+    const b = this.buses.get(cat);
+    if (b) b.gain.value = this.mix[cat];
+    try {
+      storage()?.setItem('thornvale.sfxMix', JSON.stringify(this.mix));
+    } catch {
+      /* ignore */
+    }
   }
 
   setVolume(v: number): void {
@@ -165,15 +223,15 @@ export class Sfx {
   }
 
   /** Plays a sound from the library (sfxlib.ts); `gain` scales it (distance falloff). */
-  play(s: Sound, gain = 1, delay = 0): void {
-    if (this.muted || gain <= 0.02) return;
+  play(s: Sound, gain = 1, delay = 0, cat: SfxCat = SOUND_CAT[s] ?? 'world'): void {
+    if (this.muted || gain <= 0.02 || this.mix[cat] <= 0.001) return;
     const c = this.ensure();
     if (!c || !this.master || c.state !== 'running') return;
     // don't stack the same sound many times in one instant
     const now = c.currentTime;
     if (now - (this.last.get(s) ?? -1) < 0.035) return;
     this.last.set(s, now);
-    this.sound(SOUNDS[s], gain, delay);
+    this.sound(SOUNDS[s], gain, delay, cat);
   }
 
   // ------------------------------------------------------------------ game events → sounds
@@ -230,8 +288,8 @@ export class Sfx {
           const body = this.bodyOfId(e.targetId);
           const c = this.ctl.game.getCreature(e.targetId);
           const big = !!c && e.amount >= c.maxHp * 0.15;
-          if (e.element === 'physical') this.sound((k) => impact(k, body?.material ?? 'flesh', 1, e.amount > 60 || big), v);
-          else { const el = spellElement(e.element); if (el) this.sound((k) => elementHit(k, el, big ? 1 : 0.7), v * 0.8); }
+          if (e.element === 'physical') this.sound((k) => impact(k, body?.material ?? 'flesh', 1, e.amount > 60 || big), v, 0, 'combat');
+          else { const el = spellElement(e.element); if (el) this.sound((k) => elementHit(k, el, big ? 1 : 0.7), v * 0.8, 0, 'magic'); }
           if (body && big && !c?.dead) this.cry(e.targetId, body, 'hurt', v, 1200);
           if (e.targetId === me && big) this.cry(me, { family: 'man', material: 'flesh', size: 'medium' }, 'hurt', 0.7, 1500);
         }
@@ -250,7 +308,7 @@ export class Sfx {
         const v = this.at(e.tiles[0], e.tiles[1], e.z);
         if (s) this.play(s, v);
         const el = spellElement(e.effect), size = e.tiles.length / 2;
-        if (el && size >= 3) this.sound((k) => spellSweep(k, el, size, 1), v * 0.8);
+        if (el && size >= 3) this.sound((k) => spellSweep(k, el, size, 1), v * 0.8, 0, 'magic');
         break;
       }
       case 'area': {
@@ -258,7 +316,7 @@ export class Sfx {
         const s = this.elementSound(e.effect);
         if (s) this.play(s, v);
         const el = spellElement(e.effect);
-        if (el && e.radius >= 1) this.sound((k) => spellSweep(k, el, (e.radius * 2 + 1) ** 2, 1), v * 0.7);
+        if (el && e.radius >= 1) this.sound((k) => spellSweep(k, el, (e.radius * 2 + 1) ** 2, 1), v * 0.7, 0, 'magic');
         if (e.radius >= 4) {
           // the ultimate explosions: as loud and deep as it gets
           const big: Partial<Record<Effect, Sound>> = { fire: 'roar', energy: 'thunder', ice: 'shatter', earth: 'quake', stone: 'quake', death: 'implode' };
@@ -295,8 +353,8 @@ export class Sfx {
           const v = this.atId(e.id);
           const body = this.bodyOfId(e.id);
           if (v && body) {
-            this.sound((k) => voice(k, body, 'die', 1), v);
-            this.sound((k) => bodyFall(k, body, 1), v);
+            this.sound((k) => voice(k, body, 'die', 1), v, 0, 'creatures');
+            this.sound((k) => bodyFall(k, body, 1), v, 0, 'creatures');
           } else if (v) this.play('monsterDie', v);
         }
         break;
@@ -306,7 +364,7 @@ export class Sfx {
         if (p && this.myZ !== null && p.z !== this.myZ) {
           // stairs, ladders and holes: a few quick steps on the new floor
           const gr = this.ctl.game.world.getGround(Math.round(p.x), Math.round(p.y), p.z);
-          for (let i = 0; i < 3; i++) this.later(i * 110, () => this.sound((k) => footstep(k, gr === Ground.Void ? Ground.Stone : gr, 1, i % 2 === 1, false), 0.5));
+          for (let i = 0; i < 3; i++) this.later(i * 110, () => this.sound((k) => footstep(k, gr === Ground.Void ? Ground.Stone : gr, 1, i % 2 === 1, false), 0.5, 0, 'steps'));
         } else this.play('teleport', 0.6);
         break;
       }
@@ -438,13 +496,15 @@ export class Sfx {
   }
 
   /** Plays a foley sound built from the kit, at a volume (distance falloff). */
-  private sound(build: (k: Kit) => void, gain: number, delay = 0): void {
-    if (this.muted || gain <= 0.02) return;
+  private sound(build: (k: Kit) => void, gain: number, delay: number, cat: SfxCat): void {
+    if (this.muted || gain <= 0.02 || this.mix[cat] <= 0.001) return;
     const c = this.ensure();
     if (!c || !this.master || c.state !== 'running') return;
+    const bus = this.bus(cat);
+    if (!bus) return;
     const out = c.createGain();
     out.gain.value = gain;
-    out.connect(this.master);
+    out.connect(bus);
     build(this.kit(out, c.currentTime + 0.005 + delay));
   }
 
@@ -458,7 +518,8 @@ export class Sfx {
     const now = performance.now();
     if (now - (this.lastVoice.get(id) ?? -Infinity) < cooldownMs) return;
     this.lastVoice.set(id, now);
-    this.sound((k) => voice(k, body, cry, 1), gain);
+    // your own pained grunt is part of the fight; everyone else's voice is a creature sound
+    this.sound((k) => voice(k, body, cry, 1), gain, 0, id === this.ctl.pid ? 'combat' : 'creatures');
   }
 
   /** Every frame: footsteps for the player and big monsters, and the ambience bed. */
@@ -476,7 +537,7 @@ export class Sfx {
       if (chebyshev(e.x, e.y, me.x, me.y) > 9) { this.steps.delete(e.id); continue; }
       this.stepCheck(e.id, e.x, e.y, e.z, this.at(e.x, e.y, e.z) * (b.size === 'huge' ? 0.9 : 0.5), b.size === 'huge');
     }
-    if (this.ambience && !this.muted) this.ambience.update(g, me);
+    if (this.ambience && !this.muted && this.mix.ambience > 0.001) this.ambience.update(g, me);
   }
 
   private stepCheck(id: number, x: number, y: number, z: number, gain: number, heavy: boolean): void {
@@ -489,7 +550,7 @@ export class Sfx {
     const ground = this.ctl.game.world.getGround(x, y, z);
     const alt = prev.alt;
     if (id === this.ctl.pid && this.ctl.game.world.getObj(x, y, z) === Obj.Door) this.play('door', 0.5);
-    this.sound((k) => footstep(k, ground === Ground.Void ? Ground.Cave : ground, 1, alt, heavy), gain);
+    this.sound((k) => footstep(k, ground === Ground.Void ? Ground.Cave : ground, 1, alt, heavy), gain, 0, id === this.ctl.pid ? 'steps' : 'creatures');
   }
 
   /** Sounds for the player's own actions that have no game event of their own. */

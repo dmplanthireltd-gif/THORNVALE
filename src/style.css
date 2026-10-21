@@ -623,3 +623,35 @@ select.text-input { flex: 1; }
 .settings-win { width: min(380px, calc(100vw - 24px)); }
 .set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; }
 .set-row .vol-slider { flex: 1; min-width: 120px; width: auto; }
+.settings-win { width: min(440px, calc(100vw - 24px)); }
+/* sound mix: name · percent · slider, one row per kind of sound */
+.mix-grid { display: grid; grid-template-columns: auto 44px minmax(0, 1fr); align-items: center; gap: 6px 10px; margin-bottom: 6px; font-size: 12px; }
+.mix-name { color: var(--ink); cursor: help; }
+.mix-val { color: var(--gold); font-variant-numeric: tabular-nums; text-align: right; }
+.mix-grid .vol-slider { grid-column: auto; width: 100%; }
+.mix-reset { align-self: flex-start; }
+
+/* ---------------------------------------------------------------- layout preset "Full view" (design 3c) */
+/* the game view fills the screen under the title strip; the same panels float in five docks */
+html.layout-full { --left: 0px; --side: 0px; --bottom: 0px; }
+.dock { display: none; position: absolute; z-index: 8; flex-direction: column; gap: 6px; pointer-events: none; }
+.dock > * { pointer-events: auto; }
+html.layout-full .dock { display: flex; }
+html.layout-full .flank, html.layout-full .bottom, html.layout-full .sidebar-edge, html.layout-full .bottom-edge,
+html.layout-full .hotbar-move, html.layout-full .panel-grip, html.layout-full .panel-resize { display: none; }
+.dock .panel { box-shadow: inset 0 0 0 1px #4a4034, 0 4px 14px rgba(0, 0, 0, 0.55); }
+.dock-tl { left: 14px; top: calc(var(--top) + 14px); width: 290px; max-height: calc(50% - 44px); overflow-y: auto; }
+.dock-tr { right: 14px; top: calc(var(--top) + 14px); width: 262px; max-height: calc(50% - 30px); overflow-y: auto; }
+.dock-bl { left: 14px; bottom: 14px; width: 440px; height: 236px; }
+.dock-bl .console { flex: 1; min-height: 0; }
+.dock-bc { left: 50%; bottom: 14px; transform: translateX(-50%); align-items: center; }
+.dock-bc .toolbar { display: flex; gap: 3px; }
+.dock-bc .toolbar .btn.tool { padding: 7px 12px; }
+.dock-bc .hotbar { background: var(--panel); border: 1px solid #0d0b09; box-shadow: inset 0 0 0 1px #4a4034, 0 4px 14px rgba(0, 0, 0, 0.55); padding: 6px; }
+.dock-bc .fm-grid { grid-template-columns: repeat(6, auto); }
+.dock-bc .fight-modes .panel-title { display: none; }
+.dock-bc .fight-modes .btn.fm { padding: 6px 12px; }
+.dock-br { right: 14px; bottom: 14px; width: 300px; max-height: calc(50% - 30px); overflow-y: auto; }
+.dock-br .hover-line { background: rgba(13, 11, 9, 0.75); padding: 3px 6px; }
+@media (max-width: 1600px) { .dock-bl { width: 340px; } }
+@media (max-width: 1300px) { .dock-bl { width: 280px; } .dock-br { width: 260px; } .dock-tl { width: 250px; } }
