@@ -245,7 +245,8 @@ export class CreatureView {
     this.rig.root.traverse((o) => {
       const me = o as THREE.Mesh;
       if (!me.isMesh) return;
-      me.geometry.dispose();
+      if (!me.geometry.userData.shared) me.geometry.dispose(); // dark models share geometry between instances
+      if (me.userData.sharedMaterial) return;
       const mm = me.material;
       if (Array.isArray(mm)) mm.forEach((x) => x.dispose());
       else mm.dispose();

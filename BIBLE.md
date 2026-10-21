@@ -160,6 +160,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 |---|---|---|
 | Camera | orthographic, tilt `CAMERA_TILT_DEG = 32`, looking north from south | render/CameraController.ts |
 | Pixel art | `TILE_PX = 32` art pixels per tile, depth-edge outline | render/PixelPass.ts |
+| Monster models | **Dark realistic style** for every monster (owner decision 2026-10-21): muted gritty colours, glowing eyes where they fit (never on deer/rabbits), lore weapons/armour, scars and blood. Models live in `render/models/darkRigs*.ts` (`darkRigsCore.ts` = merged per-limb meshes cached per kind + 2 materials per creature; `darkRigsParts.ts` = humanoid assembler, weapons, shields). Bosses reuse their base kind's model (tinted, crowned). `?monsters=classic` in the URL shows the old models (debug only). New monsters get a dark model | render/models/darkRigs*.ts |
 | Floors | `FLOOR_MIN = -4` … `FLOOR_MAX = 2`, FLOOR_H 3.4; z=0 ground | game/world/WorldMap.ts |
 | World size | target 640 × 800 tiles (new map in progress) | world/ |
 | Movement | 8 directions, no corner cutting, click-to-move A* | movement/pathfinding.ts |
@@ -300,7 +301,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [x] Ice-region (7.92-style) and classic monsters (35 new), 63 items, 5 spells, 3 buff potions; content-test.
 - [x] Remaining Tibia-8.0-style spells: 54 new spells (waves, beams, exori mort, mass heal, exura san, exana pox, utani gran hur, lights, utana vid, exiva, exani tera, levitate, challenge, creature illusion, food/ammo conjuring, 27 rune spells), blank runes, 21 new runes incl. fields/bombs/walls/magic wall/dispel/snare, poison condition.
 - [ ] Spells skipped for now: utevo res (summon creature) and adeta sio (convince creature) — no friendly-monster AI yet; adana mort (animate dead), adevo ina (chameleon), adito tera (disintegrate) — no systems for them; exana mort — no curse condition in the game (curses came after 8.0).
-- [ ] Dark realistic monster models (owner chose this style; sample of 4 in progress, behind `?monsters=dark`).
+- [ ] Dark realistic monster models — now the default look. Done: skeleton, orc warrior, demon, wolf. To do: batches a–h (all other monsters); bosses follow their base monster.
 - [x] Ground items can be dragged to other tiles (`moveBag`); items can be put on depot lockers, tables, counters, crates, barrels (`Game.SURFACES`); depot lockers are placed every second tile.
 - [x] Minimap: wheel zoom, right-drag pan, double-click centre. Battle list: click title to fold, drag bottom edge to resize.
 - [x] Trade items: drag an item onto a player (world or battle list) or into the trade window (`tradeItem`); click your offered item to take it back.
@@ -389,3 +390,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Bosses, world bosses and raids: 10 dungeon bosses with titles, crowns, own rigs, 2–4 abilities (nova, waves, beams, summons, heals, enrage below 30%), guaranteed rare loot and 17 unique items; 3 colossal world bosses every 3–6 h at fixed spots (server-wide broadcast, loot bags by contribution incl. healing, exp by damage, gone after 45 min); 4 raids every 2–4 h (warning 5 min before, 3 waves, raid boss, 20 min, raiders never enter protection zones); HUD announcement banner, boss crown and title on name plates, world map markers; `/raid`, `/worldboss` (everyone in test mode), `/boss`, `/events` (game masters). No save change | — | 17 |
 | 2026-10-21 | — | Rune fields no longer also draw the old static flames (WorldView.isRuneField); follow smoke test made robust | — | — |
 | 2026-10-21 | — | Process: every artifact gets a PL/EN switch; screenshot gallery artifact (DWGwwy4R5taKtW54oKnWJP) | — | — |
+| 2026-10-21 | — | Dark realistic monsters are the default: skeleton, orc warrior, demon, wolf (bigger, brighter eyes and blood, stronger contrast); one shared merged mesh per limb, 7–14 draw calls per monster instead of 18–34; `?monsters=classic` shows the old ones | — | — |

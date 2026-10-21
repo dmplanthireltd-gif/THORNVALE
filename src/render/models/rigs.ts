@@ -5,6 +5,7 @@ import type { EnemyKind } from '../../game/world/WorldMap';
 import { buildHumanoid, buildOutfitRig, holdProp } from './humanoid';
 import { box, collectMaterials, cone, cyl, group, mat, sphere, type Mat } from './parts';
 import { makeShield, makeWeapon } from './weapons';
+import { buildDarkEnemy, DARK_MONSTERS } from './darkRigs';
 
 /**
  * Animatable rigs. Every model faces +Z (local forward) and stands on y = 0.
@@ -905,6 +906,11 @@ function buildBoss(look: BossLook): Rig {
 }
 
 export function buildEnemy(kind: EnemyKind): Rig {
+  // dark realistic models are the default; `?monsters=classic` shows these classic ones
+  if (DARK_MONSTERS) {
+    const dark = buildDarkEnemy(kind);
+    if (dark) return dark;
+  }
   const boss = BOSS_LOOK[kind];
   if (boss) return buildBoss(boss);
   switch (kind) {
