@@ -324,7 +324,20 @@ export class HUD {
     el('span', 'tb-fill', top);
     const mode = el('span', `tb-mode ${this.ctl.online ? 'online' : 'offline'}`, top);
     el('span', 'tb-dot', mode);
-    el('span', '', mode, this.ctl.online ? 'Online' : 'Offline');
+    const label = el('span', '', mode, this.ctl.online ? 'Online' : 'Offline');
+    if (this.ctl.online) {
+      // players online, from the server's public /status (the same number the website shows)
+      const refresh = () => {
+        fetch('/status', { cache: 'no-store' })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((s: { online?: number } | null) => {
+            if (s && typeof s.online === 'number') label.textContent = `${s.online.toLocaleString('en-GB')} online`;
+          })
+          .catch(() => { /* keep "Online" */ });
+      };
+      refresh();
+      window.setInterval(refresh, 30000);
+    }
   }
 
   /** Settings window: display, sound and test tools that used to crowd the side bar. */
