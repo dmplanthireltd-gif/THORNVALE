@@ -226,9 +226,16 @@ function placeMarketBoards(m: WorldMap): void {
 /**
  * The Founders' Stone (names of the Legend founders, premium/premium.ts) stands on
  * the Thornvale temple plaza, two tiles behind the altar, on an open tile that is
- * not the respawn point and keeps the plaza walkable around it.
+ * not the respawn point and keeps the plaza walkable around it — unless the spawn
+ * plaza design names a spot for it.
  */
 function placeFoundersStone(m: WorldMap): void {
+  // the spawn plaza design gives the stone its own spot (world/spawnPlaza.ts)
+  const f = m.plaza?.founders;
+  if (f && m.getObj(f.x, f.y, 0) === Obj.None && m.isWalkable(f.x, f.y, 0)) {
+    m.setObj(f.x, f.y, Obj.FoundersStone, 0);
+    return;
+  }
   const t = m.temple;
   let altar: { x: number; y: number } | null = null;
   for (let dy = -8; dy <= 8 && !altar; dy++) for (let dx = -8; dx <= 8; dx++) {

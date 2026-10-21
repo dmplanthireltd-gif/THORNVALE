@@ -1,3 +1,4 @@
+import { offsetPlaza } from './spawnPlaza';
 import { buildVillage, MAP_H as VH, MAP_W as VW } from './villageMap';
 import { Gen, type Dir } from './genKit';
 import { FERRIES, townByKey } from './townList';
@@ -154,6 +155,7 @@ function buildThornvale(g: Gen, late: Region[]): { gates: Record<Dir, { x: numbe
   for (const n of v.npcs) m.npcs.push({ ...n, x: n.x + OX, y: n.y + OY });
   m.playerSpawn = { x: v.playerSpawn.x + OX, y: v.playerSpawn.y + OY, z: 0 };
   m.temple = { ...m.playerSpawn };
+  m.plaza = v.plaza ? offsetPlaza(v.plaza, OX, OY) : null;
   const houses = m.houses.filter((h) => h.x >= OX && h.y >= OY && h.x < OX + VW && h.y < OY + VH);
   // the depot has a second floor with more lockers
   const depot = houses.find((h) => h.name === 'Thornvale Depot & Bank')!;

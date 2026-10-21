@@ -1,12 +1,13 @@
 import { Rng } from '../core/rng';
 import { DIRS8 } from '../core/types';
+import { buildSpawnPlaza } from './spawnPlaza';
 import { Ground, Obj, WorldMap, type EnemyKind } from './WorldMap';
 
 /**
  * Builds the original village of Thornvale procedurally (deterministic seed).
  *
  *   North : Greywood forest (wolves)
- *   Centre: stone plaza with the well, temple respawn and Captain Aldric
+ *   Centre: the spawn plaza (fountain, temple respawn, Captain Aldric; world/spawnPlaza.ts)
  *   East  : Miller's farm and barn (rats)
  *   South-west: the old graveyard (skeletons)
  *   West  : Mirror pond
@@ -218,6 +219,9 @@ export function buildVillage(seed = 1337): WorldMap {
       else if (r < 0.13) m.setObj(x, y, Obj.Flowers);
     }
   }
+
+  // --- the spawn plaza: fountain and decorations (replaces the plain square above) --
+  buildSpawnPlaza(m);
 
   // --- border wall of pines ---------------------------------------------------
   for (let y = 0; y < MAP_H; y++) {
