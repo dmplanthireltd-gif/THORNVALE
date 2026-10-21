@@ -52,6 +52,18 @@ export function updateEnemyAI(e: Enemy, ctx: AIContext, dt: number): void {
     }
     if (e.moving) return;
     e.wanderTimer -= dt;
+    if (e.marchTo && e.wanderTimer <= 0) {
+      // raid monsters march on their town; protection zones stop them at the edge (Game.tryStep)
+      e.wanderTimer = 0.6 + Math.random() * 0.8;
+      const dx = sign(e.marchTo.x - e.x), dy = sign(e.marchTo.y - e.y);
+      if (chebyshev(e.x, e.y, e.marchTo.x, e.marchTo.y) <= 2 || !(ctx.tryStep(e, dx, dy) || (dx !== 0 && ctx.tryStep(e, dx, 0)) || (dy !== 0 && ctx.tryStep(e, 0, dy)))) {
+        // arrived, or blocked: hang around here
+        if (Math.random() < 0.15) e.marchTo = null;
+      }
+      e.homeX = e.x;
+      e.homeY = e.y;
+      return;
+    }
     if (e.wanderTimer <= 0) {
       e.wanderTimer = 1.8 + Math.random() * 3.5;
       const dx = Math.floor(Math.random() * 3) - 1;
@@ -88,21 +100,31 @@ export function updateEnemyAI(e: Enemy, ctx: AIContext, dt: number): void {
   const d = dist(e, p);
   const sees = ctx.canSee(e, p);
 
-  // special abilities, in priority order
+  // special abilities, in priority order (an enraged boss uses them more often)
+  const haste = e.rage > 1 ? 0.7 : 1;
   for (let i = 0; i < def.abilities.length; i++) {
     const a = def.abilities[i];
     if (e.abilityTimers[i] > 0) continue;
     if (a.kind === 'heal') {
       if (e.hp < e.maxHp * 0.6) {
         ctx.useAbility(e, a, p);
-        e.abilityTimers[i] = a.interval;
+        e.abilityTimers[i] = a.interval * haste;
       }
       continue;
     }
-    const inRange = a.kind === 'nova' ? d <= Math.max(1, a.radius) : d <= a.range && sees;
+    if (a.kind === 'summon') {
+      if (d <= def.aggroRange) {
+        ctx.useAbility(e, a, p);
+        e.abilityTimers[i] = a.interval * haste;
+      }
+      continue;
+    }
+    const inRange = a.kind === 'nova' ? d <= Math.max(1, a.radius)
+      : a.kind === 'wave' || a.kind === 'beam' ? sees && inLine(e, p, a.kind, a.range)
+        : d <= a.range && sees;
     if (inRange) {
       ctx.useAbility(e, a, p);
-      e.abilityTimers[i] = a.interval * (0.8 + Math.random() * 0.4);
+      e.abilityTimers[i] = a.interval * (0.8 + Math.random() * 0.4) * haste;
       break;
     }
   }
@@ -113,7 +135,7 @@ export function updateEnemyAI(e: Enemy, ctx: AIContext, dt: number): void {
     if (!e.moving) e.faceTowards(p.x, p.y);
     if (e.attackTimer <= 0) {
       ctx.meleeAttack(e, p);
-      e.attackTimer = def.attackInterval;
+      e.attackTimer = def.attackInterval * haste;
     }
     // ranged fighters back off to their preferred distance
     if (def.kite && !e.moving && Math.random() < 0.5) stepAway(e, p, ctx);
@@ -127,6 +149,18 @@ export function updateEnemyAI(e: Enemy, ctx: AIContext, dt: number): void {
     return;
   }
   stepToward(e, p, ctx, dt);
+}
+
+/**
+ * Would a wave (cone) or beam (line) aimed at the player's side reach them?
+ * Monsters breathe along the main axis towards their target, like players cast
+ * them along their facing (see Game.monsterLineTiles).
+ */
+export function inLine(e: Creature, p: Creature, kind: 'wave' | 'beam', range: number): boolean {
+  const ax = Math.abs(p.x - e.x), ay = Math.abs(p.y - e.y);
+  const along = Math.max(ax, ay), side = Math.min(ax, ay);
+  if (along < 1 || along > range) return false;
+  return kind === 'beam' ? side === 0 : side <= Math.floor(along / 2);
 }
 
 function stepAway(e: Enemy, p: Player, ctx: AIContext): void {

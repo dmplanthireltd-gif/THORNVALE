@@ -14,6 +14,9 @@ interface Label {
   el: HTMLDivElement;
   name: HTMLSpanElement;
   skull: HTMLSpanElement;
+  /** Bosses: crown before the name and the title underneath (created on first use). */
+  crown?: HTMLSpanElement;
+  title?: HTMLDivElement;
   bar: HTMLDivElement;
   fill: HTMLDivElement;
 }
@@ -51,7 +54,7 @@ export class Overlay {
     return { x: (v.x * 0.5 + 0.5) * this.w, y: (-v.y * 0.5 + 0.5) * this.h, visible: Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2 };
   }
 
-  setLabel(id: number, anchor: THREE.Vector3 | null, name: string, hpFrac: number, opts: { player?: boolean; npc?: boolean; other?: boolean; targeted?: boolean; skull?: 0 | 1 | 2; party?: 0 | 1 | 2 | 3 } = {}): void {
+  setLabel(id: number, anchor: THREE.Vector3 | null, name: string, hpFrac: number, opts: { player?: boolean; npc?: boolean; other?: boolean; targeted?: boolean; skull?: 0 | 1 | 2; party?: 0 | 1 | 2 | 3; boss?: string } = {}): void {
     let l = this.labels.get(id);
     if (!l) {
       const el = document.createElement('div');
@@ -101,6 +104,17 @@ export class Overlay {
     const pt = opts.party ?? 0;
     l.el.classList.toggle('party-member', pt === 1);
     l.el.classList.toggle('party-invite', pt === 2 || pt === 3);
+    if (opts.boss !== undefined && !l.crown) {
+      l.crown = document.createElement('span');
+      l.crown.className = 'np-crown';
+      l.crown.textContent = '♛';
+      l.name.before(l.crown);
+      l.title = document.createElement('div');
+      l.title.className = 'np-title';
+      l.title.textContent = opts.boss;
+      l.bar.before(l.title);
+      l.el.classList.add('boss');
+    }
   }
 
   removeLabel(id: number): void {

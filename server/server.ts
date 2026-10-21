@@ -108,7 +108,7 @@ const pendingSaves = new Map<string, Promise<void>>();
 
 /** Players may fight each other (PVP=0 turns it off). */
 const PVP = process.env.PVP !== '0';
-const game = new Game({ pvp: PVP });
+const game = new Game({ pvp: PVP, testMode: TEST_MODE });
 interface Client {
   addr: string;
   loggingIn?: boolean;

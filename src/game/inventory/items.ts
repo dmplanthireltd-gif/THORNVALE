@@ -474,6 +474,32 @@ const defs: ItemDef[] = [
   W('teak_shortbow', 'Teak Shortbow', 'bow', 7, 0, 38, 1600, 31, { twoHanded: true, range: 6, ammoType: 'arrow', vocations: PALADIN, rarity: 'uncommon' }),
   def({ id: 'starsteel_arrow', name: 'Starsteel Arrow', kind: 'ammo', ammoType: 'arrow', attack: 34, weight: 0.8, value: 7, level: 50, tint: '#5a8ad8', rarity: 'uncommon' }),
   def({ id: 'darkstone_arrow', name: 'Darkstone Arrow', kind: 'ammo', ammoType: 'arrow', attack: 38, weight: 0.9, value: 12, level: 70, tint: '#6a3a7a', rarity: 'rare' }),
+  // --- boss uniques (bosses/bosses.ts): a little better than the best item of their level, never far beyond -------
+  def({ id: 'ironjaw_helm', name: 'Ironjaw Warhelm', kind: 'helmet', armor: 5, level: 15, vocations: FIGHTERS, weight: 44, value: 900, rarity: 'rare', bonus: { hp: 40 }, note: 'Unique: worn by Ughrak Ironjaw, Warchief of Grimtusk.' }),
+  def({ id: 'bonebound_amulet', name: 'Bonebound Amulet', kind: 'amulet', level: 15, weight: 6, value: 900, rarity: 'rare', bonus: { hp: 30, resist: { death: 8 } }, note: 'Unique: carried by Lord Ossric, the Bonebound.' }),
+  W('ashanvil_hammer', 'Ashanvil Hammer', 'club', 30, 12, 25, 1500, 80, { vocations: KNIGHT, element: 'fire', elementDamage: 6, rarity: 'rare', note: 'Unique: the forge hammer of Grimbold Ashanvil, the Delving King.' }),
+  def({ id: 'labyrinth_greaves', name: 'Labyrinth Greaves', kind: 'legs', armor: 6, level: 30, vocations: FIGHTERS, weight: 60, value: 1800, rarity: 'rare', bonus: { speed: 4 }, note: 'Unique: Gorhorn, Lord of the Labyrinth, never lost his way in them.' }),
+  W('oracle_rod', 'Rod of the Venom Oracle', 'rod', 0, 0, 45, 4000, 28, { vocations: DRUID, range: 4, element: 'earth', magicDamage: [52, 74], manaPerShot: 9, rarity: 'legendary', note: 'Unique: the staff of Sszarak, the Venom Oracle.' }),
+  def({ id: 'matriarch_scalemail', name: 'Matriarch Scalemail', kind: 'armor', armor: 13, level: 65, vocations: FIGHTERS, weight: 105, value: 7500, rarity: 'legendary', bonus: { resist: { fire: 10 } }, note: 'Unique: shed scales of Kaerith, Mother of Flames.' }),
+  def({ id: 'sandking_crown', name: 'Crown of the Sand King', kind: 'helmet', armor: 3, level: 60, vocations: ['paladin', 'sorcerer', 'druid'], weight: 14, value: 7000, rarity: 'legendary', bonus: { mana: 100, magic: 6, resist: { death: 6 } }, note: 'Unique: the crown of Ankhset, the Undying Sand King.' }),
+  W('hundred_fang_bow', 'Hundred-Fang Bow', 'bow', 9, 0, 60, 7000, 32, { twoHanded: true, range: 7, ammoType: 'arrow', vocations: PALADIN, rarity: 'legendary', bonus: { attack: 2, resist: { earth: 4 } }, note: 'Unique: strung with the sinews of Mirewretch, the Hundred-Fanged.' }),
+  W('hrimgaard_fang', "Hrimgaard's Fang", 'sword', 41, 22, 70, 8000, 58, { vocations: KNIGHT, element: 'ice', elementDamage: 12, rarity: 'legendary', note: 'Unique: a tooth of Hrimgaard, the Rime Wyrm, ground to an edge.' }),
+  W('sovereign_wand', 'Wand of the Ashen Sovereign', 'wand', 0, 0, 90, 14000, 22, { vocations: SORC, range: 4, element: 'fire', magicDamage: [72, 98], manaPerShot: 13, rarity: 'legendary', note: 'Unique: the sceptre of Vorthazul, the Ashen Sovereign.' }),
+  def({ id: 'ashen_will_ring', name: 'Ring of Ashen Will', kind: 'ring', level: 80, weight: 1, value: 9000, rarity: 'legendary', bonus: { hp: 60, magic: 4, resist: { fire: 4 } }, note: 'Unique: Vorthazul, the Ashen Sovereign, wore it.' }),
+  // world boss uniques: shared out by contribution, very rare
+  def({ id: 'mountainheart_shield', name: 'Mountainheart Shield', kind: 'shield', defense: 37, level: 90, vocations: KNIGHT, weight: 85, value: 16000, rarity: 'legendary', bonus: { resist: { physical: 5 } }, note: 'Unique: hewn from the heart of Gorrumvald, the Mountain That Walks.' }),
+  W('colossus_maul', 'Colossus Maul', 'club', 46, 14, 100, 16000, 140, { vocations: KNIGHT, twoHanded: true, element: 'earth', elementDamage: 12, rarity: 'legendary', note: 'Unique: a fist of Gorrumvald, the Mountain That Walks.' }),
+  W('stormcoil_wand', 'Stormcoil Wand', 'wand', 0, 0, 75, 12000, 22, { vocations: SORC, range: 4, element: 'energy', magicDamage: [68, 94], manaPerShot: 12, rarity: 'legendary', note: 'Unique: a spine of Vaelith, the Storm Serpent.' }),
+  def({ id: 'tidecrest_boots', name: 'Tidecrest Boots', kind: 'boots', armor: 2, level: 70, weight: 9, value: 12000, rarity: 'legendary', bonus: { speed: 20, resist: { energy: 6, ice: 6 } }, note: 'Unique: from the hide of Vaelith, the Storm Serpent.' }),
+  def({ id: 'blightweave_robe', name: 'Blightweave Robe', kind: 'armor', armor: 7, level: 70, vocations: MAGES, weight: 38, value: 12000, rarity: 'legendary', bonus: { mana: 180, magic: 7, resist: { earth: 6 } }, note: 'Unique: woven from the silk of Nhalgrith, the Blight Mother.' }),
+  W('broodmother_crossbow', 'Broodmother Crossbow', 'crossbow', 10, 0, 75, 12000, 48, { twoHanded: true, range: 7, ammoType: 'bolt', vocations: PALADIN, rarity: 'legendary', bonus: { resist: { earth: 5 } }, note: 'Unique: Nhalgrith, the Blight Mother, spun its string.' }),
+];
+
+/** Unique items only bosses drop (bosses/bosses.ts). */
+export const BOSS_UNIQUES = [
+  'ironjaw_helm', 'bonebound_amulet', 'ashanvil_hammer', 'labyrinth_greaves', 'oracle_rod', 'matriarch_scalemail', 'sandking_crown', 'hundred_fang_bow',
+  'hrimgaard_fang', 'sovereign_wand', 'ashen_will_ring', 'mountainheart_shield', 'colossus_maul', 'stormcoil_wand', 'tidecrest_boots', 'blightweave_robe',
+  'broodmother_crossbow',
 ];
 
 /** Logs from woodcutting, cheapest first. */

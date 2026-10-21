@@ -8,6 +8,9 @@ import type { MarketView } from '../market/market';
 import { NONCOMBAT_IDS, type NonCombatSkill } from '../gathering/skills';
 import type { CraftView } from '../production/recipes';
 import type { DialogueState } from '../npc/dialogue';
+import type { WorldMark } from '../bosses/bosses';
+import { ENEMIES } from '../enemies/enemyDefs';
+import type { EnemyKind } from '../world/WorldMap';
 import { COMBAT_SKILLS, parseSkills } from '../player/skills';
 import { isOutfit, type Outfit } from '../player/outfits';
 import { emptyBuffs, FIGHT_MODE, type Buffs, type FightMode } from '../player/Player';
@@ -20,7 +23,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 16;
+export const PROTOCOL_VERSION = 17;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -109,6 +112,8 @@ export interface CreatureSnap {
   pt?: 1 | 2 | 3;
   /** Creature Illusion: the monster kind this player looks like. */
   ill?: string;
+  /** Monsters spawned while the server runs (raids, world bosses, summons): their kind, so the client can add them. */
+  ek?: string;
 }
 
 export interface SelfSnap {
@@ -152,6 +157,8 @@ export type ServerMessage =
     t: 'snap'; time: number; c: CreatureSnap[]; b: Array<{ id: number; x: number; y: number; z: number; it?: string[] }>; holes: string[]; fields?: string[]; self: SelfSnap; st?: string[];
     /** Lit campfires near the player ("x,y,z"); only sent when the list changed (absent = unchanged). */
     fi?: string[];
+    /** Active world boss and raid markers for the world map; only sent when they change. */
+    wev?: WorldMark[];
   }
   | { t: 'ev'; e: GameEvent }
   | { t: 'error'; text: string };
@@ -216,6 +223,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     c.push({
       id: e.id, k: 'e', x: e.x, y: e.y, z: e.z, fx: e.fromX, fy: e.fromY, mt: r3(e.moveT), md: r3(e.moveDur), f: r3(e.facing),
       hp: Math.ceil(e.hp), mhp: e.maxHp, d: e.dead ? 1 : 0, ct: r3(e.corpseTimer),
+      ...(e.dynamic ? { ek: e.enemyKind } : {}),
     });
   }
   const self: SelfSnap = {
@@ -246,6 +254,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     t: 'snap', time: r3(game.time), c, b: game.bags.map((b) => ({ id: b.id, x: b.x, y: b.y, z: b.z, it: b.items.slice(-3).map((i) => i.id) })), holes, fields, self,
     st: game.stumpsNear(me.x, me.y, me.z, VIEW_RADIUS + 4),
     fi: onlyChanged(s, 'fires', game.firesNear(me.x, me.y, me.z, VIEW_RADIUS + 4)),
+    wev: onlyChanged(s, 'wev', game.worldMarks()),
   };
 }
 
@@ -392,6 +401,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
         }
       }
     }
+    if (!cr && c.k === 'e' && c.ek && c.ek in ENEMIES) cr = game.addMirrorEnemy(c.id, c.ek as EnemyKind, c.x, c.y, c.z);
     if (!cr) continue;
     const floorChanged = cr.z !== c.z;
     if (cr.x !== c.x || cr.y !== c.y || floorChanged) {
@@ -436,6 +446,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     }
   }
   game.syncHoles(snap.holes);
+  if (snap.wev) game.netWorldMarks = snap.wev;
   game.syncFields(snap.fields ?? []);
   if (snap.fi) game.syncFires(snap.fi);
 

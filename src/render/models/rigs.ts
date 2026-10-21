@@ -838,7 +838,75 @@ function northBiped(kind: EnemyKind): BipedRig | null {
   }
 }
 
+// ------------------------------------------------------------------ bosses
+
+/**
+ * Bosses are an existing monster built bigger, recoloured towards their own
+ * colour, with a gold crown on the head and a glowing ring at the feet.
+ */
+interface BossLook {
+  base: EnemyKind;
+  /** Colour the body is pulled towards, and how far (0–1). */
+  tint: number;
+  amt: number;
+  crown: number;
+  aura: number;
+  /** Eye/skin glow added to every material. */
+  glow?: number;
+}
+
+export const BOSS_LOOK: Partial<Record<EnemyKind, BossLook>> = {
+  boss_ironjaw: { base: 'orc_warlord', tint: 0x6a2a10, amt: 0.3, crown: 0xe0b03c, aura: 0xff6a2a },
+  boss_bonebound: { base: 'skeleton', tint: 0x6a7a9a, amt: 0.35, crown: 0xd8c060, aura: 0x8ab0ff, glow: 0x101828 },
+  boss_delving_king: { base: 'dwarf_guard', tint: 0x3a2a20, amt: 0.35, crown: 0xffd040, aura: 0xff9a3a },
+  boss_labyrinth_lord: { base: 'minotaur', tint: 0x2a1408, amt: 0.4, crown: 0xe0b03c, aura: 0xd04020 },
+  boss_venom_oracle: { base: 'lizard_templar', tint: 0x2a8a3a, amt: 0.35, crown: 0xe0c040, aura: 0x6aff4a, glow: 0x0a2a08 },
+  boss_ember_matriarch: { base: 'dragon_lord', tint: 0xff6a10, amt: 0.3, crown: 0xffe070, aura: 0xff8a20, glow: 0x3a0a00 },
+  boss_sand_king: { base: 'mummy', tint: 0xd0a040, amt: 0.4, crown: 0xffd040, aura: 0xffd060, glow: 0x201400 },
+  boss_mire_hydra: { base: 'hydra', tint: 0x1a4a3a, amt: 0.45, crown: 0xe0b03c, aura: 0x40c0a0 },
+  boss_rime_wyrm: { base: 'frost_dragon', tint: 0x6ab0ff, amt: 0.35, crown: 0xf0f8ff, aura: 0x8ae8ff, glow: 0x0a1a30 },
+  boss_ashen_sovereign: { base: 'demon', tint: 0x2a2a2a, amt: 0.55, crown: 0xffb020, aura: 0xff3a10, glow: 0x300800 },
+  wb_mountain: { base: 'behemoth', tint: 0x6a6a5a, amt: 0.6, crown: 0xe0b03c, aura: 0xc0a060 },
+  wb_storm_serpent: { base: 'hydra', tint: 0x3a4ad0, amt: 0.55, crown: 0xe0e8ff, aura: 0x9a8aff, glow: 0x101040 },
+  wb_blight_mother: { base: 'tarantula', tint: 0x4a6a1a, amt: 0.5, crown: 0xd0e040, aura: 0x9aff3a, glow: 0x102000 },
+  raid_tusk_warlord: { base: 'orc_leader', tint: 0xa02a10, amt: 0.35, crown: 0xffb020, aura: 0xff5a1a },
+  raid_grave_warden: { base: 'ghoul', tint: 0x4a5a6a, amt: 0.4, crown: 0xc0c0d0, aura: 0x9ab0ff, glow: 0x0a1018 },
+  raid_frost_jarl: { base: 'frost_giant', tint: 0xd0e8ff, amt: 0.35, crown: 0xf0f8ff, aura: 0x8ae8ff },
+  raid_swarm_queen: { base: 'scarab', tint: 0xd0a020, amt: 0.45, crown: 0xffe070, aura: 0xffd040 },
+};
+
+function buildBoss(look: BossLook): Rig {
+  const rig = buildEnemy(look.base);
+  const tint = new THREE.Color(look.tint);
+  for (const m of rig.materials) {
+    m.color.lerp(tint, look.amt);
+    if (look.glow) m.emissive.add(new THREE.Color(look.glow));
+  }
+  // the crown sits on top of the head, wherever this rig keeps it
+  rig.root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(rig.head);
+  const top = rig.head.worldToLocal(new THREE.Vector3((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2));
+  const w = Math.max(0.12, Math.min(0.24, (box.max.x - box.min.x) * 0.38));
+  const gold = mat(look.crown, { emissive: new THREE.Color(look.crown).multiplyScalar(0.35).getHex() });
+  const crown = group(top.x, top.y - 0.02, top.z, cyl(w, w * 0.92, 0.07, gold, 0, 0.035, 0, 10));
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    crown.add(cone(w * 0.22, 0.11, gold, Math.sin(a) * w * 0.9, 0.12, Math.cos(a) * w * 0.9, 4));
+  }
+  crown.add(sphere(w * 0.2, mat(0xd02a2a, { emissive: 0x500808 }), 0, 0.06, w * 0.95));
+  rig.head.add(crown);
+  // a glowing ring at the feet marks a boss from afar
+  const aura = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.6, 28), mat(look.aura, { emissive: look.aura }));
+  aura.rotation.x = -Math.PI / 2;
+  aura.position.y = 0.025;
+  rig.root.add(aura);
+  rig.materials.push(...collectMaterials(crown), aura.material as Mat);
+  return rig;
+}
+
 export function buildEnemy(kind: EnemyKind): Rig {
+  const boss = BOSS_LOOK[kind];
+  if (boss) return buildBoss(boss);
   switch (kind) {
     case 'rat': return buildRat();
     case 'wolf': return buildWolf();
@@ -875,5 +943,10 @@ export const ENEMY_SCALE: Record<EnemyKind, number> = {
   scorpion: 1.35, mummy: 1.32, scarab: 1.3, minotaur: 1.4, minotaur_archer: 1.38, minotaur_mage: 1.36, cyclops: 1.6,
   dwarf: 1.25, dwarf_soldier: 1.25, dwarf_guard: 1.3, bandit: 1.3, amazon: 1.3, valkyrie: 1.32, bear: 1.4, deer: 1.3, snake: 1.25,
   lizard_sentinel: 1.34, lizard_templar: 1.42,
+  // bosses: clearly bigger than their kin, world bosses colossal
+  boss_ironjaw: 2.0, boss_bonebound: 1.9, boss_delving_king: 1.9, boss_labyrinth_lord: 2.1, boss_venom_oracle: 2.1,
+  boss_ember_matriarch: 2.7, boss_sand_king: 2.1, boss_mire_hydra: 2.5, boss_rime_wyrm: 2.8, boss_ashen_sovereign: 2.6,
+  wb_mountain: 3.6, wb_storm_serpent: 3.4, wb_blight_mother: 3.6,
+  raid_tusk_warlord: 2.0, raid_grave_warden: 1.9, raid_frost_jarl: 2.4, raid_swarm_queen: 2.3,
 };
 

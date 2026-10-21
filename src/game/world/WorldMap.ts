@@ -152,7 +152,12 @@ export type EnemyKind =
   | 'frostkin' | 'frostkin_toolshaper' | 'frostkin_windcaller' | 'dire_penguin' | 'silver_rabbit' | 'winter_wolf' | 'polar_bear'
   // desert, mountains, plains and coasts of the new world
   | 'scorpion' | 'mummy' | 'scarab' | 'minotaur' | 'minotaur_archer' | 'minotaur_mage' | 'cyclops'
-  | 'dwarf' | 'dwarf_soldier' | 'dwarf_guard' | 'bandit' | 'amazon' | 'valkyrie' | 'bear' | 'deer' | 'snake' | 'lizard_sentinel' | 'lizard_templar';
+  | 'dwarf' | 'dwarf_soldier' | 'dwarf_guard' | 'bandit' | 'amazon' | 'valkyrie' | 'bear' | 'deer' | 'snake' | 'lizard_sentinel' | 'lizard_templar'
+  // bosses (bosses/bosses.ts): one per dungeon, three world bosses, four raid bosses
+  | 'boss_rime_wyrm' | 'boss_sand_king' | 'boss_venom_oracle' | 'boss_delving_king' | 'boss_ironjaw'
+  | 'boss_ashen_sovereign' | 'boss_ember_matriarch' | 'boss_mire_hydra' | 'boss_bonebound' | 'boss_labyrinth_lord'
+  | 'wb_mountain' | 'wb_storm_serpent' | 'wb_blight_mother'
+  | 'raid_tusk_warlord' | 'raid_grave_warden' | 'raid_frost_jarl' | 'raid_swarm_queen';
 
 export interface Region {
   name: string;

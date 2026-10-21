@@ -34,6 +34,27 @@ function spawns(g: Gen, box: Box, list: Array<[EnemyKind, number]>, z = 0): void
   for (const [k, n] of list) g.spawn(k, n, box[0], box[1], box[2], box[3], z);
 }
 
+/**
+ * Places a dungeon boss (bosses/bosses.ts) on the first open tile spiralling out
+ * from x, y: walkable, not a protection zone, no stairs. Uses no randomness, so
+ * the rest of the map comes out exactly as before.
+ */
+function bossLair(g: Gen, kind: EnemyKind, x: number, y: number, z: number): void {
+  const m = g.m;
+  for (let r = 0; r <= 10; r++) {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      const tx = x + dx, ty = y + dy;
+      if (!m.isWalkable(tx, ty, z) || m.isSafe(tx, ty, z) || m.linkAt(tx, ty, z)) continue;
+      const o = m.getObj(tx, ty, z);
+      if (o === Obj.Door || o === Obj.Hole || o === Obj.LooseStone) continue;
+      g.b.spawn(kind, tx, ty, z);
+      return;
+    }
+  }
+  throw new Error(`no room for ${kind} near ${x},${y},${z}`);
+}
+
 /** A palisade camp with tents and a campfire; returns the tent interiors. */
 function camp(g: Gen, [x0, y0, x1, y1]: Box, opts: { name: string; ground?: Ground; wall?: Obj; gates?: Dir[]; tents?: number; roof?: number }): Array<{ x: number; y: number }> {
   const { b, m, rng } = g;
@@ -146,6 +167,7 @@ function centralNorth(g: Gen): void {
   // Grimtusk Fortress north of the village
   stamp(m, legacyGrimtusk(), 7, 5, 57, 43, 198, 237);
   region(g, 'Grimtusk Fortress', [205, 242, 255, 280], '10+', -1, 1);
+  bossLair(g, 'boss_ironjaw', 230, 252, 0);
   spawns(g, [196, 232, 266, 288], [['orc', 6], ['orc_spearman', 2]]);
 
   // Dragonspire Plateau with the Caldera: dragons in the heart of the north lobe
@@ -158,6 +180,7 @@ function centralNorth(g: Gen): void {
   spawns(g, [272, 298, 324, 334], [['dragon', 5], ['dragon_lord', 1]], -1);
   b.chest('dragon_lair', 315, 317, -1, [{ id: 'dragon_helm', qty: 1 }, { id: 'small_ruby', qty: 3 }, { id: 'gold', qty: 1500 }]);
   region(g, 'Dragon Lair', [272, 298, 324, 334], '50+', -1);
+  bossLair(g, 'boss_ember_matriarch', 312, 314, -1);
 
   // meadows and woods around Thornvale (beginners)
   spawns(g, [140, 292, 175, 340], [['deer', 6], ['snake', 4], ['rat', 3], ['wolf', 2]]);
@@ -191,6 +214,7 @@ function centralMountains(g: Gen): void {
   cave(g, { x: 262, y: 360 }, -2, [256, 340, 342, 396], [{ x: 280, y: 372 }, { x: 304, y: 360 }, { x: 330, y: 372 }, { x: 312, y: 390 }], { open: 0.52 });
   spawns(g, [256, 340, 342, 396], [['dwarf_guard', 6], ['dwarf_soldier', 4], ['tarantula', 3]], -2);
   region(g, 'Deep Delvings', [256, 340, 342, 396], '20+', -2);
+  bossLair(g, 'boss_delving_king', 330, 372, -2);
   // Molten Deep (z−3)
   cave(g, { x: 312, y: 392 }, -3, [270, 348, 334, 396], [{ x: 300, y: 380 }, { x: 284, y: 362 }, { x: 318, y: 358 }], { ground: Ground.Ash, open: 0.5, deco: [[Obj.FireField, 0.015], [Obj.Stalagmite, 0.02]] });
   spawns(g, [270, 348, 334, 396], [['fire_elemental', 4], ['behemoth', 2]], -3);
@@ -232,6 +256,7 @@ function centralSouth(g: Gen): void {
   const last = rooms[rooms.length - 1];
   b.chest('westmarch_catacombs', last.x + 1, last.y, -1, [{ id: 'iron_shield', qty: 1 }, { id: 'strong_health_potion', qty: 3 }, { id: 'gold', qty: 200 }]);
   region(g, 'Westmarch Catacombs', [196, 518, 262, 562], '15+', -1);
+  bossLair(g, 'boss_bonebound', last.x - 1, last.y, -1);
   spawns(g, [196, 522, 262, 562], [['skeleton', 2], ['snake', 3]]);
   region(g, 'Chapel Hill', [196, 520, 262, 562], '10+');
 
@@ -337,6 +362,7 @@ function frozenNorth(g: Gen): void {
   spawns(g, [54, 68, 112, 126], [['frost_dragon', 7], ['ice_golem', 2]], -1);
   b.chest('frostfang_hoard', 64, 76, -1, [{ id: 'rod_of_glaciers', qty: 1 }, { id: 'small_sapphire', qty: 4 }, { id: 'gold', qty: 3000 }]);
   region(g, 'Frost Dragon Lair', [54, 68, 112, 126], '60+', -1);
+  bossLair(g, 'boss_rime_wyrm', 66, 78, -1);
   // Crystal Mines under the central peaks
   cave(g, { x: 136, y: 72 }, -1, [106, 52, 150, 140], [{ x: 126, y: 80 }, { x: 118, y: 104 }, { x: 130, y: 126 }, { x: 140, y: 100 }], { deco: [[Obj.Stalagmite, 0.04]] });
   spawns(g, [106, 52, 150, 140], [['crystal_spider', 8], ['ice_golem', 3], ['frostkin_toolshaper', 3], ['frostkin', 3]], -1);
@@ -474,6 +500,7 @@ function northEast(g: Gen): void {
   const mh = crypt(g, { x: hx1 - 5, y: hy1 - 4 }, -1, [452, 150, 508, 210], 7);
   mh.slice(1).forEach((r, i) => spawns(g, [r.x - 3, r.y - 2, r.x + 3, r.y + 2], [[i % 3 === 2 ? 'minotaur_mage' : 'minotaur', 2]], -1));
   b.chest('minotaur_hold', mh[mh.length - 1].x, mh[mh.length - 1].y + 1, -1, [{ id: 'plate_legs', qty: 1 }, { id: 'gold', qty: 700 }]);
+  bossLair(g, 'boss_labyrinth_lord', mh[mh.length - 1].x - 1, mh[mh.length - 1].y - 1, -1);
   spawns(g, [hx0 + 1, hy0 + 1, hx1 - 1, hy1 - 1], [['minotaur', 6], ['minotaur_archer', 4], ['minotaur_mage', 3]]);
   spawns(g, [448, 140, 512, 226], [['minotaur', 4], ['minotaur_archer', 2]]);
   region(g, 'Minotaur Hold', [446, 138, 514, 228], '25+', -1, 0);
@@ -532,6 +559,7 @@ function southIsles(g: Gen): void {
   region(g, 'Burning Catacombs', [200, 652, 266, 716], '45+', -2);
   region(g, 'Abyssal Halls', [200, 652, 266, 716], '65+', -3);
   region(g, 'The Demon Pit', [200, 652, 266, 716], '100+', -4);
+  bossLair(g, 'boss_ashen_sovereign', 233, 684, -4);
   spawns(g, [130, 700, 206, 728], [['snake', 4], ['wolf', 3], ['deer', 3]]);
   region(g, 'Saltmere Shore', [128, 700, 206, 730], '3+');
   // Bonecrag
@@ -577,6 +605,7 @@ function jungle(g: Gen): void {
   b.chest('lizard_temple', lt[lt.length - 1].x, lt[lt.length - 1].y + 1, -1, [{ id: 'jade_amulet', qty: 1 }, { id: 'small_emerald', qty: 2 }, { id: 'gold', qty: 800 }]);
   region(g, 'Lizard Temple', [tx - 14, ty - 12, tx + 14, ty + 12], '30+');
   region(g, 'Temple Undercroft', [tx - 24, ty - 18, tx + 24, ty + 18], '40+', -1);
+  bossLair(g, 'boss_venom_oracle', lt[lt.length - 1].x - 1, lt[lt.length - 1].y - 1, -1);
   // the Hydra Bog, the Mire Caves and the Hydra Nest
   spawns(g, [414, 668, 466, 712], [['hydra', 4], ['crocodile', 2]]);
   region(g, 'Hydra Bog', [412, 666, 468, 714], '50+');
@@ -589,6 +618,7 @@ function jungle(g: Gen): void {
   b.chest('hydra_nest', 430, 712, -2, [{ id: 'hydra_egg', qty: 2 }, { id: 'rod_of_glaciers', qty: 1 }, { id: 'small_sapphire', qty: 3 }]);
   b.ropeSpot(428, 714, -2, [0, -1]);
   region(g, 'Hydra Nest', [414, 652, 468, 724], '60+', -2);
+  bossLair(g, 'boss_mire_hydra', 446, 690, -2);
   // the southern mangroves
   spawns(g, [332, 744, 390, 778], [['crocodile', 4], ['snake', 3]]);
   region(g, 'Mangrove Mire', [330, 742, 392, 780], '22+');
@@ -656,6 +686,7 @@ function desert(g: Gen): void {
   t3.slice(1).forEach((r) => spawns(g, [r.x - 2, r.y - 2, r.x + 2, r.y + 2], [['mummy', 2]], -3));
   b.spawn('behemoth', t3[t3.length - 1].x, t3[t3.length - 1].y, -3);
   b.chest('pharaohs_vault', t3[t3.length - 1].x + 2, t3[t3.length - 1].y, -3, [{ id: 'kings_edge', qty: 1 }, { id: 'small_diamond', qty: 4 }, { id: 'gold', qty: 6000 }]);
+  bossLair(g, 'boss_sand_king', t3[t3.length - 1].x - 2, t3[t3.length - 1].y, -3);
   region(g, 'Pyramid of Kesh', [px - 2, py - 2, px + n + 1, py + n + 1], '30+', 0, 2);
   region(g, 'Tomb of Kesh', [546, 626, 600, 680], '35+', -1);
   region(g, 'Kesh Catacombs', [548, 628, 598, 678], '50+', -2);

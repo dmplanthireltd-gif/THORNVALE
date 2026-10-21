@@ -12,7 +12,7 @@
 
 ## Before every push
 ```
-npm run typecheck && npm run test:logic && npx tsx scripts/content-test.ts && npm run test:storage && npm run test:auth && npm run test:net
+npm run typecheck && npm run test:logic && npx tsx scripts/content-test.ts && npm run test:storage && npm run test:auth && npm run test:net && npm run test:bosses
 ```
 (In the Claude cloud sandbox npm registry is blocked: use `/opt/npm-tools/node_modules/.bin/{tsc,tsx,esbuild}`.)
 

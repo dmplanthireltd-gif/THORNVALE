@@ -84,7 +84,7 @@ html, body {
 /* ---------------------------------------------------------------- HUD frame */
 .hud { position: absolute; inset: 0; pointer-events: none; }
 .hud > * { pointer-events: auto; }
-.hud > .region-banner, .hud > .toast, .hud > .death-screen { pointer-events: none; }
+.hud > .region-banner, .hud > .toast, .hud > .death-screen, .hud > .announce-banner { pointer-events: none; }
 
 .panel {
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
@@ -216,6 +216,7 @@ html, body {
 .log-line.npc { color: #7ac8ff; }
 .log-line.chat { color: #ffe23a; }
 .log-line.trade { color: #e0a0ff; }
+.log-line.event { color: #ffb84a; font-weight: 700; }
 .chat-row { display: flex; }
 .chat-input { flex: 1; }
 
@@ -288,6 +289,18 @@ html, body {
 }
 .region-banner.show { animation: banner 3.2s ease forwards; }
 @keyframes banner { 0% { opacity: 0; } 12% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+/* server-wide announcements: world bosses, raids */
+.announce-banner {
+  position: absolute; left: var(--cx); top: 24%; transform: translateX(-50%); z-index: 20;
+  max-width: min(640px, 80%); padding: 10px 22px; text-align: center;
+  background: linear-gradient(180deg, rgba(30, 10, 6, 0.88), rgba(10, 4, 2, 0.88)); border: 2px solid #8a5a1a; box-shadow: 0 0 18px rgba(255, 140, 40, 0.35);
+  opacity: 0; transition: opacity 0.6s;
+}
+.announce-banner.show { opacity: 1; }
+.announce-banner.raid { border-color: #a02a1a; box-shadow: 0 0 18px rgba(255, 50, 30, 0.4); }
+.announce-banner.worldboss { border-color: #d0a030; }
+.announce-title { font: 700 13px var(--pixel); letter-spacing: 0.12em; text-transform: uppercase; color: #ffb84a; margin-bottom: 4px; }
+.announce-text { font: 700 20px var(--serif); color: #fff; text-shadow: 2px 2px 0 #000; }
 .toast {
   position: absolute; left: var(--cx); top: calc(var(--top) + 56px); transform: translateX(-50%);
   padding: 6px 12px; background: rgba(0, 0, 0, 0.75); border: 1px solid #000; color: var(--gold);
@@ -448,6 +461,9 @@ select.text-input { flex: 1; }
 /* PvP skulls (nameplate and battle list) and the secure-mode button */
 .np-head { display: flex; align-items: center; gap: 3px; }
 .np-skull, .battle-skull { display: none; font-size: 12px; line-height: 1; }
+.np-crown { color: #ffd23a; font-size: 13px; line-height: 1; margin-right: 2px; text-shadow: 1px 1px 0 #000; }
+.np-title { font: italic 600 11px var(--serif); color: #ffd98a; text-shadow: 1px 1px 0 #000; text-align: center; white-space: nowrap; }
+.nameplate.boss .np-name { font-weight: 800; }
 .np-skull.white, .battle-skull.white { display: inline; color: #f4f4f4; }
 .np-skull.red, .battle-skull.red { display: inline; color: #ff3030; }
 .battle-row .battle-skull { flex: none; }

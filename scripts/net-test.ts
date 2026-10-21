@@ -70,6 +70,20 @@ async function main(): Promise<void> {
     rejected = e instanceof Error ? e.message : String(e);
   }
   check(/wrong password|already online/i.test(rejected), `someone else cannot take a name (${rejected || 'accepted!'})`);
+  // world bosses: a tester wakes one (test mode), everyone hears it, the map marks it, and a client next to it sees it
+  const heard: string[] = [];
+  b.game.events.on((e) => { if (e.type === 'announce') heard.push(e.text); });
+  a.send({ c: 'say', text: '/worldboss gorrumvald' });
+  await pump([a, b], 0.8);
+  const mark = b.game.worldMarks().find((m) => m.kind === 'worldboss');
+  check(!!mark, `the world map marks the world boss on every client (${mark?.name ?? 'none'})`);
+  check(heard.some((t) => /has awakened near/.test(t)) || !!mark, 'the awakening is broadcast');
+  if (mark) {
+    b.send({ c: 'say', text: `/goto ${mark.x + 3} ${mark.y} ${mark.z}` });
+    await pump([a, b], 1.2);
+    const seen = b.game.enemies.find((e) => e.def.boss === 'world' && !e.dead);
+    check(!!seen && !!seen.def.title, `a client near it sees the world boss (${seen ? `${seen.name}, ${seen.def.title}` : 'nothing'})`);
+  }
   const aGold = a.game.session(a.pid)!.inventory.count('gold');
   const aItem = a.game.session(a.pid)!.inventory.count(item);
   a.close();

@@ -11,10 +11,11 @@ export interface LootEntry {
 /**
  * A special attack. `ranged` fires a projectile at the target, `blast` hits an
  * area around the target, `nova` hits an area around the monster, `heal`
- * restores its own health.
+ * restores its own health, `wave` breathes a cone and `beam` a straight line
+ * towards the target (as long as `range`), `summon` calls helpers (bosses).
  */
 export interface Ability {
-  kind: 'ranged' | 'blast' | 'nova' | 'heal';
+  kind: 'ranged' | 'blast' | 'nova' | 'heal' | 'wave' | 'beam' | 'summon';
   name: string;
   element: Element;
   min: number;
@@ -24,7 +25,14 @@ export interface Ability {
   interval: number;
   /** Projectile / effect look. */
   effect: 'fire' | 'energy' | 'ice' | 'earth' | 'death' | 'holy' | 'arrow' | 'spear' | 'stone' | 'heal';
+  /** Summons: which monster, how many per call and how many may live at once. */
+  summon?: EnemyKind;
+  count?: number;
+  maxAlive?: number;
 }
+
+/** Bosses: dungeon bosses (one per region, long respawn), world bosses (scheduled, overworld), raid bosses (end a raid). */
+export type BossKind = 'dungeon' | 'world' | 'raid';
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -50,10 +58,19 @@ export interface EnemyDef {
   kite?: number;
   /** Elite monsters are tougher and announced with a coloured name. */
   elite?: boolean;
+  /** Bosses: what kind, and the title shown under the name ("the Rime Wyrm"). */
+  boss?: BossKind;
+  title?: string;
+  /** Below this share of health the monster enrages once: +50% damage, faster attacks and abilities. */
+  enrage?: number;
 }
 
 const A = (kind: Ability['kind'], name: string, element: Element, min: number, max: number, interval: number, effect: Ability['effect'], range = 4, radius = 0): Ability =>
   ({ kind, name, element, min, max, range, radius, interval, effect });
+
+/** A summoning ability: `count` helpers of `kind` per call, never more than `maxAlive` at once. */
+const S = (name: string, kind: EnemyKind, count: number, maxAlive: number, interval: number): Ability =>
+  ({ kind: 'summon', name, element: 'physical', min: 0, max: 0, range: 3, radius: 0, interval, effect: 'death', summon: kind, count, maxAlive });
 
 const L = (id: string, chance: number, min = 1, max = 1): LootEntry => ({ id, chance, min, max });
 
@@ -419,5 +436,181 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
       L('gold', 1, 100, 320), L('frost_dragon_scale', 0.5, 1, 3), L('dragon_scale', 0.4, 1, 2), L('great_health_potion', 0.2), L('great_mana_potion', 0.2),
       L('frostscale_shield', 0.012), L('frost_plate', 0.008), L('frost_legs', 0.012), L('frostbite_crossbow', 0.006), L('frozen_heart', 0.1), L('small_sapphire', 0.3), L('small_diamond', 0.1),
     ],
+  }),
+
+  // =================================================================== bosses (see bosses/bosses.ts)
+  // Dungeon bosses: one per region, elite, slow to respawn (1–4 hours), guaranteed rare loot and a chance at their unique item.
+  boss_ironjaw: E('boss_ironjaw', {
+    name: 'Ughrak Ironjaw', title: 'Warchief of Grimtusk', boss: 'dungeon', elite: true, enrage: 0.3,
+    maxHp: 2600, minDmg: 20, maxDmg: 110, armor: 16, attackInterval: 1.6, stepTime: 0.32, aggroRange: 8, leash: 8, wanderRadius: 2, exp: 2000, respawn: 3600,
+    abilities: [A('nova', 'cleaving spin', 'physical', 30, 90, 6, 'stone', 0, 1), S('war cry', 'orc_spearman', 2, 4, 20), A('ranged', 'hurled axe', 'physical', 30, 80, 4, 'spear', 4)],
+    loot: [L('gold', 1, 300, 700), L('orc_banner', 1), L('orc_warhelm', 1), L('strong_health_potion', 1, 2, 4), L('small_ruby', 1, 1, 2), L('ironjaw_helm', 0.25), L('ring_of_might', 0.06)],
+  }),
+  boss_bonebound: E('boss_bonebound', {
+    name: 'Lord Ossric', title: 'the Bonebound', boss: 'dungeon', elite: true, enrage: 0.3,
+    maxHp: 1900, minDmg: 15, maxDmg: 85, armor: 12, attackInterval: 1.7, stepTime: 0.38, aggroRange: 7, leash: 8, wanderRadius: 1, exp: 1500, respawn: 3600,
+    resist: { death: 100, holy: -25, ice: 20 },
+    abilities: [A('nova', 'grave chill', 'death', 25, 70, 5, 'death', 0, 2), S('raise the fallen', 'skeleton', 2, 4, 18), A('heal', 'bone mending', 'holy', 150, 300, 12, 'heal')],
+    loot: [L('gold', 1, 250, 600), L('bone', 1, 3, 6), L('strong_health_potion', 1, 1, 3), L('iron_shield', 1), L('small_emerald', 1), L('bonebound_amulet', 0.25), L('scarab_amulet', 0.05)],
+  }),
+  boss_delving_king: E('boss_delving_king', {
+    name: 'Grimbold Ashanvil', title: 'the Delving King', boss: 'dungeon', elite: true, enrage: 0.3,
+    maxHp: 4600, minDmg: 30, maxDmg: 150, armor: 26, attackInterval: 1.7, stepTime: 0.36, aggroRange: 8, leash: 8, wanderRadius: 2, exp: 3600, respawn: 5400,
+    resist: { physical: 10, earth: 20, fire: 10 },
+    abilities: [A('nova', 'hammer quake', 'physical', 60, 160, 6, 'stone', 0, 2), A('ranged', 'thrown hammer', 'physical', 50, 140, 4, 'stone', 4), S('call the guard', 'dwarf_soldier', 2, 4, 22)],
+    loot: [L('gold', 1, 500, 1200), L('dwarven_armor', 1), L('dwarven_legs', 0.5), L('dwarven_shield', 1), L('small_diamond', 1), L('ashanvil_hammer', 0.22), L('dwarven_helmet', 0.4)],
+  }),
+  boss_labyrinth_lord: E('boss_labyrinth_lord', {
+    name: 'Gorhorn', title: 'Lord of the Labyrinth', boss: 'dungeon', elite: true, enrage: 0.3,
+    maxHp: 5400, minDmg: 35, maxDmg: 170, armor: 22, attackInterval: 1.5, stepTime: 0.3, aggroRange: 8, leash: 8, wanderRadius: 2, exp: 4000, respawn: 5400,
+    resist: { earth: 15, physical: 5 },
+    abilities: [A('beam', 'goring charge', 'physical', 90, 210, 6, 'stone', 5), A('nova', 'trample', 'physical', 60, 150, 7, 'stone', 0, 1), S('horn call', 'minotaur_archer', 2, 4, 22)],
+    loot: [L('gold', 1, 500, 1200), L('minotaur_horn', 1, 3, 5), L('plate_legs', 1), L('great_health_potion', 1, 1, 3), L('small_ruby', 1, 1, 2), L('labyrinth_greaves', 0.22), L('tower_shield', 0.15)],
+  }),
+  boss_venom_oracle: E('boss_venom_oracle', {
+    name: 'Sszarak', title: 'the Venom Oracle', boss: 'dungeon', elite: true, enrage: 0.3,
+    maxHp: 9500, minDmg: 40, maxDmg: 190, armor: 24, attackInterval: 1.7, stepTime: 0.31, aggroRange: 8, leash: 8, wanderRadius: 2, exp: 7000, respawn: 7200,
+    resist: { earth: 80, fire: 15, ice: -15, physical: 5 },
+    abilities: [
+      A('wave', 'venom spray', 'earth', 120, 260, 6, 'earth', 5),
+      A('blast', 'poison rain', 'earth', 90, 200, 7, 'earth', 5, 2),
+      S('serpent call', 'lizard_sentinel', 2, 4, 20),
+      A('heal', 'serpent prayer', 'holy', 600, 1000, 14, 'heal'),
+    ],
+    loot: [L('gold', 1, 800, 1800), L('lizard_scale', 1, 3, 6), L('jade_amulet', 1), L('great_mana_potion', 1, 2, 4), L('small_emerald', 1, 2, 4), L('oracle_rod', 0.2), L('lizard_blade', 0.12), L('lizardscale_armor', 0.12)],
+  }),
+  boss_ember_matriarch: E('boss_ember_matriarch', {
+    name: 'Kaerith', title: 'Mother of Flames', boss: 'dungeon', elite: true, enrage: 0.3,
+    maxHp: 14000, minDmg: 50, maxDmg: 220, armor: 28, attackInterval: 2, stepTime: 0.38, aggroRange: 8, leash: 8, wanderRadius: 2, exp: 10000, respawn: 9000,
+    resist: { fire: 100, ice: -10, earth: 20 },
+    abilities: [
+      A('wave', 'searing breath', 'fire', 200, 450, 6, 'fire', 5),
+      A('nova', 'wingbeat inferno', 'fire', 150, 320, 9, 'fire', 0, 2),
+      S('brood call', 'dragon', 1, 2, 30),
+    ],
+    loot: [L('gold', 1, 1000, 2500), L('red_dragon_scale', 1, 2, 4), L('dragon_scale', 1, 3, 6), L('dragon_helm', 0.5), L('great_health_potion', 1, 2, 4), L('small_ruby', 1, 3, 6), L('matriarch_scalemail', 0.2), L('dragonbane_crossbow', 0.06), L('dragonhide_pack', 0.1)],
+  }),
+  boss_sand_king: E('boss_sand_king', {
+    name: 'Ankhset', title: 'the Undying Sand King', boss: 'dungeon', elite: true, enrage: 0.3,
+    maxHp: 18000, minDmg: 60, maxDmg: 260, armor: 26, attackInterval: 1.8, stepTime: 0.4, aggroRange: 8, leash: 8, wanderRadius: 2, exp: 13000, respawn: 10800,
+    resist: { death: 100, earth: 30, holy: -25, fire: -10 },
+    abilities: [
+      A('beam', 'curse of ages', 'death', 180, 380, 5, 'death', 6),
+      A('blast', 'sandstorm', 'earth', 120, 260, 7, 'earth', 5, 2),
+      S('wake the dead', 'mummy', 3, 5, 24),
+      A('heal', 'embalmed vigour', 'holy', 1200, 2000, 16, 'heal'),
+    ],
+    loot: [L('gold', 1, 1500, 3500), L('golden_goblet', 1, 1, 2), L('scarab_coin', 1, 5, 10), L('scarab_amulet', 1), L('small_diamond', 1, 2, 4), L('sandking_crown', 0.2), L('kings_edge', 0.05)],
+  }),
+  boss_mire_hydra: E('boss_mire_hydra', {
+    name: 'Mirewretch', title: 'the Hundred-Fanged', boss: 'dungeon', elite: true, enrage: 0.3,
+    maxHp: 22000, minDmg: 60, maxDmg: 250, armor: 28, attackInterval: 1.8, stepTime: 0.42, aggroRange: 8, leash: 8, wanderRadius: 2, exp: 16000, respawn: 10800,
+    resist: { ice: 60, earth: 100, fire: -10, energy: 10 },
+    abilities: [
+      A('wave', 'frost spray', 'ice', 180, 400, 6, 'ice', 5),
+      A('blast', 'venom flood', 'earth', 140, 300, 7, 'earth', 5, 2),
+      A('heal', 'regrowth', 'holy', 1500, 2500, 15, 'heal'),
+    ],
+    loot: [L('gold', 1, 1500, 3500), L('hydra_head', 1, 2, 3), L('hydra_egg', 1, 1, 2), L('hydra_legs', 0.5), L('great_mana_potion', 1, 3, 5), L('small_sapphire', 1, 3, 6), L('hundred_fang_bow', 0.2), L('rod_of_glaciers', 0.3)],
+  }),
+  boss_rime_wyrm: E('boss_rime_wyrm', {
+    name: 'Hrimgaard', title: 'the Rime Wyrm', boss: 'dungeon', elite: true, enrage: 0.3,
+    maxHp: 30000, minDmg: 80, maxDmg: 320, armor: 32, attackInterval: 2, stepTime: 0.4, aggroRange: 8, leash: 8, wanderRadius: 2, exp: 22000, respawn: 10800,
+    resist: { ice: 100, earth: 30, death: 20, fire: -15, energy: -10 },
+    abilities: [
+      A('wave', 'rime breath', 'ice', 250, 520, 6, 'ice', 6),
+      A('nova', 'glacial roar', 'ice', 180, 400, 9, 'ice', 0, 3),
+      S('ice call', 'ice_golem', 2, 4, 28),
+      A('ranged', 'frost bite', 'ice', 120, 260, 4, 'ice', 5),
+    ],
+    loot: [L('gold', 1, 2000, 4000), L('frost_dragon_scale', 1, 3, 6), L('frozen_heart', 1, 1, 2), L('frost_plate', 0.4), L('frostscale_shield', 0.4), L('small_sapphire', 1, 4, 8), L('hrimgaard_fang', 0.2), L('frostbite_crossbow', 0.15)],
+  }),
+  boss_ashen_sovereign: E('boss_ashen_sovereign', {
+    name: 'Vorthazul', title: 'the Ashen Sovereign', boss: 'dungeon', elite: true, enrage: 0.3,
+    maxHp: 50000, minDmg: 150, maxDmg: 600, armor: 45, attackInterval: 2, stepTime: 0.34, aggroRange: 8, leash: 8, wanderRadius: 2, exp: 40000, respawn: 14400,
+    resist: { fire: 100, physical: 25, energy: 40, death: 30, holy: -20, ice: -10 },
+    abilities: [
+      A('blast', 'ashfall', 'fire', 300, 650, 6, 'fire', 6, 3),
+      A('beam', 'abyssal lance', 'energy', 350, 650, 7, 'energy', 7),
+      S('summon embers', 'fire_elemental', 2, 4, 25),
+      A('heal', 'sovereign will', 'holy', 2000, 3500, 18, 'heal'),
+    ],
+    loot: [
+      L('gold', 1, 4000, 8000), L('demonic_essence', 1, 2, 4), L('demon_horn', 1, 1, 2), L('small_diamond', 1, 4, 8), L('great_health_potion', 1, 3, 6),
+      L('demon_shield', 0.2), L('demon_helm', 0.15), L('demonplate', 0.08), L('demonbone_amulet', 0.15), L('sovereign_wand', 0.15), L('ashen_will_ring', 0.15),
+    ],
+  }),
+  // World bosses: colossal, need many players; loot is shared by contribution (bosses/WorldEvents.ts), never dropped on the ground.
+  wb_mountain: E('wb_mountain', {
+    name: 'Gorrumvald', title: 'the Mountain That Walks', boss: 'world', elite: true, enrage: 0.3,
+    maxHp: 250000, minDmg: 150, maxDmg: 650, armor: 50, attackInterval: 2.2, stepTime: 0.5, aggroRange: 9, leash: 8, wanderRadius: 3, exp: 150000, respawn: 999999,
+    resist: { physical: 20, earth: 40, fire: 10, energy: -10 },
+    abilities: [
+      A('nova', 'earthquake', 'physical', 150, 400, 7, 'stone', 0, 4),
+      A('blast', 'boulder rain', 'physical', 200, 480, 6, 'stone', 7, 3),
+      S('stone kin', 'cyclops', 3, 6, 30),
+    ],
+    loot: [
+      L('gold', 1, 3000, 6000), L('great_health_potion', 1, 3, 6), L('small_diamond', 0.8, 1, 4), L('behemoth_claw', 0.5), L('thunder_maul', 0.08), L('steel_boots', 0.3),
+      L('mountainheart_shield', 0.06), L('colossus_maul', 0.06),
+    ],
+  }),
+  wb_storm_serpent: E('wb_storm_serpent', {
+    name: 'Vaelith', title: 'the Storm Serpent', boss: 'world', elite: true, enrage: 0.3,
+    maxHp: 200000, minDmg: 120, maxDmg: 520, armor: 40, attackInterval: 2, stepTime: 0.45, aggroRange: 9, leash: 8, wanderRadius: 3, exp: 130000, respawn: 999999,
+    resist: { energy: 100, ice: 40, earth: -15, fire: 10 },
+    abilities: [
+      A('beam', 'lightning lance', 'energy', 250, 550, 5, 'energy', 8),
+      A('nova', 'thunderstorm', 'energy', 150, 350, 8, 'energy', 0, 4),
+      A('wave', 'tidal crash', 'ice', 200, 420, 7, 'ice', 6),
+      S('call of the deep', 'crocodile', 3, 6, 30),
+    ],
+    loot: [
+      L('gold', 1, 3000, 6000), L('great_mana_potion', 1, 3, 6), L('small_sapphire', 0.8, 1, 4), L('wand_of_storms', 0.15), L('storm_tome', 0.08),
+      L('stormcoil_wand', 0.06), L('tidecrest_boots', 0.06),
+    ],
+  }),
+  wb_blight_mother: E('wb_blight_mother', {
+    name: 'Nhalgrith', title: 'the Blight Mother', boss: 'world', elite: true, enrage: 0.3,
+    maxHp: 220000, minDmg: 130, maxDmg: 560, armor: 42, attackInterval: 1.9, stepTime: 0.42, aggroRange: 9, leash: 8, wanderRadius: 3, exp: 140000, respawn: 999999,
+    resist: { earth: 100, death: 30, fire: -20, holy: -10 },
+    abilities: [
+      A('blast', 'blight rain', 'earth', 180, 420, 6, 'earth', 7, 3),
+      A('wave', 'venom torrent', 'earth', 220, 460, 7, 'earth', 6),
+      S('brood swarm', 'tarantula', 4, 8, 22),
+      A('heal', 'brood feast', 'holy', 3000, 6000, 20, 'heal'),
+    ],
+    loot: [
+      L('gold', 1, 3000, 6000), L('great_health_potion', 1, 2, 4), L('spider_silk', 1, 3, 8), L('small_emerald', 0.8, 1, 4), L('jade_amulet', 0.3), L('elven_aegis', 0.08),
+      L('blightweave_robe', 0.06), L('broodmother_crossbow', 0.06),
+    ],
+  }),
+  // Raid bosses: end the last wave of a raid (bosses/bosses.ts RAIDS); never respawn.
+  raid_tusk_warlord: E('raid_tusk_warlord', {
+    name: 'Grashnak Tuskbreaker', title: 'the Burning Warlord', boss: 'raid', elite: true, enrage: 0.3,
+    maxHp: 6000, minDmg: 35, maxDmg: 160, armor: 20, attackInterval: 1.5, stepTime: 0.3, aggroRange: 9, leash: 8, wanderRadius: 3, exp: 4500, respawn: 999999,
+    abilities: [A('nova', 'burning whirl', 'fire', 60, 150, 6, 'fire', 0, 2), A('ranged', 'hurled axe', 'physical', 50, 130, 4, 'spear', 4), S('rally', 'orc_berserker', 2, 4, 25)],
+    loot: [L('gold', 1, 800, 1600), L('orc_banner', 1, 1, 2), L('orc_warhelm', 1), L('double_axe', 0.3), L('tower_shield', 0.2), L('ring_of_might', 0.1), L('small_ruby', 1, 1, 3)],
+  }),
+  raid_grave_warden: E('raid_grave_warden', {
+    name: 'Sexton Morrow', title: 'the Gravewarden', boss: 'raid', elite: true, enrage: 0.3,
+    maxHp: 3000, minDmg: 20, maxDmg: 100, armor: 14, attackInterval: 1.7, stepTime: 0.36, aggroRange: 9, leash: 8, wanderRadius: 3, exp: 2200, respawn: 999999,
+    resist: { death: 100, holy: -30, earth: 30 },
+    abilities: [A('nova', 'grave dirt', 'death', 30, 90, 6, 'death', 0, 2), S('dig up', 'skeleton', 3, 5, 20), A('heal', 'unholy rite', 'holy', 200, 400, 14, 'heal')],
+    loot: [L('gold', 1, 400, 900), L('bone', 1, 3, 6), L('strong_health_potion', 1, 2, 3), L('chain_armor', 0.5), L('golden_goblet', 0.25), L('small_emerald', 1)],
+  }),
+  raid_frost_jarl: E('raid_frost_jarl', {
+    name: 'Hjalmvar Rimeborn', title: 'Jarl of the Frostmarch', boss: 'raid', elite: true, enrage: 0.3,
+    maxHp: 12000, minDmg: 50, maxDmg: 220, armor: 28, attackInterval: 1.8, stepTime: 0.36, aggroRange: 9, leash: 8, wanderRadius: 3, exp: 9000, respawn: 999999,
+    resist: { ice: 80, physical: 10, fire: -15, energy: -10 },
+    abilities: [A('nova', 'frost stomp', 'ice', 100, 240, 6, 'ice', 0, 2), A('wave', 'blizzard breath', 'ice', 140, 300, 7, 'ice', 5), A('ranged', 'hurled ice block', 'physical', 90, 200, 5, 'stone', 5)],
+    loot: [L('gold', 1, 1200, 2500), L('giant_beard', 1, 1, 3), L('frost_helm', 0.3), L('glacial_cleaver', 0.15), L('fur_backpack', 0.4), L('small_sapphire', 1, 2, 4)],
+  }),
+  raid_swarm_queen: E('raid_swarm_queen', {
+    name: 'Ixtara', title: 'Queen of the Swarm', boss: 'raid', elite: true, enrage: 0.3,
+    maxHp: 7000, minDmg: 35, maxDmg: 150, armor: 30, attackInterval: 1.6, stepTime: 0.34, aggroRange: 9, leash: 8, wanderRadius: 3, exp: 5200, respawn: 999999,
+    resist: { earth: 90, physical: 15, fire: -15, ice: -10 },
+    abilities: [A('blast', 'sand swarm', 'earth', 80, 200, 6, 'earth', 5, 2), S('brood', 'scarab', 4, 8, 20), A('heal', 'royal jelly', 'holy', 500, 900, 15, 'heal')],
+    loot: [L('gold', 1, 900, 1800), L('scarab_coin', 1, 4, 8), L('scarab_shield', 0.4), L('scarab_amulet', 0.4), L('small_emerald', 1, 1, 3)],
   }),
 };

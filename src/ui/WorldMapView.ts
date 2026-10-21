@@ -256,6 +256,30 @@ export class WorldMapView {
         ctx.fillText(label, c.x, c.y - 10);
       }
     }
+    // an active world boss (gold crown) and raid (red swords), on every floor so nobody misses them
+    for (const m of g.worldMarks()) {
+      const c = this.screenOf(m.x + 0.5, m.y + 0.5);
+      const pulse = 9 + Math.sin(performance.now() / 200) * 3;
+      const col = m.kind === 'worldboss' ? '#ffd23a' : '#ff4a2a';
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, pulse + Math.max(0, s * 0.6), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.font = '700 18px Verdana, sans-serif';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#000';
+      const icon = m.kind === 'worldboss' ? '♛' : '⚔';
+      ctx.strokeText(icon, c.x, c.y);
+      ctx.fillStyle = col;
+      ctx.fillText(icon, c.x, c.y);
+      ctx.font = '700 12px Verdana, sans-serif';
+      const label = `${m.name}${m.z !== this.z ? ` (floor ${m.z})` : ''}`;
+      ctx.strokeText(label, c.x, c.y - 20);
+      ctx.fillText(label, c.x, c.y - 20);
+    }
+    ctx.font = '600 10px Verdana, sans-serif';
     const me = g.getPlayer(this.ctl.pid);
     for (const p of g.players()) {
       if (p.z !== this.z || p === me) continue;

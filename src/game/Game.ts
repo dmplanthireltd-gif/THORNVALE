@@ -34,6 +34,8 @@ import { buildDialogue, type DialogueState, type DialogueView } from './npc/dial
 import { Npc } from './npc/Npc';
 import { buyPrice, NPCS } from './npc/npcs';
 import { runAdminCommand } from './admin';
+import { GM_BOSS_LIFETIME, SUMMON_LIFETIME, type WorldMark } from './bosses/bosses';
+import { WorldEvents } from './bosses/WorldEvents';
 import { migrateSave, SAVE_VERSION } from './save/migrate';
 import { DEFAULT_OUTFIT, isOutfit, type Outfit } from './player/outfits';
 import { BUFF_NAMES, emptyBuffs, expForLevel, FIGHT_MODE, Player, type FightMode } from './player/Player';
@@ -194,6 +196,8 @@ export interface GameOptions {
   pvp?: boolean;
   /** Wall clock in ms (skulls, unjustified kills). Tests replace it. */
   now?: () => number;
+  /** Server test mode (TEST_MODE): everyone may start raids and world bosses with /raid and /worldboss. */
+  testMode?: boolean;
 }
 
 export const BAG_LIFETIME = 180;
@@ -281,10 +285,22 @@ export class Game implements AIContext {
   /** Online mirror: party relation per player id (1 member, 2 invited me, 3 I invited). */
   netPartyFlags = new Map<number, 1 | 2 | 3>();
   private nextId = 1;
+  /** Server test mode: /raid and /worldboss for everyone. */
+  readonly testMode: boolean;
+  /** World bosses and raids (schedule, broadcasts, loot by contribution). */
+  readonly worldEvents: WorldEvents;
+  /** Online mirror: active world boss / raid markers as last sent by the server. */
+  netWorldMarks: WorldMark[] = [];
+  /** Dynamic monsters to take out of the world at the end of this update. */
+  private despawnQueue: Enemy[] = [];
 
   constructor(opts: GameOptions = {}) {
     this.simulate = opts.simulate ?? true;
     this.pvp = opts.pvp ?? false;
+    this.testMode = opts.testMode ?? false;
+    this.worldEvents = new WorldEvents(this);
+    // a mirror drops raid monsters, summons and world bosses when the server says they left
+    if (!this.simulate) this.events.on((e) => { if (e.type === 'despawn') this.removeEnemyNow(e.id); });
     this.now = opts.now ?? (() => Date.now());
     this.world = buildWorld();
     // NPCs and monsters always take the first ids, so a server and its clients agree on them
@@ -666,6 +682,8 @@ export class Game implements AIContext {
     this.updateStumps(dt);
     this.updateFires(dt);
     this.updateFishSpots(dt);
+    this.worldEvents.update(dt);
+    this.flushDespawns();
     this.marketTimer -= dt;
     if (this.marketTimer <= 0) {
       this.marketTimer = 10;
@@ -986,6 +1004,19 @@ export class Game implements AIContext {
   }
 
   private updateEnemy(e: Enemy, dt: number): void {
+    if (e.dynamic) {
+      // raid monsters, world bosses, summons: no respawn, they leave after their corpse fades or their time is up
+      if (e.dead) {
+        e.corpseTimer -= dt;
+        if (e.corpseTimer <= 0) this.despawnEnemy(e);
+        return;
+      }
+      e.lifetime -= dt;
+      if (e.lifetime <= 0) {
+        this.despawnEnemy(e);
+        return;
+      }
+    }
     if (e.dead) {
       e.corpseTimer -= dt;
       e.respawnTimer -= dt;
@@ -1000,6 +1031,7 @@ export class Game implements AIContext {
           e.state = 'idle';
           e.attackTimer = 0;
           e.targetId = null;
+          e.rage = 1;
           e.damageBy.clear();
           this.events.emit({ type: 'spawn', id: e.id });
         } else {
@@ -1009,8 +1041,8 @@ export class Game implements AIContext {
       return;
     }
     // monsters far from every player sleep, which keeps a big world cheap
-    let awake = false;
-    for (const s of this.sessions.values()) {
+    let awake = e.alwaysAwake;
+    if (!awake) for (const s of this.sessions.values()) {
       const p = s.player;
       if (p.z === e.z && chebyshev(p.x, p.y, e.x, e.y) <= 24) { awake = true; break; }
     }
@@ -1863,7 +1895,7 @@ export class Game implements AIContext {
     } else if (attacker instanceof Enemy && target instanceof Player) {
       const s = this.sessions.get(target.id);
       if (!s || this.isProtected(target)) return;
-      const roll = rollMonsterMelee(attacker.def.minDmg, attacker.def.maxDmg, this.armor(s), this.defense(s));
+      const roll = rollMonsterMelee(Math.round(attacker.def.minDmg * attacker.rage), Math.round(attacker.def.maxDmg * attacker.rage), this.armor(s), this.defense(s));
       roll.amount = applyResist(Math.round(roll.amount * FIGHT_MODE[target.fightMode].taken), this.resist(s, 'physical'));
       this.trainShield(target);
       this.applyDamage(target, attacker, roll, 'physical');
@@ -1954,11 +1986,15 @@ export class Game implements AIContext {
       this.events.emit({ type: 'heal', targetId: e.id, amount });
       return;
     }
+    if (a.kind === 'summon') {
+      this.summonHelpers(e, a, target);
+      return;
+    }
     e.faceTowards(target.x, target.y);
     const hit = (p: Player) => {
       const s = this.sessions.get(p.id);
       if (!s || p.dead || this.isProtected(p)) return;
-      let raw = randInt(a.min, a.max);
+      let raw = Math.round(randInt(a.min, a.max) * e.rage);
       if (a.element === 'physical') raw -= randInt(0, Math.floor(this.armor(s) / 2));
       else raw -= randInt(0, Math.floor(this.defense(s) / 4));
       const amount = applyResist(Math.max(1, raw), this.resist(s, a.element));
@@ -1970,6 +2006,17 @@ export class Game implements AIContext {
       this.events.emit({ type: 'projectile', fromId: e.id, toId: target.id, effect: a.effect as Effect });
       if (a.element === 'physical' && !this.isProtected(target)) this.trainShield(target);
       hit(target);
+      return;
+    }
+    if (a.kind === 'wave' || a.kind === 'beam') {
+      // breathed along the main axis towards the target, like a player's wave along their facing
+      const dx = target.x - e.x, dy = target.y - e.y;
+      const dir = Math.abs(dx) >= Math.abs(dy) ? { dx: Math.sign(dx) || 1, dy: 0 } : { dx: 0, dy: Math.sign(dy) };
+      const tiles = (a.kind === 'wave' ? waveTiles(e.x, e.y, dir, a.range) : beamTiles(e.x, e.y, dir, a.range))
+        .filter(([x, y]) => this.world.inBounds(x, y) && !this.world.blocksSight(x, y, e.z) && this.world.lineOfSight(e.x, e.y, x, y, e.z));
+      this.events.emit({ type: 'tiles', z: e.z, tiles: tiles.flat(), effect: a.effect as Effect });
+      const on = new Set(tiles.map(([x, y]) => y * this.world.width + x));
+      for (const p of this.alivePlayers()) if (p.z === e.z && on.has(p.y * this.world.width + p.x)) hit(p);
       return;
     }
     const cx = a.kind === 'nova' ? e.x : target.x;
@@ -2093,6 +2140,7 @@ export class Game implements AIContext {
     if (source instanceof Player) source.sinceCombat = 0;
     if (target instanceof Enemy && source instanceof Player) onEnemyDamaged(target, source.id);
     if (roll.result !== 'hit') return;
+    this.worldEvents.onDamage(target, source);
     if (target instanceof Enemy && source instanceof Player) {
       const dealt = Math.min(amount, Math.max(0, target.hp));
       target.damageBy.set(source.id, (target.damageBy.get(source.id) ?? 0) + dealt);
@@ -2108,6 +2156,11 @@ export class Game implements AIContext {
       target.hp = 0;
       if (target instanceof Player) this.killPlayer(target, source);
       else if (target instanceof Enemy) this.killEnemy(target);
+    } else if (target instanceof Enemy && target.def.enrage && target.rage === 1 && target.hp < target.maxHp * target.def.enrage) {
+      // bosses fly into a rage once below their threshold: harder hits, faster attacks and abilities
+      target.rage = 1.5;
+      this.events.emit({ type: 'chat', id: target.id, name: target.name, text: 'ENRAGED!' });
+      this.events.emit({ type: 'area', x: target.x, y: target.y, z: target.z, radius: 1, effect: 'fire' });
     }
   }
 
@@ -2118,14 +2171,20 @@ export class Game implements AIContext {
     e.moveT = 1;
     e.fromX = e.x;
     e.fromY = e.y;
-    e.respawnTimer = e.def.respawn;
-    e.corpseTimer = 8;
+    e.respawnTimer = e.dynamic ? Infinity : this.worldEvents.respawnDelay(e);
+    e.corpseTimer = e.def.boss ? 20 : 8;
     e.targetId = null;
     this.events.emit({ type: 'death', id: e.id });
     for (const s of this.sessions.values()) if (s.player.targetId === e.id) s.player.targetId = null;
+    if (e.noReward) {
+      // summoned helpers: no experience, no loot, no quest kills
+      e.damageBy.clear();
+      return;
+    }
 
     const total = [...e.damageBy.values()].reduce((a, b) => a + b, 0) || 1;
-    const why = `for slaying ${e.def.elite ? 'the ' + e.def.name.toLowerCase() : article(e.def.name)}`;
+    const who = e.def.boss ? e.def.name : e.def.elite ? 'the ' + e.def.name.toLowerCase() : article(e.def.name);
+    const why = `for slaying ${who}`;
     // parties with shared experience pool their members' part, add a bonus and split it evenly
     const pooled = new Set<number>();
     for (const party of this.parties) {
@@ -2158,15 +2217,129 @@ export class Game implements AIContext {
       if (changed.length) this.events.emit({ type: 'questChanged', to: pid });
     }
     const looters = [...e.damageBy.keys()];
+    const damage = new Map(e.damageBy);
     e.damageBy.clear();
+    // world bosses share their loot by contribution instead of dropping it
+    if (this.worldEvents.onKilled(e, damage)) return;
 
     const items: ItemStack[] = [];
     for (const l of e.def.loot) {
       if (Math.random() < l.chance) items.push({ id: l.id, qty: randInt(l.min, l.max) });
     }
     const names = items.length ? items.map(describeStack).join(', ') : 'nothing';
-    for (const pid of looters) this.msg(pid, `Loot of ${e.def.elite ? 'the ' + e.def.name.toLowerCase() : article(e.def.name)}: ${names}.`, 'loot');
+    for (const pid of looters) this.msg(pid, `Loot of ${who}: ${names}.`, 'loot');
     if (items.length) this.dropBag(e.x, e.y, e.z, items);
+  }
+
+  // ---------------------------------------------------------------- bosses, raids, summons
+
+  /**
+   * Puts a monster into the running world (raids, world bosses, summons, /boss)
+   * on a free, unprotected tile within `radius` of x, y. It never respawns and
+   * leaves after its corpse fades. Returns null when there is no room.
+   */
+  spawnEnemy(kind: EnemyKind, x: number, y: number, z: number, opts: { tag: string; radius?: number; masterId?: number; noReward?: boolean; alwaysAwake?: boolean; lifetime?: number }): Enemy | null {
+    const at = this.spawnTileNear(x, y, z, opts.radius ?? 4);
+    if (!at) return null;
+    const e = new Enemy(this.nextId++, kind, at.x, at.y, z);
+    e.dynamic = true;
+    e.tag = opts.tag;
+    e.masterId = opts.masterId ?? null;
+    e.noReward = opts.noReward ?? false;
+    e.alwaysAwake = opts.alwaysAwake ?? false;
+    e.lifetime = opts.lifetime ?? Infinity;
+    this.enemies.push(e);
+    this.events.emit({ type: 'spawn', id: e.id });
+    this.events.emit({ type: 'area', x: at.x, y: at.y, z, radius: 0, effect: 'energy' });
+    return e;
+  }
+
+  /** Nearest free tile a monster may stand on (walkable, no protection zone, no stairs, nobody there), searched ring by ring. */
+  private spawnTileNear(x: number, y: number, z: number, radius: number): { x: number; y: number } | null {
+    const w = this.world;
+    for (let r = 0; r <= radius; r++) {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const nx = x + dx, ny = y + dy;
+        if (w.inBounds(nx, ny) && w.isWalkable(nx, ny, z) && !w.isSafe(nx, ny, z) && !w.linkAt(nx, ny, z) && !this.isOccupied(nx, ny, z)) return { x: nx, y: ny };
+      }
+    }
+    return null;
+  }
+
+  /** A boss calls helpers next to it, never more than the ability's `maxAlive` at once. */
+  private summonHelpers(e: Enemy, a: Ability, target: Player): void {
+    if (!a.summon) return;
+    let alive = 0;
+    for (const o of this.enemies) if (o.masterId === e.id && !o.dead) alive++;
+    const n = Math.min(a.count ?? 1, (a.maxAlive ?? 4) - alive);
+    if (n <= 0) return;
+    let made = 0;
+    for (let i = 0; i < n; i++) {
+      const h = this.spawnEnemy(a.summon, e.x, e.y, e.z, { tag: 'summon', radius: a.range || 3, masterId: e.id, noReward: true, lifetime: SUMMON_LIFETIME, alwaysAwake: e.alwaysAwake });
+      if (!h) break;
+      h.state = 'chase';
+      h.targetId = target.id;
+      made++;
+    }
+    if (made) {
+      this.events.emit({ type: 'area', x: e.x, y: e.y, z: e.z, radius: 1, effect: 'death' });
+      this.events.emit({ type: 'chat', id: e.id, name: e.name, text: a.name.toUpperCase() + '!' });
+    }
+  }
+
+  /** Takes a dynamic monster out of the world at the end of this update (safe while looping over enemies). */
+  despawnEnemy(e: Enemy): void {
+    if (!e.dynamic || e.gone) return;
+    e.gone = true;
+    this.despawnQueue.push(e);
+  }
+
+  private flushDespawns(): void {
+    if (!this.despawnQueue.length) return;
+    const q = this.despawnQueue;
+    this.despawnQueue = [];
+    for (const e of q) this.removeEnemyNow(e.id);
+  }
+
+  /** Removes a monster and every reference to it; tells clients. */
+  private removeEnemyNow(id: number): void {
+    const i = this.enemies.findIndex((e) => e.id === id);
+    if (i < 0) return;
+    const e = this.enemies[i];
+    e.gone = true;
+    this.enemies.splice(i, 1);
+    for (const s of this.sessions.values()) if (s.player.targetId === id) s.player.targetId = null;
+    if (this.simulate) this.events.emit({ type: 'despawn', id });
+  }
+
+  /** Online mirror: a monster the server spawned while running (it arrives with its kind in the snapshot). */
+  addMirrorEnemy(id: number, kind: EnemyKind, x: number, y: number, z: number): Enemy {
+    const e = new Enemy(id, kind, x, y, z);
+    e.dynamic = true;
+    this.enemies.push(e);
+    if (id >= this.nextId) this.nextId = id + 1;
+    return e;
+  }
+
+  /** /boss: a boss (any monster) right next to a game master; leaves after 30 minutes. */
+  spawnBossNear(p: Player, kind: EnemyKind): Enemy | null {
+    return this.spawnEnemy(kind, p.x, p.y, p.z, { tag: 'gm', radius: 4, lifetime: GM_BOSS_LIFETIME });
+  }
+
+  /** Server-wide announcement (big banner and a log line on every client). */
+  announce(title: string, text: string, style: 'worldboss' | 'raid' | 'boss', big: boolean): void {
+    this.events.emit({ type: 'announce', title, text, style, big });
+  }
+
+  /** Active world boss and raid, for the world map. */
+  worldMarks(): WorldMark[] {
+    return this.simulate ? this.worldEvents.marks() : this.netWorldMarks;
+  }
+
+  /** Items on the ground (in one bag) at a tile. */
+  dropItemsAt(x: number, y: number, z: number, items: ItemStack[]): void {
+    if (items.length) this.dropBag(x, y, z, items);
   }
 
   private dropBag(x: number, y: number, z: number, items: ItemStack[]): GroundBag {
@@ -2738,6 +2911,7 @@ export class Game implements AIContext {
         p.hp += amount;
         this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'heal' });
         this.events.emit({ type: 'heal', targetId: p.id, amount });
+        this.worldEvents.onHeal(p, p, amount);
         return;
       }
       case 'healFriend': {
@@ -2750,6 +2924,7 @@ export class Game implements AIContext {
         target.hp += amount;
         this.events.emit({ type: 'projectile', fromId: p.id, toId: target.id, effect: 'heal' });
         this.events.emit({ type: 'heal', targetId: target.id, amount });
+        this.worldEvents.onHeal(p, target, amount);
         this.msg(target.id, `${p.name} heals you for ${amount} hitpoints.`, 'info');
         return;
       }
@@ -2779,6 +2954,7 @@ export class Game implements AIContext {
           if (amount <= 0) continue;
           o.hp += amount;
           this.events.emit({ type: 'heal', targetId: o.id, amount });
+          this.worldEvents.onHeal(p, o, amount);
           if (o !== p) this.msg(o.id, `${p.name} heals you for ${amount} hitpoints.`, 'info');
         }
         return;
@@ -3003,6 +3179,7 @@ export class Game implements AIContext {
       if (who !== p) this.events.emit({ type: 'projectile', fromId: p.id, toId: who.id, effect: 'heal' });
       this.events.emit({ type: 'area', x: who.x, y: who.y, z: who.z, radius: 0, effect: 'heal' });
       this.events.emit({ type: 'heal', targetId: who.id, amount });
+      this.worldEvents.onHeal(p, who, amount);
     } else if (r.type === 'cure') {
       const c = at ? creatureAt(at.x, at.y) : p;
       const who = c instanceof Player ? c : null;
@@ -4182,7 +4359,9 @@ export class Game implements AIContext {
       const [x, y, z] = k.split(',').map(Number);
       this.putOutFire(x, y, z);
     }
+    for (const e of [...this.enemies]) if (e.dynamic) this.removeEnemyNow(e.id);
     for (const e of this.enemies) {
+      e.rage = 1;
       e.placeAt(e.spawnX, e.spawnY, e.spawnZ);
       e.homeX = e.spawnX;
       e.homeY = e.spawnY;

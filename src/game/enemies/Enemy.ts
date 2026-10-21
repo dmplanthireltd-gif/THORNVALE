@@ -29,6 +29,28 @@ export class Enemy extends Creature {
   slowTimer = 0;
   /** Seconds until a magic field may hurt it again. */
   hazardTimer = 0;
+  /** Bosses below `def.enrage` health: hits harder and acts faster (1 = calm). */
+  rage = 1;
+  /**
+   * Spawned while the game runs (raids, world bosses, summons, /boss) instead of
+   * from the map: never respawns, is removed after its corpse fades, and the
+   * client learns its kind from the snapshot.
+   */
+  dynamic = false;
+  /** What spawned it: 'summon', 'raid', 'worldboss' or 'gm' (dynamic monsters only). */
+  tag: string | null = null;
+  /** Summons: the boss that called it (it dies with it). */
+  masterId: number | null = null;
+  /** Dynamic monsters: seconds before it leaves the world if still alive. */
+  lifetime = Infinity;
+  /** No loot and no experience (summoned helpers, so bosses cannot be farmed for adds). */
+  noReward = false;
+  /** Keeps thinking with no player nearby (raid monsters march on their town). */
+  alwaysAwake = false;
+  /** Removed from the world (dynamic monsters only). */
+  gone = false;
+  /** Raid monsters: the tile they march towards while idle. */
+  marchTo: { x: number; y: number } | null = null;
 
   constructor(id: number, readonly enemyKind: EnemyKind, readonly spawnX: number, readonly spawnY: number, readonly spawnZ = 0) {
     const def = ENEMIES[enemyKind];

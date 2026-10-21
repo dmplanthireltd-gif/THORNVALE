@@ -6,6 +6,10 @@ import { gatherXpForLevel, WC_MAX_LEVEL } from './gathering/woodcutting';
 import { findNonCombatSkill, NONCOMBAT_IDS, skillDef, type NonCombatSkill } from './gathering/skills';
 import { COMBAT_SKILLS, legacySkills, MAGIC_START, SKILL_MAX, SKILL_NAMES, SKILL_START, type CombatSkill } from './player/skills';
 import { isVocation, VOCATIONS } from './player/vocations';
+import { findRaid, RAIDS, WORLD_BOSSES } from './bosses/bosses';
+import { bossTitle } from './bosses/WorldEvents';
+import { ENEMIES } from './enemies/enemyDefs';
+import type { EnemyKind } from './world/WorldMap';
 
 /**
  * Test / game-master commands, typed in chat with a leading "/".
@@ -25,8 +29,22 @@ export const ADMIN_HELP = [
   '/kill — kill your current target (full admins only, not in test mode)',
   '/goto place — teleport to a place (e.g. /goto caldera) or /goto x y z',
   '/vocation name — change vocation',
+  '/raid name — start a raid now, after a 30 s warning (game masters; everyone in test mode)',
+  '/worldboss name — wake a world boss at one of its spots now (game masters; everyone in test mode)',
+  '/boss name — a boss right next to you, for 30 minutes (game masters only)',
+  '/events — world boss, raid and dungeon boss timers (game masters only)',
   '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing, fletching, crafting, cooking, firemaking); also /fishing N, /mining N, /smithing N, /fletching N, /crafting N, /cooking N, /firemaking N',
 ];
+
+/** Boss kinds by name, title or id ("hrimgaard", "rime wyrm", "boss_rime_wyrm", "mountain"). */
+export function findBoss(q: string, only?: 'dungeon' | 'world' | 'raid'): EnemyKind | null {
+  const n = q.trim().toLowerCase();
+  if (!n) return null;
+  const kinds = (Object.keys(ENEMIES) as EnemyKind[]).filter((k) => ENEMIES[k].boss && (!only || ENEMIES[k].boss === only));
+  return kinds.find((k) => k === n.replace(/\s+/g, '_') || ENEMIES[k].name.toLowerCase() === n)
+    ?? kinds.find((k) => k.includes(n.replace(/\s+/g, '_')) || bossTitle(k).toLowerCase().includes(n))
+    ?? null;
+}
 
 /** Short names accepted by /skill. */
 const SKILL_ALIASES: Record<string, CombatSkill> = {
@@ -180,6 +198,39 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       const t = game.getEnemy(p.targetId);
       if (!t || t.dead) return say('Target a monster first.', 'warn');
       game.adminKill(p, t);
+      return;
+    }
+    case 'raid': {
+      // game masters always; everyone on a test server
+      if (s.testOnly && !game.testMode) return say('Only game masters can start raids.', 'warn');
+      const r = findRaid(arg);
+      if (!r) return say(`Raids: ${RAIDS.map((x) => `${x.id} (${x.town})`).join(', ')}. Example: /raid orc`, 'warn');
+      if (game.worldEvents.raid) return say(`A raid is already running: ${game.worldEvents.raid.def.name}.`, 'warn');
+      game.worldEvents.startRaidNow(r);
+      return say(`Raid "${r.name}" on ${r.town} starts in 30 seconds.`);
+    }
+    case 'worldboss':
+    case 'wb': {
+      if (s.testOnly && !game.testMode) return say('Only game masters can wake world bosses.', 'warn');
+      const k = findBoss(arg, 'world');
+      const def = WORLD_BOSSES.find((w) => w.kind === k);
+      if (!def) return say(`World bosses: ${WORLD_BOSSES.map((w) => ENEMIES[w.kind].name.toLowerCase()).join(', ')}. Example: /worldboss ${ENEMIES[WORLD_BOSSES[0].kind].name.toLowerCase()}`, 'warn');
+      if (game.worldEvents.worldBoss) return say(`A world boss is already up: ${ENEMIES[game.worldEvents.worldBoss.def.kind].name}.`, 'warn');
+      const e = game.worldEvents.startWorldBoss(def);
+      if (!e) return say('No room for it at any of its spots right now.', 'warn');
+      return say(`${bossTitle(def.kind)} is up at ${e.x}, ${e.y}, ${e.z}.`);
+    }
+    case 'boss': {
+      if (s.testOnly) return say('Only game masters can call bosses.', 'warn');
+      const k = findBoss(arg);
+      if (!k) return say(`Bosses: ${(Object.keys(ENEMIES) as EnemyKind[]).filter((x) => ENEMIES[x].boss).map((x) => ENEMIES[x].name.toLowerCase()).join(', ')}. Example: /boss ironjaw`, 'warn');
+      const e = game.spawnBossNear(p, k);
+      if (!e) return say('There is no room for it next to you.', 'warn');
+      return say(`${bossTitle(k)} appears next to you (it leaves in 30 minutes).`);
+    }
+    case 'events': {
+      if (s.testOnly) return say('Only game masters can see the event timers.', 'warn');
+      for (const l of game.worldEvents.upcoming()) say(l);
       return;
     }
     case 'goto':

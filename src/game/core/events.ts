@@ -9,7 +9,7 @@ import type { BuffName } from '../player/Player';
  * quests, dialogue). A multiplayer server routes those to that player and
  * broadcasts the rest.
  */
-export type MessageKind = 'info' | 'combat' | 'loot' | 'quest' | 'warn' | 'level' | 'npc' | 'chat' | 'trade';
+export type MessageKind = 'info' | 'combat' | 'loot' | 'quest' | 'warn' | 'level' | 'npc' | 'chat' | 'trade' | 'event';
 
 export type Effect =
   | 'physical' | 'fire' | 'energy' | 'ice' | 'earth' | 'death' | 'holy'
@@ -28,6 +28,13 @@ export type GameEvent =
   | { type: 'buff'; id: number; buff: BuffName; on: boolean }
   | { type: 'death'; id: number }
   | { type: 'spawn'; id: number }
+  /** A monster spawned while the game runs (raid, world boss, summon) left the world for good. */
+  | { type: 'despawn'; id: number }
+  /**
+   * Server-wide announcement: world bosses, raids, boss kills. `big` shows the
+   * centred banner, otherwise only a line in the log.
+   */
+  | { type: 'announce'; title: string; text: string; style: 'worldboss' | 'raid' | 'boss'; big: boolean }
   | { type: 'teleport'; id: number }
   /** Experience gained; `skill` names a gathering skill (otherwise character experience). */
   | { type: 'xp'; amount: number; atId: number; to: number; skill?: string }

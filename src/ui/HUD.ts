@@ -81,6 +81,9 @@ export class HUD {
   private capEl!: HTMLDivElement;
   private buffsEl!: HTMLDivElement;
   private regionEl!: HTMLDivElement;
+  /** Big centred banner for server-wide announcements (world bosses, raids). */
+  private announceEl!: HTMLDivElement;
+  private announceTimer = 0;
   private floorEl!: HTMLDivElement;
   private statsEl!: HTMLDivElement;
   private equipEls = new Map<EquipSlot, HTMLDivElement>();
@@ -151,6 +154,7 @@ export class HUD {
     this.buildWindows();
     this.worldMap = new WorldMapView(this.root, this.ctl, this.minimap);
     this.regionEl = el('div', 'region-banner', this.root);
+    this.announceEl = el('div', 'announce-banner', this.root);
     this.deathEl = el('div', 'death-screen', this.root);
     el('div', 'death-title', this.deathEl, 'You are dead');
     el('div', 'death-sub', this.deathEl, 'You will wake in your home temple…');
@@ -193,6 +197,10 @@ export class HUD {
         break;
       case 'adminNotice':
         if (e.to === me) this.adminNotice(e.title, e.text);
+        break;
+      case 'announce':
+        this.log(e.text, 'event');
+        if (e.big) this.announce(e.title, e.text, e.style);
         break;
       case 'inventoryChanged':
         if (e.to !== me) break;
@@ -1090,6 +1098,15 @@ export class HUD {
     line.title = new Date().toLocaleTimeString();
     while (this.logEl.childElementCount > 120) this.logEl.firstElementChild?.remove();
     this.logEl.scrollTop = this.logEl.scrollHeight;
+  }
+
+  /** Shows a server-wide announcement in the middle of the screen for a few seconds. */
+  private announce(title: string, text: string, style: string): void {
+    this.announceEl.replaceChildren();
+    el('div', 'announce-title', this.announceEl, title);
+    el('div', 'announce-text', this.announceEl, text);
+    this.announceEl.className = `announce-banner ${style} show`;
+    this.announceTimer = 7;
   }
 
   toast(text: string, secs = 3): void {
@@ -2161,7 +2178,7 @@ export class HUD {
     const t = g.getTarget(p.targetId);
     if (t && !t.dead) {
       this.targetEl.classList.add('on');
-      this.targetName.textContent = t instanceof Enemy && t.def.elite ? `★ ${t.name}` : t.name;
+      this.targetName.textContent = t instanceof Enemy && t.def.boss ? `♛ ${t.name}${t.def.title ? `, ${t.def.title}` : ''}` : t instanceof Enemy && t.def.elite ? `★ ${t.name}` : t.name;
       this.targetFill.style.width = `${(t.hp / t.maxHp) * 100}%`;
       this.targetFill.style.background = hpColor(t.hp / t.maxHp);
     } else {
@@ -2185,6 +2202,10 @@ export class HUD {
     const hover = this.renderer.describeHover();
     if (this.statusLine.textContent !== hover) this.statusLine.textContent = hover;
 
+    if (this.announceTimer > 0) {
+      this.announceTimer -= dt;
+      if (this.announceTimer <= 0) this.announceEl.classList.remove('show');
+    }
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
       if (this.toastTimer <= 0) this.toastEl.classList.remove('show');

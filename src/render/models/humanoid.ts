@@ -571,17 +571,21 @@ export const HELMETS: Record<string, HelmLook> = {
   steel_helmet: { color: 0xc9d0da, shape: 'helm', trim: 0x4a4e56 },
   starsteel_helm: { color: 0x5a8ad8, shape: 'crested', trim: 0xc9d0da },
   darkstone_helm: { color: 0x4a2a5a, shape: 'horned', trim: 0x8a6aa0 },
+  ironjaw_helm: { color: 0x3a3a3a, shape: 'horned', trim: 0xe0b03c },
+  sandking_crown: { color: 0xffd040, shape: 'circlet', trim: 0x3a8ad0 },
 };
 
 export const LEGS: Record<string, number> = {
   fur_legs: 0xd8ccb4, dwarven_legs: 0xb08a4a, frost_legs: 0xbfe6f5,
   leather_legs: 0x8a5a32, chain_legs: 0xa9b2bf, plate_legs: 0xd4dae4, elven_leggings: 0x9ad0a0, hydra_legs: 0x2f7a5a, demon_legs: 0x7a1a1a,
   iron_legs: 0x9aa0aa, starsteel_legs: 0x5a8ad8, darkstone_legs: 0x4a2a5a,
+  labyrinth_greaves: 0x6a3a1a,
 };
 
 export const BOOTS: Record<string, number> = {
   fur_boots: 0xd8ccb4, glacier_boots: 0x9fd8f0,
   leather_boots: 0x6a4426, traveler_boots: 0x8a6a3e, steel_boots: 0xc9d0da, emberwalk_boots: 0xd0501a, windstride_boots: 0x9fe8ff,
+  tidecrest_boots: 0x3a6ad0,
 };
 
 function buildHelmet(h: HelmLook): THREE.Group {

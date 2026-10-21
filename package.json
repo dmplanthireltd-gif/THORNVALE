@@ -16,7 +16,8 @@
     "saves:import": "tsx scripts/saves.ts import",
     "saves:check": "tsx scripts/saves.ts check",
     "test:storage": "tsx scripts/storage-test.ts",
-    "test:auth": "tsx scripts/auth-test.ts"
+    "test:auth": "tsx scripts/auth-test.ts",
+    "test:bosses": "tsx scripts/boss-test.ts"
   },
   "dependencies": {
     "three": "^0.170.0"

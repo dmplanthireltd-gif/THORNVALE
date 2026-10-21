@@ -81,6 +81,15 @@ export const LOOKS: Record<string, Look> = {
   darkstone_sword: { c: 0x4a2a5a, t: 0x8a6aa0, g: 0x200a30, s: 1.12 },
   darkstone_axe: { c: 0x4a2a5a, t: 0x2a2028, g: 0x200a30, s: 1.12 },
   darkstone_mace: { c: 0x3a2048, t: 0x8a6aa0, g: 0x200a30, s: 1.12 },
+  // boss uniques
+  ashanvil_hammer: { c: 0x4a4038, t: 0xff8a2a, g: 0x5a1a00, s: 1.1 },
+  oracle_rod: { c: 0x6aff4a, t: 0x2a4a1a, g: 0x1a6a10 },
+  hundred_fang_bow: { c: 0x1a4a3a, t: 0xe8e0c6, g: 0x0a2a20, s: 1.15 },
+  hrimgaard_fang: { c: 0xe0f4ff, t: 0x6ab0ff, g: 0x2a6aa0, s: 1.15 },
+  sovereign_wand: { c: 0x2a2a2a, t: 0xffb020, g: 0xa02000 },
+  colossus_maul: { c: 0x7a7468, t: 0xe0b03c, g: 0x2a2010, s: 1.4 },
+  stormcoil_wand: { c: 0x9a8aff, t: 0x2a2a6a, g: 0x4040c0 },
+  broodmother_crossbow: { c: 0x3a4a1a, t: 0x9aff3a, g: 0x1a3a08, s: 1.1 },
 };
 
 const wood = () => mat(0x7a5530);
@@ -226,6 +235,7 @@ export const SHIELDS: Record<string, { face: number; rim: number; shape: 'round'
   dragon_shield: { face: 0x3f9a52, rim: 0xe0b03c, shape: 'kite', boss: 0x2f7a3e },
   elven_aegis: { face: 0xd8e8c0, rim: 0x4a9a5a, shape: 'kite', boss: 0x7ad08a, glow: 0x1a3a1a },
   demon_shield: { face: 0x5a1010, rim: 0x2a1a1a, shape: 'tower', boss: 0xd04020, glow: 0x300000 },
+  mountainheart_shield: { face: 0x6a6a5a, rim: 0xe0b03c, shape: 'tower', boss: 0xc0a060, glow: 0x201808 },
   apprentice_book: { face: 0x6a3a8a, rim: 0xe0b03c, shape: 'book' },
   dwarven_shield: { face: 0x8a6a3a, rim: 0xc9a04a, shape: 'round', boss: 0xd8c080 },
   scarab_shield: { face: 0x2a8a6a, rim: 0xd0a030, shape: 'kite', boss: 0x40c0a0 },
@@ -296,4 +306,6 @@ export const ARMOR_LOOK: Record<string, { color: number; size: number; plate?: b
   steel_plate: { color: 0xc9d0da, size: 0.16, plate: true },
   starsteel_plate: { color: 0x5a8ad8, size: 0.17, plate: true },
   darkstone_plate: { color: 0x4a2a5a, size: 0.18, plate: true },
+  matriarch_scalemail: { color: 0xd8501a, size: 0.17, plate: true },
+  blightweave_robe: { color: 0x4a6a1a, size: 0.12 },
 };
