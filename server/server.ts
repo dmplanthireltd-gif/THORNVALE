@@ -401,7 +401,7 @@ const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8',
-  '.xml': 'application/xml', '.woff2': 'font/woff2', '.mp4': 'video/mp4', '.webm': 'video/webm',
+  '.xml': 'application/xml', '.woff2': 'font/woff2', '.mp4': 'video/mp4', '.webm': 'video/webm', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg',
 };
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -549,6 +549,8 @@ function staticFile(root: string, pathname: string): string | null | 'forbidden'
 function sendFile(res: ServerResponse, file: string, status: number, range?: string): void {
   const type = TYPES[extname(file)] ?? 'application/octet-stream';
   const size = statSync(file).size;
+  // music and video files don't change under the same name between deploys: let browsers keep them a day
+  const cache = /\.(m4a|mp3|mp4|webm)$/.test(file) ? 'public, max-age=86400' : 'no-cache';
   // Byte ranges let browsers (Safari in particular) stream and seek video; other files are sent whole.
   const m = status === 200 && range ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
   if (m && (m[1] || m[2])) {
@@ -559,11 +561,11 @@ function sendFile(res: ServerResponse, file: string, status: number, range?: str
       res.writeHead(416, { 'content-range': `bytes */${size}` }).end();
       return;
     }
-    res.writeHead(206, { 'content-type': type, 'content-length': end - start + 1, 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes', 'cache-control': 'no-cache' });
+    res.writeHead(206, { 'content-type': type, 'content-length': end - start + 1, 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes', 'cache-control': cache });
     createReadStream(file, { start, end }).pipe(res);
     return;
   }
-  res.writeHead(status, { 'content-type': type, 'content-length': size, 'accept-ranges': 'bytes', 'cache-control': 'no-cache' });
+  res.writeHead(status, { 'content-type': type, 'content-length': size, 'accept-ranges': 'bytes', 'cache-control': cache });
   createReadStream(file).pipe(res);
 }
 
