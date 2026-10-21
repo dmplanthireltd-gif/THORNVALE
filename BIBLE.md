@@ -161,8 +161,9 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 | Waves / beams | face N/E/S/W only (diagonal facing → east/west); wave cone widths 1,3,3,5,5…; beam = straight line | magic/spells.ts |
 | Rune fields | fire 45 s, energy 30 s, poison 60 s, magic wall 20 s; tick every 2 s; not in protection zones; never saved | items.ts, Game.ts |
 | Poison | `buffs.poisoned` seconds, damage every 2 s; from venom fields and earth monster attacks (35%); cured by exana pox / antidote rune | Game.ts |
+| Music | `src/audio/Music.ts`: "The Open Road" (fields, 88 bpm), "Hearth and Lantern" (protection zones, 96 bpm), "Below the Stone" (z<0, 60 bpm); switches at phrase ends | audio/Music.ts |
 | Autosave | every 30 s + on logout + on SIGTERM | server/server.ts |
-| PvP min level | `PVP_MIN_LEVEL = 8` (attacker and target) | Game.ts |
+| PvP min level | `PVP_MIN_LEVEL = 1` (owner: PvP from level 1) | Game.ts |
 | White skull | `WHITE_SKULL_MS` 15 min, refreshed per attack; self-defence window also 15 min | Game.ts |
 | Red skull | `UNJUST_KILLS_FOR_RED = 3` unjustified kills within `UNJUST_WINDOW_MS` 24 h → `RED_SKULL_MS` 24 h | Game.ts |
 | PZ lock | `PZ_LOCK_SECONDS = 60` after attacking a player | Game.ts |
@@ -296,3 +297,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | PvP (`PVP` env, default on): players block each other outside protection zones, secure mode, white/red skulls, PZ lock, red skull drops the backpack | 4 | 7 |
 | 2026-10-21 | — | Removed the classic-look option: worn equipment always changes the character's look | 4 | 7 |
 | 2026-10-21 | — | Classic spell list: 54 spells (waves, beams, mass heal, cure poison, invisibility, find person, magic rope, levitate, challenge, illusion, rune conjuring from blank runes), 22 new items (blank rune + 21 runes), rune fields and magic walls, poison condition | 4 | 8 |
+| 2026-10-21 | — | Adventure music (3 original pieces synthesized live: road / town / underground, Music on/off + volume); PvP from level 1 | 4 | 8 |

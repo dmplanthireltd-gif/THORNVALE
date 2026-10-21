@@ -15,6 +15,7 @@ import { ITEM_RENAMES, migrateSave, SAVE_VERSION } from '../src/game/save/migrat
 import { floodFill3D } from '../src/game/world/worldGen';
 import { Obj, WorldMap } from '../src/game/world/WorldMap';
 import { ITEMS } from '../src/game/inventory/items';
+import { PVP_MIN_LEVEL } from '../src/game/Game';
 import type { Vocation } from '../src/game/player/vocations';
 import { expForLevel } from '../src/game/player/Player';
 
@@ -774,8 +775,7 @@ console.log('\nPvP');
   a.player.placeAt(spot.x, spot.y, 0);
   b.player.placeAt(spot.x + 1, spot.y, 0);
   executeCommand(g, a.id, { c: 'secureMode', on: false });
-  executeCommand(g, a.id, { c: 'attack', id: b.id });
-  check(a.player.targetId === null, 'attacking a player below level 8 is refused');
+  check(PVP_MIN_LEVEL === 1, 'PvP is open from level 1');
   // real experience, so the 6% death penalty keeps them well above level 8
   for (const s of [a, b]) { s.player.level = 20; s.player.exp = expForLevel(20); g.refreshStats(s); s.player.hp = s.player.maxHp; }
   executeCommand(g, a.id, { c: 'secureMode', on: true });

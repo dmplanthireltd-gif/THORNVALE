@@ -15,6 +15,7 @@ import type { Renderer } from '../render/Renderer';
 import { button, el, fmtGold, paintSlot } from './dom';
 import { itemIcon, spellIcon } from './icons';
 import type { Sfx } from '../audio/Sfx';
+import type { Music } from '../audio/Music';
 import { Minimap } from './Minimap';
 import { WorldMapView } from './WorldMapView';
 import { OutfitPreview } from './OutfitPreview';
@@ -110,7 +111,7 @@ export class HUD {
   private pvpBtn!: HTMLButtonElement;
   private disconnectEl!: HTMLDivElement;
 
-  constructor(private readonly ctl: Controller, private readonly renderer: Renderer, container: HTMLElement, private readonly sfx: Sfx) {
+  constructor(private readonly ctl: Controller, private readonly renderer: Renderer, container: HTMLElement, private readonly sfx: Sfx, private readonly music?: Music) {
     this.root = el('div', 'hud', container);
     // classic client layout: game view top left, two side columns on the right, action bar and console below
     const side = el('div', 'sidebar', this.root);
@@ -299,6 +300,20 @@ export class HUD {
     const snd = button(tools, this.sfx.muted ? 'Sound: off' : 'Sound: on', () => {
       snd.textContent = this.sfx.toggleMute() ? 'Sound: off' : 'Sound: on';
     }, 'btn tool');
+    if (this.music) {
+      const mu = this.music;
+      const mb = button(tools, mu.muted ? 'Music: off' : 'Music: on', () => {
+        mb.textContent = mu.toggleMute() ? 'Music: off' : 'Music: on';
+      }, 'btn tool');
+      const mv = el('input', 'vol-slider', tools);
+      mv.type = 'range';
+      mv.min = '0';
+      mv.max = '100';
+      mv.value = String(Math.round(mu.volume * 100));
+      mv.title = 'Music volume';
+      mv.addEventListener('input', () => mu.setVolume(Number(mv.value) / 100));
+      mv.addEventListener('keydown', (e) => e.stopPropagation());
+    }
     const vol = el('input', 'vol-slider', tools);
     vol.type = 'range';
     vol.min = '0';
@@ -1517,6 +1532,7 @@ export class HUD {
   // ================================================================ per frame
 
   update(dt: number): void {
+    this.music?.update();
     const s = this.s;
     const p = s.player;
     const g = this.ctl.game;

@@ -33,9 +33,6 @@ async function main(): Promise<void> {
   a.send({ c: 'secureMode', on: false });
   await pump([a, b], 0.4);
   check(!a.game.getPlayer(a.pid)!.secure, 'secure mode toggles over the network');
-  a.send({ c: 'attack', id: b.pid });
-  await pump([a, b], 0.4);
-  check(a.game.getPlayer(a.pid)!.targetId === null, 'new characters below level 8 cannot attack each other');
   a.send({ c: 'secureMode', on: true });
   const chats: string[] = [];
   b.game.events.on((e) => { if (e.type === 'chat') chats.push(e.text); });

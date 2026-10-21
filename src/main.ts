@@ -6,12 +6,14 @@ import { Input } from './input/Input';
 import { Renderer } from './render/Renderer';
 import { HUD } from './ui/HUD';
 import { Sfx } from './audio/Sfx';
+import { Music } from './audio/Music';
 import { StartScreen } from './ui/StartScreen';
 
 async function boot(): Promise<void> {
   const container = document.getElementById('app');
   if (!container) throw new Error('#app missing');
   const saves = new SaveSystem();
+  const music = new Music();
   const start = new StartScreen(container, saves);
 
   let ctl: Controller | null = null;
@@ -34,16 +36,17 @@ async function boot(): Promise<void> {
     }
   }
   start.close();
-  run(container, ctl);
+  run(container, ctl, music);
 }
 
-function run(container: HTMLElement, ctl: Controller): void {
+function run(container: HTMLElement, ctl: Controller, music: Music): void {
   const viewport = document.createElement('div');
   viewport.className = 'viewport';
   container.appendChild(viewport);
   const renderer = new Renderer(viewport, ctl);
   const sfx = new Sfx(ctl);
-  const hud = new HUD(ctl, renderer, container, sfx);
+  music.attach(ctl);
+  const hud = new HUD(ctl, renderer, container, sfx, music);
   new Input(ctl, renderer, hud);
   hud.applyStoredPixelSetting();
   const first = (() => {

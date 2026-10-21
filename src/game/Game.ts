@@ -132,7 +132,8 @@ export interface GameOptions {
 
 export const BAG_LIFETIME = 180;
 /** PvP: players below this level can neither attack nor be attacked by players. */
-export const PVP_MIN_LEVEL = 8;
+/** Lowest level that may attack or be attacked by players (owner: PvP from level 1). */
+export const PVP_MIN_LEVEL = 1;
 /** White skull after attacking an unmarked player, refreshed on every attack. */
 export const WHITE_SKULL_MS = 15 * 60 * 1000;
 /** Red skull after too many unjustified kills. */
