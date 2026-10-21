@@ -102,7 +102,7 @@ export class Bots {
       if (p.mana < p.maxMana * 0.3) p.mana = Math.min(p.maxMana, p.mana + p.maxMana * 0.05);
       b.next -= dt;
       if (b.next > 0) continue;
-      b.next = 2 + Math.random() * 4;
+      b.next = 4 + Math.random() * 5;
       if (p.targetId !== null && g.getCreature(p.targetId) && !g.getCreature(p.targetId)!.dead) continue;
       // hunt something close, otherwise wander around home
       const foe = g.enemies.find((e) => !e.dead && e.z === p.z && chebyshev(e.x, e.y, p.x, p.y) <= 7 && !g.world.isSafe(e.x, e.y, e.z));
@@ -113,12 +113,12 @@ export class Bots {
       if (p.moving || p.path.length) continue;
       const far = chebyshev(p.x, p.y, b.home.x, b.home.y) > 28;
       for (let tries = 0; tries < 12; tries++) {
-        const r = far ? 6 : 22;
+        const r = far ? 6 : 10;
         const x = (far ? b.home.x : p.x) + Math.floor((Math.random() * 2 - 1) * r);
         const y = (far ? b.home.y : p.y) + Math.floor((Math.random() * 2 - 1) * r);
         if (g.world.inBounds(x, y) && g.world.isWalkable(x, y, p.z)) {
-          executeCommand(g, p.id, { c: 'moveTo', x, y });
-          break;
+          // short search only: a bot just picks another spot if this one is out of reach
+          if (g.commandMoveTo(p.id, x, y, 700)) break;
         }
       }
     }

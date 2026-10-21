@@ -572,11 +572,23 @@ export class Game implements AIContext {
     const isPlayer = c.kind === 'player';
     const z = c.z;
     const pzBlocked = c instanceof Player && c.pzLock > 0 && !this.world.isSafe(c.x, c.y, z);
+    // who stands where on this floor, gathered once per search (checking every creature
+    // for every tile the search looks at was far too slow with a thousand monsters)
+    const W = this.world.width;
+    const others = new Set<number>();
+    const players = new Set<number>();
+    for (const n of this.npcs) if (n.id !== c.id && n.z === z) others.add(n.y * W + n.x);
+    for (const e of this.enemies) if (e.id !== c.id && !e.dead && e.z === z) others.add(e.y * W + e.x);
+    for (const s of this.sessions.values()) { const o = s.player; if (o.id !== c.id && !o.dead && o.z === z) players.add(o.y * W + o.x); }
+    const occupied = (x: number, y: number) => {
+      const k = y * W + x;
+      return others.has(k) || (players.has(k) && (!isPlayer || !this.world.isSafe(x, y, z)));
+    };
     return findPath(this.world.grid(z), {
       sx: c.x, sy: c.y, tx, ty, maxNodes,
-      isGoal: adjacent ? (x, y) => chebyshev(x, y, tx, ty) === 1 && !this.isOccupied(x, y, z, c.id, isPlayer) : undefined,
+      isGoal: adjacent ? (x, y) => chebyshev(x, y, tx, ty) === 1 && !occupied(x, y) : undefined,
       isBlocked: (x, y) => {
-        if (this.isOccupied(x, y, z, c.id, isPlayer) && !(x === tx && y === ty && !adjacent)) return true;
+        if (occupied(x, y) && !(x === tx && y === ty && !adjacent)) return true;
         if (!isPlayer && (this.world.isSafe(x, y, z) || this.world.linkAt(x, y, z))) return true;
         if (pzBlocked && this.world.isSafe(x, y, z)) return true;
         // players path around floor changes unless that is the destination
@@ -2088,7 +2100,7 @@ export class Game implements AIContext {
 
   // ================================================================ commands
 
-  commandMoveTo(pid: number, x: number, y: number): TilePos | null {
+  commandMoveTo(pid: number, x: number, y: number, budget = 40000): TilePos | null {
     const s = this.sessions.get(pid);
     if (!s) return null;
     const p = s.player;
@@ -2097,9 +2109,9 @@ export class Game implements AIContext {
     p.chaseSuppressed = 1.5;
     // someone standing on the tile (outside a protection zone): walk next to them instead
     const walkable = this.world.isWalkable(x, y, p.z) && !this.isOccupied(x, y, p.z, p.id, true);
-    const path = this.pathTo(p, x, y, !walkable, 40000);
+    const path = this.pathTo(p, x, y, !walkable, budget);
     if (!path) {
-      this.msg(pid, 'There is no way.', 'warn');
+      if (budget >= 40000) this.msg(pid, 'There is no way.', 'warn');
       return null;
     }
     p.path = path;

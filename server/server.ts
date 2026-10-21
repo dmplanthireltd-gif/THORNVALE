@@ -587,6 +587,8 @@ http.on('upgrade', (req, socket) => {
 
 let last = performance.now();
 let acc = 0;
+let snapTick = 0;
+const SNAP_EVERY = 1;
 const bots = BOT_COUNT > 0 ? new Bots(game, BOT_COUNT, BOT_LEVEL) : null;
 if (bots) console.log(`Bots: ${BOT_COUNT} at level ${BOT_LEVEL}`);
 setInterval(() => {
@@ -598,7 +600,8 @@ setInterval(() => {
     bots?.update(TICK);
     acc -= TICK;
   }
-  for (const c of clients) if (c.session) send(c, buildSnapshot(game, c.session));
+  // one snapshot per tick (20 a second); bulky unchanged parts are left out (see protocol.ts)
+  if ((snapTick = (snapTick + 1) % SNAP_EVERY) === 0) for (const c of clients) if (c.session) send(c, buildSnapshot(game, c.session));
   for (const s of game.sessions.values()) {
     if (s.wantsSave) {
       s.wantsSave = false;

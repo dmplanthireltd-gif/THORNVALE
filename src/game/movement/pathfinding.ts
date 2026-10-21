@@ -23,6 +23,8 @@ export interface PathQuery {
 
 const SQRT2 = Math.SQRT2;
 
+let scratch: { n: number; g: Float32Array; parent: Int32Array; stamp: Uint32Array; closedStamp: Uint32Array; gen: number } | null = null;
+
 /** Minimal binary min-heap keyed on f-score. */
 class Heap {
   private items: number[] = [];
@@ -84,20 +86,27 @@ export function findPath(grid: PathGrid, q: PathQuery): TilePos[] | null {
   const isGoal = q.isGoal ?? ((x: number, y: number) => x === q.tx && y === q.ty);
   if (isGoal(q.sx, q.sy)) return [];
   const maxNodes = q.maxNodes ?? 4000;
+  // Reused scratch arrays: a whole-map array per search (half a million tiles) was the
+  // biggest cost of every path. A tile's g/parent/closed values only count when its
+  // stamp matches this search.
   const n = width * height;
-  const g = new Float32Array(n).fill(Infinity);
-  const parent = new Int32Array(n).fill(-1);
-  const closed = new Uint8Array(n);
+  if (!scratch || scratch.n < n) scratch = { n, g: new Float32Array(n), parent: new Int32Array(n), stamp: new Uint32Array(n), closedStamp: new Uint32Array(n), gen: 0 };
+  const sc = scratch;
+  if (++sc.gen >= 0xffffffff) { sc.stamp.fill(0); sc.closedStamp.fill(0); sc.gen = 1; }
+  const gen = sc.gen;
+  const g = { get: (i: number) => (sc.stamp[i] === gen ? sc.g[i] : Infinity), set: (i: number, v: number) => { sc.stamp[i] = gen; sc.g[i] = v; } };
+  const parent = sc.parent;
+  const isClosed = (i: number) => sc.closedStamp[i] === gen;
   const open = new Heap();
   const start = q.sy * width + q.sx;
-  g[start] = 0;
+  g.set(start, 0);
   open.push(start, octile(q.sx, q.sy, q.tx, q.ty));
   let expanded = 0;
 
   while (open.size > 0) {
     const cur = open.pop();
-    if (closed[cur]) continue;
-    closed[cur] = 1;
+    if (isClosed(cur)) continue;
+    sc.closedStamp[cur] = gen;
     const cx = cur % width;
     const cy = (cur - cx) / width;
     if (isGoal(cx, cy) && cur !== start) {
@@ -116,12 +125,12 @@ export function findPath(grid: PathGrid, q: PathQuery): TilePos[] | null {
       const ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
       const ni = ny * width + nx;
-      if (closed[ni]) continue;
+      if (isClosed(ni)) continue;
       if (!grid.canStep(cx, cy, dx, dy)) continue;
       if (q.isBlocked && q.isBlocked(nx, ny)) continue;
-      const cost = g[cur] + (dx !== 0 && dy !== 0 ? SQRT2 : 1);
-      if (cost < g[ni]) {
-        g[ni] = cost;
+      const cost = g.get(cur) + (dx !== 0 && dy !== 0 ? SQRT2 : 1);
+      if (cost < g.get(ni)) {
+        g.set(ni, cost);
         parent[ni] = cur;
         open.push(ni, cost + octile(nx, ny, q.tx, q.ty));
       }

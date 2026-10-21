@@ -18,7 +18,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -117,11 +117,12 @@ export interface SelfSnap {
   gcds: { attack: number; heal: number; support: number; potion: number };
   buffs: Buffs;
   home: string;
-  inv: ReturnType<Inventory['toJSON']>;
-  quests: QuestLog['state'];
+  /** Sent only when changed (absent = unchanged), like quests, spells, skills and friends. */
+  inv?: ReturnType<Inventory['toJSON']>;
+  quests?: QuestLog['state'];
   dialogue: DialogueState | null;
   bank: number;
-  spells: string[];
+  spells?: string[];
   depot: (ItemStack | null)[] | null;
   trade: TradeView | null;
   /** PvP: server allows it, own secure mode, seconds of PZ lock left. */
@@ -130,14 +131,14 @@ export interface SelfSnap {
   pz: number;
   party: PartyView | null;
   /** Combat skills: [level, tries] per skill (see player/skills.ts). */
-  skills: Record<string, [number, number]>;
+  skills?: Record<string, [number, number]>;
   /** Woodcutting experience. */
   wc: number;
   /** Fishing experience. */
   fx: number;
   /** Market window contents; only sent when it changed (null = closed, absent = unchanged). */
   mk?: MarketView | null;
-  friends: ReturnType<Game['friendsView']>;
+  friends?: ReturnType<Game['friendsView']>;
 }
 
 export type ServerMessage =
@@ -149,6 +150,24 @@ export type ServerMessage =
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
 // ------------------------------------------------------------------ server side
+
+/** What each session was last sent of the bulky, rarely changing parts of its own state. */
+const selfSent = new WeakMap<Session, Record<string, string>>();
+
+/** Leaves out a part that has not changed since the last snapshot to this session. */
+function onlyChanged<T>(s: Session, key: string, value: T): T | undefined {
+  let sent = selfSent.get(s);
+  if (!sent) selfSent.set(s, (sent = {}));
+  const j = JSON.stringify(value);
+  if (sent[key] === j) return undefined;
+  sent[key] = j;
+  return value;
+}
+
+/** Next snapshot to this session carries everything again (e.g. a fresh client mirror). */
+export function resendAll(s: Session): void {
+  selfSent.delete(s);
+}
 
 export function buildSnapshot(game: Game, s: Session): ServerMessage {
   const me = s.player;
@@ -184,10 +203,10 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     id: me.id, voc: me.vocation, level: me.level, exp: me.exp,
     hp: Math.ceil(me.hp), mhp: me.maxHp, mana: Math.floor(me.mana), mmana: me.maxMana, cap: me.capacity,
     step: me.stepTime, target: me.targetId, cds: { ...me.spellCooldowns }, gcds: { ...me.groupCooldowns }, buffs: { ...me.buffs }, home: me.home,
-    inv: s.inventory.toJSON(), quests: s.quests.state, dialogue: s.dialogue, bank: s.bank, spells: [...s.spells],
+    inv: onlyChanged(s, 'inv', s.inventory.toJSON()), quests: onlyChanged(s, 'quests', s.quests.state), dialogue: s.dialogue, bank: s.bank, spells: onlyChanged(s, 'spells', [...s.spells]),
     depot: s.depotOpen ? s.depot : null, trade: game.tradeView(s.id),
     pvp: game.pvp ? 1 : 0, sec: me.secure ? 1 : 0, pz: Math.ceil(me.pzLock), party: game.partyView(me.id),
-    skills: Object.fromEntries(COMBAT_SKILLS.map((k) => [k, [s.skills[k].level, Math.floor(s.skills[k].tries)]])), wc: Math.floor(s.woodcutting), fx: Math.floor(s.fishing), friends: game.friendsView(me.id),
+    skills: onlyChanged(s, 'skills', Object.fromEntries(COMBAT_SKILLS.map((k) => [k, [s.skills[k].level, Math.floor(s.skills[k].tries)]]))), wc: Math.floor(s.woodcutting), fx: Math.floor(s.fishing), friends: onlyChanged(s, 'friends', game.friendsView(me.id)),
   };
   // the market list is only sent when something in it (or in your depot or bank) changed
   const mkKey = s.marketOpen ? `${game.market.version}|${s.bank}|${JSON.stringify(s.depot)}` : 'closed';
@@ -420,19 +439,18 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   if (typeof me.fx === 'number') s.fishing = me.fx;
   if (snap.st) game.syncStumps(snap.st, p.x, p.y, p.z, VIEW_RADIUS + 4);
   const spellsBefore = [...s.spells].sort().join();
-  const spellsAfter = [...me.spells].sort().join();
-  if (spellsBefore !== spellsAfter) {
+  const spellsAfter = me.spells ? [...me.spells].sort().join() : spellsBefore;
+  if (me.spells && spellsBefore !== spellsAfter) {
     s.spells = new Set(me.spells.filter(isSpellId));
     ev.emit({ type: 'spellsChanged', to: me.id });
   }
-  const invBefore = JSON.stringify(s.inventory.toJSON());
-  if (invBefore !== JSON.stringify(me.inv)) {
+  if (me.inv && JSON.stringify(s.inventory.toJSON()) !== JSON.stringify(me.inv)) {
     const eqBefore = JSON.stringify(s.inventory.equipment);
     s.inventory.load(me.inv);
     ev.emit({ type: 'inventoryChanged', to: me.id });
     if (JSON.stringify(s.inventory.equipment) !== eqBefore) ev.emit({ type: 'equipmentChanged', id: me.id });
   }
-  if (JSON.stringify(s.quests.state) !== JSON.stringify(me.quests)) {
+  if (me.quests && JSON.stringify(s.quests.state) !== JSON.stringify(me.quests)) {
     s.quests.load(me.quests);
     ev.emit({ type: 'questChanged', to: me.id });
   }

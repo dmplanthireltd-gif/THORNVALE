@@ -133,7 +133,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 2. **Every player action is a `Command`** sent through `Controller.send(...)` → `Game.executeCommand`. UI/input never mutate game state directly. Offline = LocalController runs it locally; online = NetController sends it, the server is authoritative.
 3. **Game → view communication is via the event bus** (`core/events.ts`). Renderer, HUD and Sfx subscribe; they never poll internal fields they don't own.
 4. **Online:** server ticks at 20 Hz and sends snapshots (`VIEW_RADIUS = 20`). The client keeps a mirror Game (`simulate:false`) and applies snapshots. Messages arriving before the HUD exists go to the backlog.
-5. **Protocol:** `PROTOCOL_VERSION` (currently **12**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
+5. **Protocol:** `PROTOCOL_VERSION` (currently **13**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
 6. **PvP** (server option `PVP`, passed as `GameOptions.pvp`; off offline). Rules live in `Game` (`pvpProblem`, `onPvpAttack`, `onPvpKill`); every PvP hit passes `applyDamage`, which re-checks them:
    - Players block players, like monsters do, **except inside protection zones** (temples, depots, town doors) where they pass through each other. Logging in or teleporting onto an occupied tile is allowed.
    - No attacking from inside, or into, a protection zone. Attacker and target must both be level ≥ 8.
@@ -336,3 +336,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Delete a character from the account screen (type the name to confirm; backup kept in `character_backups`; `POST /api/characters/delete`); test bots (`server/bots.ts`); game-master pop-ups `/warn Name, text` and `/broadcast` (full admins only, `adminNotice` event); Arcane Wall Rune shown as "Magic Wall Rune" (id unchanged) | — | — |
 | 2026-10-21 | — | Owner's character Ouriolis is always a game master (`OWNER_CHARACTERS` in server.ts) | — | — |
 | 2026-10-21 | — | Website: cinematic trailer with music (Watch the trailer pop-up) and new hero loop | — | — |
+| 2026-10-21 | — | Lag fix: A* reuses scratch arrays (was allocating ~4.6 MB per search on the 640×800 map) and gathers creature positions once per search; snapshots leave out unchanged inv/quests/spells/skills/friends; bots use short path searches. Server tick ~2× faster, worst spikes 40 ms → 5 ms | — | 13 |
