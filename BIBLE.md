@@ -2,7 +2,7 @@
 
 **The single source of truth for Thornvale.** Every Claude (claude.ai chat, Claude Code, Claude in Chrome, sub-agents) and every human contributor works from this file. If code and this file disagree, stop and fix one of them in the same change — never leave them out of sync.
 
-- Bible version: **1.0** (2026-10-21)
+- Bible version: **1.1** (2026-10-21)
 - Canonical copies: `BIBLE.md` in the GitHub repo (authoritative) and `claude/THORNVALE-BIBLE.md` in the claude.ai Project "THORNVALE - GAME DEVELOPMENT" (mirror — update both together).
 
 ---
@@ -77,7 +77,8 @@ scripts/              ← smoke-test, net-test, storage-test, auth-test, content
 |---|---|
 | GitHub repo | `dmplanthireltd-gif/thornvale` (shown as THORNVALE), branch `main` |
 | Live game | https://thornvale.onrender.com (health: `/status`) |
-| Render service | `thornvale`, free plan, Frankfurt, auto-deploys on push to `main` |
+| Render workspace | **Pro** workspace plan ($25/mo, since 2026-10-21): more bandwidth (25 GB), 15 custom domains, 1,000 build minutes/mo, team members |
+| Render service | `thornvale`, instance type **Free** (`plan: free` in render.yaml), Frankfurt, auto-deploys on push to `main` |
 | Supabase project | `thornvale`, ref `gvknnzdhxwmqimaoiref`, region eu-central-1, org `thornvale` |
 | Supabase URL | https://gvknnzdhxwmqimaoiref.supabase.co |
 | Publishable key (public, OK to commit) | `sb_publishable_Do-DXlXiAHd6f8xLCFo_qA_JHrsygW3` |
@@ -94,7 +95,9 @@ scripts/              ← smoke-test, net-test, storage-test, auth-test, content
 - `Login: email (Supabase Auth)` — email accounts active (else "name + password").
 - `Saves: Supabase database` — persistence active (else "files" = **progress is lost on restart**, because Render's disk is wiped).
 
-**Known platform limits:** Render free sleeps after 15 min idle (first visit takes ~1 min). Supabase built-in email only sends a few mails/hour and only to team members → real players need custom SMTP (Resend/Brevo) or "Confirm email" switched off.
+**Render plan rules:** the workspace plan (Pro) and the service's instance type are separate. `render.yaml` `plan:` must always match the instance type chosen in the dashboard, otherwise a Blueprint sync changes it back. If the owner upgrades the instance (Starter `0.5c-512mb`, Standard `1c-2g`, Pro `2c-4g`…), update `plan:` in render.yaml and this table in the same commit.
+
+**Known platform limits:** the Free instance sleeps after 15 min idle (first visit takes ~1 min) and wipes its disk on restart — saves are safe only because they go to Supabase. Any paid instance removes the sleep. Supabase built-in email only sends a few mails/hour and only to team members → real players need custom SMTP (Resend/Brevo) or "Confirm email" switched off.
 
 ---
 
@@ -222,6 +225,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Ice-region (7.92-style) and classic monsters, items, spells, buff potions, conjure spells; content-test.
 - [ ] Better spell effects (Effects.ts).
 - [ ] Integrate, test all, push, refresh artifact.
+- [ ] Owner decision: upgrade the thornvale service from Free to a paid instance (Starter is enough for ~50 players) so the server never sleeps; then set `plan:` in render.yaml.
 - [ ] Later: custom SMTP for recovery mails; more map/game polish.
 - [ ] Marketing website (mockups approved on the "Thornvale Website" design canvas): home page at `/`, game moved to `/play`, live player count from `/status`, news. Same Render service, no new dependencies. Update §4 when the routes change.
 - [ ] New sign-in and character screens (email + password, up to 5 characters per account, "Play offline" kept) replacing the current start screen.
@@ -236,5 +240,6 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10 | 545248d | First playable: 3D client, server, Render setup | 1 | 2 |
 | 2026-10 | 7de245b | Supabase saves, account login, save migrations + backups | 2 | 3 |
 | 2026-10 | 55d38a3 | Email accounts with password recovery (Supabase Auth) | 2 | 3 |
-| 2026-10-21 | — | BIBLE.md + CLAUDE.md added | 2 | 3 |
-| 2026-10-21 | — | Open Work: marketing website, new sign-in/character screens, grand opening (design stage, no code yet) | 2 | 3 |
+| 2026-10-21 | 5bc8b26 | BIBLE.md + CLAUDE.md added | 2 | 3 |
+| 2026-10-21 | 6a2ea6d | Open Work: marketing website, new sign-in/character screens, grand opening (design stage, no code yet) | 2 | 3 |
+| 2026-10-21 | — | Render workspace upgraded to Pro (service still Free instance) | 2 | 3 |
