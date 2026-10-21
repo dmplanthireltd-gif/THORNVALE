@@ -18,8 +18,8 @@ export const ADMIN_HELP = [
   '/item name [qty] — get an item by id or name',
   '/spells — learn every spell of your vocation',
   '/heal — full health and mana',
-  '/god — toggle invulnerability',
-  '/kill — kill your current target',
+  '/god — toggle invulnerability (full admins only, not in test mode)',
+  '/kill — kill your current target (full admins only, not in test mode)',
   '/goto place — teleport to a place (e.g. /goto caldera) or /goto x y z',
   '/vocation name — change vocation',
   '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing); also /fishing N',
@@ -144,10 +144,12 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       game.events.emit({ type: 'heal', targetId: pid, amount: p.maxHp });
       return;
     case 'god':
+      if (s.testOnly) return say('God mode is not available in test mode.', 'warn');
       p.god = !p.god;
       say(p.god ? 'God mode on: nothing can hurt you.' : 'God mode off.');
       return;
     case 'kill': {
+      if (s.testOnly) return say('/kill is not available in test mode.', 'warn');
       const t = game.getEnemy(p.targetId);
       if (!t || t.dead) return say('Target a monster first.', 'warn');
       game.adminKill(p, t);

@@ -312,6 +312,8 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
   c.session = s;
   if (owner) sessionOwner.set(s.id, owner);
   s.admin = ALLOW_ADMIN || ADMINS.has(key);
+  // test mode (ALLOW_ADMIN) gives every test command except god mode and /kill; names in ADMINS get everything
+  s.testOnly = !ADMINS.has(key);
   const saved = !!stored;
   if (stored) {
     if (!game.applySave(s.id, stored.data)) {

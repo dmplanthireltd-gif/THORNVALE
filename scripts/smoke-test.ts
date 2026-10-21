@@ -1461,5 +1461,20 @@ console.log('Follow and friends');
   check(g.friendsView(a.id).friends.length === 0, 'remove a friend');
 }
 
+console.log('Test mode (server ALLOW_ADMIN): everything but god mode');
+{
+  const { g, s, pid } = solo('sorcerer');
+  s.admin = true;
+  s.testOnly = true;
+  g.say(pid, '/level 50');
+  g.say(pid, '/spells');
+  g.say(pid, '/god');
+  check(s.player.level === 50 && s.spells.size > 10, 'test mode: levels and spells work');
+  check(!s.player.god, 'test mode: no god mode');
+  s.testOnly = false;
+  g.say(pid, '/god');
+  check(s.player.god, 'full admins still have god mode');
+}
+
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

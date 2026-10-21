@@ -118,6 +118,8 @@ export interface Session {
   wantsSave: boolean;
   /** May use /test commands (always offline; per character on a server). */
   admin: boolean;
+  /** Test mode only (ALLOW_ADMIN on a server): every test command except god mode and /kill. */
+  testOnly?: boolean;
   /** Items from older versions that no longer exist (kept with the save). */
   lostItems: ItemStack[];
   /** Combat skills (fist … magic level). */

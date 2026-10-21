@@ -96,7 +96,7 @@ scripts/              ← smoke-test, net-test, storage-test, auth-test, content
 - Never print env vars in logs. Never echo a key back to the user.
 - Publishable key and URL are public by design.
 
-**Render environment variables:** `START_LEVEL` (test servers: every character is raised to at least this level at login; currently "20" for testing — set to "1" before the grand opening), `NODE_VERSION=20`, `MAX_PLAYERS=50`, `ALLOW_ADMIN=1` (testing phase: everyone may use `/` commands and the ` console — set back to 0 before the grand opening), `ADMINS=""` (comma-separated character names allowed to use `/` commands online), `PVP=1` (player-versus-player on; `0` turns it off — offline single-player never has PvP), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_KEY` (secret), optional `MAX_CHARACTERS` (default 5).
+**Render environment variables:** `START_LEVEL` (test servers: every character is raised to at least this level at login; currently "20" for testing — set to "1" before the grand opening), `NODE_VERSION=20`, `MAX_PLAYERS=50`, `ALLOW_ADMIN=1` (testing phase = test mode: everyone may use the `/` commands and the ` console except `/god` and `/kill`; names in `ADMINS` get everything — set back to 0 before the grand opening), `ADMINS=""` (comma-separated character names allowed to use `/` commands online), `PVP=1` (player-versus-player on; `0` turns it off — offline single-player never has PvP), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_KEY` (secret), optional `MAX_CHARACTERS` (default 5).
 
 **Startup log lines to check after a deploy:**
 - `Login: email (Supabase Auth)` — email accounts active (else "name + password").
@@ -330,3 +330,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Test server: `START_LEVEL` env (render.yaml "20") raises characters to that level at login; `setLevel` shared by `/level` | 6 | 11 |
 | 2026-10-21 | — | Fishing skill: fishing rod, fish in water within 3 tiles (small fish, trout, pike, salmon, ice fish, swordfish by level and water kind), rare old boot/treasure, fished-out spots, Skills panel row, `/fishing N`; captains sell rods, traders and captains buy fish | 7 | 12 |
 | 2026-10-21 | — | Movable/resizable side panels (grip bar, bottom-edge resize, side bar width), resizable chat area, action bar can float on top of the game view (`src/ui/panels.ts`, layout in localStorage, Reset layout in Help); test server: `ALLOW_ADMIN=1` | — | — |
+| 2026-10-21 | — | Test mode: with `ALLOW_ADMIN=1` everyone gets the test commands except `/god` and `/kill` (`Session.testOnly`); `ADMINS` names keep everything | — | — |
