@@ -70,8 +70,9 @@ html, body {
 .float.mana { color: #6aa2ff; }
 .float.xp { color: #ffffff; font-size: 12px; }
 .float.level { color: #ffe27a; font-size: 16px; }
-.float.speech { color: #ffe23a; font-size: 11px; font-weight: 600; max-width: 260px; white-space: normal; text-align: center; }
-.float.speech.spell { color: #ff9a2a; }
+.float.speech { color: #ffe23a; font-size: 16px; font-weight: 700; max-width: 340px; white-space: normal; text-align: center; line-height: 1.25;
+  text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000, 0 2px 3px rgba(0,0,0,0.8); }
+.float.speech.spell { color: #ffa53a; font-size: 18px; letter-spacing: 0.5px; }
 
 /* ---------------------------------------------------------------- HUD frame */
 .hud { position: absolute; inset: 0; pointer-events: none; }

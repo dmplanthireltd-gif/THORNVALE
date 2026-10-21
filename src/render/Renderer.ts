@@ -424,10 +424,11 @@ export class Renderer {
         break;
       }
       case 'cast':
-        this.float(e.casterId, e.words, 'speech spell', 1.6, 0.15);
+        this.float(e.casterId, e.words, 'speech spell', 3, 0.15);
         break;
       case 'chat':
-        this.float(e.id, `${e.name}: ${e.text}`, 'speech', 3.2, 0.15);
+        // chat stays up long enough to read: 5 s plus a little per word
+        this.float(e.id, `${e.name}: ${e.text}`, 'speech', Math.min(12, 5 + e.text.length * 0.06), 0.15);
         break;
       case 'buff': {
         const v = this.visibleView(e.id);
