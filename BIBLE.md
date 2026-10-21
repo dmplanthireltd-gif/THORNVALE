@@ -196,7 +196,7 @@ IDs are `snake_case`, English, stable forever once shipped (they live in saves).
 
 ## 10. Controls (don't change without the owner)
 
-Arrows/WASD + numpad diagonals move · **Ctrl+direction** turns · **Ctrl+R** turns clockwise · click to walk (A*) · right-click = use/look/context menu · drag items (to ground = throw, to slots/containers) · **F1–F12** hotbar (12 slots) · runes aimed with a crosshair (area preview) · **M** world map · **H** help · **`** dev console · Enter/chat for spells and `/` commands. Option "keep outfit" hides equipment on the character (classic look).
+Arrows/WASD + numpad diagonals move · **Ctrl+direction** turns · **Ctrl+R** turns clockwise · click to walk (A*) · right-click = use/look/context menu · Atk/Bal/Def + Follow/Stand buttons · drag items (onto a player = trade; to ground = throw; ground items to another tile; onto lockers/tables; runes onto battle-list rows; to slots/containers) · **F1–F12** hotbar (12 slots) · runes aimed with a crosshair (area preview) · **M** world map · **H** help · **`** dev console · Enter/chat for spells and `/` commands. Worn equipment always shows on the character (owner decision 2026-10-21; the old "classic look" option was removed).
 
 ---
 
@@ -282,3 +282,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | 0eb9396 | Move ground items, items on lockers/tables, depot gaps, minimap zoom/pan, foldable/resizable battle list, runes on battle list | 3 | 5 |
 | 2026-10-21 | — | Item trading by drag-and-drop, fight stance + follow/stand, lurable monsters (no leash/home-healing) | 3 | 6 |
 | 2026-10-21 | — | PvP (`PVP` env, default on): players block each other outside protection zones, secure mode, white/red skulls, PZ lock, red skull drops the backpack | 4 | 7 |
+| 2026-10-21 | — | Removed the classic-look option: worn equipment always changes the character's look | 4 | 7 |

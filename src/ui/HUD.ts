@@ -1281,15 +1281,6 @@ export class HUD {
         this.renderOutfit();
       });
     }
-    const gear = el('label', 'check-row', b);
-    const cb = el('input', '', gear);
-    cb.type = 'checkbox';
-    cb.checked = this.s.player.showGear;
-    cb.addEventListener('change', () => {
-      this.ctl.send({ c: 'showGear', on: cb.checked });
-      cb.blur();
-    });
-    el('span', '', gear, 'Show worn equipment on my character (untick for the classic look: your outfit never changes)');
     const row = el('div', 'trade-actions', b);
     button(row, 'Apply', () => {
       this.ctl.send({ c: 'outfit', outfit: { ...o } });

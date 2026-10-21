@@ -601,11 +601,11 @@ console.log('\nTest commands and classic look');
   g.say(pid, '/kill');
   check(e.dead, '/kill kills the target');
   g.setShowGear(pid, false);
-  check(g.serialize(pid).player.showGear === false, 'classic look is saved');
+  check(g.serialize(pid).player.showGear === true, 'worn equipment always shows (no classic-look option)');
   const mirror = new Game({ simulate: false });
   mirror.localId = 999;
   applySnapshot(mirror, buildSnapshot(g, s) as never);
-  check(mirror.getPlayer(pid)?.showGear === false, 'classic look reaches other players');
+  check(mirror.getPlayer(pid)?.showGear === true, 'other players see the worn equipment');
 }
 
 console.log('\nAnti-spam cooldowns');

@@ -1908,7 +1908,9 @@ export class Game implements AIContext {
   setShowGear(pid: number, on: boolean): void {
     const s = this.sessions.get(pid);
     if (!s) return;
-    s.player.showGear = !!on;
+    // the owner's rule: what you wear always shows on your character
+    void on;
+    s.player.showGear = true;
     s.wantsSave = true;
     this.events.emit({ type: 'equipmentChanged', id: pid });
   }
@@ -2377,7 +2379,7 @@ export class Game implements AIContext {
     p.facing = Number.isFinite(data.player.facing) ? data.player.facing : 0;
     p.outfit = isOutfit(data.player.outfit) ? { ...data.player.outfit } : { ...DEFAULT_OUTFIT };
     p.home = typeof data.player.home === 'string' ? data.player.home : 'Thornvale';
-    p.showGear = data.player.showGear !== false;
+    p.showGear = true; // worn equipment always shows (the old classic-look option was removed)
     const pv = data.pvp ?? {};
     p.secure = pv.secure !== false;
     p.whiteSkullUntil = finiteOr0(pv.whiteSkullUntil);
