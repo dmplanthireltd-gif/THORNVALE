@@ -375,7 +375,7 @@ export class HUD {
     // classic skills window: every skill with a thin bar to the next level; click the title to fold
     const sk = el('div', 'panel skills', col);
     const st = el('div', 'panel-title skills-title', sk, 'Skills');
-    st.title = 'Click to fold or unfold. Skills rise by using them: fight with a weapon, block with a shield, spend mana, chop trees.';
+    st.title = 'Click to fold or unfold. Skills rise by using them: fight with a weapon, block with a shield, spend mana, chop trees, fish.';
     this.skillsEl = el('div', 'skills-list', sk);
     try {
       if (localStorage.getItem('thornvale.skillsFolded') === '1') sk.classList.add('folded');
@@ -1276,7 +1276,7 @@ export class HUD {
   private renderSkills(): void {
     const s = this.s;
     const voc = s.player.vocation;
-    const key = `${voc}|${JSON.stringify(s.skills)}|${Math.floor(s.woodcutting)}`;
+    const key = `${voc}|${JSON.stringify(s.skills)}|${Math.floor(s.woodcutting)}|${Math.floor(s.fishing)}`;
     if (key === this.skillsKey) return;
     this.skillsKey = key;
     const box = this.skillsEl;
@@ -1301,6 +1301,9 @@ export class HUD {
     const wl = gatherLevelForXp(s.woodcutting);
     const left = wl >= WC_MAX_LEVEL ? 0 : gatherXpForLevel(wl + 1) - s.woodcutting;
     row(SKILL_NAMES.woodcutting, wl, gatherProgress(s.woodcutting), `Woodcutting ${wl} — ${fmtGold(Math.floor(s.woodcutting))} xp${wl < WC_MAX_LEVEL ? `, ${fmtGold(Math.ceil(left))} to level ${wl + 1}` : ' (maximum)'}. Chop trees with an axe.`);
+    const fl = gatherLevelForXp(s.fishing);
+    const fleft = fl >= WC_MAX_LEVEL ? 0 : gatherXpForLevel(fl + 1) - s.fishing;
+    row(SKILL_NAMES.fishing, fl, gatherProgress(s.fishing), `Fishing ${fl} — ${fmtGold(Math.floor(s.fishing))} xp${fl < WC_MAX_LEVEL ? `, ${fmtGold(Math.ceil(fleft))} to level ${fl + 1}` : ' (maximum)'}. Click water near you with a fishing rod.`);
   }
 
   // ---------------------------------------------------------------- market
@@ -1761,6 +1764,7 @@ export class HUD {
       ['` (key under Esc)', 'Test console: levels, gold, items, teleports (also /help in chat)'],
       ['Ctrl-click item', 'Store in depot while a locker is open'],
       ['Click a tree (with an axe)', 'Chop it: logs and woodcutting experience (higher trees need higher woodcutting)'],
+      ['Click water within 3 tiles (with a fishing rod)', 'Fish: catches to eat or sell and fishing experience (better fish need higher fishing; ice fish near snow, swordfish in deep sea)'],
       ['Market board (in depots)', 'Buy from and sell to other players; gold goes to the bank, items to the depot'],
     ];
     for (const [k, v] of rows) {

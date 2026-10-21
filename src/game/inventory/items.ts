@@ -109,7 +109,7 @@ export interface ItemDef {
   heal?: number;
   mana?: number;
   rune?: RuneEffect;
-  tool?: 'rope' | 'shovel';
+  tool?: 'rope' | 'shovel' | 'fishing';
   /** Buff potions: which timed buff drinking it grants. */
   buff?: PotionBuff;
   /** Throwing weapons: chance a throw uses one up (default 0.85). */
@@ -204,6 +204,7 @@ const defs: ItemDef[] = [
   // --- tools -----------------------------------------------------------------------
   def({ id: 'rope', name: 'Rope', kind: 'tool', tool: 'rope', weight: 18, value: 8, tint: '#b08a5a', icon: '§', note: 'Use on a rope spot to climb up.' }),
   def({ id: 'shovel', name: 'Shovel', kind: 'tool', tool: 'shovel', weight: 35, value: 8, tint: '#8f98a6', icon: '⚒', note: 'Dig loose stones open to find a way down.' }),
+  def({ id: 'fishing_rod', name: 'Fishing Rod', kind: 'tool', tool: 'fishing', weight: 8, value: 20, tint: '#a8804a', icon: '⌐', note: 'Click open water within 3 tiles to fish.' }),
 
   // --- backpacks ---------------------------------------------------------------------
   def({ id: 'bag', name: 'Bag', kind: 'backpack', slots: 12, weight: 8, value: 4, tint: '#a8743f', icon: '▤' }),
@@ -375,6 +376,14 @@ const defs: ItemDef[] = [
   def({ id: 'pine_logs', name: 'Pine Logs', kind: 'material', weight: 8, value: 12, tint: '#b08850', note: 'Resinous pine wood. Woodcutting 15.' }),
   def({ id: 'palm_logs', name: 'Palm Logs', kind: 'material', weight: 8, value: 22, tint: '#c8a870', note: 'Light, fibrous palm wood. Woodcutting 25.' }),
   def({ id: 'teak_logs', name: 'Teak Logs', kind: 'material', weight: 9, value: 38, tint: '#7a4a28', rarity: 'uncommon', note: 'Hard jungle teak. Woodcutting 35.' }),
+
+  // --- fishing: catches you can eat or sell (the plain 'fish' above is the small fish) ------
+  def({ id: 'trout', name: 'Trout', kind: 'consumable', weight: 6, value: 6, heal: 40, tint: '#9aa86a', icon: '◆', note: 'A speckled river fish. Fishing 10.' }),
+  def({ id: 'pike', name: 'Pike', kind: 'consumable', weight: 8, value: 12, heal: 60, tint: '#6a8a4a', icon: '◆', note: 'A toothy lake hunter. Fishing 20.' }),
+  def({ id: 'salmon', name: 'Salmon', kind: 'consumable', weight: 9, value: 22, heal: 90, tint: '#e08a70', icon: '◆', note: 'Rich pink flesh from the shallows. Fishing 30.' }),
+  def({ id: 'ice_fish', name: 'Ice Fish', kind: 'consumable', weight: 8, value: 35, heal: 120, tint: '#bfe6f5', icon: '◆', rarity: 'uncommon', note: 'Nearly see-through; lives under the northern ice. Fishing 40.' }),
+  def({ id: 'swordfish', name: 'Swordfish', kind: 'consumable', weight: 14, value: 60, heal: 180, tint: '#5a7ab0', icon: '◆', rarity: 'uncommon', note: 'A fighter of the deep sea. Fishing 50.' }),
+  def({ id: 'old_boot', name: 'Old Boot', kind: 'material', weight: 6, value: 1, tint: '#6a5038', note: 'Soggy, smelly, and somebody\'s loss.' }),
 ];
 
 /** Logs from woodcutting, cheapest first. */

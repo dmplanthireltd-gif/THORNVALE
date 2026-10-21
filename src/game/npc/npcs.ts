@@ -4,6 +4,7 @@ import type { Outfit } from '../player/outfits';
 import { SPELLS } from '../magic/spells';
 import { FERRIES, fare, TOWNS, type StaffRole } from '../world/townList';
 import { EXTRA_BUYS, EXTRA_SELLS, EXTRA_SPELLS } from './stock';
+import { FISH_ITEMS, FISHING_ROD } from '../gathering/fishing';
 
 export interface ShopEntry {
   id: string;
@@ -255,6 +256,15 @@ for (const [key, list] of Object.entries(EXTRA_BUYS)) {
   NPCS.brann.greeting = 'Keep your voice down, {name}. The elves of Silverbough have sharp ears, and their fortress lies just west of Elderglen.';
   NPCS.hask.greeting = "Sea's calm today, {name}. Where can the old Gull take you?";
   NPCS.mara.greeting = "Ahoy, {name}! The Saltwind sails wherever there's a harbour.";
+}
+
+// ---------------------------------------------------------------- fishing trade
+// Harbour captains and ferrymen sell rods and buy the catch; every trader who buys
+// logs (outfitters, general traders, quest givers) buys fish too.
+for (const n of Object.values(NPCS)) {
+  const harbour = !!n.travel?.length && n.prop === 'oar' && n.role !== 'Mine-cart master';
+  if (harbour && !(n.sells ?? []).some((e) => e.id === FISHING_ROD)) n.sells = [...(n.sells ?? []), s(FISHING_ROD, 55)];
+  if (harbour || n.buys?.includes('logs')) n.buys = [...new Set([...(n.buys ?? []), ...FISH_ITEMS])];
 }
 
 export function buyPrice(id: string): number {

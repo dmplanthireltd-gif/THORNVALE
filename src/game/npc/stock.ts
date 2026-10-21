@@ -38,14 +38,14 @@ export const EXTRA_SELLS: Record<string, ShopEntry[]> = {
   garrick: [
     s('fur_bag', 70), s('fur_backpack', 250), s('sylvan_bow', 3900),
     s('onyx_arrow', 8), s('hawkeye_arrow', 13), s('royal_spear', 16), s('enchanted_spear', 50), s('viper_star', 20), s('shadow_star', 65),
-    s('fish', 5), s('mead', 15), s('hatchet', 70),
+    s('fish', 5), s('mead', 15), s('hatchet', 70), s('fishing_rod', 50),
   ],
   mirella: [
     s('berserk_potion', 400), s('bullseye_potion', 400), s('mastermind_potion', 600), s('glacier_robe', 9500), s('frost_circlet', 6000),
     // spells update: blank runes for rune spells, and every new rune ready-made
     s('blank_rune', 10), ...SPELL_RUNES.map((id) => s(id)),
   ],
-  zuri: [s('bullseye_potion', 420), s('viper_star', 22), s('onyx_arrow', 9), s('fish', 5), s('blank_rune', 12), s('antidote_rune'), s('venom_field_rune'), s('hatchet', 75)],
+  zuri: [s('bullseye_potion', 420), s('viper_star', 22), s('onyx_arrow', 9), s('fish', 5), s('blank_rune', 12), s('antidote_rune'), s('venom_field_rune'), s('hatchet', 75), s('fishing_rod', 55)],
   brann: [s('fur_cap', 75), s('fur_boots', 150), s('mead', 16)],
   aldric: [s('berserk_potion', 420)],
 };

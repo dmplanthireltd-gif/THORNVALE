@@ -15,6 +15,8 @@ import { facingFromDelta } from '../src/game/core/types';
 import { Ground, Obj } from '../src/game/world/WorldMap';
 import { SPELL_RUNES } from '../src/game/npc/stock';
 import { TREES } from '../src/game/gathering/woodcutting';
+import { FISH, FISH_ITEMS, FISHING_ROD, TREASURE_ITEMS } from '../src/game/gathering/fishing';
+import { CATCH_FISH, MATERIAL_SHAPE } from '../src/ui/icons';
 import { buildDialogue } from '../src/game/npc/dialogue';
 import { NPCS } from '../src/game/npc/npcs';
 import { EXTRA_BUYS, EXTRA_SELLS, EXTRA_SPELLS } from '../src/game/npc/stock';
@@ -762,6 +764,28 @@ console.log('Woodcutting and market');
     let trees = 0;
   for (let y = 0; y < w.height; y += 2) for (let x = 0; x < w.width; x += 2) if (TREES[w.getObj(x, y, 0)]) trees++;
   check(trees > 500, `plenty of trees to chop (${trees} sampled)`);
+}
+
+// ---------------------------------------------------------------- fishing content
+console.log('Fishing');
+{
+  check(FISH_ITEMS.every((id) => ITEMS[id]?.kind === 'consumable' && (ITEMS[id].heal ?? 0) > 0 && ITEMS[id].value > 0 && ITEMS[id].weight > 0), 'every fish is edible food with a price');
+  check(FISH_ITEMS.every((id) => !!ITEMS[id].icon && !!ITEMS[id].tint && (id === 'fish' || CATCH_FISH.has(id))), 'every fish has an icon');
+  const values = FISH_ITEMS.map((id) => ITEMS[id].value);
+  const heals = FISH_ITEMS.map((id) => ITEMS[id].heal ?? 0);
+  check(values.every((v, i) => i === 0 || v > values[i - 1]) && heals.every((v, i) => i === 0 || v > heals[i - 1]), 'better fish are worth more and heal more');
+  check(FISH.every((f, i) => i === 0 || f.level > FISH[i - 1].level), 'fish tiers rise with level');
+  const bought = new Set(Object.values(NPCS).flatMap((n) => n.buys ?? []));
+  check(FISH_ITEMS.every((id) => bought.has(id)), 'every fish has a buyer');
+  const rod = ITEMS[FISHING_ROD];
+  check(rod?.kind === 'tool' && rod.tool === 'fishing' && !!rod.icon && !equipSlotFor(rod), 'the fishing rod is a tool with an icon');
+  const outfitters = Object.values(NPCS).filter((n) => n.role.startsWith('Outfitter'));
+  check(outfitters.length > 5 && outfitters.every((n) => n.sells?.some((e) => e.id === FISHING_ROD) && FISH_ITEMS.every((id) => n.buys?.includes(id))), `every outfitter (${outfitters.length}) sells rods and buys fish`);
+  const captains = Object.values(NPCS).filter((n) => n.role === 'Ship captain' || n.role.startsWith('Ferry'));
+  check(captains.length > 5 && captains.every((n) => n.sells?.some((e) => e.id === FISHING_ROD) && FISH_ITEMS.every((id) => n.buys?.includes(id))), `every harbour captain and ferryman (${captains.length}) sells rods and buys fish`);
+  check(!!NPCS.aldric.buys?.includes('swordfish') && !!NPCS.zuri.sells?.some((e) => e.id === FISHING_ROD), 'general traders buy fish; Zuri sells rods');
+  check(ITEMS.old_boot?.kind === 'material' && bought.has('old_boot') && !!MATERIAL_SHAPE.old_boot, 'the old boot exists, has an icon and a buyer');
+  check(TREASURE_ITEMS.every((id) => !!ITEMS[id] && ITEMS[id].rarity !== 'legendary'), 'treasure catches are existing loot items');
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll content checks passed.');

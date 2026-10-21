@@ -33,6 +33,8 @@ export type GameEvent =
   | { type: 'xp'; amount: number; atId: number; to: number; skill?: string }
   /** A player swings an axe at a tree; `got` = a log came loose, `felled` = the tree fell. */
   | { type: 'chop'; id: number; x: number; y: number; z: number; got: boolean; felled: boolean }
+  /** A player casts a fishing line at a water tile; `got` = something bit and was landed. */
+  | { type: 'fish'; id: number; x: number; y: number; z: number; got: boolean }
   /** A skill advanced (shown in the Skills panel). */
   | { type: 'skillUp'; skill: string; level: number; to: number }
   | { type: 'levelUp'; id: number; level: number }

@@ -12,7 +12,7 @@ type Sound =
   | 'hit' | 'hitHard' | 'miss' | 'block' | 'swing' | 'bow' | 'throw'
   | 'fire' | 'energy' | 'ice' | 'earth' | 'death' | 'holy'
   | 'heal' | 'mana' | 'buff' | 'shield' | 'levelUp' | 'die' | 'monsterDie'
-  | 'coins' | 'pickup' | 'drink' | 'click' | 'teleport' | 'dig' | 'error' | 'explosion' | 'chop' | 'treeFall' | 'skillUp';
+  | 'coins' | 'pickup' | 'drink' | 'click' | 'teleport' | 'dig' | 'error' | 'explosion' | 'chop' | 'treeFall' | 'skillUp' | 'cast' | 'splash';
 
 const HEARING = 11;
 
@@ -255,6 +255,16 @@ export class Sfx {
         this.noise(out, 'lowpass', 500, 80, t + 0.35, 0.45, 0.8, 0.8);
         this.tone(out, 'sine', 80, 40, t + 0.35, 0.4, 0.5);
         break;
+      case 'cast':
+        // the line whips out and the float drops in: a soft plop
+        this.noise(out, 'bandpass', 2400, 900, t, 0.12, 0.08, 1.2);
+        this.tone(out, 'sine', r(520, 600), 260, t + 0.12, 0.09, 0.08);
+        break;
+      case 'splash':
+        // a fish breaks the surface
+        this.noise(out, 'lowpass', 2200, 400, t, 0.3, 0.3, 0.8, 0.01);
+        this.noise(out, 'bandpass', 900, 1600, t + 0.08, 0.22, 0.12, 2);
+        break;
       case 'skillUp':
         [659, 784, 988].forEach((f, i) => this.tone(out, 'triangle', f, f, t + i * 0.07, 0.18, 0.12, 0.01));
         break;
@@ -361,6 +371,11 @@ export class Sfx {
         const v = this.at(e.x, e.y, e.z);
         this.play('chop', v);
         if (e.felled) this.play('treeFall', v);
+        break;
+      }
+      case 'fish': {
+        const v = this.at(e.x, e.y, e.z);
+        this.play(e.got ? 'splash' : 'cast', v * 0.8);
         break;
       }
       case 'skillUp':

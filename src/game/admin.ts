@@ -22,13 +22,13 @@ export const ADMIN_HELP = [
   '/kill — kill your current target',
   '/goto place — teleport to a place (e.g. /goto caldera) or /goto x y z',
   '/vocation name — change vocation',
-  '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting)',
+  '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing); also /fishing N',
 ];
 
 /** Short names accepted by /skill. */
-const SKILL_ALIASES: Record<string, CombatSkill | 'woodcutting'> = {
+const SKILL_ALIASES: Record<string, CombatSkill | 'woodcutting' | 'fishing'> = {
   fist: 'fist', club: 'club', sword: 'sword', axe: 'axe', distance: 'distance', dist: 'distance', shielding: 'shielding', shield: 'shielding',
-  magic: 'magic', ml: 'magic', mlvl: 'magic', woodcutting: 'woodcutting', wc: 'woodcutting', wood: 'woodcutting',
+  magic: 'magic', ml: 'magic', mlvl: 'magic', woodcutting: 'woodcutting', wc: 'woodcutting', wood: 'woodcutting', fishing: 'fishing', fish: 'fishing',
 };
 
 export function findItem(query: string): ItemDef | null | ItemDef[] {
@@ -185,14 +185,18 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       say(`You are now a ${VOCATIONS[v].name.toLowerCase()}.`);
       return;
     }
+    case 'fishing':
+    case 'woodcutting':
     case 'skill':
     case 'skills': {
+      // "/fishing 30" is short for "/skill fishing 30"
+      if (cmd === 'fishing' || cmd === 'woodcutting') rest.unshift(cmd);
       const which = SKILL_ALIASES[(rest[0] ?? '').toLowerCase()];
-      if (!which) return say(`Skills: ${[...COMBAT_SKILLS, 'woodcutting'].join(', ')}. Example: /skill sword 50`, 'warn');
-      if (which === 'woodcutting') {
+      if (!which) return say(`Skills: ${[...COMBAT_SKILLS, 'woodcutting', 'fishing'].join(', ')}. Example: /skill sword 50`, 'warn');
+      if (which === 'woodcutting' || which === 'fishing') {
         const lvl = Math.max(1, Math.min(WC_MAX_LEVEL, num(rest[1], 1)));
-        s.woodcutting = gatherXpForLevel(lvl);
-        say(`Woodcutting is now level ${lvl}.`);
+        s[which] = gatherXpForLevel(lvl);
+        say(`${which === 'fishing' ? 'Fishing' : 'Woodcutting'} is now level ${lvl}.`);
       } else {
         const min = which === 'magic' ? MAGIC_START : SKILL_START;
         const lvl = Math.max(min, Math.min(SKILL_MAX, num(rest[1], min)));

@@ -18,7 +18,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -133,6 +133,8 @@ export interface SelfSnap {
   skills: Record<string, [number, number]>;
   /** Woodcutting experience. */
   wc: number;
+  /** Fishing experience. */
+  fx: number;
   /** Market window contents; only sent when it changed (null = closed, absent = unchanged). */
   mk?: MarketView | null;
   friends: ReturnType<Game['friendsView']>;
@@ -185,7 +187,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     inv: s.inventory.toJSON(), quests: s.quests.state, dialogue: s.dialogue, bank: s.bank, spells: [...s.spells],
     depot: s.depotOpen ? s.depot : null, trade: game.tradeView(s.id),
     pvp: game.pvp ? 1 : 0, sec: me.secure ? 1 : 0, pz: Math.ceil(me.pzLock), party: game.partyView(me.id),
-    skills: Object.fromEntries(COMBAT_SKILLS.map((k) => [k, [s.skills[k].level, Math.floor(s.skills[k].tries)]])), wc: Math.floor(s.woodcutting), friends: game.friendsView(me.id),
+    skills: Object.fromEntries(COMBAT_SKILLS.map((k) => [k, [s.skills[k].level, Math.floor(s.skills[k].tries)]])), wc: Math.floor(s.woodcutting), fx: Math.floor(s.fishing), friends: game.friendsView(me.id),
   };
   // the market list is only sent when something in it (or in your depot or bank) changed
   const mkKey = s.marketOpen ? `${game.market.version}|${s.bank}|${JSON.stringify(s.depot)}` : 'closed';
@@ -415,6 +417,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   // the Skills panel redraws itself when these change
   if (me.skills) s.skills = parseSkills(Object.fromEntries(Object.entries(me.skills).map(([k, v]) => [k, { level: v[0], tries: v[1] }])));
   if (typeof me.wc === 'number') s.woodcutting = me.wc;
+  if (typeof me.fx === 'number') s.fishing = me.fx;
   if (snap.st) game.syncStumps(snap.st, p.x, p.y, p.z, VIEW_RADIUS + 4);
   const spellsBefore = [...s.spells].sort().join();
   const spellsAfter = [...me.spells].sort().join();

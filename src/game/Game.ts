@@ -14,6 +14,10 @@ import { ENEMIES } from './enemies/enemyDefs';
 import { beamTiles, exivaText, facingDir, GROUP_COOLDOWN, isSpellId, parseSpellWords, SPELLS, startingSpells, waveTiles, type SpellDef, type SpellId } from './magic/spells';
 import { CHOP_INTERVAL, chopChance, gatherLevelForXp, treeAt } from './gathering/woodcutting';
 import {
+  biteChance, FISH_INTERVAL, FISH_RANGE, fishFor, FISHING_ROD, isFishingWater, JUNK_CHANCE, rollFish, SPOT_RECOVER_SECONDS, SPOT_WARY_AFTER, spotKey,
+  TREASURE_CHANCE, TREASURE_ITEMS,
+} from './gathering/fishing';
+import {
   emptyChange, MARKET_CLAIMS_KEPT, MARKET_MAX_OFFERS, MARKET_MAX_PRICE, MARKET_OFFER_MS, MarketBook, marketFee, marketId,
   type MarketChange, type MarketDelivery, type MarketOffer, type MarketView,
 } from './market/market';
@@ -120,6 +124,8 @@ export interface Session {
   skills: Skills;
   /** Woodcutting experience (level 1–99 from the curve in gathering/woodcutting.ts). */
   woodcutting: number;
+  /** Fishing experience (same 1–99 curve; save v7+). */
+  fishing: number;
   /** Market board the player is using, if any. */
   marketOpen: { x: number; y: number; z: number } | null;
   /** Ids of market deliveries this character already received (saved; makes hand-outs idempotent). */
@@ -163,7 +169,7 @@ export interface SaveData {
   /** Combat skills (save v5+): level and tries towards the next level. */
   skills?: Partial<Record<CombatSkill, { level: number; tries: number }>>;
   /** Gathering skills (save v5+): total experience. */
-  gathering?: { woodcutting?: number };
+  gathering?: { woodcutting?: number; fishing?: number };
   /** Market deliveries already received (save v5+). */
   market?: { claimed?: string[] };
   /** Friends list: character names (save v6+). */
@@ -236,6 +242,8 @@ export class Game implements AIContext {
   private fields = new Map<string, TempField>();
   /** Felled trees: key → the tree that grows back and seconds left (mirror games: until the server says otherwise). */
   private stumps = new Map<string, { obj: Obj; left: number }>();
+  /** Fishing spots (3×3 tiles) fished recently: catches there, and seconds until one is forgotten. Not saved. */
+  private fishSpots = new Map<string, { n: number; t: number }>();
   /** The player market (sell offers, escrow, deliveries to offline sellers). */
   readonly market = new MarketBook();
   /**
@@ -285,7 +293,7 @@ export class Game implements AIContext {
       id, player, inventory: new Inventory(), quests: new QuestLog(), dialogue: null,
       intent: opts.intent ?? new BufferedIntent(), depot: new Array(DEPOT_SLOTS).fill(null), depotOpen: null, friends: [],
       bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
-      skills: startSkills(), woodcutting: 0, marketOpen: null, marketClaimed: [],
+      skills: startSkills(), woodcutting: 0, fishing: 0, marketOpen: null, marketClaimed: [],
     };
     if (opts.starter !== false) giveStarterKit(session.inventory, voc);
     this.sessions.set(id, session);
@@ -602,6 +610,7 @@ export class Game implements AIContext {
       this.closeDialogue(s.id);
     }
     p.chop = null;
+    p.fish = null;
     this.cancelTrade(p.id, 'moved away');
     this.events.emit({ type: 'teleport', id: p.id });
   }
@@ -622,6 +631,7 @@ export class Game implements AIContext {
     this.updateHoles(dt);
     this.updateFields(dt);
     this.updateStumps(dt);
+    this.updateFishSpots(dt);
     this.marketTimer -= dt;
     if (this.marketTimer <= 0) {
       this.marketTimer = 10;
@@ -711,6 +721,7 @@ export class Game implements AIContext {
     this.updateHazards(s);
     this.updatePending(s);
     this.updateChop(s, dt);
+    this.updateFish(s, dt);
     this.updatePlayerCombat(s);
   }
 
@@ -883,6 +894,14 @@ export class Game implements AIContext {
       }
     } else {
       if (pend.z !== p.z) { p.pending = null; return; }
+      if (isFishingWater(this.world, pend.x, pend.y, pend.z)) {
+        // fishing needs no walking: cast from where you stand (once the current step is done)
+        if (p.moving) return;
+        p.pending = null;
+        p.path = [];
+        this.startFish(s, pend.x, pend.y, pend.z);
+        return;
+      }
       const onTile = pend.x === p.x && pend.y === p.y;
       if (!p.moving && (chebyshev(p.x, p.y, pend.x, pend.y) <= 1)) {
         p.pending = null;
@@ -1124,6 +1143,7 @@ export class Game implements AIContext {
     if (!s.inventory.canFit(tree.log, 1)) return this.msg(s.id, 'Your backpack is full.', 'warn');
     if (s.inventory.weight() + log.weight > p.capacity) return this.msg(s.id, 'You cannot carry any more.', 'warn');
     p.targetId = null;
+    p.fish = null;
     p.faceTowards(x, y);
     if (!p.chop || p.chop.x !== x || p.chop.y !== y) this.msg(s.id, `You swing your axe at the ${tree.name}.`, 'info');
     p.chop = { x, y, z, timer: CHOP_INTERVAL / 2 };
@@ -1185,6 +1205,126 @@ export class Game implements AIContext {
       this.msg(s.id, `You advanced to woodcutting level ${after}.`, 'level');
       this.events.emit({ type: 'skillUp', skill: 'woodcutting', level: after, to: s.id });
       s.wantsSave = true;
+    }
+  }
+
+  // ================================================================ fishing
+
+  /** Fishing level (1–99, same curve as woodcutting). */
+  fishingLevel(s: Session): number {
+    return gatherLevelForXp(s.fishing);
+  }
+
+  /** Whether the player carries a fishing rod (backpack or hands). */
+  hasRod(s: Session): boolean {
+    return s.inventory.has(FISHING_ROD);
+  }
+
+  /** Whether the player can fish this water from where they stand: in range and in sight. */
+  private canReachWater(p: Player, x: number, y: number, z: number): boolean {
+    return p.z === z && chebyshev(p.x, p.y, x, y) <= FISH_RANGE && this.world.lineOfSight(p.x, p.y, x, y, z);
+  }
+
+  private startFish(s: Session, x: number, y: number, z: number): void {
+    const p = s.player;
+    if (!isFishingWater(this.world, x, y, z)) return;
+    if (!this.hasRod(s)) return this.msg(s.id, 'You need a fishing rod to fish. Outfitters and harbour captains sell them.', 'warn');
+    if (!this.canReachWater(p, x, y, z)) return this.msg(s.id, `The water is too far away. Stand within ${FISH_RANGE} tiles of it.`, 'warn');
+    if (!s.inventory.canFit('fish', 1) && s.inventory.freeSlots() === 0) return this.msg(s.id, 'Your backpack is full.', 'warn');
+    p.targetId = null;
+    p.chop = null;
+    p.faceTowards(x, y);
+    if (!p.fish || p.fish.x !== x || p.fish.y !== y) this.msg(s.id, 'You cast your line into the water.', 'info');
+    p.fish = { x, y, z, timer: FISH_INTERVAL / 2 };
+  }
+
+  /** One cast every FISH_INTERVAL while you stand still; walking or attacking stops it. */
+  private updateFish(s: Session, dt: number): void {
+    const p = s.player;
+    const f = p.fish;
+    if (!f) return;
+    if (p.dead || p.moving || p.path.length || p.pending || p.targetId !== null || !this.canReachWater(p, f.x, f.y, f.z) || !isFishingWater(this.world, f.x, f.y, f.z)) {
+      p.fish = null;
+      return;
+    }
+    f.timer -= dt;
+    if (f.timer > 0) return;
+    f.timer += FISH_INTERVAL;
+    p.faceTowards(f.x, f.y);
+    if (!this.hasRod(s)) {
+      p.fish = null;
+      return this.msg(s.id, 'You need a fishing rod to fish.', 'warn');
+    }
+    const lvl = this.fishingLevel(s);
+    const key = spotKey(f.x, f.y, f.z);
+    const spot = this.fishSpots.get(key);
+    const r = Math.random();
+    // rare catches first: an old boot or a little treasure
+    let catchId: string | null = null;
+    let qty = 1;
+    let xp = 0;
+    let what = '';
+    if (r < JUNK_CHANCE) {
+      catchId = 'old_boot';
+      what = 'You pull up an old boot. Lovely.';
+      xp = 1;
+    } else if (r < JUNK_CHANCE + TREASURE_CHANCE) {
+      if (Math.random() < 0.5) {
+        catchId = 'gold';
+        qty = 20 + Math.floor(Math.random() * 61);
+        what = `Your hook snags a sunken purse: ${qty} gold!`;
+      } else {
+        catchId = TREASURE_ITEMS[Math.floor(Math.random() * TREASURE_ITEMS.length)];
+        what = `Something glitters on your hook: ${itemDef(catchId).name.toLowerCase()}!`;
+      }
+      xp = 10;
+    } else if (Math.random() < biteChance(lvl, spot?.n ?? 0)) {
+      const fish = rollFish(fishFor(this.world, f.x, f.y, f.z, lvl), lvl);
+      if (fish) {
+        catchId = fish.item;
+        xp = fish.xp;
+        what = `You catch ${/^[aeiou]/.test(fish.name) ? 'an' : 'a'} ${fish.name}.`;
+      }
+    }
+    if (catchId) {
+      const d = itemDef(catchId);
+      if (!s.inventory.canFit(catchId, qty) || s.inventory.weight() + d.weight * qty > p.capacity) {
+        p.fish = null;
+        this.events.emit({ type: 'fish', id: p.id, x: f.x, y: f.y, z: f.z, got: false });
+        return this.msg(s.id, s.inventory.canFit(catchId, qty) ? 'You cannot carry any more.' : 'Your backpack is full.', 'warn');
+      }
+      s.inventory.add(catchId, qty);
+      this.events.emit({ type: 'inventoryChanged', to: s.id });
+      this.msg(s.id, what, 'loot');
+      if (xp > 0) this.gainFishing(s, xp, p.id);
+      const n = (spot?.n ?? 0) + 1;
+      this.fishSpots.set(key, { n, t: spot?.t ?? SPOT_RECOVER_SECONDS });
+      if (n === SPOT_WARY_AFTER) this.msg(s.id, 'The fish here are getting wary. Try another spot for a while.', 'info');
+    }
+    this.events.emit({ type: 'fish', id: p.id, x: f.x, y: f.y, z: f.z, got: !!catchId });
+  }
+
+  /** Adds fishing experience and announces new levels. */
+  gainFishing(s: Session, xp: number, atId: number): void {
+    const before = this.fishingLevel(s);
+    s.fishing = Math.min(200_000_000, s.fishing + Math.max(0, xp));
+    this.events.emit({ type: 'xp', amount: xp, atId, to: s.id, skill: 'fishing' });
+    const after = this.fishingLevel(s);
+    if (after > before) {
+      this.msg(s.id, `You advanced to fishing level ${after}.`, 'level');
+      this.events.emit({ type: 'skillUp', skill: 'fishing', level: after, to: s.id });
+      s.wantsSave = true;
+    }
+  }
+
+  /** Fished-out spots slowly recover: one catch forgotten every SPOT_RECOVER_SECONDS. */
+  private updateFishSpots(dt: number): void {
+    for (const [k, sp] of this.fishSpots) {
+      sp.t -= dt;
+      if (sp.t > 0) continue;
+      sp.n -= 1;
+      sp.t += SPOT_RECOVER_SECONDS;
+      if (sp.n <= 0) this.fishSpots.delete(k);
     }
   }
 
@@ -2047,6 +2187,11 @@ export class Game implements AIContext {
       const s = this.session(this.localId);
       return !!s && !!this.bestAxe(s);
     }
+    if (isFishingWater(this.world, x, y, z)) {
+      // open water is "usable" (fish) with a rod, when it is close enough and in sight
+      const s = this.session(this.localId);
+      return !!s && this.hasRod(s) && this.canReachWater(s.player, x, y, z);
+    }
     return o === Obj.Ladder || o === Obj.RopeSpot || o === Obj.LooseStone || o === Obj.Locker || o === Obj.Chest || o === Obj.MarketBoard;
   }
 
@@ -2604,6 +2749,7 @@ export class Game implements AIContext {
     }
     if (d.tool === 'rope') return this.msg(pid, 'Click a rope spot to climb up with your rope.', 'info');
     if (d.tool === 'shovel') return this.msg(pid, 'Click loose stones to dig them open.', 'info');
+    if (d.tool === 'fishing') return this.msg(pid, `Click open water within ${FISH_RANGE} tiles to fish.`, 'info');
     this.msg(pid, `${d.name}: ${describeItem(d)}${d.value ? ` — traders pay ${d.value} gold.` : ''}`, 'info');
   }
 
@@ -3468,7 +3614,7 @@ export class Game implements AIContext {
       lostItems: s.lostItems.map((x) => ({ ...x })),
       pvp: { secure: p.secure, whiteSkullUntil: p.whiteSkullUntil, redSkullUntil: p.redSkullUntil, unjustKills: [...p.unjustKills] },
       skills: Object.fromEntries(Object.entries(s.skills).map(([k, v]) => [k, { level: v.level, tries: v.tries }])),
-      gathering: { woodcutting: s.woodcutting },
+      gathering: { woodcutting: s.woodcutting, fishing: s.fishing },
       market: { claimed: [...s.marketClaimed] },
       friends: [...s.friends],
     };
@@ -3519,6 +3665,8 @@ export class Game implements AIContext {
     s.skills = data.skills ? parseSkills(data.skills) : legacySkills(p.vocation, p.level);
     const wc = Number(data.gathering?.woodcutting);
     s.woodcutting = Number.isFinite(wc) && wc > 0 ? Math.min(200_000_000, wc) : 0;
+    const fx = Number(data.gathering?.fishing);
+    s.fishing = Number.isFinite(fx) && fx > 0 ? Math.min(200_000_000, fx) : 0;
     s.marketClaimed = Array.isArray(data.market?.claimed) ? data.market!.claimed!.filter((x) => typeof x === 'string').slice(-MARKET_CLAIMS_KEPT) : [];
     s.marketOpen = null;
     this.refreshStats(s);
@@ -3561,6 +3709,7 @@ export class Game implements AIContext {
     s.chests = new Set();
     s.skills = startSkills();
     s.woodcutting = 0;
+    s.fishing = 0;
     s.marketOpen = null;
     this.refreshStats(s);
     p.hp = p.maxHp;
@@ -3582,6 +3731,7 @@ export class Game implements AIContext {
     }
     for (const b of this.bags) this.events.emit({ type: 'bagRemoved', bagId: b.id });
     this.bags.length = 0;
+    this.fishSpots.clear();
     for (const e of this.enemies) {
       e.placeAt(e.spawnX, e.spawnY, e.spawnZ);
       e.homeX = e.spawnX;
@@ -3632,6 +3782,7 @@ function resetPlayerState(p: Player): void {
   p.redSkullUntil = 0;
   p.unjustKills = [];
   p.chop = null;
+  p.fish = null;
 }
 
 /** Each vocation starts with gear it can actually use. */

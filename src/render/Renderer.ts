@@ -7,6 +7,7 @@ import type { Creature } from '../game/entities/Creature';
 import type { GroundBag } from '../game/Game';
 import { itemDef, type Element } from '../game/inventory/items';
 import { treeAt } from '../game/gathering/woodcutting';
+import { isFishingWater } from '../game/gathering/fishing';
 import { NPCS } from '../game/npc/npcs';
 import { Npc } from '../game/npc/Npc';
 import { Player, spellLight } from '../game/player/Player';
@@ -507,6 +508,20 @@ export class Renderer {
         if (e.felled) this.effects.burst(new THREE.Vector3(e.x, off + 1.6, e.y), 0x4a8a38, 26, 2.4, 4, 0.09);
         break;
       }
+      case 'fish': {
+        // a cast: the line goes out with a swing; a soft ring on the water, a splash and ripples when something bites
+        this.visibleView(e.id)?.onAttack();
+        const off = this.worldView.floorOffset(e.z);
+        if (off === null || chebyshev(e.x, e.y, this.me.x, this.me.y) > VIEW_RANGE + 2) break;
+        const at = new THREE.Vector3(e.x, off + 0.04, e.y);
+        this.effects.ring(at, 0xcfe8ff, 0.08, 0.45, 0.6);
+        if (e.got) {
+          this.effects.burst(new THREE.Vector3(e.x, off + 0.1, e.y), 0xbfe0ff, 12, 1.6, 6, 0.06);
+          this.effects.ring(at.clone(), 0x9fd0ff, 0.15, 0.9, 1.0);
+          this.effects.ring(at.clone(), 0x9fd0ff, 0.1, 0.65, 1.3);
+        }
+        break;
+      }
       case 'levelUp': {
         const v = this.visibleView(e.id);
         if (!v) break;
@@ -673,6 +688,7 @@ export class Renderer {
       if (tree) return `A ${tree.name}${tree.level > 1 ? ` (woodcutting ${tree.level})` : ''}${h.usable ? ' — click to chop' : ''}`;
       if (o === Obj.Stump) return 'A tree stump. It will grow back.';
       if (o === Obj.MarketBoard) return 'Market board — buy from and sell to other players';
+      if (h.usable && isFishingWater(g.world, h.x, h.y, this.me.z)) return 'Water — click to fish';
       return '';
     }
     const c = g.getCreature(h.id);

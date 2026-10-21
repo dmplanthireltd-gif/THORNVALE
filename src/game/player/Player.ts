@@ -112,6 +112,8 @@ export class Player extends Creature {
   pzMsgTimer = 0;
   /** Woodcutting in progress: the tree being chopped and seconds to the next chop. Not saved. */
   chop: { x: number; y: number; z: number; timer: number } | null = null;
+  /** Fishing in progress: the water tile and seconds to the next cast. Not saved. */
+  fish: { x: number; y: number; z: number; timer: number } | null = null;
   // derived from vocation, level and gear (refreshed by the game)
   baseStep = 0.27;
   hpRegen = 0;

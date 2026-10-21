@@ -17,9 +17,9 @@ import type { Vocation } from './vocations';
 export type CombatSkill = 'fist' | 'club' | 'sword' | 'axe' | 'distance' | 'shielding' | 'magic';
 export const COMBAT_SKILLS: CombatSkill[] = ['fist', 'club', 'sword', 'axe', 'distance', 'shielding', 'magic'];
 
-export const SKILL_NAMES: Record<CombatSkill | 'woodcutting', string> = {
+export const SKILL_NAMES: Record<CombatSkill | 'woodcutting' | 'fishing', string> = {
   fist: 'Fist Fighting', club: 'Club Fighting', sword: 'Sword Fighting', axe: 'Axe Fighting', distance: 'Distance Fighting',
-  shielding: 'Shielding', magic: 'Magic Level', woodcutting: 'Woodcutting',
+  shielding: 'Shielding', magic: 'Magic Level', woodcutting: 'Woodcutting', fishing: 'Fishing',
 };
 
 export interface SkillProgress {

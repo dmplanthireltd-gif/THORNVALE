@@ -23,6 +23,7 @@ import { expForLevel } from '../src/game/player/Player';
 import { legacySkills, powerLevel, triesForNext, typicalSkill } from '../src/game/player/skills';
 import { rollMelee } from '../src/game/combat/combat';
 import { gatherLevelForXp, gatherXpForLevel, TREES } from '../src/game/gathering/woodcutting';
+import { biteChance, FISH, FISH_ITEMS, FISH_RANGE, fishFor, isColdWater, isFishingWater } from '../src/game/gathering/fishing';
 import { MARKET_OFFER_MS, type MarketChange } from '../src/game/market/market';
 
 let failures = 0;
@@ -1187,6 +1188,142 @@ console.log('Woodcutting');
   g.dialogueAction(pid, 'sell:logs:10');
   check(!!NPCS.aldric.buys?.includes('logs'), 'general traders list logs among what they buy');
   check(s.inventory.count('logs') === 0 && s.inventory.count('gold') === gold0 + 10 * ITEMS.logs.value, `traders buy logs (${10 * ITEMS.logs.value} gold for 10)`);
+}
+
+console.log('Fishing');
+{
+  const { g, s, pid } = solo('knight');
+  const p = s.player;
+  const w = g.world;
+  const msgs: string[] = [];
+  g.events.on((e) => { if (e.type === 'message' && e.to === pid) msgs.push(e.text); });
+  const casts: boolean[] = [];
+  g.events.on((e) => { if (e.type === 'fish' && e.id === pid) casts.push(e.got); });
+  /** A free shore tile next to water that matches `want`. */
+  const findShore = (want: (x: number, y: number) => boolean): { x: number; y: number; wx: number; wy: number } | null => {
+    for (let y = 40; y < w.height - 40; y++) for (let x = 40; x < w.width - 40; x++) {
+      if (!isFishingWater(w, x, y, 0) || !want(x, y)) continue;
+      for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
+        if (w.isWalkable(x + dx, y + dy, 0) && !w.linkAt(x + dx, y + dy, 0) && !g.isOccupied(x + dx, y + dy, 0)) return { x: x + dx, y: y + dy, wx: x, wy: y };
+      }
+    }
+    return null;
+  };
+  const clearFoes = () => { for (const e of g.enemies) if (!e.dead && Math.abs(e.x - p.x) < 14 && Math.abs(e.y - p.y) < 14) { e.dead = true; e.respawnTimer = 1e9; } };
+  const deep = (x: number, y: number) => w.getGround(x, y, 0) === 16;
+  const sh = findShore((x, y) => !deep(x, y) && !isColdWater(w, x, y, 0))!;
+  const dp = findShore((x, y) => deep(x, y) && !isColdWater(w, x, y, 0))!;
+  const cold = findShore((x, y) => isColdWater(w, x, y, 0))!;
+  check(!!sh && !!dp && !!cold, 'the world has shallow, deep and icy water by the shore');
+  check(gatherXpForLevel(2) === 83 && FISH.map((f) => f.level).join() === '1,10,20,30,40,50', 'fishing tiers at levels 1, 10, 20, 30, 40, 50 on the 1–99 curve');
+  // which fish live where
+  const names = (x: number, y: number, lvl: number) => fishFor(w, x, y, 0, lvl).map((f) => f.item);
+  check(names(dp.wx, dp.wy, 1).join() === 'fish', 'at level 1 only small fish bite');
+  check(names(dp.wx, dp.wy, 99).includes('swordfish') && !names(sh.wx, sh.wy, 99).includes('swordfish'), 'swordfish only in deep water');
+  check(names(sh.wx, sh.wy, 99).includes('salmon') && !names(dp.wx, dp.wy, 99).includes('salmon'), 'salmon only in shallow water');
+  check(names(cold.wx, cold.wy, 99).includes('ice_fish') && !names(sh.wx, sh.wy, 99).includes('ice_fish'), 'ice fish only near snow and ice');
+  check(names(sh.wx, sh.wy, 25).join() === 'pike,trout,fish', 'level 25 in shallow water: pike, trout, small fish');
+  check(biteChance(30, 12) < biteChance(30, 0), 'a fished-out spot bites less');
+
+  g.teleport(p, sh.x, sh.y, 0);
+  p.god = true;
+  clearFoes();
+  check(!g.isUsable(sh.wx, sh.wy, 0), 'without a rod water is not usable');
+  executeCommand(g, pid, { c: 'useTile', x: sh.wx, y: sh.wy });
+  run(g, 0.5);
+  check(msgs.some((m) => m.startsWith('You need a fishing rod')) && p.fish === null, 'no rod, no fishing');
+  s.inventory.add('fishing_rod', 1);
+  check(g.isUsable(sh.wx, sh.wy, 0), 'with a rod, nearby water can be used (fished)');
+  const caught = () => FISH_ITEMS.reduce((n, id) => n + s.inventory.count(id), 0);
+  executeCommand(g, pid, { c: 'useTile', x: sh.wx, y: sh.wy });
+  run(g, 0.2);
+  check(p.fish !== null && p.x === sh.x && p.y === sh.y, 'fishing starts without walking');
+  run(g, 200, () => caught() > 0);
+  check(s.inventory.count('fish') === 1 && s.fishing >= FISH[0].xp && casts.length > 0, `fishing gives fish and fishing experience (${casts.length} casts, ${s.fishing} xp)`);
+  check(p.fish !== null, 'you keep fishing after a catch');
+  // level gate: many casts at level 1 in deep water never land anything better than small fish
+  g.teleport(p, dp.x, dp.y, 0);
+  clearFoes();
+  s.fishing = 0;
+  for (const id of FISH_ITEMS) s.inventory.removeById(id, s.inventory.count(id));
+  s.inventory.removeById('old_boot', s.inventory.count('old_boot'));
+  p.capacity = 1e6;
+  executeCommand(g, pid, { c: 'useTile', x: dp.wx, y: dp.wy });
+  run(g, 240, () => s.inventory.count('fish') >= 6);
+  check(s.inventory.count('fish') >= 1 && FISH_ITEMS.slice(1).every((id) => s.inventory.count(id) === 0), `no swordfish (or any better fish) at level 1 (${s.inventory.count('fish')} small fish)`);
+  // at level 50 in deep water swordfish bite
+  s.fishing = gatherXpForLevel(50);
+  for (const id of FISH_ITEMS) s.inventory.removeById(id, s.inventory.count(id));
+  g.teleport(p, dp.x, dp.y, 0);
+  clearFoes();
+  executeCommand(g, pid, { c: 'useTile', x: dp.wx, y: dp.wy });
+  run(g, 900, () => s.inventory.count('swordfish') > 0);
+  check(s.inventory.count('swordfish') > 0 && s.inventory.count('salmon') === 0 && s.inventory.count('pike') === 0, 'at level 50 deep water gives swordfish (never salmon or pike)');
+  // range: water further than 3 tiles is refused
+  msgs.length = 0;
+  const far = (() => { for (let r = FISH_RANGE + 1; r < 12; r++) for (const [dx, dy] of [[r, 0], [-r, 0], [0, r], [0, -r]]) if (isFishingWater(w, p.x + dx, p.y + dy, 0)) return { x: p.x + dx, y: p.y + dy }; return null; })();
+  if (far) {
+    executeCommand(g, pid, { c: 'useTile', x: far.x, y: far.y });
+    run(g, 0.3);
+    check(msgs.some((m) => m.startsWith('The water is too far away')) && !g.isUsable(far.x, far.y, 0), 'water more than 3 tiles away cannot be fished');
+  } else check(true, 'far water check skipped (none in a straight line)');
+  // moving stops fishing
+  executeCommand(g, pid, { c: 'useTile', x: dp.wx, y: dp.wy });
+  run(g, 0.3);
+  check(p.fish !== null, 'fishing again');
+  const away = [[dp.x - dp.wx, dp.y - dp.wy]].map(([dx, dy]) => ({ x: dp.x + dx * 3, y: dp.y + dy * 3 }))[0];
+  executeCommand(g, pid, { c: 'moveTo', x: away.x, y: away.y });
+  run(g, 0.4);
+  check(p.fish === null, 'walking away stops fishing');
+  // attacking stops fishing
+  g.teleport(p, dp.x, dp.y, 0);
+  clearFoes();
+  executeCommand(g, pid, { c: 'useTile', x: dp.wx, y: dp.wy });
+  run(g, 0.3);
+  const foe = enemyNear(g, 'rat', p, dp.x === dp.wx ? 1 : 0, dp.x === dp.wx ? 0 : 1);
+  executeCommand(g, pid, { c: 'attack', id: foe.id });
+  run(g, 0.2);
+  check(p.fish === null, 'attacking stops fishing');
+  foe.dead = true;
+  foe.respawnTimer = 1e9;
+  // fish are food
+  const hp0 = (p.hp = 50);
+  s.inventory.removeById('trout', s.inventory.count('trout'));
+  s.inventory.add('trout', 1);
+  msgs.length = 0;
+  g.useItem(pid, 'trout');
+  check(p.hp > hp0 && s.inventory.count('trout') === 0, `fish can be eaten${msgs.length ? ` (${msgs.join(' | ')})` : ''}`);
+  // admin, save, migration, snapshot
+  s.admin = true;
+  g.say(pid, '/skill fishing 30');
+  check(g.fishingLevel(s) === 30, '/skill fishing sets fishing');
+  g.say(pid, '/fishing 42');
+  check(g.fishingLevel(s) === 42, '/fishing N sets fishing');
+  const data = g.serialize(pid);
+  check(data.version === SAVE_VERSION && SAVE_VERSION === 7 && data.gathering?.fishing === s.fishing, 'saves carry fishing experience (save v7)');
+  const t2 = solo('knight');
+  check(t2.g.applySave(t2.pid, data) && t2.s.fishing === s.fishing && t2.s.woodcutting === s.woodcutting, 'fishing survives save and load');
+  const v6 = JSON.parse(JSON.stringify({ ...data, version: 6, gathering: { woodcutting: 1234 } })) as Record<string, unknown>;
+  const mig = migrateSave(v6);
+  check(typeof mig !== 'string' && mig.from === 6 && mig.data.version === 7 && mig.data.gathering?.fishing === 0 && mig.data.gathering?.woodcutting === 1234, 'a v6 save migrates: fishing 0, woodcutting kept');
+  const t3 = solo('knight');
+  check(t3.g.applySave(t3.pid, v6) && t3.s.fishing === 0 && t3.s.woodcutting === 1234 && t3.s.inventory.count('fishing_rod') === s.inventory.count('fishing_rod'), 'a migrated v6 character loads with its items and woodcutting');
+  const snap = buildSnapshot(g, s);
+  const mirror = new Game({ simulate: false });
+  if (snap.t === 'snap') {
+    check(snap.self.fx === Math.floor(s.fishing), 'the snapshot carries fishing (fx)');
+    applySnapshot(mirror, snap);
+    check(mirror.session(pid)!.fishing === Math.floor(s.fishing), 'clients get fishing experience');
+  }
+  // harbour captains buy the catch
+  const captain = g.npcs.find((n) => NPCS[n.key]?.role === 'Ship captain')!;
+  g.teleport(p, captain.x, captain.y + 1, captain.z);
+  s.inventory.add('salmon', 5);
+  const gold0 = s.inventory.count('gold');
+  g.commandTalk(pid, captain.id);
+  run(g, 2, () => !!s.dialogue);
+  g.dialogueAction(pid, 'sell:salmon:5');
+  check(s.inventory.count('salmon') === 0 && s.inventory.count('gold') === gold0 + 5 * ITEMS.salmon.value, `harbour captains buy fish (${5 * ITEMS.salmon.value} gold for 5 salmon)`);
 }
 
 console.log('Player market');

@@ -387,12 +387,29 @@ function drawGold(x: Ctx): void {
   }
 }
 
+/** Fishing catches other than the plain fish: same body, own colour, a few marks per kind. */
+export const CATCH_FISH = new Set(['trout', 'pike', 'salmon', 'ice_fish', 'swordfish']);
+
 function drawFood(x: Ctx, d: ItemDef): void {
   if (d.id === 'fish') {
     poly(x, [3, 16, 9, 10, 20, 9, 26, 15, 20, 22, 9, 22], '#8ab0c8');
     poly(x, [25, 15, 31, 9, 30, 22], '#6a90a8');
     circle(x, 9, 15, 1.5, '#121212', 0);
     bar(x, 13, 12, 13, 19, 0.6, '#5a7a90');
+    return;
+  }
+  if (CATCH_FISH.has(d.id)) {
+    const c = d.tint;
+    if (d.id === 'swordfish') bar(x, 1, 13, 8, 15, 1.4, shade(c, 1.3));
+    const long = d.id === 'pike' || d.id === 'swordfish';
+    poly(x, long ? [4, 16, 8, 11, 21, 10, 26, 15, 21, 21, 8, 21] : [5, 16, 10, 9, 19, 8, 25, 15, 19, 23, 10, 23], c);
+    poly(x, [25, 15, 31, 8, 30, 23], shade(c, 0.78));
+    if (d.id === 'swordfish') poly(x, [13, 10, 17, 3, 20, 10], shade(c, 0.78), 1);
+    circle(x, long ? 9 : 10, 15, 1.4, '#121212', 0);
+    if (d.id === 'trout') for (const [sx, sy] of [[14, 13], [18, 17], [21, 13], [15, 19]]) circle(x, sx, sy, 0.9, '#3a4a2a', 0);
+    if (d.id === 'pike') for (let i = 0; i < 3; i++) bar(x, 13 + i * 4, 12, 12 + i * 4, 19, 0.8, shade(c, 0.7));
+    if (d.id === 'salmon') bar(x, 9, 18, 24, 17, 1.2, '#f0c0b0');
+    if (d.id === 'ice_fish') bar(x, 12, 15, 24, 15, 0.8, '#ffffff');
     return;
   }
   if (d.id === 'cheese') {
@@ -413,6 +430,19 @@ function drawFood(x: Ctx, d: ItemDef): void {
 }
 
 function drawTool(x: Ctx, d: ItemDef): void {
+  if (d.tool === 'fishing') {
+    // a bent rod with its line and a red float
+    bar(x, 4, 29, 25, 4, 2, '#a8804a');
+    bar(x, 4, 29, 8, 24, 3, '#5a3a22');
+    x.beginPath();
+    x.moveTo(25, 4);
+    x.quadraticCurveTo(29, 14, 26, 22);
+    x.strokeStyle = '#e8e8e8';
+    x.lineWidth = 0.8;
+    x.stroke();
+    circle(x, 26, 24, 2.2, '#d8302a', 1);
+    return;
+  }
   if (d.tool === 'rope') {
     for (const r of [11, 8, 5]) {
       x.beginPath();
@@ -432,7 +462,7 @@ function drawTool(x: Ctx, d: ItemDef): void {
   poly(x, [19, 9, 24, 4, 30, 10, 25, 15], '#9aa4b2');
 }
 
-const MATERIAL_SHAPE: Record<string, [string, string]> = {
+export const MATERIAL_SHAPE: Record<string, [string, string]> = {
   rat_tail: ['tail', '#c48a8a'], wolf_pelt: ['pelt', '#7a7a82'], bone: ['bone', '#efe6cc'], orc_tooth: ['fang', '#f0e6c8'],
   orc_charm: ['orb', '#7affb0'], orc_banner: ['flag', '#a8281f'], elvish_talisman: ['orb', '#9ad0a0'], elven_scroll: ['scroll', '#efe6cf'],
   crocodile_leather: ['pelt', '#5a7a3a'], spider_silk: ['spiral', '#f0f0f0'], troll_hair: ['pelt', '#3a4a2a'], hydra_head: ['head', '#2f7a5a'],
@@ -447,6 +477,7 @@ const MATERIAL_SHAPE: Record<string, [string, string]> = {
   mummy_wrapping: ['scroll', '#d8ccb0'], lizard_scale: ['scale', '#5a9a4a'], giant_beard: ['pelt', '#c8d8e8'], crystal_shard: ['crystal', '#9fe6ff'],
   frozen_heart: ['heart', '#6ac8ff'], frost_dragon_scale: ['scale', '#bfe6f5'],
   logs: ['logs', '#9a6a3a'], pine_logs: ['logs', '#b08850'], palm_logs: ['logs', '#c8a870'], teak_logs: ['logs', '#7a4a28'],
+  old_boot: ['boot', '#6a5038'],
 };
 
 function drawMaterial(x: Ctx, d: ItemDef): void {
@@ -601,6 +632,13 @@ function drawMaterial(x: Ctx, d: ItemDef): void {
       x.beginPath();
       x.ellipse(16, 18, 11, 8, 0.3, 0, Math.PI * 2);
       paint(x, c);
+      break;
+    case 'boot':
+      // a soggy old boot, sole worn through, dripping
+      poly(x, [9, 4, 18, 4, 18, 18, 27, 21, 27, 27, 7, 27, 8, 16], c);
+      bar(x, 7, 27, 27, 27, 1.6, shade(c, 0.6));
+      bar(x, 10, 9, 17, 9, 0.8, shade(c, 0.7));
+      circle(x, 20, 30, 1, '#7ab0e0', 0);
       break;
     case 'logs':
       // three logs stacked, cut ends showing their rings
