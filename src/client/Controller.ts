@@ -131,6 +131,7 @@ export class LocalController implements Controller {
 export interface ConnectOptions {
   url: string;
   name: string;
+  password: string;
   vocation: Vocation;
   outfit: Outfit;
   timeoutMs?: number;
@@ -175,7 +176,7 @@ export class NetController implements Controller {
         }
       }, o.timeoutMs ?? 8000);
       ws.onopen = () => {
-        const hello: ClientMessage = { t: 'hello', v: PROTOCOL_VERSION, name: o.name, vocation: o.vocation, outfit: o.outfit };
+        const hello: ClientMessage = { t: 'hello', v: PROTOCOL_VERSION, name: o.name, password: o.password, vocation: o.vocation, outfit: o.outfit };
         ws.send(JSON.stringify(hello));
       };
       ws.onerror = () => {

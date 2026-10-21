@@ -11,6 +11,7 @@ import { Enemy } from '../src/game/enemies/Enemy';
 import { findPath } from '../src/game/movement/pathfinding';
 import { applySnapshot, buildSnapshot, executeCommand } from '../src/game/net/protocol';
 import { SaveSystem, type KeyValueStore } from '../src/game/save/SaveSystem';
+import { ITEM_RENAMES, migrateSave, SAVE_VERSION } from '../src/game/save/migrate';
 import { floodFill3D } from '../src/game/world/worldGen';
 import { Obj, WorldMap } from '../src/game/world/WorldMap';
 import type { Vocation } from '../src/game/player/vocations';
@@ -627,6 +628,35 @@ console.log('\nAnti-spam cooldowns');
   g.castSpell(pid, 'exura');
   check(s.player.hp === hp1, 'healing spells cannot be spammed');
   check(s.player.groupCooldowns.potion >= 0 && s.player.groupCooldowns.heal > 0, 'cooldowns tracked per group');
+}
+
+console.log('\nSave migration (big updates must not lose progress)');
+{
+  const { g, s, pid } = solo('paladin');
+  s.player.level = 30;
+  s.player.exp = 200000;
+  s.inventory.add('gold', 500);
+  const gold = s.inventory.count('gold');
+  s.bank = 777;
+  const data = g.serialize(pid) as unknown as Record<string, unknown>;
+  check(data.version === SAVE_VERSION, `saves carry the format version (${SAVE_VERSION})`);
+  // pretend an update removed one item and an old save still has it
+  const inv = data.inventory as { slots: Array<{ id: string; qty: number } | null> };
+  inv.slots[7] = { id: 'removed_relic', qty: 2 };
+  const t = solo('knight');
+  check(t.g.applySave(t.pid, data), 'save with a removed item still loads');
+  check(t.s.player.level === 30 && t.s.inventory.count('gold') === gold && t.s.bank === 777, 'level, gold and bank survive');
+  check(t.s.lostItems.some((x) => x.id === 'removed_relic' && x.qty === 2), 'the removed item is kept aside, not deleted');
+  const again = t.g.serialize(t.pid);
+  check(again.lostItems?.some((x) => x.id === 'removed_relic'), 'kept-aside items stay in later saves');
+  // a later update brings it back under a new name
+  ITEM_RENAMES.removed_relic = 'demon_horn';
+  const u = solo('knight');
+  check(u.g.applySave(u.pid, again), 'loads after the item returns');
+  check(u.s.depot.some((x) => x?.id === 'demon_horn' && x.qty === 2) && u.s.lostItems.length === 0, 'returned items are given back in the depot');
+  delete ITEM_RENAMES.removed_relic;
+  const future = { ...again, version: SAVE_VERSION + 1 };
+  check(migrateSave(future) === 'newer' && !u.g.applySave(u.pid, future), 'a save from a newer version is never overwritten by an older server');
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);

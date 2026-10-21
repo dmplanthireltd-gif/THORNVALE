@@ -24,3 +24,10 @@ services:
         value: "0"
       - key: ADMINS
         value: ""
+      # Supabase keeps accounts and characters safe across restarts and updates.
+      # Render asks for these two values when you create or sync the Blueprint
+      # (Supabase dashboard → Project Settings → API / API Keys). Run supabase/schema.sql first.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false

@@ -1,8 +1,18 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["node"],
-    "lib": ["ES2022"]
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2022"
+    ]
   },
-  "include": ["server", "src/game"]
+  "include": [
+    "server",
+    "src/game",
+    "scripts/saves.ts",
+    "scripts/storage-test.ts"
+  ],
+  "exclude": []
 }

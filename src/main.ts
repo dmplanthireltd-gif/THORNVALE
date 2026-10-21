@@ -20,7 +20,7 @@ async function boot(): Promise<void> {
     try {
       if (choice.mode === 'online') {
         start.setStatus(`Connecting to ${choice.url}…`);
-        ctl = await NetController.connect({ url: choice.url, name: choice.name, vocation: choice.vocation, outfit: choice.outfit });
+        ctl = await NetController.connect({ url: choice.url, name: choice.name, password: choice.password, vocation: choice.vocation, outfit: choice.outfit });
       } else if (choice.mode === 'continue') {
         const peek = saves.peek();
         ctl = new LocalController(new Game(), saves, peek?.name ?? 'Adventurer', 'knight', { load: true });

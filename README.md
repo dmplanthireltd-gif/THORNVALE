@@ -13,7 +13,7 @@ npm run server       # multiplayer server: serves dist/ and the game on http://l
 npm run test:logic   # headless simulation test of every system (no browser needed)
 ```
 
-Requires Node 18+. For multiplayer, run `npm run build` and then `npm run server`, and open `http://localhost:8080` in several browsers. On the title screen choose **Connect**. The address is filled in for you when the page is served by the server. Characters are stored by name in `server/data/characters.json`.
+Requires Node 20+. For multiplayer, run `npm run build` and then `npm run server`, and open `http://localhost:8080` in several browsers. On the title screen log in with a character name and password: a new name creates the character (with the vocation and outfit chosen below the login box) and the password protects it from then on. Passwords are stored only as salted scrypt hashes in `server/data/accounts.json`; characters are in `server/data/characters.json`. Five wrong passwords from one address lock logins for a minute.
 
 Server settings come from environment variables: `PORT` (8080), `MAX_PLAYERS` (50), `STATIC_DIR`, `DATA_FILE`, and for test commands `ALLOW_ADMIN=1` (everyone) or `ADMINS="Name One,Name Two"`. Offline, test commands are always on.
 
@@ -21,9 +21,25 @@ Server settings come from environment variables: `PORT` (8080), `MAX_PLAYERS` (5
 
 1. Put this folder in a GitHub repository.
 2. On [render.com](https://dashboard.render.com/register) choose **New + → Blueprint** and pick the repository. Render reads `render.yaml`, builds the client and starts the server.
-3. Open `https://<your-service>.onrender.com`, choose **Connect**. The server address is filled in automatically, so share the link with friends.
+3. Open `https://<your-service>.onrender.com` and log in with a name and password. The server address is filled in automatically, so share the link with friends.
 
-Free plan notes: the service sleeps after 15 minutes without players and takes about a minute to wake up. Its disk is wiped on restarts, so characters in `server/data/characters.json` are lost until saves move to a database (planned: Supabase). Test commands are off online unless you set `ALLOW_ADMIN=1` or list character names in `ADMINS` in the Render dashboard.
+Free plan notes: the service sleeps after 15 minutes without players and takes about a minute to wake up. Its disk is wiped on restarts, so set up Supabase (below) — then accounts and characters are kept permanently. Test commands are off online unless you set `ALLOW_ADMIN=1` or list character names in `ADMINS` in the Render dashboard.
+
+## Saving characters in Supabase (recommended for any hosted server)
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. In the project open **SQL Editor → New query**, paste the contents of `supabase/schema.sql` and click **Run**. This creates `accounts`, `characters` and `character_backups` (row level security on, no public access).
+3. In **Project Settings → API Keys** copy the **Project URL** and the **secret** key (`sb_secret_…`, or the legacy `service_role` key). Never put this key in the browser or in Git.
+4. In Render open the service → **Environment** and add `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`, then save. Render restarts the server; its log shows `Saves: Supabase database`.
+
+Locally the same two variables switch `npm run server` to Supabase; without them saves go to `server/data/*.json`.
+
+### Updates never wipe progress
+
+- Every save records its format version (`SAVE_VERSION` in `src/game/save/migrate.ts`). When an update changes the format, add a step to `MIGRATIONS`; old characters are upgraded one step at a time when they log in, and a copy of the old save goes to `character_backups` first.
+- Renamed items: add the old → new id to `ITEM_RENAMES`. Removed items are never deleted: they wait in the save's `lostItems` and return to the player's depot automatically if the item (or a rename for it) comes back.
+- A server never overwrites a save written by a newer version, and an unreadable save is backed up and left untouched.
+- Before deploying a big update: `npm run saves:backup` (downloads every character to a JSON file) and `npm run saves:check` (loads every stored character with the new code and reports anything that would not migrate). `npm run saves:import` copies local `server/data` into Supabase.
 
 ## Controls
 

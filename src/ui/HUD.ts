@@ -732,6 +732,11 @@ export class HUD {
         r = { row, fill, name };
         this.battleRows.set(c.id, r);
       }
+      if (c.kind === 'player') {
+        const pl = g.getPlayer(c.id);
+        const label = pl ? `${pl.name} · ${pl.level} ${VOCATIONS[pl.vocation].name}` : c.name;
+        if (r.name.textContent !== label) r.name.textContent = label;
+      }
       const frac = c.hp / c.maxHp;
       r.fill.style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`;
       r.fill.style.background = c.kind === 'npc' ? '#6fc8ff' : hpColor(frac);

@@ -11,7 +11,11 @@
     "preview": "vite preview",
     "server": "tsx server/server.ts",
     "test:logic": "tsx scripts/smoke-test.ts",
-    "test:net": "tsx scripts/net-test.ts"
+    "test:net": "tsx scripts/net-test.ts",
+    "saves:backup": "tsx scripts/saves.ts backup",
+    "saves:import": "tsx scripts/saves.ts import",
+    "saves:check": "tsx scripts/saves.ts check",
+    "test:storage": "tsx scripts/storage-test.ts"
   },
   "dependencies": {
     "three": "^0.170.0"

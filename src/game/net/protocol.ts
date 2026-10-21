@@ -16,7 +16,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -52,7 +52,7 @@ export type Command =
   | { c: 'tradeCancel' };
 
 export type ClientMessage =
-  | { t: 'hello'; v: number; name: string; outfit?: Outfit; vocation?: Vocation }
+  | { t: 'hello'; v: number; name: string; password?: string; outfit?: Outfit; vocation?: Vocation }
   | { t: 'intent'; dx: number; dy: number }
   | { t: 'tap'; dx: number; dy: number }
   | ({ t: 'cmd' } & Command);

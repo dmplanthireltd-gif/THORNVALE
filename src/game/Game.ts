@@ -16,6 +16,7 @@ import { buildDialogue, type DialogueState, type DialogueView } from './npc/dial
 import { Npc } from './npc/Npc';
 import { buyPrice, NPCS } from './npc/npcs';
 import { runAdminCommand } from './admin';
+import { migrateSave, SAVE_VERSION } from './save/migrate';
 import { DEFAULT_OUTFIT, isOutfit, type Outfit } from './player/outfits';
 import { expForLevel, Player } from './player/Player';
 import { isVocation, VOCATIONS, type Vocation } from './player/vocations';
@@ -81,6 +82,8 @@ export interface Session {
   wantsSave: boolean;
   /** May use /test commands (always offline; per character on a server). */
   admin: boolean;
+  /** Items from older versions that no longer exist (kept with the save). */
+  lostItems: ItemStack[];
 }
 
 export interface CharacterData {
@@ -101,7 +104,8 @@ export interface CharacterData {
 }
 
 export interface SaveData {
-  version: 1 | 2;
+  /** Save format version (see save/migrate.ts). */
+  version: number;
   savedAt: number;
   player: CharacterData;
   inventory: ReturnType<Inventory['toJSON']>;
@@ -110,6 +114,8 @@ export interface SaveData {
   bank?: number;
   spells?: string[];
   chests?: string[];
+  /** Items that no longer exist in the game, kept so a later update can give them back. */
+  lostItems?: ItemStack[];
 }
 
 export interface GameOptions {
@@ -168,7 +174,7 @@ export class Game implements AIContext {
     const session: Session = {
       id, player, inventory: new Inventory(), quests: new QuestLog(), dialogue: null,
       intent: opts.intent ?? new BufferedIntent(), depot: new Array(DEPOT_SLOTS).fill(null), depotOpen: null,
-      bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false,
+      bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
     };
     if (opts.starter !== false) giveStarterKit(session.inventory, voc);
     this.sessions.set(id, session);
@@ -1997,7 +2003,7 @@ export class Game implements AIContext {
     if (!s) throw new Error('No such player');
     const p = s.player;
     return {
-      version: 2,
+      version: SAVE_VERSION,
       savedAt: Date.now(),
       player: {
         name: p.name, vocation: p.vocation, x: p.x, y: p.y, z: p.z, level: p.level, exp: p.exp,
@@ -2009,12 +2015,17 @@ export class Game implements AIContext {
       bank: s.bank,
       spells: [...s.spells],
       chests: [...s.chests],
+      lostItems: s.lostItems.map((x) => ({ ...x })),
     };
   }
 
-  applySave(pid: number, data: unknown, opts: { resetWorld?: boolean } = {}): boolean {
+  applySave(pid: number, raw: unknown, opts: { resetWorld?: boolean } = {}): boolean {
     const s = this.sessions.get(pid);
-    if (!s || !isSaveData(data)) return false;
+    if (!s) return false;
+    const m = migrateSave(raw);
+    if (typeof m === 'string') return false;
+    const data = m.data;
+    if (!isSaveData(data)) return false;
     if (opts.resetWorld) this.resetWorldState();
     const p = s.player;
     resetPlayerState(p);
@@ -2047,6 +2058,13 @@ export class Game implements AIContext {
     this.events.emit({ type: 'outfitChanged', id: pid });
     this.events.emit({ type: 'equipmentChanged', id: pid });
     this.events.emit({ type: 'teleport', id: pid });
+    s.lostItems = data.lostItems ?? [];
+    for (const it of m.restored) {
+      const left = addToList(s.depot, it.id, it.qty);
+      if (left > 0) s.lostItems.push({ id: it.id, qty: left });
+      else this.msg(pid, `${describeStack(it)} from an older version of the game is waiting in your depot.`, 'loot');
+    }
+    if (m.lost.length) this.msg(pid, `Some of your items no longer exist in this version. They are kept safe and will come back if they return.`, 'warn');
     this.events.emit({ type: 'gameLoaded', to: pid });
     return true;
   }
@@ -2174,7 +2192,7 @@ export function isSaveData(d: unknown): d is SaveData {
   if (!d || typeof d !== 'object') return false;
   const s = d as Partial<SaveData>;
   return (
-    (s.version === 1 || s.version === 2) &&
+    typeof s.version === 'number' && s.version >= 1 && s.version <= SAVE_VERSION &&
     !!s.player &&
     typeof s.player.x === 'number' &&
     typeof s.player.y === 'number' &&
