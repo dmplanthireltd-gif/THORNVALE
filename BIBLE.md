@@ -293,7 +293,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Later: custom SMTP for recovery mails; more map/game polish.
 - [x] Website at thornvaleonline.com from `site/`, game at `/play/` (2026-10-21).
 - [x] Website pages: guide, highscores, FAQ, rules, privacy (2026-10-21).
-- [x] Website graphics: hero trailer (`site/media/trailer.webm|mp4`, 29 s of real gameplay recorded in the owner's Mac Chrome via canvas capture, offline test character), world-card and news pictures, share image `og-image.jpg` (2026-10-21).
+- [x] Website graphics: full trailer with game music (`site/media/trailer-full.webm|mp4`, 44 s: title card, captions, town, amazons, frost dragon, demon pit, desert, end card) behind "Watch the trailer"; silent 14 s hero loop (`trailer.webm|mp4`). Recorded in the owner's Mac Chrome by canvas + Web Audio capture with an offline test character, world-card and news pictures, share image `og-image.jpg` (2026-10-21).
 - [ ] Website: more news posts; refresh the trailer after big visual changes (e.g. the graphics overhaul). Keep guide/FAQ in step with gameplay changes.
 - [ ] Owner: set up email forwarding support@thornvaleonline.com → owner's Gmail (WordPress.com → Domains → thornvaleonline.com → Email → Email forwarding).
 - [ ] New sign-in and character screens (email + password, up to 5 characters per account, "Play offline" kept) replacing the current start screen.
@@ -335,3 +335,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | `TEST_MODE` env, ON by default in code (no dashboard change needed): test commands for everyone (not /god, /kill), START_LEVEL default 20 | — | — |
 | 2026-10-21 | — | Delete a character from the account screen (type the name to confirm; backup kept in `character_backups`; `POST /api/characters/delete`); test bots (`server/bots.ts`); game-master pop-ups `/warn Name, text` and `/broadcast` (full admins only, `adminNotice` event); Arcane Wall Rune shown as "Magic Wall Rune" (id unchanged) | — | — |
 | 2026-10-21 | — | Owner's character Ouriolis is always a game master (`OWNER_CHARACTERS` in server.ts) | — | — |
+| 2026-10-21 | — | Website: cinematic trailer with music (Watch the trailer pop-up) and new hero loop | — | — |

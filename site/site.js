@@ -53,6 +53,19 @@
     setInterval(tick, 15000);
   }
 
+  // Full trailer with sound in a dialog; stops when closed.
+  const dialog = document.querySelector('.trailer-dialog');
+  if (dialog) {
+    const video = dialog.querySelector('video');
+    document.querySelectorAll('[data-open-trailer]').forEach((b) => b.addEventListener('click', () => {
+      dialog.showModal();
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    }));
+    dialog.addEventListener('close', () => video.pause());
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
+  }
+
   // Highscores table (built with DOM methods, never innerHTML: names come from players).
   const table = document.querySelector('[data-highscores]');
   if (table) {

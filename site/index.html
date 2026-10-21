@@ -51,6 +51,7 @@
       <div class="btns">
         <a class="btn big" href="/play/">Play free now</a>
         <a class="btn big ghost" href="#opening">Create free account</a>
+        <button type="button" class="btn big ghost play-trailer" data-open-trailer><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>Watch the trailer</button>
       </div>
       <p class="faint">Works in Chrome, Edge, Firefox and Safari on a computer.</p>
     </div>
@@ -59,7 +60,7 @@
         <source src="/media/trailer.webm" type="video/webm">
         <source src="/media/trailer.mp4" type="video/mp4">
       </video>
-      <figcaption class="hero-tag"><span class="kicker">Real gameplay · Opens 1 January 2027</span></figcaption>
+      <button type="button" class="hero-play" data-open-trailer aria-label="Watch the full trailer with sound"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg></button>
     </figure>
   </section>
 
@@ -149,6 +150,14 @@
     </div>
   </section>
 </main>
+
+<dialog class="trailer-dialog" aria-label="Thornvale trailer">
+  <form method="dialog" class="trailer-close-row"><button class="trailer-close" aria-label="Close the trailer">✕</button></form>
+  <video controls playsinline preload="none" poster="/media/trailer-full-poster.jpg">
+    <source src="/media/trailer-full.webm" type="video/webm">
+    <source src="/media/trailer-full.mp4" type="video/mp4">
+  </video>
+</dialog>
 
 <footer class="wrap footer">
   <div><a class="logo" href="/">Thornvale</a><br>© 2026 Thornvale. All designs are original.</div>

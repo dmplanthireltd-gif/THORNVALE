@@ -63,6 +63,15 @@ p { margin: 0; }
 .hero-tag { position: absolute; left: 12px; bottom: 12px; background: rgba(12, 15, 10, .82); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; }
 .hero-tag .kicker { font-size: 11px; letter-spacing: 1px; }
 @media (prefers-reduced-motion: reduce) { .hero-art video { display: none; } .hero-art.has-video { background: #0c0f0a url('/media/trailer-poster.jpg') center / cover; } }
+.btn.play-trailer { display: inline-flex; align-items: center; gap: 8px; font: inherit; font-weight: 700; font-size: 19px; cursor: pointer; }
+.hero-play { position: absolute; right: 14px; bottom: 12px; width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--gold); background: rgba(12, 15, 10, .82); color: var(--gold); display: grid; place-items: center; cursor: pointer; padding: 0 0 0 4px; }
+.hero-play:hover { background: var(--gold); color: var(--ink); }
+.trailer-dialog { padding: 0; border: 1px solid var(--line); border-radius: 8px; background: #000; width: min(1200px, 94vw); max-width: none; overflow: hidden; }
+.trailer-dialog::backdrop { background: rgba(5, 7, 4, .86); }
+.trailer-dialog video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #000; }
+.trailer-close-row { position: absolute; right: 8px; top: 8px; margin: 0; z-index: 1; }
+.trailer-close { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: rgba(12, 15, 10, .85); color: var(--text); font-size: 18px; cursor: pointer; }
+.trailer-close:hover { color: var(--gold); border-color: var(--gold); }
 .hero-art .crest { font-family: var(--display); font-size: clamp(40px, 6vw, 72px); color: var(--gold); letter-spacing: 3px; }
 
 .stats { border-top: 1px solid #2b3224; border-bottom: 1px solid #2b3224; background: var(--band); }
