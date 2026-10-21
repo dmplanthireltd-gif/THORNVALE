@@ -1,0 +1,26 @@
+# Render Blueprint for the Thornvale multiplayer server.
+# On Render: New + → Blueprint → pick this repository. Render reads this file,
+# builds the browser client and starts the game server, which serves the game
+# page and the websocket on the same address (https://<name>.onrender.com).
+services:
+  - type: web
+    name: thornvale
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm run server
+    healthCheckPath: /status
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # how many players may be online at once
+      - key: MAX_PLAYERS
+        value: "50"
+      # test commands (/level, /item, the ` console): "1" lets everyone use them;
+      # leave "0" and list names in ADMINS to allow only those characters
+      - key: ALLOW_ADMIN
+        value: "0"
+      - key: ADMINS
+        value: ""

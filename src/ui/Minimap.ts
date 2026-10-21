@@ -1,0 +1,108 @@
+import type { Controller } from '../client/Controller';
+import { Ground, Obj, WorldMap } from '../game/world/WorldMap';
+
+const GROUND_RGB: Record<number, string> = {
+  [Ground.Grass]: '#3f8a2e', [Ground.Path]: '#a08a62', [Ground.Stone]: '#8a8a88', [Ground.Wood]: '#7a5530', [Ground.Water]: '#2f6ab0',
+  [Ground.Dirt]: '#7a6040', [Ground.Crop]: '#8a7a32', [Ground.Sand]: '#d8c88a', [Ground.DarkGrass]: '#2f6a24', [Ground.Lava]: '#e0501a',
+  [Ground.Ash]: '#4a4440', [Ground.Swamp]: '#4a5a2a', [Ground.Cave]: '#6a5a4a', [Ground.Jungle]: '#2a6a1e', [Ground.Marble]: '#d0ccc4',
+  [Ground.DeepWater]: '#1f4a8a',
+};
+
+const OBJ_RGB: Partial<Record<number, string>> = {
+  [Obj.Tree]: '#1f5a1a', [Obj.Pine]: '#1a4a20', [Obj.JungleTree]: '#164a14', [Obj.Palm]: '#2a7a2a', [Obj.Rock]: '#6a6a6a',
+  [Obj.Wall]: '#5a4a3a', [Obj.StoneWall]: '#6a6460', [Obj.Cliff]: '#5a5048', [Obj.Palisade]: '#6a4a2a', [Obj.Stalagmite]: '#5a5048',
+  [Obj.StairsUp]: '#ffe040', [Obj.StairsDown]: '#ffe040', [Obj.Ladder]: '#ffe040', [Obj.RopeSpot]: '#ffe040', [Obj.Hole]: '#ffe040',
+  [Obj.LooseStone]: '#c8b080', [Obj.FireField]: '#ff7a1a', [Obj.Locker]: '#e0b03c', [Obj.Chest]: '#e0b03c', [Obj.Pillar]: '#9a948c',
+};
+
+const PX = 3;
+const VIEW = 52;
+
+/** Floor-aware minimap: one cached image per floor, cropped around the player. */
+export class Minimap {
+  readonly canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D | null;
+  private cache = new Map<number, HTMLCanvasElement>();
+  private timer = 0;
+
+  constructor(parent: HTMLElement, private readonly ctl: Controller) {
+    this.canvas = document.createElement('canvas');
+    this.canvas.className = 'minimap';
+    this.canvas.width = VIEW * PX;
+    this.canvas.height = VIEW * PX;
+    this.canvas.title = 'Minimap — click to walk there';
+    parent.appendChild(this.canvas);
+    this.ctx = this.canvas.getContext('2d');
+    this.canvas.addEventListener('mousedown', (e) => {
+      const p = this.ctl.game.getPlayer(this.ctl.pid);
+      if (!p) return;
+      const r = this.canvas.getBoundingClientRect();
+      const tx = Math.floor(((e.clientX - r.left) / r.width) * VIEW) + this.origin(p.x);
+      const ty = Math.floor(((e.clientY - r.top) / r.height) * VIEW) + this.origin(p.y);
+      this.ctl.send({ c: 'moveTo', x: tx, y: ty });
+    });
+  }
+
+  private origin(c: number): number {
+    return Math.round(c) - Math.floor(VIEW / 2);
+  }
+
+  invalidate(z: number): void {
+    this.cache.delete(z);
+  }
+
+  /** Whole-floor image, one pixel per tile (cached). */
+  floorImage(z: number): HTMLCanvasElement {
+    let c = this.cache.get(z);
+    if (c) return c;
+    const w: WorldMap = this.ctl.game.world;
+    c = document.createElement('canvas');
+    c.width = w.width;
+    c.height = w.height;
+    const g = c.getContext('2d');
+    if (g) {
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, w.width, w.height);
+      for (let y = 0; y < w.height; y++) {
+        for (let x = 0; x < w.width; x++) {
+          const gr = w.getGround(x, y, z);
+          if (gr === Ground.Void) continue;
+          const o = w.getObj(x, y, z);
+          g.fillStyle = OBJ_RGB[o] ?? GROUND_RGB[gr] ?? '#444';
+          g.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+    this.cache.set(z, c);
+    return c;
+  }
+
+  update(dt: number): void {
+    this.timer -= dt;
+    if (this.timer > 0 || !this.ctx) return;
+    this.timer = 0.25;
+    const g = this.ctl.game;
+    const p = g.getPlayer(this.ctl.pid);
+    if (!p) return;
+    const ctx = this.ctx;
+    const ox = this.origin(p.x);
+    const oy = this.origin(p.y);
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.drawImage(this.floorImage(p.z), ox, oy, VIEW, VIEW, 0, 0, VIEW * PX, VIEW * PX);
+    const dot = (x: number, y: number, color: string, size = PX) => {
+      ctx.fillStyle = color;
+      ctx.fillRect((x - ox) * PX + (PX - size) / 2, (y - oy) * PX + (PX - size) / 2, size, size);
+    };
+    for (const n of g.npcs) if (n.z === p.z) dot(n.x, n.y, '#6fc8ff');
+    for (const e of g.enemies) if (e.z === p.z && !e.dead && Math.abs(e.x - p.x) < 10 && Math.abs(e.y - p.y) < 8) dot(e.x, e.y, '#ff3a2a');
+    for (const o of g.players()) if (o.z === p.z && o !== p) dot(o.x, o.y, '#ffffff');
+    // the player: a white cross like the classic map marker
+    ctx.fillStyle = '#ffffff';
+    const cx = (p.x - ox) * PX;
+    const cy = (p.y - oy) * PX;
+    ctx.fillRect(cx - PX, cy + 1, PX * 3, 1);
+    ctx.fillRect(cx + 1, cy - PX, 1, PX * 3);
+  }
+}
