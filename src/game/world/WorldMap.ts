@@ -119,6 +119,9 @@ const UNWALKABLE_GROUND_SET = new Set<number>([Ground.Water, Ground.Lava, Ground
 /** Lookup tables for fast whole-map passes (flood fills, renderers). */
 export const SOLID_OBJ = new Uint8Array(256);
 for (const o of SOLID) SOLID_OBJ[o] = 1;
+/** Objects that are part of a building or barrier: no squeezing diagonally between two of these. */
+export const STRUCTURE_OBJ = new Uint8Array(256);
+for (const o of [Obj.Wall, Obj.Fence, Obj.Palisade, Obj.Cliff, Obj.Door]) STRUCTURE_OBJ[o] = 1;
 export const UNWALKABLE_GROUND = new Uint8Array(256);
 for (const g of UNWALKABLE_GROUND_SET) UNWALKABLE_GROUND[g] = 1;
 
@@ -284,14 +287,19 @@ export class WorldMap {
   }
 
   /**
-   * Can a creature step from (x,y) by (dx,dy) on floor z? Diagonal steps are
-   * refused when either orthogonal neighbour is blocked — no corner cutting.
+   * Can a creature step from (x,y) by (dx,dy) on floor z? Diagonal steps go
+   * between trees, bushes, rocks and the like, as in the classic game; they are
+   * only refused when BOTH side tiles are blocked and one of them is building
+   * structure (wall, fence, palisade, cliff, door), so nobody slips through the
+   * seam where two walls meet.
    */
   canStep(x: number, y: number, z: number, dx: number, dy: number): boolean {
     if (dx === 0 && dy === 0) return false;
     if (!this.isWalkable(x + dx, y + dy, z)) return false;
     if (dx !== 0 && dy !== 0) {
-      if (!this.isWalkable(x + dx, y, z) || !this.isWalkable(x, y + dy, z)) return false;
+      const a = this.isWalkable(x + dx, y, z);
+      const b = this.isWalkable(x, y + dy, z);
+      if (!a && !b && (STRUCTURE_OBJ[this.getObj(x + dx, y, z)] || STRUCTURE_OBJ[this.getObj(x, y + dy, z)])) return false;
     }
     return true;
   }

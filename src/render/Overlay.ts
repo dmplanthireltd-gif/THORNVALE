@@ -142,9 +142,7 @@ export class Overlay {
     this.root.appendChild(el);
     // stack texts that start together so they don't overlap
     const stacked = this.texts.filter((t) => t.life < 0.25 && t.anchor.distanceTo(anchor) < 0.5).length;
-    const speech = cls.includes('speech');
-    // spoken text barely drifts so it can be read; damage numbers rise and fade quickly
-    this.texts.push({ el, anchor: anchor.clone(), follow, life: 0, max, rise: speech ? 10 : 34, offset: stacked * (speech ? 22 : 16) });
+    this.texts.push({ el, anchor: anchor.clone(), follow, life: 0, max, rise: 34, offset: stacked * 16 });
   }
 
   update(dt: number): void {

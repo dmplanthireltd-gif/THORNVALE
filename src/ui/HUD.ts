@@ -39,8 +39,10 @@ export type DragSrc = { kind: 'inv'; index: number } | { kind: 'eq'; slot: Equip
 
 export type HotbarEntry = { kind: 'spell'; id: SpellId } | { kind: 'item'; id: string } | null;
 
-const HOTBAR_SIZE = 12;
-const HOTKEY_LABELS = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'];
+/** F1–F12, then a second row on Ctrl+1 … Ctrl+0 (runes for PvP). */
+const HOTBAR_SIZE = 22;
+const HOTKEY_LABELS = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', ...['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((d) => `^${d}`)];
+const hotkeyName = (i: number): string => (i < 12 ? HOTKEY_LABELS[i] : `Ctrl+${HOTKEY_LABELS[i].slice(1)}`);
 
 /** Tibia-style equipment layout, three columns. */
 const EQUIP_LAYOUT: Array<{ slot: EquipSlot; ph: string; name: string }> = [
@@ -482,6 +484,10 @@ export class HUD {
     if (!this.ctl.online) button(game, 'Save now', () => this.saveNow(), 'btn');
     button(game, 'Test console (`)', () => { this.closeWin('settings'); this.toggleWin('dev'); }, 'btn');
     button(game, 'Reset layout', () => resetPanelLayout(), 'btn');
+    button(game, 'Full screen', () => {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+      else void document.documentElement.requestFullscreen().catch(() => this.log('Your browser refused full screen.', 'warn'));
+    }, 'btn');
   }
 
   private buildSidebar(): void {
@@ -973,8 +979,10 @@ export class HUD {
       this.cdBars.set(g, { item, fill, secs });
     }
     const bar = el('div', 'hot-row', outer);
+    const bar2 = el('div', 'hot-row hot-row-ctrl', outer);
+    bar2.title = 'Ctrl+1 … Ctrl+0 (or Alt+1 … Alt+0). In full screen your browser lets the game have Ctrl+number.';
     for (let i = 0; i < HOTBAR_SIZE; i++) {
-      const btn = el('button', 'hot-slot', bar);
+      const btn = el('button', 'hot-slot', i < 12 ? bar : bar2);
       btn.type = 'button';
       el('span', 'hot-key', btn, HOTKEY_LABELS[i]);
       const icon = el('img', 'hot-icon', btn);
@@ -1018,7 +1026,7 @@ export class HUD {
       e.count.textContent = '';
       if (!h) {
         e.icon.hidden = true;
-        e.btn.title = `Hotkey ${HOTKEY_LABELS[i]} — empty. Assign from the spellbook or an item's right-click menu.`;
+        e.btn.title = `Hotkey ${hotkeyName(i)} — empty. Assign from the spellbook or an item's right-click menu.`;
         e.btn.classList.add('empty');
         return;
       }
@@ -2079,6 +2087,7 @@ export class HUD {
       ['Click ladders, ropes, lockers…', 'Use them (rope spots need a rope, loose stones a shovel)'],
       ['Right-click', 'Context menu: trade with players, item actions'],
       ['F1 – F12', 'Hotkeys (spells, potions, runes)'],
+      ['Ctrl+1 – Ctrl+0', 'Second hotkey row, made for runes in PvP (Alt+1 – Alt+0 also works; use Full screen in Settings so the browser lets the game have Ctrl+number)'],
       ['Enter', 'Chat; saying spell words casts spells (e.g. exura)'],
       ['Tab / Space', 'Target the next monster'],
       ['Esc', 'Close windows / clear target'],

@@ -127,6 +127,13 @@ console.log('Corner rule & pathfinding');
   m.setObj(2, 1, Obj.Wall);
   check(!m.canStep(1, 2, 0, 1, -1), 'diagonal past a blocked corner is refused');
   check(m.canStep(1, 2, 0, 1, 1), 'free diagonal allowed');
+  {
+    const t = new WorldMap(4, 4);
+    t.setObj(2, 1, Obj.Tree); t.setObj(1, 2, Obj.Bush);
+    check(t.canStep(1, 1, 0, 1, 1), 'diagonal between a tree and a bush is allowed (classic movement)');
+    t.setObj(2, 1, Obj.Wall); t.setObj(1, 2, Obj.Wall);
+    check(!t.canStep(1, 1, 0, 1, 1), 'no squeezing diagonally through the seam of two walls');
+  }
   const path = findPath(m.grid(0), { sx: 1, sy: 1, tx: 3, ty: 1 });
   check(!!path && path.every((p, i, arr) => {
     const prev = i === 0 ? { x: 1, y: 1 } : arr[i - 1];

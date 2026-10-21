@@ -32,6 +32,21 @@ export class Input {
       e.stopPropagation();
       if (!e.repeat) this.hud.triggerHotbar(hk);
     }, true);
+    // second row: Ctrl+1 … Ctrl+0 (Alt+1 … Alt+0 too, for browsers that keep Ctrl+number for tabs)
+    window.addEventListener('keydown', (e) => {
+      const m = /^Digit(\d)$/.exec(e.code);
+      if (!m || e.shiftKey || e.metaKey || !(e.ctrlKey || e.altKey)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const d = Number(m[1]);
+      if (!e.repeat) this.hud.triggerHotbar(12 + (d === 0 ? 9 : d - 1));
+    }, true);
+    // in full screen, ask the browser to hand Ctrl+number to the game instead of switching tabs
+    document.addEventListener('fullscreenchange', () => {
+      const kb = (navigator as unknown as { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } }).keyboard;
+      if (document.fullscreenElement) kb?.lock?.([...Array(10).keys()].map((i) => `Digit${i}`)).catch(() => undefined);
+      else kb?.unlock?.();
+    });
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
     window.addEventListener('keyup', (e) => {
       this.down.delete(e.code);
