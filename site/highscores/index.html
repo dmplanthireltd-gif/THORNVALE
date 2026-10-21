@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Highscores – Thornvale</title>
+<meta name="description" content="The highest-level adventurers in Thornvale, updated live from the game server.">
+<link rel="canonical" href="https://thornvaleonline.com/highscores/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&amp;family=Alegreya+Sans:wght@400;500;700&amp;family=Silkscreen&amp;display=swap">
+<link rel="stylesheet" href="/styles.css">
+<script src="/site.js" defer></script>
+</head>
+<body>
+
+<header class="wrap nav">
+  <a class="logo" href="/">Thornvale</a>
+  <nav class="nav-links" aria-label="Main">
+    <a href="/guide/">Guide</a>
+    <a href="/highscores/" aria-current="page">Highscores</a>
+    <a href="/news/">News</a>
+    <a href="/faq/">FAQ</a>
+    <a class="btn" href="/play/">Play now</a>
+  </nav>
+</header>
+
+<main class="wrap section">
+  <div class="section-head">
+    <span class="kicker">Highscores</span>
+    <h1>The strongest in Thornvale</h1>
+    <p>The top 50 adventurers by level, straight from the game server. Updated every minute.</p>
+  </div>
+
+  <div class="filters" role="group" aria-label="Filter by vocation">
+    <button type="button" class="chip on" data-voc="">All</button>
+    <button type="button" class="chip" data-voc="knight">Knights</button>
+    <button type="button" class="chip" data-voc="paladin">Paladins</button>
+    <button type="button" class="chip" data-voc="sorcerer">Sorcerers</button>
+    <button type="button" class="chip" data-voc="druid">Druids</button>
+  </div>
+
+  <div class="table-box">
+    <table class="scores" data-highscores>
+      <thead><tr><th scope="col">Rank</th><th scope="col">Name</th><th scope="col">Vocation</th><th scope="col">Level</th></tr></thead>
+      <tbody><tr><td colspan="4" class="faint">Loading highscores…</td></tr></tbody>
+    </table>
+  </div>
+  <p class="faint" data-highscores-updated></p>
+</main>
+
+<footer class="wrap footer">
+  <div><a class="logo" href="/">Thornvale</a><br>© 2026 Thornvale. All designs are original.</div>
+  <div class="footer-links">
+    <a href="/play/">Play</a>
+    <a href="/guide/">Guide</a>
+    <a href="/highscores/">Highscores</a>
+    <a href="/news/">News</a>
+    <a href="/faq/">FAQ</a>
+    <a href="/rules/">Rules</a>
+    <a href="/privacy/">Privacy</a>
+    <a href="mailto:support@thornvaleonline.com">support@thornvaleonline.com</a>
+  </div>
+</footer>
+</body>
+</html>

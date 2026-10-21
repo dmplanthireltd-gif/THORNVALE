@@ -44,6 +44,8 @@ export interface Storage {
   saveCharacter(key: string, name: string, data: SaveData, owner?: string | null): Promise<void>;
   /** Characters owned by an email-login user. */
   listCharacters(owner: string): Promise<CharacterSummary[]>;
+  /** The highest-level characters, best first (public highscores). */
+  topCharacters(limit: number): Promise<CharacterSummary[]>;
   backupCharacter(key: string, data: unknown, version: number, reason: string): Promise<void>;
   /** Every character (for export / migration scripts). */
   allCharacters(): Promise<Array<{ key: string } & StoredCharacter>>;
@@ -115,6 +117,13 @@ export class FileStorage implements Storage {
       const d = this.chars[k];
       return { name: d?.player?.name ?? k, level: d?.player?.level ?? 1, vocation: d?.player?.vocation ?? 'knight' };
     });
+  }
+
+  async topCharacters(limit: number): Promise<CharacterSummary[]> {
+    return Object.entries(this.chars)
+      .map(([k, d]) => ({ name: d?.player?.name ?? k, level: d?.player?.level ?? 1, vocation: d?.player?.vocation ?? 'knight' }))
+      .sort((a, b) => b.level - a.level || a.name.localeCompare(b.name))
+      .slice(0, limit);
   }
 
   async backupCharacter(key: string, data: unknown, version: number, reason: string): Promise<void> {
@@ -199,6 +208,12 @@ export class SupabaseStorage implements Storage {
 
   async listCharacters(owner: string): Promise<CharacterSummary[]> {
     const rows = (await this.req('GET', `characters?owner_id=eq.${encodeURIComponent(owner)}&select=display_name,level,vocation&order=updated_at.desc`)) as Array<Record<string, unknown>>;
+    return rows.map((r) => ({ name: String(r.display_name), level: Number(r.level) || 1, vocation: String(r.vocation ?? 'knight') }));
+  }
+
+  async topCharacters(limit: number): Promise<CharacterSummary[]> {
+    const n = Math.max(1, Math.min(500, Math.floor(limit)));
+    const rows = (await this.req('GET', `characters?select=display_name,level,vocation&order=level.desc,updated_at.asc&limit=${n}`)) as Array<Record<string, unknown>>;
     return rows.map((r) => ({ name: String(r.display_name), level: Number(r.level) || 1, vocation: String(r.vocation ?? 'knight') }));
   }
 

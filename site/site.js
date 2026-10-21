@@ -52,4 +52,56 @@
     tick();
     setInterval(tick, 15000);
   }
+
+  // Highscores table (built with DOM methods, never innerHTML: names come from players).
+  const table = document.querySelector('[data-highscores]');
+  if (table) {
+    const body = table.querySelector('tbody');
+    const updated = document.querySelector('[data-highscores-updated]');
+    const chips = document.querySelectorAll('[data-voc]');
+    const VOC = { knight: 'Knight', paladin: 'Paladin', sorcerer: 'Sorcerer', druid: 'Druid' };
+    let rows = [];
+    let voc = '';
+    const message = (text) => {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 4;
+      td.className = 'faint';
+      td.textContent = text;
+      tr.append(td);
+      body.replaceChildren(tr);
+    };
+    const render = () => {
+      const shown = voc ? rows.filter((r) => r.vocation === voc) : rows;
+      if (!shown.length) return message(rows.length ? 'Nobody of this vocation on the list yet.' : 'No adventurers yet. Be the first!');
+      body.replaceChildren(...shown.map((r, i) => {
+        const tr = document.createElement('tr');
+        for (const v of [voc ? i + 1 : r.rank, r.name, VOC[r.vocation] ?? r.vocation, r.level]) {
+          const td = document.createElement('td');
+          td.textContent = String(v);
+          tr.append(td);
+        }
+        return tr;
+      }));
+    };
+    chips.forEach((c) => c.addEventListener('click', () => {
+      voc = c.dataset.voc;
+      chips.forEach((x) => x.classList.toggle('on', x === c));
+      render();
+    }));
+    const load = async () => {
+      try {
+        const res = await fetch('/api/highscores', { cache: 'no-store' });
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        rows = Array.isArray(data.rows) ? data.rows : [];
+        render();
+        if (updated && data.updated) updated.textContent = `Last updated ${new Date(data.updated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`;
+      } catch {
+        message('The server is waking up. The highscores will appear in a moment…');
+        setTimeout(load, 15000);
+      }
+    };
+    load();
+  }
 })();

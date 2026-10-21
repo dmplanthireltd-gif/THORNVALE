@@ -333,7 +333,7 @@ const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8',
-  '.xml': 'application/xml', '.woff2': 'font/woff2',
+  '.xml': 'application/xml', '.woff2': 'font/woff2', '.mp4': 'video/mp4', '.webm': 'video/webm',
 };
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -342,11 +342,41 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 }
 
 /** Small JSON API used by the title screen. */
+/** Public highscores for the website: top 50 by level, admins' test characters left out, cached for a minute. */
+let highscoreCache: { at: number; rows: Array<{ rank: number; name: string; level: number; vocation: string }> } | null = null;
+async function highscores(): Promise<{ updated: string; rows: Array<{ rank: number; name: string; level: number; vocation: string }> }> {
+  if (!highscoreCache || Date.now() - highscoreCache.at > 60_000) {
+    try {
+      // characters in storage only update on save, so online players' live levels are merged in
+      const stored = storage ? await storage.topCharacters(80) : [];
+      const best = new Map<string, { name: string; level: number; vocation: string }>();
+      for (const c of stored) best.set(c.name.toLowerCase(), c);
+      for (const p of game.players()) {
+        const prev = best.get(p.name.toLowerCase());
+        if (!prev || p.level > prev.level) best.set(p.name.toLowerCase(), { name: p.name, level: p.level, vocation: p.vocation });
+      }
+      const rows = [...best.values()]
+        .filter((c) => !ADMINS.has(c.name.toLowerCase()))
+        .sort((a, b) => b.level - a.level || a.name.localeCompare(b.name))
+        .slice(0, 50)
+        .map((c, i) => ({ rank: i + 1, ...c }));
+      highscoreCache = { at: Date.now(), rows };
+    } catch (err) {
+      console.error('Loading highscores failed:', err);
+      if (!highscoreCache) return { updated: new Date().toISOString(), rows: [] };
+    }
+  }
+  return { updated: new Date(highscoreCache.at).toISOString(), rows: highscoreCache.rows };
+}
+
 async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   if (req.method === 'OPTIONS') return json(res, 204, null);
   if (url.pathname === '/api/auth-config') {
     // the publishable key is meant for browsers; the secret key never leaves the server
     return json(res, 200, EMAIL_AUTH ? { mode: 'email', url: SUPABASE_URL, key: SUPABASE_PUBLISHABLE_KEY, maxCharacters: MAX_CHARACTERS_PER_ACCOUNT } : { mode: 'local' });
+  }
+  if (url.pathname === '/api/highscores') {
+    return json(res, 200, await highscores());
   }
   if (url.pathname === '/api/characters') {
     if (!EMAIL_AUTH) return json(res, 404, { error: 'Email login is not enabled on this server.' });
@@ -396,7 +426,7 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   // Everything else is the marketing website (static files in site/).
   const page = staticFile(SITE_DIR, url.pathname);
   if (page === 'forbidden') return void res.writeHead(403).end();
-  if (page) return sendFile(res, page, 200);
+  if (page) return sendFile(res, page, 200, req.headers.range);
   const missing = join(SITE_DIR, '404.html');
   if (existsSync(missing)) return sendFile(res, missing, 404);
   res.writeHead(404).end('Not found');
@@ -416,8 +446,24 @@ function staticFile(root: string, pathname: string): string | null | 'forbidden'
   return existsSync(file) && statSync(file).isFile() ? file : null;
 }
 
-function sendFile(res: ServerResponse, file: string, status: number): void {
-  res.writeHead(status, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
+function sendFile(res: ServerResponse, file: string, status: number, range?: string): void {
+  const type = TYPES[extname(file)] ?? 'application/octet-stream';
+  const size = statSync(file).size;
+  // Byte ranges let browsers (Safari in particular) stream and seek video; other files are sent whole.
+  const m = status === 200 && range ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
+  if (m && (m[1] || m[2])) {
+    let start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+    let end = m[1] && m[2] ? Number(m[2]) : size - 1;
+    end = Math.min(end, size - 1);
+    if (start > end || start >= size) {
+      res.writeHead(416, { 'content-range': `bytes */${size}` }).end();
+      return;
+    }
+    res.writeHead(206, { 'content-type': type, 'content-length': end - start + 1, 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes', 'cache-control': 'no-cache' });
+    createReadStream(file, { start, end }).pipe(res);
+    return;
+  }
+  res.writeHead(status, { 'content-type': type, 'content-length': size, 'accept-ranges': 'bytes', 'cache-control': 'no-cache' });
   createReadStream(file).pipe(res);
 }
 

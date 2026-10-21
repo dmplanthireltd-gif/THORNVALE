@@ -44,7 +44,7 @@ BIBLE.md              ← this file
 CLAUDE.md             ← short pointer + checklist for Claude Code
 README.md             ← player/host-facing docs
 render.yaml           ← Render Blueprint
-site/                 ← marketing website (plain HTML/CSS/JS, no build): served at / — index, news/, 404, robots, sitemap
+site/                 ← marketing website (plain HTML/CSS/JS, no build): served at / — index, news/, guide/, highscores/, faq/, rules/, privacy/, 404, robots, sitemap; site.js = live status, countdown, highscores table
 supabase/schema.sql   ← database tables (keep in sync with migrations)
 server/
   server.ts           ← game server: tick 20 Hz, login, autosave, HTTP API, static files
@@ -80,7 +80,7 @@ scripts/              ← smoke-test, net-test, storage-test, auth-test, content
 | Live game | https://thornvaleonline.com/play/ (also https://thornvale.onrender.com/play/). `/play` → 301 → `/play/`. Root-level `/ws`, `/api/*`, `/status` (health) |
 | Render workspace | **Pro** workspace plan ($25/mo, since 2026-10-21): more bandwidth (25 GB), 15 custom domains, 1,000 build minutes/mo, team members |
 | Grand opening | **1 January 2027, 00:00 UK time** (Europe/London) |
-| Website | https://thornvaleonline.com — static files in `site/`, served by the game server at every path except `/play/`, `/ws`, `/api/*`, `/status`. Live player count from `/status`; countdown in `site/site.js`. |
+| Website | https://thornvaleonline.com — static files in `site/`, served by the game server at every path except `/play/`, `/ws`, `/api/*`, `/status`. Live player count from `/status`; countdown in `site/site.js`; highscores from `/api/highscores` (top 50 by level, online players' live levels merged in, `ADMINS` excluded, cached 60 s). Files are served with byte ranges (video). Operator in the privacy policy: Dawid Mlynarczyk (individual, UK); accounts 13+; contact support@thornvaleonline.com. |
 | Domain | `thornvaleonline.com` + `www` (redirects to the root) are custom domains on the Render service. Registered at WordPress.com; DNS there: A `@` 216.24.57.1, CNAME `www` thornvale.onrender.com. The old WordPress.com site (blog id 258122271) is no longer served at the domain. |
 | Render service | `thornvale`, instance type **Free** (`plan: free` in render.yaml), Frankfurt, auto-deploys on push to `main` |
 | Supabase project | `thornvale`, ref `gvknnzdhxwmqimaoiref`, region eu-central-1, org `thornvale` |
@@ -273,7 +273,9 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] **Graphics overhaul (owner decision 2026-10-21):** replace the whole look with a darker, "brutal" dark-fantasy style. Gameplay, controls, camera, tiles, systems and saves stay exactly the same — visuals only (`src/render/**`, `ui/icons.ts`, textures, models, effects, HUD skin). Start after the new map is live, with a side-by-side test area for the owner to approve. Style direction still to be chosen.
 - [ ] Later: custom SMTP for recovery mails; more map/game polish.
 - [x] Website at thornvaleonline.com from `site/`, game at `/play/` (2026-10-21).
-- [ ] Website: add real in-game screenshots (hero, world cards), a Discord link if wanted, more news posts.
+- [x] Website pages: guide, highscores, FAQ, rules, privacy (2026-10-21).
+- [ ] Website: hero trailer video and world-card screenshots (in progress), more news posts. Keep guide/FAQ in step with gameplay changes (PvP, parties, spells).
+- [ ] Owner: set up email forwarding support@thornvaleonline.com → owner's Gmail (WordPress.com → Domains → thornvaleonline.com → Email → Email forwarding).
 - [ ] New sign-in and character screens (email + password, up to 5 characters per account, "Play offline" kept) replacing the current start screen.
 - [ ] Grand opening on **1 January 2027, 00:00 UK time**: countdown on site and title screen, "create account and claim your names early" sign-up, square social post.
 
@@ -291,7 +293,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | 965a3d6 | Render workspace upgraded to Pro (service still Free instance) | 2 | 3 |
 | 2026-10-21 | 4c04878 | Repo renamed to dmplanthireltd-gif/THORNVALE; grand opening date set to 1 January 2027 | 2 | 3 |
 | 2026-10-21 | c93fc10 | Website planned on WordPress.com (superseded by the next row) | 2 | 3 |
-| 2026-10-21 | — | Game moved to /play/ (Vite base '/play/'); marketing website from `site/` served at the root by server.ts; domain thornvaleonline.com on Render | 2 | 3 |
+| 2026-10-21 | 4a07415 | Game moved to /play/ (Vite base '/play/'); marketing website from `site/` served at the root by server.ts; domain thornvaleonline.com on Render | 2 | 3 |
 | 2026-10-21 | 8fa1064 | New 640×800 world (14 towns), 35 monsters, 63 items, 5 spells, buff potions; saves v3 respawn everyone at the Thornvale temple | 3 | 4 |
 | 2026-10-21 | 0eb9396 | Move ground items, items on lockers/tables, depot gaps, minimap zoom/pan, foldable/resizable battle list, runes on battle list | 3 | 5 |
 | 2026-10-21 | — | Item trading by drag-and-drop, fight stance + follow/stand, lurable monsters (no leash/home-healing) | 3 | 6 |
@@ -301,3 +303,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Adventure music (3 original pieces synthesized live: road / town / underground, Music on/off + volume); PvP from level 1 | 4 | 8 |
 | 2026-10-21 | — | Bigger/longer speech text; party system (invite/join/leave/pass leader via right-click, Party panel, no friendly fire) with shared experience (+20%, same floor within 30 tiles, lowest level ≥ 2/3 of highest; leader switches it on/off) | 4 | 9 |
 | 2026-10-21 | — | More blood on hits; blood splats and death pools stay on the floor (dry darker, vanish after 3 min) — `src/render/Blood.ts`, render-only | 4 | 9 |
+| 2026-10-21 | — | Website: guide, highscores (/api/highscores), FAQ, rules, privacy pages; byte-range file serving | 4 | 9 |
