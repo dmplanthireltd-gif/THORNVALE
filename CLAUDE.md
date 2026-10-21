@@ -21,3 +21,4 @@ npm run typecheck && npm run test:logic && npx tsx scripts/content-test.ts && np
 - Add a Change Log row (BIBLE §13). Tick Open Work (§12).
 - Parallel agents: each edits only the files it was assigned.
 - Ask the owner before anything irreversible.
+- Every artifact you make for the owner needs a Polish / English switch (PL default).
