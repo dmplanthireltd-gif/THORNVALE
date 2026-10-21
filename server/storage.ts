@@ -104,6 +104,22 @@ export interface Storage {
   listFounders(): Promise<Founder[]>;
   /** Legend packs handed out so far. */
   legendCount(): Promise<number>;
+  /**
+   * Tutorial: has this account finished Wayfarer's Isle once? True when the account flag
+   * is set, or (with an email owner) when the account owns a character that finished it
+   * or was made before the tutorial existed. `account` = 'auth:<user id>' or 'name:<name_key>'.
+   */
+  tutorialDone(account: string, owner?: string | null): Promise<boolean>;
+  /** Sets the account's tutorial flag (kept even when that character is deleted later). */
+  markTutorialDone(account: string): Promise<void>;
+  /** Start-up check: 'table' when the account_flags table exists, 'derived' when only character saves can tell. */
+  accountFlagsMode(): Promise<'table' | 'derived'>;
+}
+
+/** A stored save that counts as "finished the tutorial": made before it existed (v10 and older) or done on the island. */
+function savePassedTutorial(version: number, tutorial: unknown): boolean {
+  if (version < 11) return true;
+  return !!tutorial && typeof tutorial === 'object' && (tutorial as { state?: unknown }).state === 'done';
 }
 
 const DAY_MS = 86_400_000;
@@ -121,6 +137,7 @@ export class FileStorage implements Storage {
   private backups: Array<{ key: string; data: unknown; version: number; reason: string; at: number }>;
   private market: { offers: Record<string, MarketOffer>; deliveries: Record<string, MarketDelivery> };
   private store: { perks: Record<string, AccountPerks>; purchases: Record<string, FilePurchase> };
+  private flags: Record<string, { tutorialDone?: number }>;
   private dirty = false;
 
   constructor(
@@ -129,7 +146,9 @@ export class FileStorage implements Storage {
     private readonly backupFile = join(dirname(charFile), 'backups.json'),
     private readonly marketFile = join(dirname(charFile), 'market.json'),
     private readonly storeFile = join(dirname(charFile), 'store.json'),
+    private readonly flagFile = join(dirname(charFile), 'account-flags.json'),
   ) {
+    this.flags = FileStorage.read(flagFile, {});
     this.chars = FileStorage.read(charFile, {});
     this.accounts = FileStorage.read(accountFile, {});
     this.backups = FileStorage.read(backupFile, []);
@@ -320,6 +339,25 @@ export class FileStorage implements Storage {
 
   async legendCount(): Promise<number> {
     return Object.values(this.store.perks).filter((p) => p.founderNo > 0).length;
+  }
+
+  async tutorialDone(account: string, owner?: string | null): Promise<boolean> {
+    if (this.flags[account]?.tutorialDone) return true;
+    if (!owner) return false;
+    return Object.entries(this.owners).some(([k, o]) => {
+      const d = this.chars[k];
+      return o === owner && !!d && savePassedTutorial(typeof d.version === 'number' ? d.version : 1, d.tutorial);
+    });
+  }
+
+  async markTutorialDone(account: string): Promise<void> {
+    if (this.flags[account]?.tutorialDone) return;
+    this.flags[account] = { ...this.flags[account], tutorialDone: Date.now() };
+    FileStorage.write(this.flagFile, this.flags);
+  }
+
+  async accountFlagsMode(): Promise<'table' | 'derived'> {
+    return 'table';
   }
 }
 
@@ -551,6 +589,41 @@ export class SupabaseStorage implements Storage {
   async legendCount(): Promise<number> {
     const rows = (await this.req('GET', 'account_perks?founder_no=not.is.null&select=founder_no&order=founder_no.desc&limit=1')) as Array<Record<string, unknown>>;
     return Number(rows?.[0]?.founder_no) || 0;
+  }
+
+  // ---------------------------------------------------------------- account flags (table account_flags)
+
+  /** null = not checked yet; false = the table is missing (migration not applied): saves alone decide. */
+  private flagsTable: boolean | null = null;
+
+  async accountFlagsMode(): Promise<'table' | 'derived'> {
+    try {
+      await this.req('GET', 'account_flags?select=account_key&limit=1');
+      this.flagsTable = true;
+    } catch (err) {
+      console.warn(`account_flags table not found (${String((err as Error).message).slice(0, 120)}). Tutorial skipping is decided from character saves until the migration is applied.`);
+      this.flagsTable = false;
+    }
+    return this.flagsTable ? 'table' : 'derived';
+  }
+
+  async tutorialDone(account: string, owner?: string | null): Promise<boolean> {
+    if (this.flagsTable !== false) {
+      try {
+        const rows = (await this.req('GET', `account_flags?account_key=eq.${encodeURIComponent(account)}&select=tutorial_done_at`)) as Array<Record<string, unknown>>;
+        if (rows?.[0]?.tutorial_done_at) return true;
+      } catch (err) {
+        console.warn('Reading account flags failed:', (err as Error).message);
+      }
+    }
+    if (!owner) return false;
+    const rows = (await this.req('GET', `characters?owner_id=eq.${encodeURIComponent(owner)}&select=save_version,tutorial:data->tutorial`)) as Array<Record<string, unknown>>;
+    return rows.some((r) => savePassedTutorial(Number(r.save_version) || 1, r.tutorial));
+  }
+
+  async markTutorialDone(account: string): Promise<void> {
+    if (this.flagsTable === false) return;
+    await this.req('POST', 'account_flags?on_conflict=account_key', { account_key: account, tutorial_done_at: new Date().toISOString() }, 'resolution=merge-duplicates,return=minimal');
   }
 }
 

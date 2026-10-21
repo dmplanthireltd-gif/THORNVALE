@@ -206,3 +206,12 @@ revoke execute on function public.thornvale_grant_purchase(text, text, uuid, tex
 revoke execute on function public.thornvale_revoke_purchase(text, text, text) from public, anon, authenticated;
 grant execute on function public.thornvale_grant_purchase(text, text, uuid, text, integer, timestamptz, text, bigint, text, jsonb) to service_role;
 grant execute on function public.thornvale_revoke_purchase(text, text, text) to service_role;
+-- Account flags (tutorial): an account that has finished Wayfarer's Isle once may let its later
+-- characters skip it. account_key = 'auth:<Supabase Auth user id>' or 'name:<name_key>'. Server only.
+create table if not exists public.account_flags (
+  account_key       text primary key,
+  tutorial_done_at  timestamptz,
+  created_at        timestamptz not null default now()
+);
+
+alter table public.account_flags enable row level security;

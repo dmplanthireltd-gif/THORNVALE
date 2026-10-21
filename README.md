@@ -28,7 +28,7 @@ Free plan notes: the service sleeps after 15 minutes without players and takes a
 ## Saving characters in Supabase (recommended for any hosted server)
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. In the project open **SQL Editor → New query**, paste the contents of `supabase/schema.sql` and click **Run**. This creates `accounts`, `characters` and `character_backups` (row level security on, no public access).
+2. In the project open **SQL Editor → New query**, paste the contents of `supabase/schema.sql` and click **Run**. This creates `accounts`, `characters`, `character_backups`, the market tables and `account_flags` (row level security on, no public access).
 3. In **Project Settings → API Keys** copy the **Project URL** and the **secret** key (`sb_secret_…`, or the legacy `service_role` key). Never put this key in the browser or in Git.
 4. In Render open the service → **Environment** and add `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (secret) and `SUPABASE_PUBLISHABLE_KEY` (public, `sb_publishable_…`), then save. Render restarts the server; its log shows `Login: email (Supabase Auth)` and `Saves: Supabase database`.
 
@@ -73,6 +73,7 @@ The map is 224 × 176 tiles and has seven floors, from +2 (towers, the elven can
 
 | Area | Levels | What's there |
 | --- | --- | --- |
+| Wayfarer's Isle | tutorial | Where every new character starts: Guide Maren, a supply chest, a rat meadow with a cellar, Tobin's trading post (shop, bank, lockers) and Captain Wren's one-way ship to Thornvale. No PvP, no experience lost on death |
 | Thornvale | town | Temple, depot and bank (with a loft), smith, magic shop, outfitter, spell trainer, harbour |
 | Greywood, Miller's Farm, Old Graveyard, Howling Hills | 1+ | Rats, wolves, skeletons |
 | Grimtusk Fortress | 10+ | Walls, gates, four towers with archer platforms, a two-floor keep and an underground treasury. Orcs, spearmen, shamans, warriors, berserkers, leaders and a warlord |
@@ -99,6 +100,7 @@ The map is 224 × 176 tiles and has seven floors, from +2 (towers, the elven can
   - Your personal depot is reachable from any locker.
   - Player-to-player trade only completes when both sides accept, and checks that everything fits.
 - **Quests:** ten kill quests chained across the regions, with item and experience rewards.
+- **Tutorial:** twelve short steps on Wayfarer's Isle, each learned by doing it, with an objective bar and a direction arrow. Once one character on an account has finished it, later characters may skip it (tick box at creation, or the Skip button on the island) and get the same starting gear. The account flag lives in the `account_flags` table (`supabase/migrations/20261021_account_flags.sql`); without that table the server decides from the account's character saves. Offline, the flag is kept in the browser.
 
 ## Camera & rendering rules
 

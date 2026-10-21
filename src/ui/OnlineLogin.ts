@@ -18,6 +18,8 @@ export interface OnlinePick {
   token?: string;
   vocation: Vocation;
   outfit: Outfit;
+  /** New heroes only: start in Thornvale instead of the tutorial island (accounts that finished it once). */
+  skipTutorial?: boolean;
 }
 
 interface Hooks {
@@ -354,7 +356,7 @@ export class OnlineLogin {
     let b = this.fresh(true);
     el('p', 'gate-hint', b, 'Gathering your heroes…');
     if (!(await this.ensureFresh())) return this.renderSignIn('Your login expired. Please log in again.');
-    let data: { email: string; characters: Hero[]; maxCharacters?: number };
+    let data: { email: string; characters: Hero[]; maxCharacters?: number; tutorialDone?: boolean };
     try {
       const res = await fetch(`${httpBase(this.h.serverUrl)}/api/characters`, { headers: { Authorization: `Bearer ${this.session!.access_token}` } });
       if (res.status === 401) {
@@ -384,16 +386,17 @@ export class OnlineLogin {
       this.renderSignIn();
     }, 'gate-link quiet');
 
-    const play = (name: string) => {
+    const play = (name: string, skipTutorial = false) => {
       const look = this.h.look();
       void this.ensureFresh().then((ok) => {
         if (!ok) return this.renderSignIn('Your login expired. Please log in again.');
-        this.h.play({ url: this.h.serverUrl, name, token: this.session!.access_token, ...look });
+        this.h.play({ url: this.h.serverUrl, name, token: this.session!.access_token, ...look, skipTutorial });
       });
     };
     const create = () => this.h.create({
       primary: 'Create & enter',
-      done: (name) => play(name),
+      skippable: data.tutorialDone === true,
+      done: (name, skip) => play(name, skip),
       back: () => void this.renderCharacters(),
     });
 

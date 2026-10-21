@@ -12,6 +12,7 @@
  * item (only new items wait until there is room again).
  */
 import { FERRIES, TOWNS } from '../world/townList';
+import { ISLE_DEST } from '../world/tutorialIsle';
 import { Ground, type WorldMap } from '../world/WorldMap';
 
 // ------------------------------------------------------------------ limits
@@ -209,6 +210,9 @@ export class PremiumZone {
       if (x >= 0 && y >= 0 && x < W && y < H && label[y * W + x] >= 0) free.add(label[y * W + x]);
     };
     for (const t of TOWNS) if ((FREE_TOWNS as readonly string[]).includes(t.key)) mark(t.x, t.y);
+    // the tutorial island is free land: every new character starts there
+    const isle = world.destinations[ISLE_DEST];
+    if (isle) mark(isle.x, isle.y);
     for (const fr of FERRIES) {
       const d = world.destinations[fr.key];
       if (d && (FREE_TOWNS as readonly string[]).includes(fr.home)) mark(d.x, d.y);

@@ -15,7 +15,7 @@ import { isVocation } from '../player/vocations';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -59,6 +59,9 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   8: (d) => ({ ...d, gathering: { ...((d.gathering ?? {}) as Record<string, unknown>), fletching: 0, crafting: 0, cooking: 0, firemaking: 0 }, version: 9 }),
   // v9 → v10: founder cloak and title shown by default (premium itself lives on the account, not in the save)
   9: (d) => ({ ...d, cosmetics: { hideCloak: false, hideTitle: false }, version: 10 }),
+  // v10 → v11: the tutorial island. Everyone who existed before it counts as having finished it,
+  // so nobody is moved, and their account may let new characters skip it. Nothing else changes.
+  10: (d) => ({ ...d, tutorial: { state: 'done', step: 12 }, version: 11 }),
 };
 
 export interface MigrationResult {

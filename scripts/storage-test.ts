@@ -20,8 +20,8 @@ const check = (ok: unknown, label: string) => {
 };
 
 type Row = Record<string, unknown>;
-const tables: Record<string, Row[]> = { accounts: [], characters: [], character_backups: [], market_offers: [], market_deliveries: [] };
-const keys: Record<string, string> = { accounts: 'name_key', characters: 'name_key', market_offers: 'id', market_deliveries: 'id' };
+const tables: Record<string, Row[]> = { accounts: [], characters: [], character_backups: [], market_offers: [], market_deliveries: [], account_flags: [] };
+const keys: Record<string, string> = { accounts: 'name_key', characters: 'name_key', market_offers: 'id', market_deliveries: 'id', account_flags: 'account_key' };
 let sawApiKey = true;
 
 /** Access tokens the fake login service accepts: token → user. */
@@ -55,7 +55,14 @@ const mock = createServer((req, res) => {
     if (req.method === 'GET') {
       const offset = Number(url.searchParams.get('offset') ?? 0);
       const limit = Number(url.searchParams.get('limit') ?? 1000);
-      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(rows.filter(match).slice(offset, offset + limit)));
+      // select aliases into JSON columns, e.g. tutorial:data->tutorial
+      const aliases = (url.searchParams.get('select') ?? '').split(',').map((x) => /^(\w+):(\w+)->(\w+)$/.exec(x)).filter((x): x is RegExpExecArray => !!x);
+      const out = rows.filter(match).slice(offset, offset + limit).map((r) => {
+        const o: Row = { ...r };
+        for (const a of aliases) o[a[1]] = (r[a[2]] as Row | undefined)?.[a[3]] ?? null;
+        return o;
+      });
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(out));
       return;
     }
     if (req.method === 'POST') {
@@ -165,6 +172,38 @@ async function main(): Promise<void> {
   delete tables.market_offers;
   check((await st.loadMarket()) === null, 'missing market tables: the market stays closed (server still starts)');
   tables.market_offers = [];
+
+  // ---- tutorial account flags (table account_flags), Supabase and files
+  const ann = USERS['tok-ann'].id, ben = USERS['tok-ben'].id;
+  check((await st.accountFlagsMode()) === 'table', 'Supabase: the account_flags table is found');
+  check(!(await st.tutorialDone(`auth:${ann}`, ann)), 'an account with no characters has not finished the tutorial');
+  const fresh = new Game();
+  const nc = fresh.addPlayer('Islander', { vocation: 'knight' });
+  fresh.beginTutorial(nc.id);
+  await st.saveCharacter('islander', 'Islander', fresh.serialize(nc.id), ann);
+  check(!(await st.tutorialDone(`auth:${ann}`, ann)), 'a character still on the island does not count');
+  const oldSave = { ...fresh.serialize(nc.id), version: 8 } as Record<string, unknown>;
+  delete oldSave.tutorial;
+  tables.characters.push({ name_key: 'veteran', owner_id: ben, display_name: 'Veteran', data: oldSave, save_version: 8, level: 30 });
+  check(await st.tutorialDone(`auth:${ben}`, ben), 'an account owning a character from before the tutorial may skip it');
+  await st.markTutorialDone(`auth:${ann}`);
+  check(tables.account_flags.length === 1 && await st.tutorialDone(`auth:${ann}`, ann), 'the flag is stored and read back');
+  tables.characters = tables.characters.filter((r) => r.owner_id !== ann);
+  check(await st.tutorialDone(`auth:${ann}`, ann), 'the flag stays when the character is deleted');
+  // a project without the table: the server still starts and character saves decide
+  const flags = tables.account_flags;
+  delete tables.account_flags;
+  const st2 = new SupabaseStorage('http://localhost:54329/', 'eyJ.test');
+  check((await st2.accountFlagsMode()) === 'derived', 'missing account_flags table: derived mode');
+  await st2.markTutorialDone(`auth:${ann}`);
+  check(await st2.tutorialDone(`auth:${ben}`, ben) && !(await st2.tutorialDone(`auth:${ann}`, ann)), 'derived mode answers from the saves (and writing is skipped)');
+  tables.account_flags = flags;
+  const dir2 = mkdtempSync(join(tmpdir(), 'thornvale-flags-'));
+  const ff = new FileStorage(join(dir2, 'characters.json'));
+  check(!(await ff.tutorialDone('name:zed')), 'files: no flag yet');
+  await ff.markTutorialDone('name:zed');
+  check(await new FileStorage(join(dir2, 'characters.json')).tutorialDone('name:zed'), 'files: the flag survives a restart');
+  rmSync(dir2, { recursive: true, force: true });
   mock.close();
   console.log(failed ? `\n${failed} check(s) failed.` : '\nAll storage checks passed.');
   process.exit(failed ? 1 : 0);

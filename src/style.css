@@ -655,3 +655,14 @@ html.layout-full .hotbar-move, html.layout-full .panel-grip, html.layout-full .p
 .dock-br .hover-line { background: rgba(13, 11, 9, 0.75); padding: 3px 6px; }
 @media (max-width: 1600px) { .dock-bl { width: 340px; } }
 @media (max-width: 1300px) { .dock-bl { width: 280px; } .dock-br { width: 260px; } .dock-tl { width: 250px; } }
+
+/* tutorial objective bar (Wayfarer's Isle): floats over the bottom of the game view */
+.tut-bar { position: absolute; left: var(--cx); bottom: calc(var(--bottom) + 12px); transform: translateX(-50%); width: min(560px, calc(100vw - var(--left) - var(--side) - 32px)); display: none; z-index: 5; padding: 8px 12px; box-shadow: inset 0 0 0 1px #4a4034, 0 3px 12px rgba(0, 0, 0, 0.55); }
+.tut-bar.on { display: block; }
+.tut-head { display: flex; align-items: center; gap: 8px; }
+.tut-tag { font: 700 11px var(--serif); letter-spacing: 0.08em; text-transform: uppercase; color: #1d1913; background: var(--gold); padding: 1px 6px; border-radius: 2px; }
+.tut-title { font: 700 15px var(--serif); color: var(--gold); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tut-nav { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.tut-arrow { display: inline-block; color: var(--gold); font-size: 15px; transition: transform 0.2s; }
+.tut-hint { margin-top: 4px; color: var(--ink); font-size: 13px; line-height: 1.35; }
+.tut-todo { margin-top: 3px; color: var(--muted); font-size: 12px; white-space: pre; }

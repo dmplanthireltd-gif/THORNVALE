@@ -16,6 +16,7 @@ import { isOutfit, type Outfit } from '../player/outfits';
 import { emptyBuffs, FIGHT_MODE, type Buffs, type FightMode, type Player } from '../player/Player';
 import { isVocation, type Vocation } from '../player/vocations';
 import type { QuestLog } from '../quests/quests';
+import type { TutorialState } from '../tutorial/tutorial';
 
 /**
  * Wire protocol (JSON over WebSocket). The server runs the real Game; clients
@@ -23,7 +24,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 19;
+export const PROTOCOL_VERSION = 20;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -85,10 +86,12 @@ export type Command =
   | { c: 'craft'; recipe: string; count: number }
   | { c: 'craftClose' }
   /** Founder looks: show (true) or hide the cloak / title. */
-  | { c: 'cosmetics'; cloak?: boolean; title?: boolean };
+  | { c: 'cosmetics'; cloak?: boolean; title?: boolean }
+  /** Leave the tutorial island now (accounts that finished it once). */
+  | { c: 'tutorialSkip' };
 
 export type ClientMessage =
-  | { t: 'hello'; v: number; name: string; password?: string; token?: string; outfit?: Outfit; vocation?: Vocation }
+  | { t: 'hello'; v: number; name: string; password?: string; token?: string; outfit?: Outfit; vocation?: Vocation; skipTutorial?: boolean }
   | { t: 'intent'; dx: number; dy: number }
   | { t: 'tap'; dx: number; dy: number }
   | ({ t: 'cmd' } & Command);
@@ -159,6 +162,8 @@ export interface SelfSnap {
   pm?: PremiumView;
   /** Founder look switches of this character: [show cloak, show title] (sent only when changed). */
   cos?: [0 | 1, 0 | 1];
+  /** Tutorial: state, step, step flags, counter, may skip (1/0). Sent only when changed. */
+  tu?: { s: TutorialState['state']; st: number; f: number; n: number; cs: 0 | 1 };
 }
 
 export type ServerMessage =
@@ -251,6 +256,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     cw: onlyChanged(s, 'cw', game.craftView(s.id)),
     pm: onlyChanged(s, 'pm', game.premiumView(s.id) ?? undefined),
     cos: onlyChanged(s, 'cos', [s.cosmetics.hideCloak ? 0 : 1, s.cosmetics.hideTitle ? 0 : 1] as [0 | 1, 0 | 1]),
+    tu: onlyChanged(s, 'tu', { s: s.tutorial.state, st: s.tutorial.step, f: s.tutorial.flags, n: s.tutorial.count, cs: s.tutorial.canSkip ? 1 as const : 0 as const }),
   };
   // the market list is only sent when something in it (or in your depot or bank) changed
   const mkKey = s.marketOpen ? `${game.market.version}|${s.bank}|${JSON.stringify(s.depot)}` : 'closed';
@@ -283,7 +289,7 @@ export function eventAudience(e: GameEvent): number | null {
     case 'bagCreated': case 'bagRemoved': case 'bagChanged': case 'playerJoined': case 'playerLeft': case 'tileChanged':
     case 'inventoryChanged': case 'questChanged': case 'dialogueOpened': case 'dialogueClosed':
     case 'gameLoaded': case 'equipmentChanged': case 'outfitChanged': case 'depotChanged': case 'tradeChanged': case 'partyChanged': case 'friendsChanged': case 'spellsChanged':
-    case 'marketChanged': case 'craftChanged':
+    case 'marketChanged': case 'craftChanged': case 'tutorialChanged':
       return null;
     default:
       return 'to' in e ? e.to : -1;
@@ -358,6 +364,7 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'craft': if (typeof m.recipe === 'string' && num(m.count)) game.commandCraft(pid, m.recipe.slice(0, 64), Math.floor(m.count)); break;
     case 'craftClose': game.closeCraft(pid); break;
     case 'cosmetics': game.setCosmetics(pid, { cloak: typeof m.cloak === 'boolean' ? m.cloak : undefined, title: typeof m.title === 'boolean' ? m.title : undefined }); break;
+    case 'tutorialSkip': game.skipTutorial(pid); break;
   }
 }
 
@@ -512,6 +519,11 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   }
   if (me.cos) s.cosmetics = { hideCloak: me.cos[0] === 0, hideTitle: me.cos[1] === 0 };
   if (snap.st) game.syncStumps(snap.st, p.x, p.y, p.z, VIEW_RADIUS + 4);
+  if (me.tu) {
+    const state = me.tu.s === 'active' || me.tu.s === 'skipped' ? me.tu.s : 'done';
+    s.tutorial = { state, step: me.tu.st, flags: me.tu.f, count: me.tu.n, canSkip: me.tu.cs === 1 };
+    ev.emit({ type: 'tutorialChanged', to: me.id });
+  }
   const spellsBefore = [...s.spells].sort().join();
   const spellsAfter = me.spells ? [...me.spells].sort().join() : spellsBefore;
   if (me.spells && spellsBefore !== spellsAfter) {

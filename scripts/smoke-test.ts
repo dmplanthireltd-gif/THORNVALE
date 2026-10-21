@@ -35,6 +35,9 @@ import { TOWNS } from '../src/game/world/townList';
 import {
   extendPremium, FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, FREE_TOWNS, LAUNCH_AT, NO_PERKS, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS, PRODUCTS,
 } from '../src/game/premium/premium';
+import { equipSlotFor, itemDef } from '../src/game/inventory/items';
+import { stepNo, TUTORIAL_LAST, TUTORIAL_STEPS } from '../src/game/tutorial/tutorial';
+import { ISLE, ISLE_CAPTAIN, ISLE_CELLAR_HOLE, ISLE_CHEST, ISLE_DEST, ISLE_GUIDE, ISLE_REST, ISLE_ROPE_SPOT, ISLE_START, ISLE_TRADER, onIsle } from '../src/game/world/tutorialIsle';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -1449,7 +1452,8 @@ console.log('Follow and friends');
   for (let y = 300; y < 500 && !at; y++) for (let x = 100; x < 500; x++) {
     let ok = true;
     for (let dx = -1; dx <= 12 && ok; dx++) if (!w.isWalkable(x + dx, y, 0) || w.getObj(x + dx, y, 0) !== 0) ok = false;
-    if (ok) { at = [x, y]; break; }
+    // (not on the tutorial island: its rat meadow is crowded)
+    if (ok && !onIsle(x, y, 0)) { at = [x, y]; break; }
   }
   g.teleport(a.player, at![0], at![1], 0);
   g.teleport(b.player, at![0] + 2, at![1], 0);
@@ -1806,6 +1810,215 @@ console.log('Premium accounts and founder packs');
   check(extendPremium(0, PRODUCTS.founder_warden, pre) === LAUNCH_AT + 180 * DAY, 'founder premium bought in December starts on opening day');
   check(extendPremium(0, PRODUCTS.premium_30, LAUNCH_AT + DAY) === LAUNCH_AT + 31 * DAY, 'premium bought after opening starts at once');
   check(extendPremium(LAUNCH_AT + 60 * DAY, PRODUCTS.premium_90, LAUNCH_AT + DAY) === LAUNCH_AT + 150 * DAY, 'more premium adds on top of what is left');
+
+console.log("Tutorial: Wayfarer's Isle (save v10)");
+{
+  const g = new Game();
+  const w = g.world;
+  // ---- the island
+  check(w.destinations[ISLE_DEST]?.x === ISLE_START.x && w.isWalkable(ISLE_START.x, ISLE_START.y, 0) && w.isSafe(ISLE_START.x, ISLE_START.y, 0), 'the island shrine exists, is walkable and is a protection zone');
+  check(w.regions.some((r) => r.name === ISLE_REST.name && r.temple && r.safe), 'the shrine is a respawn temple');
+  const reach = floodFill3D(w);
+  const isleNpcs = g.npcs.filter((n) => onIsle(n.x, n.y, n.z));
+  check(isleNpcs.length === 3 && [ISLE_GUIDE, ISLE_TRADER, ISLE_CAPTAIN].every((k) => isleNpcs.some((n) => n.key === k)), 'guide, trader and captain stand on the island');
+  check(isleNpcs.every((n) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => reach.at(n.x + dx, n.y + dy, n.z))), 'every island NPC can be reached');
+  const isleRats = g.enemies.filter((e) => onIsle(e.x, e.y, e.z));
+  check(isleRats.length >= 10 && isleRats.every((e) => (e.enemyKind === 'rat' || e.enemyKind === 'snake') && w.isWalkable(e.x, e.y, e.z) && reach.at(e.x, e.y, e.z)), `island monsters are rats and a snake, all reachable (${isleRats.length})`);
+  check(w.getObj(ISLE_CHEST.x, ISLE_CHEST.y, 0) === Obj.Chest && w.getObj(ISLE_ROPE_SPOT.x, ISLE_ROPE_SPOT.y, -1) === Obj.RopeSpot && w.getObj(ISLE_CELLAR_HOLE.x, ISLE_CELLAR_HOLE.y, 0) === Obj.Hole, 'chest, cellar hole and rope spot are in place');
+  // the island is cut off from the mainland: only the arrival point (new characters) and the ship lead off it
+  const fromTemple = (() => { const c = w.clone(); for (const k of Object.keys(c.destinations)) if (k === ISLE_DEST) delete c.destinations[k]; return floodFill3D(c); })();
+  check(!fromTemple.at(ISLE_START.x, ISLE_START.y, 0), 'the island cannot be walked to from the mainland');
+  check(TUTORIAL_STEPS.length === 12 && TUTORIAL_LAST === 12, 'twelve tutorial steps');
+
+  // ---- a new character walks the whole island
+  const intent = new BufferedIntent();
+  const s = g.addPlayer('Newcomer', { intent, vocation: 'knight' });
+  const pid = s.id;
+  g.localId = pid;
+  const p = s.player;
+  const events: GameEvent[] = [];
+  g.events.on((e) => events.push(e));
+  check(s.tutorial.state === 'done', 'players added the old way (bots, old saves) are not on the tutorial');
+  g.beginTutorial(pid);
+  check(s.tutorial.state === 'active' && s.tutorial.step === 1 && onIsle(p.x, p.y, p.z) && p.home === ISLE_REST.name, 'beginTutorial puts the character on the island at step 1');
+  check(!s.inventory.equipment.weapon && !s.inventory.equipment.armor && s.inventory.count('cheese') === 2 && s.inventory.count('gold') === 0, 'they arrive with a bag and some food, nothing else');
+  // captain refuses before the lessons
+  const captain = g.npcs.find((n) => n.key === ISLE_CAPTAIN)!;
+  const guide = g.npcs.find((n) => n.key === ISLE_GUIDE)!;
+  const trader = g.npcs.find((n) => n.key === ISLE_TRADER)!;
+  // 1 + 2: walk to the guide and talk
+  executeCommand(g, pid, { c: 'talk', id: guide.id });
+  run(g, 15, () => s.tutorial.step >= 3);
+  check(s.tutorial.step === 3, 'walking to the guide and talking to her finishes steps 1 and 2');
+  executeCommand(g, pid, { c: 'dialogue', action: 'tutorial:hint' });
+  check(!!s.dialogue && s.dialogue.text.includes('chest'), 'the guide explains the current step');
+  // 3: the chest
+  executeCommand(g, pid, { c: 'useTile', x: ISLE_CHEST.x, y: ISLE_CHEST.y });
+  run(g, 15, () => s.tutorial.step >= 4);
+  check(s.tutorial.step === 4 && s.inventory.count('short_sword') === 1 && s.inventory.count('gold') === 40, 'the supply chest holds the knight starter kit');
+  executeCommand(g, pid, { c: 'useTile', x: ISLE_CHEST.x, y: ISLE_CHEST.y });
+  run(g, 3);
+  check(s.inventory.count('short_sword') === 1, 'the chest opens only once');
+  // 4: gear up
+  for (let i = 0; i < s.inventory.slots.length; i++) {
+    const st = s.inventory.slots[i];
+    if (st && equipSlotFor(itemDef(st.id)) && st.id !== 'cheese') { executeCommand(g, pid, { c: 'useSlot', slot: i }); i = -1; }
+  }
+  run(g, 1);
+  check(s.tutorial.step === 5 && s.inventory.equipment.weapon?.id === 'short_sword' && s.inventory.equipment.armor?.id === 'leather_armor', 'putting on weapon and armour finishes step 4');
+  // 5: three rats (looting and eating on the way count for step 6)
+  const rats = g.enemies.filter((e) => e.enemyKind === 'rat' && onIsle(e.x, e.y, e.z) && e.z === 0).slice(0, 3);
+  p.god = true;
+  g.teleport(p, 89, 341, 0);
+  for (const r of rats) {
+    r.placeAt(p.x + 1, p.y, p.z);
+    Object.assign(r, { spawnX: p.x + 1, spawnY: p.y, spawnZ: p.z });
+    executeCommand(g, pid, { c: 'attack', id: r.id });
+    run(g, 40, () => r.dead);
+  }
+  check(s.tutorial.step === 6 && rats.every((r) => r.dead), `slaying three rats finishes step 5 (step ${s.tutorial.step}, count ${s.tutorial.count}, dead ${rats.map((r) => r.dead)})`);
+  // 6: loot a bag and eat
+  const cheeseSlot = s.inventory.slots.findIndex((x) => x?.id === 'cheese');
+  executeCommand(g, pid, { c: 'throw', from: cheeseSlot, x: p.x + 1, y: p.y + 1 });
+  run(g, 1);
+  const bag = g.bags.find((b) => b.x === p.x + 1 && b.y === p.y + 1 && b.z === p.z);
+  if (bag) executeCommand(g, pid, { c: 'pickup', id: bag.id });
+  run(g, 5, () => (s.tutorial.flags & 1) === 1 || s.tutorial.step > 6);
+  p.hp = Math.max(1, p.hp - 30);
+  executeCommand(g, pid, { c: 'useSlot', slot: s.inventory.slots.findIndex((x) => x?.id === 'cheese') });
+  run(g, 1);
+  check(!!bag && s.tutorial.step === 7 && s.inventory.count('gold') >= 65, 'picking up loot and eating finishes step 6 (25 gold reward)');
+  // 7: cast exura
+  p.hp = Math.max(1, p.hp - 30);
+  executeCommand(g, pid, { c: 'say', text: 'exura' });
+  run(g, 1);
+  check(s.tutorial.step === 8 && s.inventory.count('mana_potion') >= 3 && s.inventory.count('rope') === 1, 'casting exura finishes step 7 (mana potion), step 8 hands out a rope');
+  // 8: into the cellar and out again by rope
+  executeCommand(g, pid, { c: 'moveTo', x: ISLE_CELLAR_HOLE.x, y: ISLE_CELLAR_HOLE.y });
+  run(g, 40, () => p.z === -1);
+  check(p.z === -1 && (s.tutorial.flags & 1) === 1, 'dropping into the cellar hole');
+  executeCommand(g, pid, { c: 'useTile', x: ISLE_ROPE_SPOT.x, y: ISLE_ROPE_SPOT.y });
+  run(g, 40, () => p.z === 0);
+  run(g, 0.5);
+  check(p.z === 0 && s.tutorial.step === 9, 'climbing out by rope finishes step 8');
+  // 9: buy from Tobin
+  executeCommand(g, pid, { c: 'talk', id: trader.id });
+  run(g, 40, () => !!s.dialogue);
+  executeCommand(g, pid, { c: 'dialogue', action: 'sellLoot' });
+  executeCommand(g, pid, { c: 'dialogue', action: 'buy:health_potion:1' });
+  check(s.tutorial.step === 10, 'buying from Tobin finishes step 9');
+  // 10: depot and bank
+  executeCommand(g, pid, { c: 'dialogue', action: 'deposit:all' });
+  check(s.bank > 0 && (s.tutorial.flags & 2) === 2, 'banking gold counts');
+  const locker = (() => { for (let y = ISLE.y0; y <= ISLE.y1; y++) for (let x = ISLE.x0; x <= ISLE.x1; x++) if (w.getObj(x, y, 0) === Obj.Locker) return { x, y }; return null; })()!;
+  executeCommand(g, pid, { c: 'useTile', x: locker.x, y: locker.y });
+  run(g, 20, () => !!s.depotOpen);
+  executeCommand(g, pid, { c: 'deposit', slot: s.inventory.slots.findIndex((x) => x?.id === 'health_potion') });
+  run(g, 0.5);
+  check(s.tutorial.step === 11 && s.inventory.count('fishing_rod') === 1, 'using the depot finishes step 10; step 11 hands out a fishing rod');
+  // save mid-way and load: the step is kept
+  const mid = g.serialize(pid);
+  check(mid.version === SAVE_VERSION && mid.tutorial?.state === 'active' && mid.tutorial.step === 11, 'saves carry the tutorial step');
+  const t2 = solo('knight');
+  check(t2.g.applySave(t2.pid, mid) && t2.s.tutorial.state === 'active' && t2.s.tutorial.step === 11 && onIsle(t2.s.player.x, t2.s.player.y, t2.s.player.z), 'a character loaded mid-tutorial resumes on the island');
+  // 11 is optional; 12: the captain sails
+  events.length = 0;
+  executeCommand(g, pid, { c: 'talk', id: captain.id });
+  run(g, 60, () => !!s.dialogue);
+  executeCommand(g, pid, { c: 'dialogue', action: 'travel:thornvale' });
+  check(s.tutorial.state === 'done' && !onIsle(p.x, p.y, p.z) && chebyshev(p.x, p.y, w.temple.x, w.temple.y) <= 5 && p.home === 'Thornvale', 'Captain Wren sails to the Thornvale temple and the tutorial is done');
+  check(events.some((e) => e.type === 'tutorialDone' && !e.skipped && e.to === pid), 'finishing emits tutorialDone (not skipped) for the account flag');
+  const after = g.serialize(pid);
+  check(after.tutorial?.state === 'done', 'a graduate is saved as done');
+  p.god = false;
+
+  // ---- the captain refuses early, and the island spares beginners
+  {
+    const q = solo('sorcerer', g);
+    g.beginTutorial(q.pid);
+    q.s.player.placeAt(captain.x - 1, captain.y, 0);
+    executeCommand(g, q.pid, { c: 'talk', id: captain.id });
+    run(g, 5, () => !!q.s.dialogue);
+    executeCommand(g, q.pid, { c: 'dialogue', action: 'travel:thornvale' });
+    check(q.s.tutorial.state === 'active' && onIsle(q.s.player.x, q.s.player.y, q.s.player.z) && /Not yet/.test(q.s.dialogue?.text ?? ''), 'the captain will not sail before the lessons that matter');
+    q.s.player.exp = 500;
+    q.s.inventory.add('cheese', 3);
+    const cheeseBefore = q.s.inventory.count('cheese');
+    q.s.player.level = 3;
+    g.refreshStats(q.s);
+    q.s.player.placeAt(ISLE_CELLAR_HOLE.x - 2, ISLE_CELLAR_HOLE.y + 3, 0);
+    (g as unknown as { killPlayer(p: unknown, k: unknown): void }).killPlayer(q.s.player, null);
+    check(q.s.player.exp === 500 && q.s.inventory.count('cheese') === cheeseBefore, 'dying on the island costs no experience and no belongings');
+    run(g, 6, () => !q.s.player.dead);
+    check(onIsle(q.s.player.x, q.s.player.y, q.s.player.z) && w.isSafe(q.s.player.x, q.s.player.y, 0), 'and you wake at the island shrine');
+    // no PvP on the island
+    const r2 = solo('knight', g);
+    g.beginTutorial(r2.pid);
+    g.pvp = true;
+    q.s.player.level = 10; r2.s.player.level = 10;
+    check(!!g.pvpProblem(q.s.player, r2.s.player, false), 'nobody fights other players on the island');
+    g.pvp = false;
+  }
+
+  // ---- skipping
+  {
+    const k = solo('paladin', g);
+    g.beginTutorial(k.pid);
+    check(!g.skipTutorial(k.pid) && k.s.tutorial.state === 'active', 'an account that never finished the island cannot skip it');
+    k.s.tutorial.canSkip = true;
+    executeCommand(g, k.pid, { c: 'tutorialSkip' });
+    const inv = k.s.inventory;
+    check(k.s.tutorial.state === 'skipped' && !onIsle(k.s.player.x, k.s.player.y, k.s.player.z), 'an eligible account skips straight to Thornvale');
+    check(inv.equipment.weapon?.id === 'spear' && inv.equipment.armor?.id === 'leather_armor' && inv.count('hunting_bow') === 1 && inv.count('rope') === 1 && inv.count('fishing_rod') === 1 && inv.count('health_potion') === 5 && inv.count('gold') === 65,
+      'skippers get the starter kit, worn, plus what graduates earn (rope, rod, potions, gold)');
+    // a brand-new character that skips at creation
+    const f = solo('druid', g);
+    f.s.tutorial.canSkip = true;
+    g.startSkipped(f.pid);
+    check(f.s.tutorial.state === 'skipped' && f.s.inventory.count('rope') === 1 && f.s.inventory.count('fishing_rod') === 1 && f.s.inventory.count('cheese') === 2 && f.s.inventory.count('gold') === 65 && f.s.inventory.equipment.weapon?.id === 'rod_of_frost', 'skipping at creation: the starter kit plus the graduate extras');
+    check(g.serialize(f.pid).tutorial?.state === 'skipped', 'skipped is saved');
+  }
+
+  // ---- migration v9 → v10 and loading
+  {
+    const old = solo('knight');
+    old.s.inventory.add('iron_sword', 1);
+    old.s.bank = 777;
+    const v9 = JSON.parse(JSON.stringify({ ...old.g.serialize(old.pid), version: 9 })) as Record<string, unknown>;
+    delete v9.tutorial;
+    const m = migrateSave(v9);
+    check(typeof m !== 'string' && m.from === 9 && m.data.version === SAVE_VERSION && SAVE_VERSION === 10 && m.data.tutorial?.state === 'done', 'a v9 save migrates to v10 as tutorial done');
+    const t3 = solo('knight');
+    const x0 = old.s.player.x, y0 = old.s.player.y;
+    check(t3.g.applySave(t3.pid, v9) && t3.s.tutorial.state === 'done' && t3.s.player.x === x0 && t3.s.player.y === y0 && t3.s.bank === 777 && t3.s.inventory.count('iron_sword') === 1, 'a migrated v9 character keeps its place, items and bank');
+    // a finished character saved on the island (e.g. by a test command) is moved off it
+    const odd = { ...old.g.serialize(old.pid), player: { ...old.g.serialize(old.pid).player, x: ISLE_START.x, y: ISLE_START.y, z: 0 } };
+    const t4 = solo('knight');
+    check(t4.g.applySave(t4.pid, odd) && !onIsle(t4.s.player.x, t4.s.player.y, t4.s.player.z), 'a finished character never stays on the island');
+    // broken or missing tutorial data never traps anyone on the island
+    const broken = { ...old.g.serialize(old.pid), tutorial: { state: 'nonsense', step: 99 } };
+    const t5 = solo('knight');
+    check(t5.g.applySave(t5.pid, broken) && t5.s.tutorial.state === 'done', 'unreadable tutorial data counts as done');
+    check(stepNo('gather') === 11 && stepNo('sail') === 12, 'step numbers');
+  }
+
+  // ---- the mirror (online client) learns the tutorial state from snapshots
+  {
+    const srv = new Game();
+    const a = srv.addPlayer('Islander', { vocation: 'knight' });
+    srv.beginTutorial(a.id);
+    const mirror = new Game({ simulate: false });
+    mirror.localId = a.id;
+    const extras: MirrorExtras = { depot: null, trade: null };
+    const changed: GameEvent[] = [];
+    mirror.events.on((e) => { if (e.type === 'tutorialChanged') changed.push(e); });
+    applySnapshot(mirror, buildSnapshot(srv, a) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>, extras);
+    const ms = mirror.session(a.id)!;
+    check(ms.tutorial.state === 'active' && ms.tutorial.step === 1 && changed.length === 1, 'snapshots carry the tutorial step (tu)');
+    const snap2 = buildSnapshot(srv, a) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>;
+    check(snap2.self.tu === undefined, 'the tutorial part is only resent when it changes');
+    check(NPCS[ISLE_CAPTAIN].travel?.[0]?.price === 0 && NPCS[ISLE_GUIDE].tutor === true, 'island NPC definitions');
+  }
 }
 
 console.log('Walking speed grows with level');

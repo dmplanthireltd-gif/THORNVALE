@@ -5,11 +5,12 @@ import { button, el } from './dom';
 import { CREST_SVG, VOCATION_SVG } from './emblems';
 import './gate.css';
 import { OnlineLogin, type OnlinePick } from './OnlineLogin';
+import { offlineTutorialDone } from '../client/Controller';
 import { OutfitPreview } from './OutfitPreview';
 
 export type StartChoice =
   | { mode: 'continue' }
-  | { mode: 'new'; name: string; vocation: Vocation; outfit: Outfit }
+  | { mode: 'new'; name: string; vocation: Vocation; outfit: Outfit; skipTutorial?: boolean }
   | ({ mode: 'online' } & OnlinePick);
 
 const NAME_RE = /^[A-Za-z][A-Za-z '-]{1,18}[A-Za-z]$/;
@@ -36,8 +37,11 @@ function defaultServerUrl(): string {
 /** What the "create a hero" view is for: its main button and what happens next. */
 export interface CreateOptions {
   primary: string;
-  done: (name: string) => void;
+  /** `skipTutorial`: the "Skip the tutorial" box was ticked (only offered when `skippable`). */
+  done: (name: string, skipTutorial: boolean) => void;
   back: () => void;
+  /** The account (or, offline, this browser) finished the tutorial island once: offer to skip it. */
+  skippable?: boolean;
 }
 
 /**
@@ -59,6 +63,8 @@ export class StartScreen {
   private createName: HTMLInputElement | null = null;
   private createPrimary: HTMLButtonElement | null = null;
   private createOpts: CreateOptions | null = null;
+  private createSkip: { label: HTMLLabelElement; box: HTMLInputElement } | null = null;
+  private createTutNote: HTMLParagraphElement | null = null;
   private offlineView: HTMLDivElement | null = null;
   private online: OnlineLogin;
 
@@ -138,7 +144,7 @@ export class StartScreen {
   private showOffline(): void {
     const saved = this.saves.peek();
     if (!saved) {
-      this.showCreate({ primary: 'Play offline', done: (n) => this.pick({ mode: 'new', name: n, vocation: this.vocation, outfit: { ...this.outfit } }), back: () => this.online.showStart() });
+      this.showCreate({ primary: 'Play offline', skippable: offlineTutorialDone(), done: (n, skip) => this.pick({ mode: 'new', name: n, vocation: this.vocation, outfit: { ...this.outfit }, skipTutorial: skip }), back: () => this.online.showStart() });
       return;
     }
     if (!this.offlineView) this.offlineView = el('div', 'gate-view', this.views);
@@ -155,7 +161,8 @@ export class StartScreen {
     button(v, `Continue as ${saved.name}`, () => this.pick({ mode: 'continue' }), 'gate-gold');
     button(v, 'New offline hero', () => this.showCreate({
       primary: 'Start (replaces the offline save)',
-      done: (n) => this.pick({ mode: 'new', name: n, vocation: this.vocation, outfit: { ...this.outfit } }),
+      skippable: offlineTutorialDone(),
+      done: (n, skip) => this.pick({ mode: 'new', name: n, vocation: this.vocation, outfit: { ...this.outfit }, skipTutorial: skip }),
       back: () => this.showOffline(),
     }), 'gate-iron');
     button(v, 'Back to log in', () => this.online.showStart(), 'gate-link quiet');
@@ -167,6 +174,10 @@ export class StartScreen {
     this.createOpts = opts;
     if (!this.createView) this.buildCreate();
     this.createPrimary!.textContent = opts.primary;
+    // the tutorial island: new heroes start there unless the account finished it once and the box is ticked
+    this.createSkip!.box.checked = false;
+    this.createSkip!.label.hidden = !opts.skippable;
+    this.createTutNote!.hidden = !!opts.skippable;
     this.show(this.createView!, true);
     this.createName!.focus({ preventScroll: true });
   }
@@ -233,10 +244,17 @@ export class StartScreen {
     this.preview.set(this.outfit);
     el('span', 'gate-hint', stage, 'Your hero');
 
+    const skipLabel = el('label', 'gate-check', v);
+    const skipBox = el('input', '', skipLabel);
+    skipBox.type = 'checkbox';
+    skipLabel.append("Skip the tutorial and start in Thornvale (same starting gear)");
+    skipLabel.title = "You have finished Wayfarer's Isle before, so new heroes may skip it.";
+    this.createSkip = { label: skipLabel, box: skipBox };
+    this.createTutNote = el('p', 'gate-hint', v, "New heroes begin on Wayfarer's Isle, a short tutorial island. Once one of your heroes has finished it, the next ones may skip it.");
     const actions = el('div', 'gate-row', v);
     const submit = () => {
       const n = this.validName(name.value);
-      if (n) this.createOpts?.done(n);
+      if (n) this.createOpts?.done(n, !!this.createOpts?.skippable && skipBox.checked);
     };
     this.createPrimary = button(actions, '', submit, 'gate-gold');
     button(actions, 'Back', () => this.createOpts?.back(), 'gate-iron');

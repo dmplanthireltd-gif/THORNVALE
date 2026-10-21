@@ -105,6 +105,12 @@ async function verifyToken(token: string): Promise<{ id: string; email: string }
 
 /** Which Supabase Auth user owns each online session (email login). */
 const sessionOwner = new Map<number, string>();
+/** The account each online session belongs to (tutorial flag): 'auth:<user id>' or 'name:<name_key>'. */
+const sessionAccount = new Map<number, string>();
+
+function accountKey(owner: string | null, nameKey: string): string {
+  return owner ? `auth:${owner}` : `name:${nameKey}`;
+}
 
 /** Throttles password guessing per connection address. */
 const failedLogins = new Map<string, { count: number; until: number }>();
@@ -200,6 +206,21 @@ function persistMarket(c: MarketChange): void {
   });
 }
 game.marketSink = persistMarket;
+
+// the tutorial: an island graduate sets the account flag (later characters may skip it); test servers
+// raise the level now, once the character has left the island
+game.events.on((e) => {
+  if (e.type !== 'tutorialDone') return;
+  const s = game.sessions.get(e.to);
+  if (!s || s.bot) return;
+  const account = sessionAccount.get(s.id);
+  if (!e.skipped && account) storage.markTutorialDone(account).catch((err) => console.error('Storing the tutorial flag failed:', err));
+  if (s.player.level < START_LEVEL) {
+    setLevel(game, s, START_LEVEL);
+    game.msg(s.id, `Test server: your character has been raised to level ${START_LEVEL}.`, 'info');
+  }
+  void saveCharacter(s);
+});
 
 game.events.on((e) => {
   const to = eventAudience(e);
@@ -320,6 +341,7 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
   }
   await pendingSaves.get(key);
   const stored = await storage.getCharacter(key);
+  const account = accountKey(owner, key);
   let migratedFrom = 0;
   if (stored) {
     const mig = migrateSave(stored.data);
@@ -340,6 +362,12 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
       migratedFrom = mig.from;
     }
   }
+  // the tutorial: may this account skip the island? (asked only when it matters: a new character, or one still on it)
+  const onIsland = !stored || (stored.data as { tutorial?: { state?: string } }).tutorial?.state === 'active';
+  const canSkip = onIsland ? await storage.tutorialDone(account, owner).catch((err) => {
+    console.warn('Checking the tutorial flag failed:', (err as Error).message);
+    return false;
+  }) : false;
   if (!c.ws.isOpen) return;
   if ([...game.sessions.values()].some((s) => s.player.name.toLowerCase() === key)) {
     send(c, { t: 'error', text: `${name} is already online.` });
@@ -352,6 +380,7 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
   // premium and founder looks first, so loading the save keeps a premium or founder outfit
   game.setPerks(s.id, perks, true);
   perksSeen.set(s.id, JSON.stringify(perks));
+  sessionAccount.set(s.id, account);
   s.admin = ALLOW_ADMIN || ADMINS.has(key);
   // test mode (ALLOW_ADMIN) gives every test command except god mode and /kill; names in ADMINS get everything
   s.testOnly = !ADMINS.has(key);
@@ -369,17 +398,23 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
       console.log(`  migrated ${name} from save v${migratedFrom} to v${SAVE_VERSION}`);
       void saveCharacter(s);
     }
+    s.tutorial.canSkip = canSkip;
   } else {
     if (isOutfit(m.outfit)) game.setOutfit(s.id, m.outfit);
+    // new characters start on Wayfarer's Isle, unless the account finished it before and the player chose to skip
+    s.tutorial.canSkip = canSkip;
+    if (m.skipTutorial === true && canSkip) game.startSkipped(s.id);
+    else game.beginTutorial(s.id);
     void saveCharacter(s);
   }
-  if (s.player.level < START_LEVEL) {
+  // test servers raise levels, but not on the tutorial island (that happens when the character leaves it)
+  if (s.player.level < START_LEVEL && s.tutorial.state !== 'active') {
     setLevel(game, s, START_LEVEL);
     game.msg(s.id, `Test server: your character has been raised to level ${START_LEVEL}.`, 'info');
     void saveCharacter(s);
   }
   send(c, { t: 'welcome', id: s.id, v: PROTOCOL_VERSION, players: game.sessions.size });
-  game.msg(s.id, saved ? `Welcome back to Thornvale, ${name}.` : `Welcome to Thornvale, ${name}. Captain Aldric waits on the plaza.`, 'info');
+  game.msg(s.id, saved ? `Welcome back to Thornvale, ${name}.` : `Welcome to Thornvale, ${name}.`, 'info');
   for (const other of game.sessions.values()) {
     if (other.id !== s.id) game.msg(other.id, `${name} has entered Thornvale.`, 'info');
   }
@@ -418,7 +453,10 @@ function onClose(c: Client): void {
   clients.delete(c);
   const s = c.session;
   if (!s) return;
-  void saveCharacter(s).then(() => sessionOwner.delete(s.id));
+  void saveCharacter(s).then(() => {
+    sessionOwner.delete(s.id);
+    sessionAccount.delete(s.id);
+  });
   perksSeen.delete(s.id);
   game.removePlayer(s.id);
   for (const other of game.sessions.values()) game.msg(other.id, `${s.player.name} has left.`, 'info');
@@ -673,7 +711,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): P
     if (!user) return json(res, 401, { error: 'Not logged in.' });
     try {
       const perks = await perksOf(user.id);
-      return json(res, 200, { email: user.email, characters: await storage.listCharacters(user.id), maxCharacters: MAX_CHARACTERS_PER_ACCOUNT + perks.extraSlots });
+      const tutorialDone = await storage.tutorialDone(accountKey(user.id, ''), user.id).catch(() => false);
+      return json(res, 200, { email: user.email, characters: await storage.listCharacters(user.id), maxCharacters: MAX_CHARACTERS_PER_ACCOUNT + perks.extraSlots, tutorialDone });
     } catch (err) {
       console.error('Listing characters failed:', err);
       return json(res, 500, { error: 'Could not load your characters.' });
@@ -839,6 +878,7 @@ await carveFoundersStone();
 console.log(`Login: ${EMAIL_AUTH ? 'email (Supabase Auth)' : 'character name + password'}`);
 console.log(market ? `Market: open (${market.offers.length} offers, ${market.deliveries.length} deliveries waiting)` : 'Market: closed (no market tables in storage yet)');
 console.log(`Saves: ${storage.kind === 'supabase' ? 'Supabase database' : `files in ${dirname(DATA_FILE)}`} (save format v${SAVE_VERSION})`);
+console.log(`Tutorial flags: ${await storage.accountFlagsMode()}`);
 console.log(`PvP: ${PVP ? 'on' : 'off'}`);
 console.log(`Premium: ${PREMIUM ? 'enforced (free heartland, premium regions)' : 'open to everyone (test mode)'}`);
 console.log(`Store: ${!storeTables ? 'closed (no store tables in storage yet)' : !EMAIL_AUTH ? 'closed (needs email login)' : paddleReady(PADDLE) ? `open (Paddle ${PADDLE.env}, ${Object.keys(PADDLE.prices).length} prices)` : 'closed (Paddle not set up yet)'}`);

@@ -63,6 +63,25 @@ export function sessionOf(c: Controller): Session {
 
 // ------------------------------------------------------------------ single player
 
+const TUTORIAL_FLAG = 'thornvale.tutorialDone';
+
+/** Offline play: has a character in this browser finished the tutorial island? */
+export function offlineTutorialDone(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(TUTORIAL_FLAG) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markOfflineTutorialDone(): void {
+  try {
+    globalThis.localStorage?.setItem(TUTORIAL_FLAG, '1');
+  } catch {
+    /* storage off: nothing remembered */
+  }
+}
+
 const AUTOSAVE_SECONDS = 30;
 
 export class LocalController implements Controller {
@@ -73,18 +92,26 @@ export class LocalController implements Controller {
   private autosave = AUTOSAVE_SECONDS;
   private backlog: Backlog;
 
-  constructor(readonly game: Game, readonly saves: SaveSystem, name: string, vocation: Vocation, opts: { load: boolean; outfit?: Outfit }) {
+  constructor(readonly game: Game, readonly saves: SaveSystem, name: string, vocation: Vocation, opts: { load: boolean; outfit?: Outfit; skipTutorial?: boolean }) {
     this.backlog = new Backlog(game);
     const s = game.addPlayer(name, { intent: this.intent, vocation });
     this.pid = s.id;
     game.localId = s.id;
     s.admin = true; // single player: test commands are always on
     saves.attachMarket(game);
+    // offline, "the account" is this browser: finishing the island once lets later characters skip it
+    s.tutorial.canSkip = offlineTutorialDone();
+    game.events.on((e) => {
+      if (e.type === 'tutorialDone' && e.to === s.id && !e.skipped) markOfflineTutorialDone();
+    });
     if (opts.load && saves.load(game, s.id)) {
+      s.tutorial.canSkip = offlineTutorialDone();
       game.msg(s.id, `Welcome back, ${s.player.name}. Your progress was restored.`, 'info');
     } else {
       if (opts.outfit) game.setOutfit(s.id, opts.outfit);
-      game.msg(s.id, `Welcome to Thornvale, ${name}. Captain Aldric waits on the temple plaza.`, 'info');
+      game.msg(s.id, `Welcome to Thornvale, ${name}.`, 'info');
+      if (opts.skipTutorial && s.tutorial.canSkip) game.startSkipped(s.id);
+      else game.beginTutorial(s.id);
       this.save();
     }
     if (!saves.available) game.msg(s.id, 'Browser storage is unavailable here — progress cannot be saved.', 'warn');
@@ -151,6 +178,8 @@ export interface ConnectOptions {
   token?: string;
   vocation: Vocation;
   outfit: Outfit;
+  /** New character only: start in Thornvale instead of the tutorial island (accounts that finished it once). */
+  skipTutorial?: boolean;
   timeoutMs?: number;
 }
 
@@ -193,7 +222,7 @@ export class NetController implements Controller {
         }
       }, o.timeoutMs ?? 8000);
       ws.onopen = () => {
-        const hello: ClientMessage = { t: 'hello', v: PROTOCOL_VERSION, name: o.name, password: o.password, token: o.token, vocation: o.vocation, outfit: o.outfit };
+        const hello: ClientMessage = { t: 'hello', v: PROTOCOL_VERSION, name: o.name, password: o.password, token: o.token, vocation: o.vocation, outfit: o.outfit, skipTutorial: o.skipTutorial };
         ws.send(JSON.stringify(hello));
       };
       ws.onerror = () => {

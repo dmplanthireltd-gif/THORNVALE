@@ -16,9 +16,9 @@ const check = (ok: unknown, label: string) => {
   if (!ok) failed++;
 };
 
-async function connect(name: string, token: string): Promise<NetController | string> {
+async function connect(name: string, token: string, skipTutorial = false): Promise<NetController | string> {
   try {
-    return await NetController.connect({ url: 'ws://localhost:8131/ws', name, token, vocation: 'sorcerer', outfit: DEFAULT_OUTFIT });
+    return await NetController.connect({ url: 'ws://localhost:8131/ws', name, token, vocation: 'sorcerer', outfit: DEFAULT_OUTFIT, skipTutorial });
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
   }
@@ -64,7 +64,35 @@ async function main(): Promise<void> {
     check(typeof steal === 'string' && /taken/i.test(steal), `another account cannot use that name (${steal})`);
     const back = await connect('Annabel', 'tok-ann');
     check(typeof back !== 'string' && back.game.getPlayer(back.pid)?.vocation === 'sorcerer', 'the owner logs back in to the same character');
-    if (typeof back !== 'string') back.close();
+    if (typeof back === 'string') throw new Error(back);
+
+    // ---- the tutorial island and the account flag
+    const pump = async (c: NetController, secs: number) => {
+      for (let i = 0; i < secs * 20; i++) { c.update(0.05); await sleep(50); }
+    };
+    const tu = (c: NetController) => c.game.session(c.pid)!.tutorial;
+    const lvl = (c: NetController) => c.game.getPlayer(c.pid)!.level;
+    check(tu(back).state === 'active' && !tu(back).canSkip && lvl(back) === 1, 'a new character starts on the island (and test servers do not raise its level there)');
+    const before = (await (await fetch('http://localhost:8131/api/characters', { headers: { Authorization: 'Bearer tok-ann' } })).json()) as { tutorialDone: boolean };
+    check(before.tutorialDone === false, 'the account has not finished the tutorial yet');
+    back.send({ c: 'tutorialSkip' });
+    await pump(back, 0.5);
+    check(tu(back).state === 'active', 'skipping is refused before the account finished it once');
+    back.send({ c: 'say', text: '/tutorial done' });
+    await pump(back, 1);
+    check(tu(back).state === 'done' && lvl(back) >= 20, 'finishing the island ends the tutorial (test server: level raised now)');
+    await sleep(300);
+    const after = (await (await fetch('http://localhost:8131/api/characters', { headers: { Authorization: 'Bearer tok-ann' } })).json()) as { tutorialDone: boolean };
+    check(after.tutorialDone === true, 'the account is now marked as having finished the tutorial');
+    back.close();
+    await sleep(300);
+    const skipper = await connect('Annika', 'tok-ann', true);
+    check(typeof skipper !== 'string' && tu(skipper).state === 'skipped' && skipper.game.session(skipper.pid)!.inventory.count('rope') === 1, 'a second character of that account may skip the island');
+    if (typeof skipper !== 'string') skipper.close();
+    await sleep(300);
+    const keen = await connect('Anwen', 'tok-ann');
+    check(typeof keen !== 'string' && tu(keen).state === 'active' && tu(keen).canSkip, 'one who does not tick skip goes to the island, with a skip button available');
+    if (typeof keen !== 'string') keen.close();
   } finally {
     server.kill('SIGTERM');
     await sleep(800);

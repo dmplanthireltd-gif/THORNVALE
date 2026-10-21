@@ -400,6 +400,10 @@ export class Sfx {
       case 'playerRespawn':
         if (e.id === me) this.play('respawn', 0.8);
         break;
+      case 'tutorialStep':
+      case 'tutorialDone':
+        if (e.to === me) this.play('quest', 0.7);
+        break;
       case 'questChanged':
         if (e.to === me) this.play('quest', 0.7);
         break;

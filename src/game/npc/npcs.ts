@@ -34,6 +34,8 @@ export interface NpcDef {
   travel?: TravelEntry[];
   spells?: SpellId[];
   quests?: boolean;
+  /** Tutorial guide: offers "What should I do now?" with the current tutorial step. */
+  tutor?: boolean;
 }
 
 const s = (id: string, price?: number): ShopEntry => ({ id, price: price ?? Math.max(1, Math.round(ITEMS[id].value * 2.5)) });
@@ -257,6 +259,27 @@ for (const [key, list] of Object.entries(EXTRA_BUYS)) {
   NPCS.hask.greeting = "Sea's calm today, {name}. Where can the old Gull take you?";
   NPCS.mara.greeting = "Ahoy, {name}! The Saltwind sails wherever there's a harbour.";
 }
+
+// ---------------------------------------------------------------- Wayfarer's Isle (the tutorial island)
+// Plain shop lists of their own (not the town stock), so the island stays simple.
+NPCS.isle_guide = {
+  key: 'isle_guide', name: 'Guide Maren', role: 'Island guide', tutor: true, prop: 'staff',
+  greeting: 'Welcome ashore, {name}. Everyone who comes to Thornvale starts here. I will show you the ropes.',
+  look: { type: 'citizen', head: 1, body: 84, legs: 79, feet: 98 },
+};
+NPCS.isle_trader = {
+  key: 'isle_trader', name: 'Tobin', role: 'Trader & banker', bank: true, prop: 'ledger',
+  greeting: 'Tobin\'s Trading Post, {name}. I buy what you find, sell what you need, and keep your gold safe.',
+  look: { type: 'noble', head: 3, body: 69, legs: 107, feet: 99 },
+  sells: [s('health_potion', 45), s('mana_potion', 50), s('rope', 50), s('meat', 6), s('cheese', 4)],
+  buys: materials,
+};
+NPCS.isle_captain = {
+  key: 'isle_captain', name: 'Captain Wren', role: 'Ship to Thornvale', prop: 'oar',
+  greeting: 'The Wayfarer sails for Thornvale whenever you are ready, {name}. The first passage is free.',
+  look: { type: 'citizen', head: 2, body: 27, legs: 108, feet: 98 },
+  travel: [{ key: 'thornvale', name: 'Thornvale', price: 0 }],
+};
 
 // ---------------------------------------------------------------- fishing trade
 // Harbour captains and ferrymen sell rods and buy the catch (raw or cooked); every

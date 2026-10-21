@@ -19,6 +19,7 @@ import { MAX_BATCH, stationForItem, type CraftView } from '../game/production/re
 import { RAW_FOOD_ITEMS } from '../game/production/cooking';
 import { Obj } from '../game/world/WorldMap';
 import { QUESTS } from '../game/quests/quests';
+import { TUTORIAL_LAST, tutorialStep } from '../game/tutorial/tutorial';
 import { hpColor } from '../render/Overlay';
 import { makeBottomResizable, makePanelsMovable, resetPanelLayout } from './panels';
 import type { Renderer } from '../render/Renderer';
@@ -149,6 +150,8 @@ export class HUD {
   private moved: Array<[HTMLElement, HTMLElement, Node | null]> = [];
   private topLoc!: HTMLSpanElement;
   private disconnectEl!: HTMLDivElement;
+  /** Tutorial objective bar (Wayfarer's Isle): step, hint, direction to the target, skip button. */
+  private tut!: { root: HTMLDivElement; title: HTMLSpanElement; arrow: HTMLSpanElement; dist: HTMLSpanElement; hint: HTMLDivElement; todo: HTMLDivElement; skip: HTMLButtonElement; armed: number; timer: number };
 
   constructor(private readonly ctl: Controller, private readonly renderer: Renderer, container: HTMLElement, private readonly sfx: Sfx, private readonly music?: Music) {
     this.root = el('div', 'hud', container);
@@ -167,6 +170,7 @@ export class HUD {
     makeBottomResizable(this.root, this.bottom, this.bottom.querySelector('.hotbar') as HTMLElement);
     if (this.layout === 'full') this.setLayout('full');
     this.buildWindows();
+    this.buildTutorial();
     this.worldMap = new WorldMapView(this.root, this.ctl, this.minimap);
     this.regionEl = el('div', 'region-banner', this.root);
     this.announceEl = el('div', 'announce-banner', this.root);
@@ -192,6 +196,7 @@ export class HUD {
     ctl.onDisconnect = (why) => this.showDisconnect(why);
     this.renderInventory();
     this.renderHotbar();
+    this.renderTutorial();
   }
 
   private get s(): Session {
@@ -274,8 +279,12 @@ export class HUD {
         if (o !== Obj.Stump && o !== Obj.Tree && o !== Obj.Pine && o !== Obj.Palm && o !== Obj.JungleTree && o !== Obj.DepletedRock && !(o >= Obj.CopperRock && o <= Obj.DarkstoneRock)) this.minimap.invalidate(e.z);
         break;
       }
+      case 'tutorialChanged':
+        if (e.to === me) this.renderTutorial();
+        break;
       case 'gameLoaded':
         if (e.to !== me) break;
+        this.renderTutorial();
         this.renderInventory();
         this.renderDialog();
         this.loadHotbar();
@@ -2297,7 +2306,91 @@ export class HUD {
     }
   }
 
+  // ================================================================ tutorial objective bar
+
+  private buildTutorial(): void {
+    const root = el('div', 'panel tut-bar', this.root);
+    const head = el('div', 'tut-head', root);
+    el('span', 'tut-tag', head, 'Tutorial');
+    const title = el('span', 'tut-title', head);
+    const nav = el('span', 'tut-nav', head);
+    const arrow = el('span', 'tut-arrow', nav, '➤');
+    const dist = el('span', 'tut-dist', nav);
+    const hint = el('div', 'tut-hint', root);
+    const todo = el('div', 'tut-todo', root);
+    const skip = button(head, 'Skip tutorial', () => {
+      // two clicks, so nobody leaves the island by accident
+      if (this.tut.armed > 0) {
+        this.tut.armed = 0;
+        this.ctl.send({ c: 'tutorialSkip' });
+        return;
+      }
+      this.tut.armed = 4;
+      skip.textContent = 'Click again to sail to Thornvale';
+    }, 'btn tiny tut-skip');
+    skip.title = 'Your account has finished the island before. Skipping gives you the same gear a graduate leaves with.';
+    this.tut = { root, title, arrow, dist, hint, todo, skip, armed: 0, timer: 0 };
+  }
+
+  private renderTutorial(): void {
+    if (!this.tut) return;
+    const t = this.s.tutorial;
+    const on = t.state === 'active';
+    this.tut.root.classList.toggle('on', on);
+    if (!on) return;
+    const st = tutorialStep(t.step);
+    if (!st) return;
+    this.tut.title.textContent = `${t.step}/${TUTORIAL_LAST} · ${st.title}${st.optional ? ' (optional)' : ''}`;
+    this.tut.hint.textContent = st.hint;
+    const parts: string[] = [];
+    if (st.id === 'rats') parts.push(`Rats slain: ${t.count}/${st.need ?? 3}`);
+    if (st.id === 'loot') parts.push(`${t.flags & 1 ? '✔' : '○'} pick up loot`, `${t.flags & 2 ? '✔' : '○'} eat`);
+    if (st.id === 'depot') parts.push(`${t.flags & 1 ? '✔' : '○'} store an item in the depot`, `${t.flags & 2 ? '✔' : '○'} bank your gold`);
+    if (st.id === 'cellar') parts.push(`${t.flags & 1 ? '✔' : '○'} down into the cellar`, '○ climb out by rope');
+    this.tut.todo.textContent = parts.join('   ');
+    this.tut.todo.hidden = !parts.length;
+    this.tut.skip.hidden = !t.canSkip;
+    if (!this.tut.armed) this.tut.skip.textContent = 'Skip tutorial';
+    this.tut.timer = 0;
+  }
+
+  /** Points the objective arrow from the player towards the current target (north is up on screen). */
+  private updateTutorialArrow(dt: number): void {
+    const tut = this.tut;
+    if (!tut || this.s.tutorial.state !== 'active') return;
+    if (tut.armed > 0) {
+      tut.armed -= dt;
+      if (tut.armed <= 0) { tut.armed = 0; tut.skip.textContent = 'Skip tutorial'; }
+    }
+    tut.timer -= dt;
+    if (tut.timer > 0) return;
+    tut.timer = 0.2;
+    const p = this.s.player;
+    const goal = this.ctl.game.tutorialTarget(this.ctl.pid);
+    if (!goal) {
+      tut.arrow.hidden = true;
+      tut.dist.textContent = '';
+      return;
+    }
+    tut.arrow.hidden = false;
+    if (goal.z !== p.z) {
+      tut.arrow.style.transform = `rotate(${goal.z < p.z ? 90 : -90}deg)`;
+      tut.dist.textContent = goal.z < p.z ? 'go down' : 'go up';
+      return;
+    }
+    const dx = goal.x - p.x, dy = goal.y - p.y;
+    const d = Math.max(Math.abs(dx), Math.abs(dy));
+    if (d <= 1) {
+      tut.arrow.hidden = true;
+      tut.dist.textContent = 'here';
+      return;
+    }
+    tut.arrow.style.transform = `rotate(${Math.round(Math.atan2(dy, dx) * 180 / Math.PI)}deg)`;
+    tut.dist.textContent = `${d} tiles`;
+  }
+
   update(dt: number): void {
+    this.updateTutorialArrow(dt);
     this.music?.update();
     this.renderParty();
     this.inspectTimer -= dt;

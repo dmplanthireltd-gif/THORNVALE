@@ -75,7 +75,13 @@ export type GameEvent =
   | { type: 'friendsChanged'; to: number }
   | { type: 'spellsChanged'; to: number }
   | { type: 'marketChanged'; to: number }
-  | { type: 'gameLoaded'; to: number };
+  | { type: 'gameLoaded'; to: number }
+  /** Tutorial progress changed (objective bar; derived from snapshots online). */
+  | { type: 'tutorialChanged'; to: number }
+  /** A tutorial step was finished (step number, 1-based). */
+  | { type: 'tutorialStep'; step: number; to: number }
+  /** The tutorial ended: finished on the island, or skipped. */
+  | { type: 'tutorialDone'; skipped: boolean; to: number };
 
 type Listener = (e: GameEvent) => void;
 

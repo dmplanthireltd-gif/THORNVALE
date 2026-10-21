@@ -4,6 +4,7 @@ import { Gen, SOFT } from './genKit';
 import { buildAllTowns } from './townSites';
 import { Biome, computeGeography, fbm } from './terrain';
 import { placeOreRocks } from './mines';
+import { buildTutorialIsle } from './tutorialIsle';
 import { FLOOR_MAX, FLOOR_MIN, Ground, Obj, SOLID_OBJ, UNWALKABLE_GROUND, WorldMap, type House } from './WorldMap';
 
 /**
@@ -65,6 +66,9 @@ function generate(seed: number): WorldMap {
   settleSpawns(m);
   ensureConnected(m);
   T('connect');
+  // the tutorial island last: it uses no random numbers and touches only open sea, so the rest
+  // of the world stays exactly as it was; it is reached through its destination (new characters)
+  buildTutorialIsle(m);
   return m;
 }
 

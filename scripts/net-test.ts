@@ -29,6 +29,9 @@ async function main(): Promise<void> {
   const b = await NetController.connect({ url, name: `Ben ${tag}`, password: 'secret2', vocation: 'sorcerer', outfit: DEFAULT_OUTFIT });
   await pump([a, b], 1);
   check(a.game.players().length >= 2 && b.game.players().length >= 2, 'both clients see each other');
+  // new characters start on the tutorial island (a new name + password is a new account: it cannot skip)
+  const tu = a.game.session(a.pid)!.tutorial;
+  check(tu.state === 'active' && tu.step >= 1 && !tu.canSkip, 'new characters start on the tutorial island');
   check(a.game.pvp && a.game.getPlayer(a.pid)!.secure, 'server reports PvP on, secure mode starts on');
   a.send({ c: 'secureMode', on: false });
   await pump([a, b], 0.4);
@@ -50,17 +53,20 @@ async function main(): Promise<void> {
   const inv = a.game.session(a.pid)!.inventory;
   const slot = inv.slots.findIndex((s) => s && s.id !== 'gold');
   const item = inv.slots[slot]!.id;
+  const qty = inv.slots[slot]!.qty;
   const before = b.game.session(b.pid)!.inventory.count(item);
-  a.send({ c: 'tradeOffer', slots: [slot], gold: 5 });
+  // (characters on the tutorial island carry no gold yet)
+  const offerGold = Math.min(5, inv.count('gold'));
+  a.send({ c: 'tradeOffer', slots: [slot], gold: offerGold });
   await pump([a, b], 0.6);
-  check(b.trade()?.theirs.items[0]?.id === item && b.trade()?.theirs.gold === 5, 'offer visible to partner');
+  check(b.trade()?.theirs.items[0]?.id === item && b.trade()?.theirs.gold === offerGold, 'offer visible to partner');
   b.send({ c: 'tradeAccept' });
   await pump([a, b], 0.4);
   check(!!a.trade()?.theirs.accepted, 'acceptance visible to partner');
   a.send({ c: 'tradeAccept' });
   await pump([a, b], 0.8);
   check(a.trade() === null && b.trade() === null, 'trade closed on both clients');
-  check(b.game.session(b.pid)!.inventory.count(item) === before + 1, `partner received ${item}`);
+  check(b.game.session(b.pid)!.inventory.count(item) === before + qty, `partner received ${item} ×${qty}`);
   check(bp.vocation === 'sorcerer', 'vocation chosen at login');
   let rejected = '';
   try {

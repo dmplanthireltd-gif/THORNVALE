@@ -83,9 +83,10 @@ export function buildDialogue(d: DialogueState, ctx: DialogueContext): DialogueV
         if (s.status === 'active') options.push({ label: `About "${q.title}" (${s.kills}/${q.count})…`, action: `progress:${q.id}` });
       }
     }
+    if (npc.tutor) options.push({ label: 'What should I do now?', action: 'tutorial:hint' });
     if (npc.sells?.length || npc.buys?.length) options.push({ label: 'Let us trade.', action: 'page:trade' });
     if (npc.bank) options.push({ label: 'I would like to bank.', action: 'page:bank' });
-    for (const t of npc.travel ?? []) options.push({ label: `Take me to ${t.name} (${t.price} gold).`, action: `travel:${t.key}`, disabled: gold < t.price });
+    for (const t of npc.travel ?? []) options.push({ label: `Take me to ${t.name} (${t.price ? `${t.price} gold` : 'free'}).`, action: `travel:${t.key}`, disabled: gold < t.price });
     if (npc.spells?.length) options.push({ label: 'Teach me spells.', action: 'page:spells' });
     options.push({ label: 'Farewell.', action: 'bye' });
   } else if (d.page === 'trade') {

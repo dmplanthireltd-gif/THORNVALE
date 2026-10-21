@@ -47,6 +47,11 @@ import { BUFF_NAMES, emptyBuffs, expForLevel, FIGHT_MODE, Player, type FightMode
 import { isVocation, VOCATIONS, type Vocation } from './player/vocations';
 import { QUESTS, QuestLog } from './quests/quests';
 import { buildWorld } from './world/worldGen';
+import {
+  finishedTutorial, newTutorial, parseTutorial, saveTutorial, skipGifts, STEP_GIFTS, stepNo, stepTarget, TUTORIAL_LAST, TUTORIAL_START_ITEMS,
+  tutorialChestItems, tutorialStep, type TutorialState,
+} from './tutorial/tutorial';
+import { ISLE_CAPTAIN, ISLE_CHEST, ISLE_DEST, ISLE_REST, ISLE_TRADER, onIsle } from './world/tutorialIsle';
 import { FLOOR_MAX, FLOOR_MIN, Ground, Obj, WorldMap, type EnemyKind } from './world/WorldMap';
 
 /** Source of directional input. Keeps the simulation free of DOM concerns. */
@@ -160,6 +165,8 @@ export interface Session {
   premiumNet?: PremiumView;
   /** Premium was active at the last check (to notice it running out). */
   premiumWas?: boolean;
+  /** Tutorial progress on Wayfarer's Isle (save v11+); `canSkip` comes from the account, not the save. */
+  tutorial: TutorialState;
 }
 
 export interface Cosmetics {
@@ -223,6 +230,8 @@ export interface SaveData {
   friends?: string[];
   /** Founder cloak / title switched off (save v9+). */
   cosmetics?: { hideCloak?: boolean; hideTitle?: boolean };
+  /** Tutorial (save v11+): active on the island, done, or skipped. Older characters count as done. */
+  tutorial?: { state: TutorialState['state']; step: number; flags?: number; count?: number };
 }
 
 export interface GameOptions {
@@ -374,6 +383,12 @@ export class Game implements AIContext {
       this.npcs.push(npc);
     }
     for (const sp of this.world.spawns) this.enemies.push(new Enemy(this.nextId++, sp.kind, sp.x, sp.y, sp.z));
+    // tutorial steps that are easiest to see in the event stream (the simulating game only)
+    this.events.on((e) => {
+      if (!this.simulate) return;
+      if (e.type === 'cast') this.tutorialNote(e.casterId, 'cast');
+      else if ((e.type === 'fish' || e.type === 'chop') && e.got) this.tutorialNote(e.id, 'gather');
+    });
   }
 
   // ================================================================ sessions
@@ -393,6 +408,8 @@ export class Game implements AIContext {
       perks: { ...NO_PERKS }, cosmetics: { hideCloak: false, hideTitle: false },
       bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
       skills: startSkills(), gathering: emptySkillXp(), craftOpen: null, marketOpen: null, marketClaimed: [],
+      // bots, mirror copies and old characters have nothing to do on the island; new ones are sent there by beginTutorial
+      tutorial: finishedTutorial(),
     };
     if (opts.starter !== false) giveStarterKit(session.inventory, voc);
     this.sessions.set(id, session);
@@ -865,6 +882,7 @@ export class Game implements AIContext {
     this.updateMine(s, dt);
     this.updateCraft(s, dt);
     this.updatePlayerCombat(s);
+    this.updateTutorial(s);
   }
 
   private decidePlayerStep(s: Session): boolean {
@@ -940,7 +958,8 @@ export class Game implements AIContext {
     }
     // entering a town makes its temple your home
     const r = this.world.regionAt(p.x, p.y, p.z);
-    if (r?.temple && r.safe && p.home !== r.name) {
+    // (the island's shrine only while the tutorial is on: nobody else should wake up there)
+    if (r?.temple && r.safe && p.home !== r.name && (r.name !== ISLE_REST.name || s.tutorial.state === 'active')) {
       const town = r.name === 'Temple Plaza' ? 'Thornvale' : r.name;
       if (p.home !== town) {
         p.home = town;
@@ -2161,6 +2180,7 @@ export class Game implements AIContext {
     if (this.sameParty(p.id, t.id)) return 'You may not attack a member of your party.';
     if (this.isProtected(p)) return 'You may not attack from inside a protection zone.';
     if (this.isProtected(t)) return 'You may not attack a person in a protection zone.';
+    if (onIsle(p.x, p.y, p.z) || onIsle(t.x, t.y, t.z)) return "Nobody fights other players on Wayfarer's Isle.";
     if (p.level < PVP_MIN_LEVEL) return `You need level ${PVP_MIN_LEVEL} to attack players.`;
     if (t.level < PVP_MIN_LEVEL) return `You may not attack a player below level ${PVP_MIN_LEVEL}.`;
     if (p.secure && this.skullOf(t) === 0 && !this.isAggressor(p, t)) {
@@ -2293,6 +2313,7 @@ export class Game implements AIContext {
         const exp = Math.max(1, Math.round((e.def.exp * dealt) / total));
         this.grantExp(s, exp, e.id, why);
       }
+      if (e.enemyKind === 'rat') this.tutorialNote(pid, 'rat');
       const changed = s.quests.onKill(e.enemyKind);
       for (const q of changed) {
         const qs = s.quests.get(q.id);
@@ -2682,19 +2703,22 @@ export class Game implements AIContext {
     this.closeDialogue(p.id);
     if (s?.depotOpen) this.closeDepot(s.id);
     this.cancelTrade(p.id, 'died');
-    // lose 6% of experience; may lose a level, like the old days
-    const loss = Math.floor(p.exp * 0.06);
+    // lose 6% of experience; may lose a level, like the old days (the tutorial island spares beginners)
+    const spared = s?.tutorial.state === 'active' && onIsle(p.x, p.y, p.z);
+    const loss = spared ? 0 : Math.floor(p.exp * 0.06);
     p.exp -= loss;
     while (p.level > 1 && p.exp < expForLevel(p.level)) p.level--;
     if (s) this.refreshStats(s);
     for (const e of this.enemies) if (e.targetId === p.id) e.targetId = null;
     this.events.emit({ type: 'death', id: p.id });
     if (byPlayer) this.msg(p.id, `You were killed by ${byPlayer.name}. You lost ${loss} experience.`, 'warn');
+    else if (spared) this.msg(p.id, `You were slain${killer ? ` by ${article(killer.name)}` : ''}. The isle spares beginners: you lost no experience and kept your belongings.`, 'warn');
     else this.msg(p.id, `You were slain${killer ? ` by ${article(killer.name)}` : ''}. You lost ${loss} experience.`, 'warn');
     // death loot: the backpack with everything in it always stays where you fell, and each worn piece
     // has a DEATH_ITEM_CHANCE to drop too. A Hearthward Amulet (crumbles) saves it all, except on a red
-    // skull, which costs everything worn as well. Bots never drop anything (no farming).
-    if (s && !s.bot) {
+    // skull, which costs everything worn as well. Bots never drop anything (no farming), and the tutorial
+    // island spares beginners (they keep everything).
+    if (s && !s.bot && !spared) {
       const lost = this.deathLoss(s, skull === 2);
       // the dead body stays where you fell (empty when an amulet saved everything)
       const body: GroundBag = { id: this.nextId++, x: p.x, y: p.y, z: p.z, items: lost, ttl: PLAYER_CORPSE_LIFETIME, corpse: p.name };
@@ -2984,8 +3008,10 @@ export class Game implements AIContext {
         this.openCraft(s, 'tanning', x, y, z);
         return;
       case Obj.Chest: {
-        const c = this.world.chests.find((ch) => ch.x === x && ch.y === y && ch.z === z);
-        if (!c) return;
+        const found = this.world.chests.find((ch) => ch.x === x && ch.y === y && ch.z === z);
+        if (!found) return;
+        // the tutorial supply chest holds the starter kit of your own vocation
+        const c = found.id === ISLE_CHEST.id ? { ...found, items: tutorialChestItems(p.vocation, giveStarterKit) } : found;
         if (s.chests.has(c.id)) {
           this.msg(s.id, 'The chest is empty.', 'info');
           return;
@@ -3004,6 +3030,7 @@ export class Game implements AIContext {
         s.wantsSave = true;
         this.msg(s.id, `You found ${c.items.map(describeStack).join(', ')}.`, 'loot');
         this.events.emit({ type: 'inventoryChanged', to: s.id });
+        if (c.id === ISLE_CHEST.id) this.tutorialNote(s.id, 'chest');
         return;
       }
       default:
@@ -3484,6 +3511,7 @@ export class Game implements AIContext {
         const amount = Math.min(d.heal, p.maxHp - p.hp);
         p.hp += amount;
         this.events.emit({ type: 'heal', targetId: p.id, amount });
+        if (!d.id.includes('potion')) this.tutorialNote(pid, 'eat');
       }
       if (d.mana) {
         const amount = Math.min(d.mana, p.maxMana - p.mana);
@@ -3919,6 +3947,7 @@ export class Game implements AIContext {
     if (got.length) {
       this.msg(s.id, `You picked up ${got.map(describeStack).join(', ')}.`, 'loot');
       this.events.emit({ type: 'inventoryChanged', to: s.id });
+      this.tutorialNote(s.id, 'loot');
     }
     if (heavy) this.msg(s.id, 'Some of it is too heavy for you to carry.', 'warn');
     else if (full) this.msg(s.id, 'Your backpack is full.', 'warn');
@@ -3949,6 +3978,7 @@ export class Game implements AIContext {
     s.wantsSave = true;
     this.events.emit({ type: 'inventoryChanged', to: pid });
     this.events.emit({ type: 'depotChanged', to: pid });
+    this.tutorialNote(pid, 'depot');
   }
 
   withdrawItem(pid: number, index: number): void {
@@ -4376,6 +4406,11 @@ export class Game implements AIContext {
     const quest = QUESTS.find((q) => q.id === rest.join(':') || q.id === arg);
 
     switch (verb) {
+      case 'tutorial': {
+        const st = s.tutorial.state === 'active' ? tutorialStep(s.tutorial.step) : null;
+        d.text = st ? `${st.guide} (${st.hint})` : 'You have learned all I can teach. The wide world waits beyond the sea.';
+        break;
+      }
       case 'bye':
         this.msg(pid, `${d.npcName}: Farewell, ${p.name}.`, 'npc');
         this.closeDialogue(pid);
@@ -4432,6 +4467,7 @@ export class Game implements AIContext {
         inv.add(entry.id, qty);
         d.text = `${qty > 1 ? `${qty} ${d2.name.toLowerCase()}s` : `One ${d2.name.toLowerCase()}`} for ${cost} gold. Anything else?`;
         this.events.emit({ type: 'inventoryChanged', to: pid });
+        if (npc?.key === ISLE_TRADER) this.tutorialNote(pid, 'buy');
         break;
       }
       case 'sell': {
@@ -4475,6 +4511,7 @@ export class Game implements AIContext {
         s.wantsSave = true;
         d.text = `You deposited ${amt} gold. Your balance is ${s.bank} gold.`;
         this.events.emit({ type: 'inventoryChanged', to: pid });
+        this.tutorialNote(pid, 'bank');
         break;
       }
       case 'withdraw': {
@@ -4503,6 +4540,18 @@ export class Game implements AIContext {
         break;
       }
       case 'travel': {
+        if (npc?.key === ISLE_CAPTAIN) {
+          // the island ship: one way, free, and only once the lessons that matter are learned
+          if (s.tutorial.state === 'active' && s.tutorial.step < stepNo('gather')) {
+            const st = tutorialStep(s.tutorial.step);
+            d.text = `Not yet, ${p.name}. Guide Maren has more to show you first.${st ? ` (${st.hint})` : ''}`;
+            break;
+          }
+          this.closeDialogue(pid);
+          if (s.tutorial.state === 'active') this.completeTutorial(s, false);
+          else this.teleport(p, this.world.temple.x, this.world.temple.y, this.world.temple.z);
+          return;
+        }
         const tr = npc?.travel?.find((x) => x.key === arg);
         const dest = tr ? this.world.destinations[tr.key] : undefined;
         if (!tr || !dest) break;
@@ -4565,6 +4614,7 @@ export class Game implements AIContext {
       market: { claimed: [...s.marketClaimed] },
       friends: [...s.friends],
       cosmetics: { hideCloak: s.cosmetics.hideCloak, hideTitle: s.cosmetics.hideTitle },
+      tutorial: saveTutorial(s.tutorial),
     };
   }
 
@@ -4623,6 +4673,13 @@ export class Game implements AIContext {
     s.friends = Array.isArray(data.friends) ? data.friends.filter((n): n is string => typeof n === 'string').slice(0, 100) : [];
     s.cosmetics = { hideCloak: data.cosmetics?.hideCloak === true, hideTitle: data.cosmetics?.hideTitle === true };
     this.refreshPerks(s);
+    s.tutorial = { ...parseTutorial(data.tutorial), canSkip: s.tutorial.canSkip };
+    // a character finished with the island never stays on it
+    if (s.tutorial.state !== 'active' && onIsle(p.x, p.y, p.z)) {
+      const t = this.freeTileNear(this.world.temple.x, this.world.temple.y, this.world.temple.z);
+      p.placeAt(t.x, t.y, t.z);
+      if (p.home === ISLE_REST.name) p.home = 'Thornvale';
+    }
     for (const it of m.restored) {
       const left = addToCapped(s.depot, it.id, it.qty, this.depotCap(s));
       if (left > 0) s.lostItems.push({ id: it.id, qty: left });
@@ -4659,6 +4716,7 @@ export class Game implements AIContext {
     s.gathering = emptySkillXp();
     s.craftOpen = null;
     s.marketOpen = null;
+    s.tutorial = { ...finishedTutorial(), canSkip: s.tutorial.canSkip };
     this.refreshStats(s);
     p.hp = p.maxHp;
     p.mana = p.maxMana;
@@ -4670,6 +4728,214 @@ export class Game implements AIContext {
     this.events.emit({ type: 'equipmentChanged', id: pid });
     this.events.emit({ type: 'teleport', id: pid });
     this.events.emit({ type: 'gameLoaded', to: pid });
+  }
+
+  // ================================================================ tutorial (Wayfarer's Isle)
+
+  /**
+   * Sends a brand-new character to the island. They carry a bag and some food; the
+   * starter kit of their vocation waits in the supply chest by the shrine.
+   */
+  beginTutorial(pid: number): void {
+    const s = this.sessions.get(pid);
+    if (!s) return;
+    const p = s.player;
+    s.tutorial = { ...newTutorial(), canSkip: s.tutorial.canSkip };
+    s.inventory = new Inventory();
+    s.inventory.equipment.backpack = { id: 'bag', qty: 1 };
+    for (const it of TUTORIAL_START_ITEMS) s.inventory.add(it.id, it.qty);
+    s.chests.delete(ISLE_CHEST.id);
+    p.home = ISLE_REST.name;
+    const dest = this.world.destinations[ISLE_DEST] ?? this.world.temple;
+    this.teleport(p, dest.x, dest.y, dest.z);
+    this.refreshStats(s);
+    p.hp = p.maxHp;
+    p.mana = p.maxMana;
+    s.wantsSave = true;
+    this.events.emit({ type: 'inventoryChanged', to: pid });
+    this.events.emit({ type: 'equipmentChanged', id: pid });
+    this.msg(pid, `You wake on Wayfarer's Isle, where every adventurer begins. Guide Maren is waiting by the shrine.`, 'info');
+    this.tutorialChanged(s);
+  }
+
+  /**
+   * Leaves the island for good, straight to Thornvale. Only for accounts that finished
+   * it once (`canSkip`). Hands out everything a graduate would have walked off with.
+   */
+  skipTutorial(pid: number): boolean {
+    const s = this.sessions.get(pid);
+    if (!s || s.tutorial.state !== 'active') return false;
+    if (!s.tutorial.canSkip) {
+      this.msg(pid, 'Once a character on your account has finished the island, later characters may skip it.', 'warn');
+      return false;
+    }
+    const chest = tutorialChestItems(s.player.vocation, giveStarterKit);
+    this.giveItems(s, skipGifts(s.tutorial.step, s.chests.has(ISLE_CHEST.id), chest), true);
+    s.chests.add(ISLE_CHEST.id);
+    this.completeTutorial(s, true);
+    return true;
+  }
+
+  /** A new character on an account that may skip, who chose to: starts in Thornvale with the graduate's kit. */
+  startSkipped(pid: number): void {
+    const s = this.sessions.get(pid);
+    if (!s) return;
+    this.giveItems(s, skipGifts(1, true, []), true);
+    s.chests.add(ISLE_CHEST.id);
+    this.completeTutorial(s, true);
+  }
+
+  /** The current objective's position (NPCs resolved to where they stand), for the HUD arrow. */
+  tutorialTarget(pid: number): { x: number; y: number; z: number } | null {
+    const s = this.sessions.get(pid);
+    const t = s ? stepTarget(s.tutorial) : null;
+    if (!t) return null;
+    if ('npc' in t) {
+      const n = this.npcs.find((x) => x.key === t.npc);
+      return n ? { x: n.x, y: n.y, z: n.z } : null;
+    }
+    return t;
+  }
+
+  /** Something happened that a tutorial step may be waiting for. */
+  tutorialNote(pid: number, what: 'cast' | 'gather' | 'rat' | 'chest' | 'eat' | 'loot' | 'depot' | 'buy' | 'bank'): void {
+    const s = this.sessions.get(pid);
+    if (!s || !this.simulate || s.tutorial.state !== 'active') return;
+    const t = s.tutorial;
+    const id = tutorialStep(t.step)?.id;
+    const bit = (b: number) => {
+      if (t.flags & b) return;
+      t.flags |= b;
+      this.tutorialChanged(s);
+    };
+    switch (id) {
+      case 'chest': if (what === 'chest') this.advanceTutorial(s); break;
+      case 'rats':
+        if (what === 'rat') {
+          t.count++;
+          if (t.count >= (tutorialStep(t.step)!.need ?? 1)) this.advanceTutorial(s);
+          else {
+            this.msg(pid, `Rats slain: ${t.count}/${tutorialStep(t.step)!.need}.`, 'quest');
+            this.tutorialChanged(s);
+          }
+        }
+        // looting and eating already count towards the next step
+        else if (what === 'loot') bit(1);
+        else if (what === 'eat') bit(2);
+        break;
+      case 'loot':
+        if (what === 'loot') bit(1);
+        else if (what === 'eat') bit(2);
+        break;
+      case 'spell': if (what === 'cast') this.advanceTutorial(s); break;
+      case 'shop': if (what === 'buy') this.advanceTutorial(s); break;
+      case 'depot':
+        if (what === 'depot') bit(1);
+        else if (what === 'bank') bit(2);
+        break;
+      case 'gather': if (what === 'gather') this.advanceTutorial(s); break;
+      default: break;
+    }
+  }
+
+  /** Steps that are checked by looking (where you stand, what you wear, who you talk to). */
+  private updateTutorial(s: Session): void {
+    const t = s.tutorial;
+    if (t.state !== 'active') return;
+    const p = s.player;
+    if (p.dead) return;
+    // never stuck in the cellar: the guide's spare rope turns up in your bag
+    if (p.z === -1 && onIsle(p.x, p.y, p.z) && !s.inventory.has('rope') && s.inventory.add('rope', 1) === 0) {
+      this.msg(s.id, 'You find an old rope among the crates. It will get you out of here.', 'loot');
+      this.events.emit({ type: 'inventoryChanged', to: s.id });
+    }
+    switch (tutorialStep(t.step)?.id) {
+      case 'walk': {
+        const g = this.tutorialTarget(s.id);
+        if (g && g.z === p.z && chebyshev(p.x, p.y, g.x, g.y) <= 2) this.advanceTutorial(s);
+        break;
+      }
+      case 'talk': {
+        const d = s.dialogue;
+        if (d && NPCS[d.npcKey]?.tutor) this.advanceTutorial(s);
+        break;
+      }
+      case 'chest': if (s.chests.has(ISLE_CHEST.id)) this.advanceTutorial(s); break;
+      case 'gear': if (s.inventory.equipment.weapon && s.inventory.equipment.armor) this.advanceTutorial(s); break;
+      case 'loot': if ((t.flags & 3) === 3) this.advanceTutorial(s); break;
+      case 'depot': if ((t.flags & 3) === 3) this.advanceTutorial(s); break;
+      case 'cellar':
+        if (!(t.flags & 1) && p.z === -1 && onIsle(p.x, p.y, p.z)) {
+          t.flags |= 1;
+          this.msg(s.id, 'The old cellar. Find the rope spot and climb out when you are ready.', 'info');
+          this.tutorialChanged(s);
+        } else if (t.flags & 1 && p.z === 0 && onIsle(p.x, p.y, p.z)) this.advanceTutorial(s);
+        break;
+      default: break;
+    }
+  }
+
+  private advanceTutorial(s: Session): void {
+    const t = s.tutorial;
+    const done = tutorialStep(t.step);
+    if (!done || t.state !== 'active') return;
+    const gift = STEP_GIFTS[done.id]?.done;
+    if (gift) this.giveItems(s, gift, false);
+    this.events.emit({ type: 'tutorialStep', step: t.step, to: s.id });
+    if (t.step >= TUTORIAL_LAST) {
+      this.completeTutorial(s, false);
+      return;
+    }
+    // looting and eating done while hunting the rats carry over to the next step
+    const carry = done.id === 'rats' ? t.flags : 0;
+    t.step++;
+    t.flags = carry;
+    t.count = 0;
+    const next = tutorialStep(t.step)!;
+    this.msg(s.id, `Done: ${done.title}. Next (${t.step}/${TUTORIAL_LAST}): ${next.title}.`, 'quest');
+    this.msg(s.id, `Guide Maren: ${next.guide}`, 'npc');
+    const start = STEP_GIFTS[next.id]?.start;
+    if (start) this.giveItems(s, start, false);
+    s.wantsSave = true;
+    this.tutorialChanged(s);
+  }
+
+  /** Done (or skipped): the account flag is the server's business (event `tutorialDone`); the character goes to Thornvale. */
+  completeTutorial(s: Session, skipped: boolean): void {
+    const p = s.player;
+    s.tutorial = { ...finishedTutorial(skipped ? 'skipped' : 'done'), canSkip: s.tutorial.canSkip || !skipped };
+    if (p.home === ISLE_REST.name) p.home = 'Thornvale';
+    if (onIsle(p.x, p.y, p.z)) this.teleport(p, this.world.temple.x, this.world.temple.y, this.world.temple.z);
+    this.msg(s.id, skipped
+      ? 'You start your journey in Thornvale. Captain Aldric of the guard has work for newcomers on the temple plaza.'
+      : 'Captain Wren sets you ashore in Thornvale. Your training is complete: Captain Aldric of the guard has work for you on the temple plaza.', 'quest');
+    s.wantsSave = true;
+    this.events.emit({ type: 'tutorialDone', skipped, to: s.id });
+    this.tutorialChanged(s);
+  }
+
+  /** Puts items in the backpack (and empty equipment slots, with `equip`); what does not fit goes to the depot. */
+  private giveItems(s: Session, items: ItemStack[], equip: boolean): void {
+    if (!items.length) return;
+    const inv = s.inventory;
+    for (const it of items) {
+      const d = itemDef(it.id);
+      const slot = equip ? equipSlotFor(d) : null;
+      if (slot && slot !== 'ammo' && slot !== 'backpack' && !inv.equipment[slot]) {
+        inv.equipment[slot] = { id: it.id, qty: it.qty };
+        continue;
+      }
+      const left = inv.add(it.id, it.qty);
+      if (left > 0) addToList(s.depot, it.id, left);
+    }
+    this.msg(s.id, `You receive ${items.map(describeStack).join(', ')}.`, 'loot');
+    this.refreshStats(s);
+    this.events.emit({ type: 'inventoryChanged', to: s.id });
+    this.events.emit({ type: 'equipmentChanged', id: s.id });
+  }
+
+  private tutorialChanged(s: Session): void {
+    this.events.emit({ type: 'tutorialChanged', to: s.id });
   }
 
   private resetWorldState(): void {

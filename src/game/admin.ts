@@ -1,5 +1,6 @@
 import type { Game, Session } from './Game';
 import { ITEMS, type ItemDef } from './inventory/items';
+import { addToList } from './inventory/Inventory';
 import { SPELL_LIST } from './magic/spells';
 import { expForLevel } from './player/Player';
 import { gatherXpForLevel, WC_MAX_LEVEL } from './gathering/woodcutting';
@@ -11,6 +12,7 @@ import { bossTitle } from './bosses/WorldEvents';
 import { ENEMIES } from './enemies/enemyDefs';
 import type { EnemyKind } from './world/WorldMap';
 import { isFounderTier } from './premium/premium';
+import { TUTORIAL_LAST, tutorialStep } from './tutorial/tutorial';
 
 /**
  * Test / game-master commands, typed in chat with a leading "/".
@@ -34,6 +36,7 @@ export const ADMIN_HELP = [
   '/worldboss name — wake a world boss at one of its spots now (game masters; everyone in test mode)',
   '/boss name — a boss right next to you, for 30 minutes (game masters only)',
   '/events — world boss, raid and dungeon boss timers (game masters only)',
+  '/tutorial — where you are in the tutorial; /tutorial step N, /tutorial done, /tutorial skip, /tutorial reset (back to the island; game masters)',
   '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing, fletching, crafting, cooking, firemaking); also /fishing N, /mining N, /smithing N, /fletching N, /crafting N, /cooking N, /firemaking N',
   '/premium N — give yourself N days of premium for this session (0 = none; game masters only, never saved)',
   '/founder wayfarer|warden|legend|none [number] — try a founder pack\'s looks for this session (game masters only, never saved)',
@@ -316,6 +319,43 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       game.refreshStats(s);
       s.wantsSave = true;
       return;
+    }
+    case 'tutorial': {
+      const t = s.tutorial;
+      const sub = (rest[0] ?? '').toLowerCase();
+      if (!sub) return say(t.state === 'active' ? `Tutorial step ${t.step}/${TUTORIAL_LAST}: ${tutorialStep(t.step)?.title ?? '?'} (flags ${t.flags}, count ${t.count}).` : `Tutorial ${t.state}.`);
+      if (sub === 'reset') {
+        // never loses anything: what you carry and wear goes to your depot first
+        if (s.testOnly) return say('/tutorial reset is for game masters only.', 'warn');
+        const inv = s.inventory;
+        const all = [...inv.slots, ...Object.values(inv.equipment)].filter((x): x is NonNullable<typeof x> => !!x);
+        const free = s.depot.filter((x) => !x).length;
+        if (all.length > free) return say(`Make room in your depot first (${all.length} stacks to store, ${free} free).`, 'warn');
+        for (const it of all) addToList(s.depot, it.id, it.qty);
+        game.beginTutorial(pid);
+        return say("Back to Wayfarer's Isle, step 1. Everything you carried is in your depot.", 'warn');
+      }
+      if (t.state !== 'active') return say('You are not on the tutorial. Use /tutorial reset first.', 'warn');
+      if (sub === 'done') {
+        game.completeTutorial(s, false);
+        return say('Tutorial marked as finished.');
+      }
+      if (sub === 'skip') {
+        const was = t.canSkip;
+        t.canSkip = true;
+        if (!game.skipTutorial(pid)) t.canSkip = was;
+        return;
+      }
+      if (sub === 'step') {
+        const n = Math.max(1, Math.min(TUTORIAL_LAST, num(rest[1], t.step)));
+        t.step = n;
+        t.flags = 0;
+        t.count = 0;
+        game.events.emit({ type: 'tutorialChanged', to: pid });
+        s.wantsSave = true;
+        return say(`Tutorial step ${n}: ${tutorialStep(n)?.title}.`);
+      }
+      return say('Usage: /tutorial, /tutorial step N, /tutorial done, /tutorial skip, /tutorial reset', 'warn');
     }
     default:
       say(`Unknown command "/${cmd}". Type /help.`, 'warn');
