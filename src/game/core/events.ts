@@ -47,6 +47,7 @@ export type GameEvent =
   | { type: 'dialogueOpened'; npcId: number; to: number }
   | { type: 'depotChanged'; to: number }
   | { type: 'tradeChanged'; to: number }
+  | { type: 'partyChanged'; to: number }
   | { type: 'spellsChanged'; to: number }
   | { type: 'gameLoaded'; to: number };
 

@@ -127,7 +127,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 2. **Every player action is a `Command`** sent through `Controller.send(...)` → `Game.executeCommand`. UI/input never mutate game state directly. Offline = LocalController runs it locally; online = NetController sends it, the server is authoritative.
 3. **Game → view communication is via the event bus** (`core/events.ts`). Renderer, HUD and Sfx subscribe; they never poll internal fields they don't own.
 4. **Online:** server ticks at 20 Hz and sends snapshots (`VIEW_RADIUS = 20`). The client keeps a mirror Game (`simulate:false`) and applies snapshots. Messages arriving before the HUD exists go to the backlog.
-5. **Protocol:** `PROTOCOL_VERSION` (currently **8**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
+5. **Protocol:** `PROTOCOL_VERSION` (currently **9**) in `net/protocol.ts`. Bump it whenever a message shape changes; client and server must deploy together (they do — same repo, one Render service).
 6. **PvP** (server option `PVP`, passed as `GameOptions.pvp`; off offline). Rules live in `Game` (`pvpProblem`, `onPvpAttack`, `onPvpKill`); every PvP hit passes `applyDamage`, which re-checks them:
    - Players block players, like monsters do, **except inside protection zones** (temples, depots, town doors) where they pass through each other. Logging in or teleporting onto an occupied tile is allowed.
    - No attacking from inside, or into, a protection zone. Attacker and target must both be level ≥ 8.
@@ -162,6 +162,7 @@ Defined in `supabase/schema.sql`. Migrations applied so far: `thornvale_save_dat
 | Rune fields | fire 45 s, energy 30 s, poison 60 s, magic wall 20 s; tick every 2 s; not in protection zones; never saved | items.ts, Game.ts |
 | Poison | `buffs.poisoned` seconds, damage every 2 s; from venom fields and earth monster attacks (35%); cured by exana pox / antidote rune | Game.ts |
 | Music | `src/audio/Music.ts`: "The Open Road" (fields, 88 bpm), "Hearth and Lantern" (protection zones, 96 bpm), "Below the Stone" (z<0, 60 bpm); switches at phrase ends | audio/Music.ts |
+| Party | `PARTY_SHARE_RANGE = 30`, `PARTY_SHARE_BONUS = 1.2`, level rule lowest ≥ ⌈2/3 × highest⌉; parties are not saved (logout leaves the party) | Game.ts |
 | Autosave | every 30 s + on logout + on SIGTERM | server/server.ts |
 | PvP min level | `PVP_MIN_LEVEL = 1` (owner: PvP from level 1) | Game.ts |
 | White skull | `WHITE_SKULL_MS` 15 min, refreshed per attack; self-defence window also 15 min | Game.ts |
@@ -298,3 +299,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-21 | — | Removed the classic-look option: worn equipment always changes the character's look | 4 | 7 |
 | 2026-10-21 | — | Classic spell list: 54 spells (waves, beams, mass heal, cure poison, invisibility, find person, magic rope, levitate, challenge, illusion, rune conjuring from blank runes), 22 new items (blank rune + 21 runes), rune fields and magic walls, poison condition | 4 | 8 |
 | 2026-10-21 | — | Adventure music (3 original pieces synthesized live: road / town / underground, Music on/off + volume); PvP from level 1 | 4 | 8 |
+| 2026-10-21 | — | Bigger/longer speech text; party system (invite/join/leave/pass leader via right-click, Party panel, no friendly fire) with shared experience (+20%, same floor within 30 tiles, lowest level ≥ 2/3 of highest; leader switches it on/off) | 4 | 9 |

@@ -51,7 +51,7 @@ export class Overlay {
     return { x: (v.x * 0.5 + 0.5) * this.w, y: (-v.y * 0.5 + 0.5) * this.h, visible: Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2 };
   }
 
-  setLabel(id: number, anchor: THREE.Vector3 | null, name: string, hpFrac: number, opts: { player?: boolean; npc?: boolean; other?: boolean; targeted?: boolean; skull?: 0 | 1 | 2 } = {}): void {
+  setLabel(id: number, anchor: THREE.Vector3 | null, name: string, hpFrac: number, opts: { player?: boolean; npc?: boolean; other?: boolean; targeted?: boolean; skull?: 0 | 1 | 2; party?: 0 | 1 | 2 | 3 } = {}): void {
     let l = this.labels.get(id);
     if (!l) {
       const el = document.createElement('div');
@@ -97,6 +97,10 @@ export class Overlay {
     const sk = opts.skull ?? 0;
     const skCls = sk === 2 ? 'np-skull red' : sk === 1 ? 'np-skull white' : 'np-skull';
     if (l.skull.className !== skCls) l.skull.className = skCls;
+    // party shield: blue for members, flashing yellow for an open invitation
+    const pt = opts.party ?? 0;
+    l.el.classList.toggle('party-member', pt === 1);
+    l.el.classList.toggle('party-invite', pt === 2 || pt === 3);
   }
 
   removeLabel(id: number): void {

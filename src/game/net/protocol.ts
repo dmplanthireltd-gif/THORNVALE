@@ -1,6 +1,6 @@
 import { chebyshev } from '../core/types';
 import type { GameEvent } from '../core/events';
-import { BufferedIntent, type Game, type Session, type TradeView } from '../Game';
+import { BufferedIntent, type Game, type Session, type PartyView, type TradeView } from '../Game';
 import type { Inventory } from '../inventory/Inventory';
 import { EQUIP_SLOTS, isItem, type EquipSlot, type ItemStack } from '../inventory/items';
 import { isSpellId, type SpellId } from '../magic/spells';
@@ -16,7 +16,7 @@ import type { QuestLog } from '../quests/quests';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 8;
+export const PROTOCOL_VERSION = 9;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -56,6 +56,12 @@ export type Command =
   /** Drag an item onto another player: opens the trade if needed and offers that item. */
   | { c: 'tradeItem'; id: number; slot: number }
   | { c: 'fightMode'; mode: FightMode; chase: boolean }
+  | { c: 'partyInvite'; id: number }
+  | { c: 'partyRevoke'; id: number }
+  | { c: 'partyJoin'; id: number }
+  | { c: 'partyLeave' }
+  | { c: 'partyLeader'; id: number }
+  | { c: 'partyShare'; on: boolean }
   | { c: 'tradeAccept' }
   | { c: 'tradeCancel' };
 
@@ -82,6 +88,8 @@ export interface CreatureSnap {
   buffs?: Partial<Buffs>;
   /** PvP skull: 0 none, 1 white, 2 red (players only). */
   sk?: 0 | 1 | 2;
+  /** Party relation to the receiving player: 1 member, 2 invited me, 3 I invited them. */
+  pt?: 1 | 2 | 3;
   /** Creature Illusion: the monster kind this player looks like. */
   ill?: string;
 }
@@ -108,6 +116,7 @@ export interface SelfSnap {
   pvp: 0 | 1;
   sec: 0 | 1;
   pz: number;
+  party: PartyView | null;
 }
 
 export type ServerMessage =
@@ -136,6 +145,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
       },
       ill: p.illusion ?? undefined,
       sk: game.skullOf(p),
+      pt: game.partyFlag(me.id, p.id) || undefined,
     });
   }
   for (const n of game.npcs) {
@@ -155,7 +165,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     step: me.stepTime, target: me.targetId, cds: { ...me.spellCooldowns }, gcds: { ...me.groupCooldowns }, buffs: { ...me.buffs }, home: me.home,
     inv: s.inventory.toJSON(), quests: s.quests.state, dialogue: s.dialogue, bank: s.bank, spells: [...s.spells],
     depot: s.depotOpen ? s.depot : null, trade: game.tradeView(s.id),
-    pvp: game.pvp ? 1 : 0, sec: me.secure ? 1 : 0, pz: Math.ceil(me.pzLock),
+    pvp: game.pvp ? 1 : 0, sec: me.secure ? 1 : 0, pz: Math.ceil(me.pzLock), party: game.partyView(me.id),
   };
   const holes: string[] = [];
   for (const k of game.dugHoles()) holes.push(k);
@@ -173,7 +183,7 @@ export function eventAudience(e: GameEvent): number | null {
     // derived by clients from snapshots
     case 'bagCreated': case 'bagRemoved': case 'playerJoined': case 'playerLeft': case 'tileChanged':
     case 'inventoryChanged': case 'questChanged': case 'dialogueOpened': case 'dialogueClosed':
-    case 'gameLoaded': case 'equipmentChanged': case 'outfitChanged': case 'depotChanged': case 'tradeChanged': case 'spellsChanged':
+    case 'gameLoaded': case 'equipmentChanged': case 'outfitChanged': case 'depotChanged': case 'tradeChanged': case 'partyChanged': case 'spellsChanged':
       return null;
     default:
       return 'to' in e ? e.to : -1;
@@ -226,6 +236,12 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'tradeOffer': if (Array.isArray(m.slots) && num(m.gold)) game.setTradeOffer(pid, m.slots.filter(num), m.gold); break;
     case 'tradeItem': if (num(m.id) && num(m.slot)) game.offerItemTo(pid, Math.floor(m.id), Math.floor(m.slot)); break;
     case 'fightMode': if (typeof m.mode === 'string' && m.mode in FIGHT_MODE && typeof m.chase === 'boolean') game.setFightMode(pid, m.mode, m.chase); break;
+    case 'partyInvite': if (num(m.id)) game.partyInvite(pid, Math.floor(m.id)); break;
+    case 'partyRevoke': if (num(m.id)) game.partyRevoke(pid, Math.floor(m.id)); break;
+    case 'partyJoin': if (num(m.id)) game.partyJoin(pid, Math.floor(m.id)); break;
+    case 'partyLeave': game.partyLeave(pid); break;
+    case 'partyLeader': if (num(m.id)) game.partyPassLeader(pid, Math.floor(m.id)); break;
+    case 'partyShare': game.partyShare(pid, m.on === true); break;
     case 'tradeAccept': game.acceptTrade(pid); break;
     case 'tradeCancel': game.cancelTrade(pid); break;
   }
@@ -262,6 +278,8 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
         ev.emit({ type: 'equipmentChanged', id: p.id });
       }
       p.netSkull = c.sk === 1 || c.sk === 2 ? c.sk : 0;
+      if (c.pt) game.netPartyFlags.set(p.id, c.pt);
+      else game.netPartyFlags.delete(p.id);
       if (c.buffs) {
         p.buffs.haste = c.buffs.haste ? Math.max(p.buffs.haste, 1) : 0;
         p.buffs.magicShield = c.buffs.magicShield ? Math.max(p.buffs.magicShield, 1) : 0;
@@ -381,6 +399,10 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     if (JSON.stringify(extras.trade) !== JSON.stringify(me.trade)) {
       extras.trade = me.trade;
       ev.emit({ type: 'tradeChanged', to: me.id });
+    }
+    if (JSON.stringify(game.netParty) !== JSON.stringify(me.party ?? null)) {
+      game.netParty = me.party ?? null;
+      ev.emit({ type: 'partyChanged', to: me.id });
     }
   }
 }

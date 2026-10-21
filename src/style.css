@@ -444,3 +444,13 @@ select.text-input { flex: 1; }
 .np-skull.red, .battle-skull.red { display: inline; color: #ff3030; }
 .battle-row .battle-skull { flex: none; }
 .btn.tool.pvp-open { color: #ff8a6a; }
+.party .party-row { display: flex; flex-direction: column; gap: 2px; padding: 3px 4px; background: rgba(0,0,0,0.25); margin-bottom: 2px; cursor: pointer; }
+.party .party-name { font: 700 12px var(--pixel); color: #8fd0ff; }
+.party .party-share { font-size: 11px; color: var(--muted); padding: 3px 2px; }
+.party .party-share.on { color: #7dff8a; }
+.party .party-share.idle { color: #ffcf5a; }
+.party .btn.on { background: #2f5a2a; border-color: #7dff8a; }
+.nameplate.party-member .np-name::before { content: '\25C6 '; color: #5ab4ff; }
+.nameplate.party-invite .np-name::before { content: '\25C7 '; color: #ffe23a; }
+.battle-row.party .battle-name { color: #8fd0ff; }
+.battle-row.party .battle-dot { background: #5ab4ff; }

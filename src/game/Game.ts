@@ -61,6 +61,28 @@ export interface Trade {
 }
 
 /** What one side of a trade sees. */
+/** A hunting party: shared experience, no friendly fire. */
+export interface Party {
+  id: number;
+  leader: number;
+  members: number[];
+  invited: Set<number>;
+  shared: boolean;
+}
+
+/** What one player's HUD shows about their party. */
+export interface PartyView {
+  leader: number;
+  members: Array<{ id: number; name: string; level: number; hp: number; mhp: number }>;
+  shared: boolean;
+  /** Shared experience is on and the members are close enough and of similar level. */
+  sharedActive: boolean;
+}
+
+/** Party rules (classic): shared experience needs members within this range and of similar level. */
+export const PARTY_SHARE_RANGE = 30;
+export const PARTY_SHARE_BONUS = 1.2;
+
 export interface TradeView {
   partnerName: string;
   mine: { items: ItemStack[]; slots: number[]; gold: number; accepted: boolean };
@@ -185,6 +207,11 @@ export class Game implements AIContext {
   private fields = new Map<string, TempField>();
   time = 0;
   localId: number | null = null;
+  readonly parties: Party[] = [];
+  /** Online mirror: the local player's party as last sent by the server. */
+  netParty: PartyView | null = null;
+  /** Online mirror: party relation per player id (1 member, 2 invited me, 3 I invited). */
+  netPartyFlags = new Map<number, 1 | 2 | 3>();
   private nextId = 1;
 
   constructor(opts: GameOptions = {}) {
@@ -229,6 +256,7 @@ export class Game implements AIContext {
 
   removePlayer(id: number): void {
     this.cancelTrade(id, 'left the game');
+    this.partyLeave(id, true);
     if (!this.sessions.delete(id)) return;
     for (const e of this.enemies) if (e.targetId === id) e.targetId = null;
     for (const o of this.sessions.values()) if (o.player.targetId === id) o.player.targetId = null;
@@ -1163,6 +1191,7 @@ export class Game implements AIContext {
     if (p.id === t.id) return 'You may not attack yourself.';
     if (!this.pvp) return 'You may not attack players in this world.';
     if (t.dead) return 'Your target is already dead.';
+    if (this.sameParty(p.id, t.id)) return 'You may not attack a member of your party.';
     if (this.isProtected(p)) return 'You may not attack from inside a protection zone.';
     if (this.isProtected(t)) return 'You may not attack a person in a protection zone.';
     if (p.level < PVP_MIN_LEVEL) return `You need level ${PVP_MIN_LEVEL} to attack players.`;
@@ -1262,11 +1291,29 @@ export class Game implements AIContext {
     for (const s of this.sessions.values()) if (s.player.targetId === e.id) s.player.targetId = null;
 
     const total = [...e.damageBy.values()].reduce((a, b) => a + b, 0) || 1;
+    const why = `for slaying ${e.def.elite ? 'the ' + e.def.name.toLowerCase() : article(e.def.name)}`;
+    // parties with shared experience pool their members' part, add a bonus and split it evenly
+    const pooled = new Set<number>();
+    for (const party of this.parties) {
+      const share = this.shareGroup(party, e.x, e.y, e.z);
+      if (!share) continue;
+      let dealt = 0;
+      for (const m of party.members) dealt += e.damageBy.get(m) ?? 0;
+      if (dealt <= 0) continue;
+      const each = Math.max(1, Math.round((e.def.exp * dealt / total) * PARTY_SHARE_BONUS / share.length));
+      for (const m of share) {
+        const ms = this.sessions.get(m);
+        if (ms) this.grantExp(ms, each, e.id, `${why} (shared)`);
+      }
+      for (const m of party.members) pooled.add(m);
+    }
     for (const [pid, dealt] of e.damageBy) {
       const s = this.sessions.get(pid);
       if (!s) continue;
-      const exp = Math.max(1, Math.round((e.def.exp * dealt) / total));
-      this.grantExp(s, exp, e.id, `for slaying ${e.def.elite ? 'the ' + e.def.name.toLowerCase() : article(e.def.name)}`);
+      if (!pooled.has(pid)) {
+        const exp = Math.max(1, Math.round((e.def.exp * dealt) / total));
+        this.grantExp(s, exp, e.id, why);
+      }
       const changed = s.quests.onKill(e.enemyKind);
       for (const q of changed) {
         const qs = s.quests.get(q.id);
@@ -1298,6 +1345,136 @@ export class Game implements AIContext {
     bag.items.push(...items);
     bag.ttl = BAG_LIFETIME;
     return bag;
+  }
+
+  // ---------------------------------------------------------------- party
+
+  partyOf(pid: number): Party | null {
+    return this.parties.find((p) => p.members.includes(pid)) ?? null;
+  }
+
+  sameParty(a: number, b: number): boolean {
+    const p = this.partyOf(a);
+    return !!p && p.members.includes(b);
+  }
+
+  /** 1 = same party, 2 = they invited me, 3 = I invited them (for name tags and the battle list). */
+  partyFlag(viewer: number, other: number): 0 | 1 | 2 | 3 {
+    if (!this.simulate) return this.netPartyFlags.get(other) ?? 0;
+    if (viewer === other) return this.partyOf(viewer) ? 1 : 0;
+    if (this.sameParty(viewer, other)) return 1;
+    const theirs = this.partyOf(other);
+    if (theirs && theirs.leader === other && theirs.invited.has(viewer)) return 2;
+    const mine = this.partyOf(viewer);
+    if (mine && mine.leader === viewer && mine.invited.has(other)) return 3;
+    return 0;
+  }
+
+  /** Members who get shared experience for a kill at (x,y,z), or null if sharing is off or not possible. */
+  shareGroup(party: Party, x: number, y: number, z: number): number[] | null {
+    if (!party.shared) return null;
+    const near = party.members.map((m) => this.getPlayer(m)).filter((p): p is Player => !!p && !p.dead && p.z === z && chebyshev(p.x, p.y, x, y) <= PARTY_SHARE_RANGE);
+    if (near.length < 2) return null;
+    const hi = Math.max(...near.map((p) => p.level));
+    const lo = Math.min(...near.map((p) => p.level));
+    if (lo < Math.ceil((hi * 2) / 3)) return null;
+    return near.map((p) => p.id);
+  }
+
+  partyView(pid: number): PartyView | null {
+    if (!this.simulate) return this.netParty;
+    const party = this.partyOf(pid);
+    if (!party) return null;
+    const leader = this.getPlayer(party.leader);
+    return {
+      leader: party.leader,
+      members: party.members.map((m) => this.getPlayer(m)).filter((p): p is Player => !!p).map((p) => ({ id: p.id, name: p.name, level: p.level, hp: Math.ceil(p.hp), mhp: p.maxHp })),
+      shared: party.shared,
+      sharedActive: !!leader && !!this.shareGroup(party, leader.x, leader.y, leader.z),
+    };
+  }
+
+  private partyChanged(party: Party | null, extra: number[] = []): void {
+    const ids = new Set([...(party?.members ?? []), ...(party ? [...party.invited] : []), ...extra]);
+    for (const id of ids) this.events.emit({ type: 'partyChanged', to: id });
+  }
+
+  partyInvite(pid: number, otherId: number): void {
+    const a = this.getPlayer(pid), b = this.getPlayer(otherId);
+    if (!a || !b || pid === otherId) return;
+    let party = this.partyOf(pid);
+    if (party && party.leader !== pid) return this.msg(pid, 'Only the party leader can invite players.', 'warn');
+    if (this.partyOf(otherId)) return this.msg(pid, `${b.name} is already in a party.`, 'warn');
+    if (!party) {
+      party = { id: this.nextId++, leader: pid, members: [pid], invited: new Set(), shared: false };
+      this.parties.push(party);
+    }
+    party.invited.add(otherId);
+    this.msg(pid, `${b.name} has been invited to your party.`, 'info');
+    this.msg(otherId, `${a.name} invites you to a party. Right-click ${a.name} to join.`, 'info');
+    this.partyChanged(party);
+  }
+
+  partyRevoke(pid: number, otherId: number): void {
+    const party = this.partyOf(pid);
+    if (!party || party.leader !== pid || !party.invited.delete(otherId)) return;
+    this.msg(otherId, `${this.getPlayer(pid)?.name ?? 'The leader'} has withdrawn the party invitation.`, 'info');
+    this.partyChanged(party, [otherId]);
+    if (party.members.length < 2 && party.invited.size === 0) this.disband(party);
+  }
+
+  partyJoin(pid: number, leaderId: number): void {
+    const me = this.getPlayer(pid);
+    const party = this.partyOf(leaderId);
+    if (!me || !party || party.leader !== leaderId || !party.invited.has(pid)) return this.msg(pid, 'That invitation is no longer open.', 'warn');
+    if (this.partyOf(pid)) return this.msg(pid, 'Leave your party first.', 'warn');
+    party.invited.delete(pid);
+    party.members.push(pid);
+    for (const m of party.members) this.msg(m, m === pid ? `You have joined ${this.getPlayer(leaderId)?.name ?? 'the'}'s party.` : `${me.name} has joined the party.`, 'info');
+    this.partyChanged(party);
+  }
+
+  partyLeave(pid: number, quiet = false): void {
+    const party = this.partyOf(pid);
+    if (!party) return;
+    const p = this.getPlayer(pid);
+    if (p && p.pzLock > 0 && !quiet) return this.msg(pid, 'You cannot leave the party while you are in a fight.', 'warn');
+    party.members = party.members.filter((m) => m !== pid);
+    if (!quiet) this.msg(pid, 'You have left the party.', 'info');
+    for (const m of party.members) this.msg(m, `${p?.name ?? 'Someone'} has left the party.`, 'info');
+    if (party.leader === pid && party.members.length) {
+      party.leader = party.members[0];
+      party.invited.clear();
+      this.msg(party.leader, 'You are now the leader of the party.', 'info');
+    }
+    this.partyChanged(party, [pid]);
+    if (party.members.length < 2) this.disband(party);
+  }
+
+  partyPassLeader(pid: number, otherId: number): void {
+    const party = this.partyOf(pid);
+    if (!party || party.leader !== pid || !party.members.includes(otherId) || otherId === pid) return;
+    party.leader = otherId;
+    party.invited.clear();
+    for (const m of party.members) this.msg(m, `${this.getPlayer(otherId)?.name} is now the leader of the party.`, 'info');
+    this.partyChanged(party);
+  }
+
+  partyShare(pid: number, on: boolean): void {
+    const party = this.partyOf(pid);
+    if (!party) return;
+    if (party.leader !== pid) return this.msg(pid, 'Only the party leader can switch shared experience.', 'warn');
+    party.shared = on;
+    for (const m of party.members) this.msg(m, on ? 'Shared experience is on.' : 'Shared experience is off.', 'info');
+    this.partyChanged(party);
+  }
+
+  private disband(party: Party): void {
+    const i = this.parties.indexOf(party);
+    if (i < 0) return;
+    this.parties.splice(i, 1);
+    for (const m of party.members) this.msg(m, 'Your party has been disbanded.', 'info');
+    this.partyChanged(party);
   }
 
   private grantExp(s: Session, exp: number, atId: number, why: string): void {

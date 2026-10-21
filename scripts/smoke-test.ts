@@ -868,5 +868,58 @@ console.log('\nPvP');
   check(c1.player.targetId === null && !off.pvp, 'with PvP off, attacking players is refused');
 }
 
+console.log('Party and shared experience');
+{
+  const g = new Game();
+  const a = g.addPlayer('Leader', { vocation: 'knight' });
+  const b = g.addPlayer('Healer', { vocation: 'druid' });
+  const c = g.addPlayer('Stranger', { vocation: 'sorcerer' });
+  const w = g.world;
+  let at: [number, number] | null = null;
+  for (let y = 300; y < 500 && !at; y++) for (let x = 100; x < 500; x++) {
+    let ok = !w.isSafe(x, y, 0);
+    for (let dx = -2; dx <= 4 && ok; dx++) if (!w.isWalkable(x + dx, y, 0) || w.isSafe(x + dx, y, 0)) ok = false;
+    if (ok) { at = [x, y]; break; }
+  }
+  g.teleport(a.player, at![0], at![1], 0);
+  g.teleport(b.player, at![0] + 2, at![1], 0);
+  g.teleport(c.player, at![0] + 4, at![1], 0);
+  executeCommand(g, a.id, { c: 'partyInvite', id: b.id });
+  check(g.partyFlag(b.id, a.id) === 2 && g.partyFlag(a.id, b.id) === 3, 'invitation shows on both sides');
+  executeCommand(g, b.id, { c: 'partyJoin', id: a.id });
+  check(g.sameParty(a.id, b.id) && g.partyView(b.id)?.members.length === 2, 'invited player joins the party');
+  executeCommand(g, c.id, { c: 'partyJoin', id: a.id });
+  check(!g.sameParty(a.id, c.id), 'cannot join without an invitation');
+  // party members cannot hurt each other
+  executeCommand(g, a.id, { c: 'secureMode', on: false });
+  check(g.pvpProblem(a.player, b.player, false) !== null, 'no attacking party members');
+  // shared experience
+  const Ctor = g.enemies[0].constructor as new (id: number, kind: string, x: number, y: number, z: number) => (typeof g.enemies)[number];
+  const kill = () => {
+    const foe = new Ctor(999200 + Math.floor(Math.random() * 1000), 'wolf', at![0] + 1, at![1] + 1, 0);
+    g.enemies.push(foe);
+    foe.damageBy.set(a.id, foe.maxHp);
+    g.meleeAttack(a.player, foe);
+    (g as unknown as { killEnemy(e: unknown): void }).killEnemy(foe);
+    return foe.def.exp;
+  };
+  let ea = a.player.exp, eb = b.player.exp;
+  const base = kill();
+  check(a.player.exp - ea === base && b.player.exp === eb, 'without sharing only the killer gets experience');
+  executeCommand(g, b.id, { c: 'partyShare', on: true });
+  check(!g.partyView(a.id)?.shared, 'only the leader switches shared experience');
+  executeCommand(g, a.id, { c: 'partyShare', on: true });
+  check(!!g.partyView(a.id)?.sharedActive, 'shared experience is active for nearby members of similar level');
+  ea = a.player.exp; eb = b.player.exp;
+  kill();
+  const each = Math.max(1, Math.round(base * 1.2 / 2));
+  check(a.player.exp - ea === each && b.player.exp - eb === each, `shared experience is split evenly with a bonus (${each} each)`);
+  g.teleport(b.player, at![0] + 2, at![1] + 2, 0);
+  b.player.level = 100;
+  check(!g.partyView(a.id)?.sharedActive, 'sharing pauses when levels are too far apart');
+  executeCommand(g, b.id, { c: 'partyLeave' });
+  check(!g.partyOf(a.id) && !g.partyOf(b.id), 'a party of one disbands');
+}
+
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

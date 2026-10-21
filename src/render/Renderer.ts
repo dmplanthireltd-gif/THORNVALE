@@ -702,7 +702,7 @@ export class Renderer {
         this.overlay.setLabel(c.id, null, c.name, 0);
       } else {
         view.labelAnchor(anchor);
-        const opts = { player: c === p, npc: c.kind === 'npc', other: c.kind === 'player' && c !== p, targeted: p.targetId === c.id, skull: c instanceof Player ? g.skullOf(c) : 0 as const };
+        const opts = { player: c === p, npc: c.kind === 'npc', other: c.kind === 'player' && c !== p, targeted: p.targetId === c.id, skull: c instanceof Player ? g.skullOf(c) : 0 as const, party: c instanceof Player ? g.partyFlag(p.id, c.id) : 0 as const };
         this.overlay.setLabel(c.id, anchor, c.name, c.hp / c.maxHp, opts);
       }
     };

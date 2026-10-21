@@ -99,6 +99,8 @@ export class HUD {
   private colB!: HTMLDivElement;
   private bottom!: HTMLDivElement;
   private battleEl!: HTMLDivElement;
+  private partyEl!: HTMLDivElement;
+  private partyKey = '';
   private battleRows = new Map<number, { row: HTMLDivElement; fill: HTMLDivElement; name: HTMLSpanElement; skull: HTMLSpanElement }>();
   private battleTimer = 0;
   private worldMap!: WorldMapView;
@@ -187,6 +189,9 @@ export class HUD {
         break;
       case 'tradeChanged':
         if (e.to === me) this.renderTrade();
+        break;
+      case 'partyChanged':
+        if (e.to === me) this.partyKey = '';
         break;
       case 'spellsChanged':
         if (e.to === me) {
@@ -359,6 +364,10 @@ export class HUD {
       if (battle.classList.contains('folded') || !this.battleEl.style.height) return;
       try { localStorage.setItem('thornvale.battleHeight', this.battleEl.style.height); } catch { /* storage off */ }
     }).observe(this.battleEl);
+
+    // party: members with health, shared experience switch
+    this.partyEl = el('div', 'panel party', this.colB);
+    this.partyEl.hidden = true;
 
     const inv = el('div', 'panel inventory', this.colB);
     el('div', 'panel-title', inv, 'Pockets');
@@ -635,8 +644,20 @@ export class HUD {
     if (kind === 'player') {
       if (g.pvp) items.push({ label: `Attack ${c.name}`, run: () => this.ctl.send({ c: 'attack', id }) });
       items.push({ label: `Trade with ${c.name}`, run: () => this.ctl.send({ c: 'tradeRequest', id }) });
+      const flag = g.partyFlag(this.ctl.pid, id);
+      const mine = g.partyView(this.ctl.pid);
+      const lead = !mine || mine.leader === this.ctl.pid;
+      if (flag === 2) items.push({ label: `Join ${c.name}'s party`, run: () => this.ctl.send({ c: 'partyJoin', id }) });
+      else if (flag === 3) items.push({ label: `Revoke ${c.name}'s invitation`, run: () => this.ctl.send({ c: 'partyRevoke', id }) });
+      else if (flag === 0 && lead) items.push({ label: `Invite ${c.name} to party`, run: () => this.ctl.send({ c: 'partyInvite', id }) });
+      if (flag === 1 && mine?.leader === this.ctl.pid) items.push({ label: `Pass leadership to ${c.name}`, run: () => this.ctl.send({ c: 'partyLeader', id }) });
       items.push({ label: `Heal ${c.name} (exura sio)`, run: () => this.ctl.send({ c: 'cast', spell: 'exura_sio', param: c.name }), disabled: !this.s.spells.has('exura_sio') });
       items.push({ label: 'Message…', run: () => this.focusChat(`${c.name}, `) });
+    }
+    const pv = g.partyView(this.ctl.pid);
+    if (pv) {
+      if (pv.leader === this.ctl.pid) items.push({ label: pv.shared ? 'Disable shared experience' : 'Enable shared experience', run: () => this.ctl.send({ c: 'partyShare', on: !pv.shared }) });
+      items.push({ label: 'Leave party', run: () => this.ctl.send({ c: 'partyLeave' }) });
     }
     items.push({ label: 'Look', run: () => this.log(`You see ${this.renderer.describeHover() || c.name}.`, 'info') });
     this.showMenu(items, x, y);
@@ -859,6 +880,7 @@ export class HUD {
         const sk = pl ? g.skullOf(pl) : 0;
         const skCls = sk === 2 ? 'battle-skull red' : sk === 1 ? 'battle-skull white' : 'battle-skull';
         if (r.skull.className !== skCls) r.skull.className = skCls;
+        r.row.classList.toggle('party', g.partyFlag(this.ctl.pid, c.id) === 1);
       }
       const frac = c.hp / c.maxHp;
       r.fill.style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`;
@@ -1531,8 +1553,43 @@ export class HUD {
 
   // ================================================================ per frame
 
+  /** Party panel: rebuilt when membership changes, health bars every frame. */
+  private renderParty(): void {
+    const pv = this.ctl.game.partyView(this.ctl.pid);
+    this.partyEl.hidden = !pv;
+    if (!pv) { this.partyKey = ''; return; }
+    const key = JSON.stringify([pv.leader, pv.shared, pv.sharedActive, pv.members.map((m) => [m.id, m.name, m.level])]);
+    if (key !== this.partyKey) {
+      this.partyKey = key;
+      const b = this.partyEl;
+      b.replaceChildren();
+      el('div', 'panel-title', b, 'Party');
+      for (const m of pv.members) {
+        const row = el('div', 'party-row', b);
+        row.dataset.pid = String(m.id);
+        el('span', 'party-name', row, `${m.id === pv.leader ? '★ ' : ''}${m.name} (${m.level})`);
+        const bar = el('div', 'battle-bar', row);
+        el('div', 'battle-fill party-fill', bar);
+        if (m.id !== this.ctl.pid) row.addEventListener('mousedown', (e) => { e.preventDefault(); this.creatureMenu('player', m.id, e.clientX, e.clientY); });
+      }
+      const st = el('div', `party-share${pv.shared ? (pv.sharedActive ? ' on' : ' idle') : ''}`, b,
+        pv.shared ? (pv.sharedActive ? 'Shared experience: active (+20%)' : 'Shared experience: on, inactive (too far apart or levels too different)') : 'Shared experience: off');
+      st.title = 'Members on the same floor within 30 tiles of the kill share its experience evenly, with a 20% bonus. The lowest level must be at least 2/3 of the highest.';
+      const row = el('div', 'trade-actions', b);
+      if (pv.leader === this.ctl.pid) button(row, pv.shared ? 'Share exp: ON' : 'Share exp: OFF', () => this.ctl.send({ c: 'partyShare', on: !pv.shared }), `btn small${pv.shared ? ' on' : ''}`);
+      button(row, 'Leave', () => this.ctl.send({ c: 'partyLeave' }), 'btn small');
+    }
+    for (const m of pv.members) {
+      const live = this.ctl.game.getPlayer(m.id);
+      const frac = live ? live.hp / live.maxHp : m.hp / Math.max(1, m.mhp);
+      const fill = this.partyEl.querySelector(`.party-row[data-pid="${m.id}"] .party-fill`) as HTMLDivElement | null;
+      if (fill) { fill.style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`; fill.style.background = hpColor(frac); }
+    }
+  }
+
   update(dt: number): void {
     this.music?.update();
+    this.renderParty();
     const s = this.s;
     const p = s.player;
     const g = this.ctl.game;
