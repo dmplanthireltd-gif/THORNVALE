@@ -2,12 +2,13 @@ import { DEFAULT_OUTFIT, OUTFIT_TYPES, PALETTE, type Outfit, type OutfitType } f
 import { VOCATIONS, VOCATION_IDS, type Vocation } from '../game/player/vocations';
 import type { SaveSystem } from '../game/save/SaveSystem';
 import { button, el } from './dom';
+import { OnlineLogin, type OnlinePick } from './OnlineLogin';
 import { OutfitPreview } from './OutfitPreview';
 
 export type StartChoice =
   | { mode: 'continue' }
   | { mode: 'new'; name: string; vocation: Vocation; outfit: Outfit }
-  | { mode: 'online'; url: string; name: string; password: string; vocation: Vocation; outfit: Outfit };
+  | ({ mode: 'online' } & OnlinePick);
 
 const NAME_RE = /^[A-Za-z][A-Za-z '-]{1,18}[A-Za-z]$/;
 const VOC_OUTFIT: Record<Vocation, OutfitType> = { knight: 'knight', paladin: 'ranger', sorcerer: 'mage', druid: 'mage' };
@@ -97,51 +98,15 @@ export class StartScreen {
       if (n) this.pick({ mode: 'new', name: n, vocation: this.vocation, outfit: { ...this.outfit } });
     }, 'btn big');
 
-    const online = el('div', 'start-section login', card);
-    el('div', 'panel-title', online, 'Play online — log in');
-    el('div', 'hint', online, 'Log in with your character name and password. If the name is new, the character is created with the vocation and outfit chosen below, and the password protects it from then on.');
-    const lrow = el('div', 'login-grid', online);
-    const lname = el('input', 'text-input', lrow);
-    lname.placeholder = 'Character name';
-    lname.maxLength = 20;
-    lname.autocomplete = 'username';
-    try {
-      lname.value = globalThis.localStorage?.getItem('thornvale.lastLogin') ?? '';
-    } catch {
-      /* ignore */
-    }
-    const pass = el('input', 'text-input', lrow);
-    pass.type = 'password';
-    pass.placeholder = 'Password (at least 4 characters)';
-    pass.maxLength = 64;
-    pass.autocomplete = 'current-password';
-    const url = el('input', 'text-input', lrow);
-    url.value = defaultServerUrl();
-    url.spellcheck = false;
-    url.title = 'Server address';
-    const login = () => {
-      const n = this.validName(lname.value);
-      if (!n) return;
-      if (pass.value.length < 4) return this.setError('Choose a password of at least 4 characters.');
-      try {
-        globalThis.localStorage?.setItem('thornvale.lastLogin', n);
-      } catch {
-        /* ignore */
-      }
-      this.pick({ mode: 'online', url: url.value.trim(), name: n, password: pass.value, vocation: this.vocation, outfit: { ...this.outfit } });
-    };
-    button(lrow, 'Log in', login, 'btn');
-    for (const i of [lname, pass, url]) {
-      i.addEventListener('keydown', (e) => {
-        e.stopPropagation();
-        if (e.key === 'Enter') login();
-      });
-    }
+    const online = new OnlineLogin(card, {
+      serverUrl: defaultServerUrl(),
+      look: () => ({ vocation: this.vocation, outfit: { ...this.outfit } }),
+      validName: (raw) => this.validName(raw),
+      play: (p) => this.pick({ mode: 'online', ...p }),
+      message: (t) => this.setError(t),
+    });
     // on a hosted server, logging in is the main thing: show it first
-    if (servedByServer()) {
-      card.insertBefore(online, card.children[2] ?? null);
-      url.hidden = true;
-    }
+    if (servedByServer()) card.insertBefore(online.root, card.children[2] ?? null);
 
     this.errorEl = el('div', 'start-error', card);
     name.addEventListener('keydown', (e) => e.stopPropagation());

@@ -28,6 +28,10 @@ services:
       # Render asks for these two values when you create or sync the Blueprint
       # (Supabase dashboard → Project Settings → API / API Keys). Run supabase/schema.sql first.
       - key: SUPABASE_URL
-        sync: false
+        value: https://gvknnzdhxwmqimaoiref.supabase.co
+      # public key used by the title screen for email login (safe to share)
+      - key: SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_Do-DXlXiAHd6f8xLCFo_qA_JHrsygW3
+      # SECRET: paste it in the Render dashboard, never in this file
       - key: SUPABASE_SERVICE_KEY
         sync: false

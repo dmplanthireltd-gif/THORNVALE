@@ -19,8 +19,19 @@ const tables: Record<string, Row[]> = { accounts: [], characters: [], character_
 const keys: Record<string, string> = { accounts: 'name_key', characters: 'name_key' };
 let sawApiKey = true;
 
+/** Access tokens the fake login service accepts: token → user. */
+export const USERS: Record<string, { id: string; email: string }> = {
+  'tok-ann': { id: '11111111-1111-1111-1111-111111111111', email: 'ann@example.com' },
+  'tok-ben': { id: '22222222-2222-2222-2222-222222222222', email: 'ben@example.com' },
+};
+
 const mock = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
+  if (url.pathname === '/auth/v1/user') {
+    const u = USERS[String(req.headers.authorization ?? '').replace('Bearer ', '')];
+    res.writeHead(u ? 200 : 401, { 'content-type': 'application/json' }).end(JSON.stringify(u ?? { msg: 'invalid token' }));
+    return;
+  }
   if (req.headers.apikey !== 'eyJ.test') sawApiKey = false;
   const table = url.pathname.replace('/rest/v1/', '');
   const rows = tables[table];
@@ -63,8 +74,12 @@ const mock = createServer((req, res) => {
   });
 });
 
+export function startMock(port: number): Promise<void> {
+  return new Promise<void>((r) => mock.listen(port, r));
+}
+
 async function main(): Promise<void> {
-  await new Promise<void>((r) => mock.listen(54329, r));
+  await startMock(54329);
   const st = new SupabaseStorage('http://localhost:54329/', 'eyJ.test');
   await st.check();
   check(true, 'connects and finds the three tables');
@@ -97,7 +112,9 @@ async function main(): Promise<void> {
   process.exit(failed ? 1 : 0);
 }
 
-main().catch((e) => {
+// run only when started directly (auth-test.ts imports the mock from here)
+const argv1 = (globalThis as unknown as { process: { argv: string[] } }).process.argv[1] ?? '';
+if (argv1.endsWith('storage-test.ts')) main().catch((e) => {
   console.error(e);
   process.exit(1);
 });

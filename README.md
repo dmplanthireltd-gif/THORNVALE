@@ -30,7 +30,11 @@ Free plan notes: the service sleeps after 15 minutes without players and takes a
 1. Create a free project at [supabase.com](https://supabase.com).
 2. In the project open **SQL Editor → New query**, paste the contents of `supabase/schema.sql` and click **Run**. This creates `accounts`, `characters` and `character_backups` (row level security on, no public access).
 3. In **Project Settings → API Keys** copy the **Project URL** and the **secret** key (`sb_secret_…`, or the legacy `service_role` key). Never put this key in the browser or in Git.
-4. In Render open the service → **Environment** and add `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`, then save. Render restarts the server; its log shows `Saves: Supabase database`.
+4. In Render open the service → **Environment** and add `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (secret) and `SUPABASE_PUBLISHABLE_KEY` (public, `sb_publishable_…`), then save. Render restarts the server; its log shows `Login: email (Supabase Auth)` and `Saves: Supabase database`.
+
+### Email accounts
+
+With `SUPABASE_PUBLISHABLE_KEY` set, players sign up and log in with email + password (Supabase Auth), get a confirmation email, can reset a forgotten password by email, and keep up to `MAX_CHARACTERS` (5) characters per account; a character name belongs to one account. In Supabase → **Authentication → URL Configuration** set the **Site URL** to your game address (e.g. `https://thornvale.onrender.com`) so email links come back to the game. Supabase's built-in mailer only delivers to members of your Supabase team and a few emails per hour — for real players add a free SMTP provider (e.g. Resend or Brevo) under **Authentication → Emails → SMTP Settings**. Without the publishable key the server falls back to character name + password logins.
 
 Locally the same two variables switch `npm run server` to Supabase; without them saves go to `server/data/*.json`.
 

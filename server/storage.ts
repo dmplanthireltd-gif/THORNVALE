@@ -25,6 +25,14 @@ export interface StoredCharacter {
   data: SaveData;
   version: number;
   updated: number;
+  /** Supabase Auth user that owns it (email login), when known. */
+  owner?: string | null;
+}
+
+export interface CharacterSummary {
+  name: string;
+  level: number;
+  vocation: string;
 }
 
 export interface Storage {
@@ -33,7 +41,9 @@ export interface Storage {
   createAccount(key: string, a: Account): Promise<void>;
   touchLogin(key: string): Promise<void>;
   getCharacter(key: string): Promise<StoredCharacter | null>;
-  saveCharacter(key: string, name: string, data: SaveData): Promise<void>;
+  saveCharacter(key: string, name: string, data: SaveData, owner?: string | null): Promise<void>;
+  /** Characters owned by an email-login user. */
+  listCharacters(owner: string): Promise<CharacterSummary[]>;
   backupCharacter(key: string, data: unknown, version: number, reason: string): Promise<void>;
   /** Every character (for export / migration scripts). */
   allCharacters(): Promise<Array<{ key: string } & StoredCharacter>>;
@@ -89,12 +99,22 @@ export class FileStorage implements Storage {
   async getCharacter(key: string): Promise<StoredCharacter | null> {
     const d = this.chars[key];
     if (!d) return null;
-    return { name: d.player?.name ?? key, data: d, version: typeof d.version === 'number' ? d.version : 1, updated: d.savedAt ?? 0 };
+    return { name: d.player?.name ?? key, data: d, version: typeof d.version === 'number' ? d.version : 1, updated: d.savedAt ?? 0, owner: this.owners[key] ?? null };
   }
 
-  async saveCharacter(key: string, _name: string, data: SaveData): Promise<void> {
+  private owners: Record<string, string> = {};
+
+  async saveCharacter(key: string, _name: string, data: SaveData, owner?: string | null): Promise<void> {
     this.chars[key] = data;
+    if (owner) this.owners[key] = owner;
     this.dirty = true;
+  }
+
+  async listCharacters(owner: string): Promise<CharacterSummary[]> {
+    return Object.entries(this.owners).filter(([, o]) => o === owner).map(([k]) => {
+      const d = this.chars[k];
+      return { name: d?.player?.name ?? k, level: d?.player?.level ?? 1, vocation: d?.player?.vocation ?? 'knight' };
+    });
   }
 
   async backupCharacter(key: string, data: unknown, version: number, reason: string): Promise<void> {
@@ -174,11 +194,17 @@ export class SupabaseStorage implements Storage {
     const rows = (await this.req('GET', `characters?name_key=eq.${encodeURIComponent(key)}&select=*`)) as Array<Record<string, unknown>>;
     const r = rows?.[0];
     if (!r) return null;
-    return { name: String(r.display_name), data: r.data as SaveData, version: Number(r.save_version) || 1, updated: Date.parse(String(r.updated_at)) || 0 };
+    return { name: String(r.display_name), data: r.data as SaveData, version: Number(r.save_version) || 1, updated: Date.parse(String(r.updated_at)) || 0, owner: (r.owner_id as string | null) ?? null };
   }
 
-  async saveCharacter(key: string, name: string, data: SaveData): Promise<void> {
+  async listCharacters(owner: string): Promise<CharacterSummary[]> {
+    const rows = (await this.req('GET', `characters?owner_id=eq.${encodeURIComponent(owner)}&select=display_name,level,vocation&order=updated_at.desc`)) as Array<Record<string, unknown>>;
+    return rows.map((r) => ({ name: String(r.display_name), level: Number(r.level) || 1, vocation: String(r.vocation ?? 'knight') }));
+  }
+
+  async saveCharacter(key: string, name: string, data: SaveData, owner?: string | null): Promise<void> {
     await this.req('POST', 'characters?on_conflict=name_key', {
+      ...(owner ? { owner_id: owner } : {}),
       name_key: key,
       display_name: name,
       data,

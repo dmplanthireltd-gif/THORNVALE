@@ -34,6 +34,11 @@ const TICK = 1 / 20;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS ?? 50);
 /** Test commands (/level, /item, …): ALLOW_ADMIN=1 for everyone, or ADMINS="Name One,Name Two". */
 const ALLOW_ADMIN = process.env.ALLOW_ADMIN === '1';
+/** Email login with password recovery (Supabase Auth). Without it, players log in with name + password. */
+const SUPABASE_URL = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
+const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? '';
+const EMAIL_AUTH = !!(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+const MAX_CHARACTERS_PER_ACCOUNT = Number(process.env.MAX_CHARACTERS ?? 5);
 const ADMINS = new Set((process.env.ADMINS ?? '').split(',').map((n) => n.trim().toLowerCase()).filter(Boolean));
 
 // ------------------------------------------------------------------ storage and accounts
@@ -59,6 +64,22 @@ async function authenticate(name: string, password: string): Promise<'ok' | 'cre
   storage.touchLogin(key).catch(() => {});
   return 'ok';
 }
+
+/** Checks a Supabase Auth access token and returns the user it belongs to. */
+async function verifyToken(token: string): Promise<{ id: string; email: string } | null> {
+  if (!token || token.length > 4096) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}` } });
+    if (!res.ok) return null;
+    const u = (await res.json()) as { id?: string; email?: string };
+    return u.id ? { id: u.id, email: u.email ?? '' } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Which Supabase Auth user owns each online session (email login). */
+const sessionOwner = new Map<number, string>();
 
 /** Throttles password guessing per connection address. */
 const failedLogins = new Map<string, { count: number; until: number }>();
@@ -89,7 +110,7 @@ function saveCharacter(s: Session): Promise<void> {
   const data = game.serialize(s.id);
   const prev = pendingSaves.get(key) ?? Promise.resolve();
   const next = prev
-    .then(() => storage.saveCharacter(key, s.player.name, data))
+    .then(() => storage.saveCharacter(key, s.player.name, data, sessionOwner.get(s.id) ?? null))
     .catch((err) => console.error(`Saving ${s.player.name} failed:`, err));
   pendingSaves.set(key, next);
   void next.then(() => {
@@ -125,7 +146,13 @@ async function onHello(c: Client, m: Extract<ClientMessage, { t: 'hello' }>): Pr
     return;
   }
   const password = typeof m.password === 'string' ? m.password : '';
-  if (password.length < 4 || password.length > 64) {
+  if (EMAIL_AUTH) {
+    if (typeof m.token !== 'string' || !m.token) {
+      send(c, { t: 'error', text: 'Please log in with your email first.' });
+      c.ws.close(4004);
+      return;
+    }
+  } else if (password.length < 4 || password.length > 64) {
     send(c, { t: 'error', text: 'Passwords are 4–64 characters.' });
     c.ws.close(4004);
     return;
@@ -156,7 +183,28 @@ async function onHello(c: Client, m: Extract<ClientMessage, { t: 'hello' }>): Pr
 
 async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>, name: string, password: string): Promise<void> {
   const key = name.toLowerCase();
-  const auth = await authenticate(name, password);
+  let owner: string | null = null;
+  if (EMAIL_AUTH) {
+    const user = await verifyToken(String(m.token));
+    if (!user) {
+      send(c, { t: 'error', text: 'Your login has expired. Please log in again.' });
+      c.ws.close(4007);
+      return;
+    }
+    owner = user.id;
+    const existing = await storage.getCharacter(key);
+    if (existing && existing.owner !== user.id) {
+      send(c, { t: 'error', text: `The name ${name} is already taken. Pick another name.` });
+      c.ws.close(4008);
+      return;
+    }
+    if (!existing && (await storage.listCharacters(user.id)).length >= MAX_CHARACTERS_PER_ACCOUNT) {
+      send(c, { t: 'error', text: `An account can have at most ${MAX_CHARACTERS_PER_ACCOUNT} characters.` });
+      c.ws.close(4009);
+      return;
+    }
+  }
+  const auth = EMAIL_AUTH ? 'ok' : await authenticate(name, password);
   if (auth === 'wrong') {
     const f = failedLogins.get(c.addr) ?? { count: 0, until: 0 };
     f.count++;
@@ -210,6 +258,7 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
   }
   const s = game.addPlayer(name, { intent: c.intent, vocation: isVocation(m.vocation) ? m.vocation : 'knight' });
   c.session = s;
+  if (owner) sessionOwner.set(s.id, owner);
   s.admin = ALLOW_ADMIN || ADMINS.has(key);
   const saved = !!stored;
   if (stored) {
@@ -269,7 +318,7 @@ function onClose(c: Client): void {
   clients.delete(c);
   const s = c.session;
   if (!s) return;
-  void saveCharacter(s);
+  void saveCharacter(s).then(() => sessionOwner.delete(s.id));
   game.removePlayer(s.id);
   for (const other of game.sessions.values()) game.msg(other.id, `${s.player.name} has left.`, 'info');
   console.log(`- ${s.player.name} (${game.sessions.size} online)`);
@@ -282,8 +331,39 @@ const TYPES: Record<string, string> = {
   '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 };
 
+function json(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type' });
+  res.end(JSON.stringify(body));
+}
+
+/** Small JSON API used by the title screen. */
+async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  if (req.method === 'OPTIONS') return json(res, 204, null);
+  if (url.pathname === '/api/auth-config') {
+    // the publishable key is meant for browsers; the secret key never leaves the server
+    return json(res, 200, EMAIL_AUTH ? { mode: 'email', url: SUPABASE_URL, key: SUPABASE_PUBLISHABLE_KEY, maxCharacters: MAX_CHARACTERS_PER_ACCOUNT } : { mode: 'local' });
+  }
+  if (url.pathname === '/api/characters') {
+    if (!EMAIL_AUTH) return json(res, 404, { error: 'Email login is not enabled on this server.' });
+    const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    const user = await verifyToken(token);
+    if (!user) return json(res, 401, { error: 'Not logged in.' });
+    try {
+      return json(res, 200, { email: user.email, characters: await storage.listCharacters(user.id) });
+    } catch (err) {
+      console.error('Listing characters failed:', err);
+      return json(res, 500, { error: 'Could not load your characters.' });
+    }
+  }
+  json(res, 404, { error: 'Not found' });
+}
+
 function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   const url = new URL(req.url ?? '/', 'http://x');
+  if (url.pathname.startsWith('/api/')) {
+    void handleApi(req, res, url);
+    return;
+  }
   if (url.pathname === '/status') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ online: game.sessions.size, players: game.players().map((p) => ({ name: p.name, level: p.level })) }));
@@ -366,6 +446,7 @@ process.on('SIGINT', () => void shutdown());
 process.on('SIGTERM', () => void shutdown());
 
 storage = await openStorage(DATA_FILE);
+console.log(`Login: ${EMAIL_AUTH ? 'email (Supabase Auth)' : 'character name + password'}`);
 console.log(`Saves: ${storage.kind === 'supabase' ? 'Supabase database' : `files in ${dirname(DATA_FILE)}`} (save format v${SAVE_VERSION})`);
 if (storage.kind !== 'supabase' && process.env.RENDER) {
   console.warn('WARNING: running on Render without SUPABASE_URL / SUPABASE_SERVICE_KEY — characters are lost on every restart.');

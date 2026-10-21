@@ -9,10 +9,11 @@
     ]
   },
   "include": [
-    "server",
-    "src/game",
+    "scripts/auth-test.ts",
     "scripts/saves.ts",
-    "scripts/storage-test.ts"
+    "scripts/storage-test.ts",
+    "server",
+    "src/game"
   ],
   "exclude": []
 }

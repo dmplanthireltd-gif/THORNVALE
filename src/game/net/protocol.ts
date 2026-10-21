@@ -52,7 +52,7 @@ export type Command =
   | { c: 'tradeCancel' };
 
 export type ClientMessage =
-  | { t: 'hello'; v: number; name: string; password?: string; outfit?: Outfit; vocation?: Vocation }
+  | { t: 'hello'; v: number; name: string; password?: string; token?: string; outfit?: Outfit; vocation?: Vocation }
   | { t: 'intent'; dx: number; dy: number }
   | { t: 'tap'; dx: number; dy: number }
   | ({ t: 'cmd' } & Command);

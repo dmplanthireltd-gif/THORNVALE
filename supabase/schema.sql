@@ -2,6 +2,7 @@
 -- Only the game server (using the secret / service_role key) may read or write these tables:
 -- row level security is on and there are no public policies.
 
+-- Name + password logins, used only when the server runs without Supabase Auth (no SUPABASE_PUBLISHABLE_KEY).
 create table if not exists public.accounts (
   name_key      text primary key,              -- character name in lower case
   display_name  text not null,
@@ -12,7 +13,8 @@ create table if not exists public.accounts (
 );
 
 create table if not exists public.characters (
-  name_key      text primary key references public.accounts (name_key) on delete cascade,
+  name_key      text primary key,
+  owner_id      uuid references auth.users (id) on delete set null,   -- email login (Supabase Auth) that owns it
   display_name  text not null,
   data          jsonb not null,                -- the full save: level, exp, backpack, depot, bank, quests, spells…
   save_version  integer not null,              -- format version (src/game/save/migrate.ts)
@@ -33,6 +35,7 @@ create table if not exists public.character_backups (
 );
 
 create index if not exists character_backups_name_idx on public.character_backups (name_key, created_at desc);
+create index if not exists characters_owner_idx on public.characters (owner_id);
 create index if not exists characters_level_idx on public.characters (level desc);
 
 alter table public.accounts enable row level security;

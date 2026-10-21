@@ -26,6 +26,7 @@
     "scripts"
   ],
   "exclude": [
+    "scripts/auth-test.ts",
     "scripts/saves.ts",
     "scripts/storage-test.ts"
   ]

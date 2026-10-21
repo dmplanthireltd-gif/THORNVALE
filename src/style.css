@@ -422,3 +422,7 @@ select.text-input { flex: 1; }
 /* other players: name in white with a coloured health bar, like the classic client */
 .nameplate.other-player .np-name { color: #f4f4f4 !important; }
 .battle-row.k-player .battle-name { color: #f4f4f4; }
+
+.login-body { display: flex; flex-direction: column; gap: 8px; }
+.login-who { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--gold); }
+.char-list { display: flex; flex-direction: column; gap: 4px; }
