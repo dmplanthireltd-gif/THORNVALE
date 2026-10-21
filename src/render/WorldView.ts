@@ -1172,11 +1172,12 @@ export class WorldView {
     const want = new Set<number>();
     for (const t of watch) {
       const tx = Math.round(t.x), ty = Math.round(t.y);
-      for (let dy = -1; dy <= 3; dy++) for (let dx = -1; dx <= 1; dx++) {
+      // only trees between the camera (south) and the player fade; the tree you chop beside or above you stays solid
+      for (let dy = 1; dy <= 3; dy++) for (let dx = -1; dx <= 1; dx++) {
         const x = tx + dx, y = ty + dy;
         if (!w.inBounds(x, y)) continue;
         const o = w.getObj(x, y, fv.z);
-        if (o === Obj.Tree || o === Obj.Pine || o === Obj.JungleTree || o === Obj.Palm || (o === Obj.Cliff && dy >= 1)) want.add(w.idx(x, y));
+        if (o === Obj.Tree || o === Obj.Pine || o === Obj.JungleTree || o === Obj.Palm || o === Obj.Cliff) want.add(w.idx(x, y));
       }
     }
     // restore what no longer needs fading (and everything when the floor changed)
