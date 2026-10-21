@@ -6,7 +6,7 @@ import { bonusParts } from '../game/inventory/sets';
 import { describeItem, equipSlotFor, ITEMS, itemDef, runeGroup, runeIsAimed, type EquipSlot, type ItemStack } from '../game/inventory/items';
 import { GROUP_COOLDOWN, isSpellId, SPELL_LIST, SPELLS, type CooldownGroup, type SpellDef, type SpellId } from '../game/magic/spells';
 import { NPCS } from '../game/npc/npcs';
-import { OUTFIT_PARTS, OUTFIT_TYPES, PALETTE, PALETTE_COLS, PALETTE_ROWS, type Outfit, type OutfitPart } from '../game/player/outfits';
+import { encodeAppearance } from '../game/player/appearance';
 import { PREMIUM_DEPOT_SLOTS } from '../game/premium/premium';
 import { Enemy } from '../game/enemies/Enemy';
 import { expForLevel, type FightMode } from '../game/player/Player';
@@ -32,7 +32,7 @@ type HudLayout = 'flanks' | 'full';
 import type { Music } from '../audio/Music';
 import { Minimap } from './Minimap';
 import { WorldMapView } from './WorldMapView';
-import { OutfitPreview } from './OutfitPreview';
+import { CharacterDesigner } from './CharacterDesigner';
 import { expStageLine, isClassic, stagesTable } from '../game/progression/stages';
 
 /** Where a dragged item comes from. */
@@ -129,7 +129,7 @@ export class HUD {
   private battleTimer = 0;
   private worldMap!: WorldMapView;
   private lastRegion = '';
-  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'craft' | 'outfit' | 'spells' | 'quests' | 'help' | 'dev' | 'inspect' | 'friends' | 'settings' | 'corpse', Win> = {} as never;
+  private wins: Record<'dialog' | 'depot' | 'trade' | 'market' | 'craft' | 'appearance' | 'spells' | 'quests' | 'help' | 'dev' | 'inspect' | 'friends' | 'settings' | 'corpse', Win> = {} as never;
   /** Station window state that survives redraws: chosen tab (metal) and the "Make X" amount. */
   private cw = { tab: '', qty: 10, station: '' };
   private skillsEl!: HTMLDivElement;
@@ -137,9 +137,8 @@ export class HUD {
   private skillsTimer = 0;
   /** Market window state that survives redraws. */
   private mk = { tab: 'browse' as 'browse' | 'sell' | 'mine', search: '', sel: null as null | { from: 'depot' | 'inv'; index: number }, qty: 1, price: 0, buyQty: new Map<string, number>(), dirty: false };
-  private outfitDraft: Outfit | null = null;
-  private outfitPart: OutfitPart = 'head';
-  private preview: OutfitPreview | null = null;
+  private designer: CharacterDesigner | null = null;
+  private designerGear = true;
   private pixelBtn!: HTMLButtonElement;
   private pvpBtn!: HTMLButtonElement;
   private lvlBadge!: HTMLDivElement;
@@ -540,7 +539,7 @@ export class HUD {
     button(tools, 'Spells', () => this.toggleWin('spells'), 'btn tool');
     button(tools, 'Quests', () => this.toggleWin('quests'), 'btn tool');
     this.friendsBtn = button(tools, 'Friends', () => { this.toggleWin('friends'); this.renderFriends(); }, 'btn tool');
-    button(tools, 'Outfit', () => this.toggleWin('outfit'), 'btn tool');
+    button(tools, 'Appearance', () => this.toggleWin('appearance'), 'btn tool');
     button(tools, 'Help', () => this.toggleWin('help'), 'btn tool');
     button(tools, 'Settings', () => this.toggleWin('settings'), 'btn tool');
     this.buildSettings();
@@ -1264,7 +1263,7 @@ export class HUD {
     this.makeWin('trade', 'Trade', 'trade-win');
     this.makeWin('market', 'Market', 'market-win');
     this.makeWin('craft', 'Production', 'craft-win');
-    this.makeWin('outfit', 'Outfit', 'outfit-win');
+    this.makeWin('appearance', 'Appearance', 'appearance-win');
     this.makeWin('spells', 'Spellbook', 'spells-win');
     this.makeWin('quests', 'Quest Log', 'quests-win');
     this.makeWin('help', 'How to play', 'help-win');
@@ -1284,7 +1283,7 @@ export class HUD {
     w.root.style.zIndex = String(++this.zTop);
     if (key === 'spells') this.renderSpells();
     if (key === 'quests') this.renderQuests();
-    if (key === 'outfit') this.renderOutfit(true);
+    if (key === 'appearance') this.renderAppearance();
     if (key === 'dev') this.renderDev();
   }
 
@@ -1298,9 +1297,9 @@ export class HUD {
     if (key === 'trade' && this.ctl.trade()) this.ctl.send({ c: 'tradeCancel' });
     if (key === 'market' && this.ctl.market()) this.ctl.send({ c: 'marketClose' });
     if (key === 'craft' && this.ctl.craft()) this.ctl.send({ c: 'craftClose' });
-    if (key === 'outfit') {
-      this.preview?.dispose();
-      this.preview = null;
+    if (key === 'appearance') {
+      this.designer?.dispose();
+      this.designer = null;
     }
   }
 
@@ -1337,7 +1336,7 @@ export class HUD {
       this.root.classList.remove('assigning');
       return true;
     }
-    for (const k of ['settings', 'dev', 'help', 'outfit', 'spells', 'quests', 'craft', 'market', 'trade', 'depot', 'dialog'] as const) {
+    for (const k of ['settings', 'dev', 'help', 'appearance', 'spells', 'quests', 'craft', 'market', 'trade', 'depot', 'dialog'] as const) {
       if (this.wins[k].open) {
         this.closeWin(k);
         return true;
@@ -1841,80 +1840,58 @@ export class HUD {
     button(row, 'Cancel trade', () => this.ctl.send({ c: 'tradeCancel' }), 'btn');
   }
 
-  // ---------------------------------------------------------------- outfit
+  // ---------------------------------------------------------------- appearance
 
-  private renderOutfit(fresh = false): void {
-    const w = this.wins.outfit;
-    if (fresh || !this.outfitDraft) this.outfitDraft = { ...this.s.player.outfit };
-    const o = this.outfitDraft;
+  /**
+   * The character designer in game: free, anywhere. The preview shows the worn gear
+   * (switchable) so a helmet's effect on the hair is visible before confirming.
+   */
+  private renderAppearance(): void {
+    const w = this.wins.appearance;
     const b = w.body;
+    this.designer?.dispose();
     b.replaceChildren();
-    const top = el('div', 'outfit-top', b);
-    const pv = el('div', 'outfit-pv', top);
-    if (!this.preview || !this.preview.canvas.isConnected) {
-      this.preview?.dispose();
-      this.preview = new OutfitPreview(pv);
-    } else {
-      pv.appendChild(this.preview.canvas);
-    }
-    this.preview.set(o);
-    const types = el('div', 'outfit-types', top);
-    const g = this.ctl.game;
-    for (const t of OUTFIT_TYPES) {
-      const lock = g.outfitLock(this.s, t.id);
-      const bb = button(types, lock ? `${t.name} (${t.id === 'warden' ? 'founder' : 'premium'})` : t.name, () => {
-        o.type = t.id;
-        this.renderOutfit();
-      }, `btn small${o.type === t.id ? ' on' : ''}${lock ? ' locked' : ''}`);
-      bb.setAttribute('aria-pressed', String(o.type === t.id));
-      if (lock) bb.title = lock;
-    }
-    const parts = el('div', 'outfit-parts', b);
-    for (const p of OUTFIT_PARTS) {
-      const bb = button(parts, p.name, () => {
-        this.outfitPart = p.id;
-        this.renderOutfit();
-      }, `btn small${this.outfitPart === p.id ? ' on' : ''}`);
-      const sw = el('span', 'swatch', bb);
-      sw.style.background = `#${PALETTE[o[p.id]].toString(16).padStart(6, '0')}`;
-    }
-    const pal = el('div', 'palette', b);
-    pal.style.gridTemplateColumns = `repeat(${PALETTE_COLS}, 1fr)`;
-    for (let i = 0; i < PALETTE_COLS * PALETTE_ROWS; i++) {
-      const c = el('button', `pal${o[this.outfitPart] === i ? ' on' : ''}`, pal);
-      c.type = 'button';
-      c.style.background = `#${PALETTE[i].toString(16).padStart(6, '0')}`;
-      c.addEventListener('click', () => {
-        o[this.outfitPart] = i;
-        this.renderOutfit();
-      });
-    }
+    const d = new CharacterDesigner(b, this.s.player.appearance);
+    this.designer = d;
+    const gearNow = () => {
+      const eq = this.s.inventory.equipment;
+      const id = (k: keyof typeof eq) => eq[k]?.id ?? null;
+      return { weapon: id('weapon'), shield: id('shield'), armor: id('armor'), head: id('head'), legs: id('legs'), feet: id('feet'), cloak: this.s.player.cloak || null };
+    };
+    d.setGear(this.designerGear ? gearNow() : null);
+    const opts = el('div', 'dev-row', b);
+    el('span', 'dev-label', opts, 'Preview');
+    const gb = button(opts, this.designerGear ? 'Worn gear: shown' : 'Worn gear: hidden', () => {
+      this.designerGear = !this.designerGear;
+      d.setGear(this.designerGear ? gearNow() : null);
+      gb.textContent = this.designerGear ? 'Worn gear: shown' : 'Worn gear: hidden';
+      gb.classList.toggle('on', this.designerGear);
+    }, `btn small${this.designerGear ? ' on' : ''}`);
     // founder looks: cloak and title can be switched off per character
-    const tier = g.premiumView(this.ctl.pid)?.tier ?? null;
+    const tier = this.ctl.game.premiumView(this.ctl.pid)?.tier ?? null;
     if (tier) {
       const fr = el('div', 'dev-row', b);
       el('span', 'dev-label', fr, 'Founder');
       const cos = this.s.cosmetics;
-      button(fr, cos.hideCloak ? 'Cloak: hidden' : 'Cloak: shown', () => {
+      const cb = button(fr, cos.hideCloak ? 'Cloak: hidden' : 'Cloak: shown', () => {
         this.ctl.send({ c: 'cosmetics', cloak: cos.hideCloak });
         cos.hideCloak = !cos.hideCloak;
-        this.renderOutfit();
+        cb.textContent = cos.hideCloak ? 'Cloak: hidden' : 'Cloak: shown';
+        cb.classList.toggle('on', !cos.hideCloak);
       }, `btn small${cos.hideCloak ? '' : ' on'}`);
-      button(fr, cos.hideTitle ? 'Title: hidden' : 'Title: shown', () => {
+      const tb = button(fr, cos.hideTitle ? 'Title: hidden' : 'Title: shown', () => {
         this.ctl.send({ c: 'cosmetics', title: cos.hideTitle });
         cos.hideTitle = !cos.hideTitle;
-        this.renderOutfit();
+        tb.textContent = cos.hideTitle ? 'Title: hidden' : 'Title: shown';
+        tb.classList.toggle('on', !cos.hideTitle);
       }, `btn small${cos.hideTitle ? '' : ' on'}`);
     }
-    const lock = g.outfitLock(this.s, o.type);
-    if (lock) el('p', 'hint warn', b, `${lock} See thornvaleonline.com/store/`);
     const row = el('div', 'trade-actions', b);
-    const apply = button(row, 'Apply', () => {
-      this.ctl.send({ c: 'outfit', outfit: { ...o } });
-      this.closeWin('outfit');
-    }, 'btn');
-    apply.disabled = !!lock;
-    button(row, 'Cancel', () => this.closeWin('outfit'), 'btn');
+    button(row, 'Confirm', () => {
+      this.ctl.send({ c: 'appearance', ap: encodeAppearance(d.value) });
+      this.closeWin('appearance');
+    }, 'btn on');
+    button(row, 'Cancel', () => this.closeWin('appearance'), 'btn');
   }
 
   // ---------------------------------------------------------------- test console

@@ -5,7 +5,7 @@
  */
 import { spawn } from 'node:child_process';
 import { NetController } from '../src/client/Controller';
-import { DEFAULT_OUTFIT } from '../src/game/player/outfits';
+import { DEFAULT_APPEARANCE } from '../src/game/player/appearance';
 import { startMock } from './storage-test';
 
 const proc = (globalThis as unknown as { process: { env: Record<string, string>; execPath: string; exit(c: number): never } }).process;
@@ -18,7 +18,7 @@ const check = (ok: unknown, label: string) => {
 
 async function connect(name: string, token: string, skipTutorial = false): Promise<NetController | string> {
   try {
-    return await NetController.connect({ url: 'ws://localhost:8131/ws', name, token, vocation: 'sorcerer', outfit: DEFAULT_OUTFIT, skipTutorial });
+    return await NetController.connect({ url: 'ws://localhost:8131/ws', name, token, vocation: 'sorcerer', appearance: DEFAULT_APPEARANCE, skipTutorial });
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
   }

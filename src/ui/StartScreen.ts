@@ -1,4 +1,4 @@
-import { DEFAULT_OUTFIT, OUTFIT_TYPES, PALETTE, type Outfit, type OutfitType } from '../game/player/outfits';
+import { randomAppearance, type Appearance } from '../game/player/appearance';
 import { VOCATIONS, VOCATION_IDS, type Vocation } from '../game/player/vocations';
 import type { SaveSystem } from '../game/save/SaveSystem';
 import { button, el } from './dom';
@@ -6,15 +6,14 @@ import { CREST_SVG, VOCATION_SVG } from './emblems';
 import './gate.css';
 import { OnlineLogin, type OnlinePick } from './OnlineLogin';
 import { offlineTutorialDone } from '../client/Controller';
-import { OutfitPreview } from './OutfitPreview';
+import { CharacterDesigner } from './CharacterDesigner';
 
 export type StartChoice =
   | { mode: 'continue' }
-  | { mode: 'new'; name: string; vocation: Vocation; outfit: Outfit; skipTutorial?: boolean }
+  | { mode: 'new'; name: string; vocation: Vocation; appearance: Appearance; skipTutorial?: boolean }
   | ({ mode: 'online' } & OnlinePick);
 
 const NAME_RE = /^[A-Za-z][A-Za-z '-]{1,18}[A-Za-z]$/;
-const VOC_OUTFIT: Record<Vocation, OutfitType> = { knight: 'knight', paladin: 'ranger', sorcerer: 'mage', druid: 'mage' };
 const OPENING = Date.UTC(2027, 0, 1); // midnight UK time (GMT in January)
 /** News shown in the Herald strip at the bottom of the title screen. */
 const HERALD = 'New: bosses, world bosses and raids have arrived. The gates open fully on 1 January 2027.';
@@ -55,10 +54,11 @@ export class StartScreen {
   private views: HTMLDivElement;
   private msg: HTMLDivElement;
   private busy = false;
-  private preview: OutfitPreview | null = null;
+  private designer: CharacterDesigner | null = null;
   private resolve: ((c: StartChoice) => void) | null = null;
   private vocation: Vocation = 'knight';
-  private outfit: Outfit = { ...DEFAULT_OUTFIT };
+  /** A fresh random look for every visit to the hero creator (the designer changes it). */
+  private appearance: Appearance = randomAppearance();
   private createView: HTMLDivElement | null = null;
   private createName: HTMLInputElement | null = null;
   private createPrimary: HTMLButtonElement | null = null;
@@ -120,7 +120,7 @@ export class StartScreen {
 
     this.online = new OnlineLogin(this.views, {
       serverUrl: defaultServerUrl(),
-      look: () => ({ vocation: this.vocation, outfit: { ...this.outfit } }),
+      look: () => ({ vocation: this.vocation, appearance: { ...this.appearance } }),
       validName: (raw) => this.validName(raw),
       play: (p) => this.pick({ mode: 'online', ...p }),
       message: (t, ok) => this.setError(t, ok),
@@ -144,7 +144,7 @@ export class StartScreen {
   private showOffline(): void {
     const saved = this.saves.peek();
     if (!saved) {
-      this.showCreate({ primary: 'Play offline', skippable: offlineTutorialDone(), done: (n, skip) => this.pick({ mode: 'new', name: n, vocation: this.vocation, outfit: { ...this.outfit }, skipTutorial: skip }), back: () => this.online.showStart() });
+      this.showCreate({ primary: 'Play offline', skippable: offlineTutorialDone(), done: (n, skip) => this.pick({ mode: 'new', name: n, vocation: this.vocation, appearance: { ...this.appearance }, skipTutorial: skip }), back: () => this.online.showStart() });
       return;
     }
     if (!this.offlineView) this.offlineView = el('div', 'gate-view', this.views);
@@ -162,14 +162,14 @@ export class StartScreen {
     button(v, 'New offline hero', () => this.showCreate({
       primary: 'Start (replaces the offline save)',
       skippable: offlineTutorialDone(),
-      done: (n, skip) => this.pick({ mode: 'new', name: n, vocation: this.vocation, outfit: { ...this.outfit }, skipTutorial: skip }),
+      done: (n, skip) => this.pick({ mode: 'new', name: n, vocation: this.vocation, appearance: { ...this.appearance }, skipTutorial: skip }),
       back: () => this.showOffline(),
     }), 'gate-iron');
     button(v, 'Back to log in', () => this.online.showStart(), 'gate-link quiet');
     this.show(v);
   }
 
-  /** The hero creator: name, vocation, outfit and a turning 3D preview. Shared by online and offline. */
+  /** The hero creator: name, vocation and the character designer (turning 3D preview). Shared by online and offline. */
   showCreate(opts: CreateOptions): void {
     this.createOpts = opts;
     if (!this.createView) this.buildCreate();
@@ -210,12 +210,10 @@ export class StartScreen {
     for (const id of VOCATION_IDS) {
       const b = button(vocs, '', () => {
         this.vocation = id;
-        this.outfit.type = VOC_OUTFIT[id];
         vocBtns.forEach((x, i) => {
           x.classList.toggle('on', VOCATION_IDS[i] === id);
           x.setAttribute('aria-pressed', String(VOCATION_IDS[i] === id));
         });
-        this.preview?.set(this.outfit);
       }, `gate-voc${id === this.vocation ? ' on' : ''}`);
       b.setAttribute('aria-pressed', String(id === this.vocation));
       el('span', '', b).innerHTML = VOCATION_SVG(id, 30);
@@ -225,24 +223,8 @@ export class StartScreen {
       vocBtns.push(b);
     }
 
-    el('span', 'gate-label', left, 'Outfit');
-    const looks = el('div', 'gate-looks', left);
-    for (const o of OUTFIT_TYPES) {
-      button(looks, o.name, () => {
-        this.outfit.type = o.id;
-        this.preview?.set(this.outfit);
-      }, 'gate-look');
-    }
-    button(looks, 'Random colours', () => {
-      const r = () => Math.floor(Math.random() * PALETTE.length);
-      this.outfit = { ...this.outfit, head: r(), body: r(), legs: r(), feet: r() };
-      this.preview?.set(this.outfit);
-    }, 'gate-look');
-
-    const stage = el('div', 'gate-stage', row);
-    this.preview = new OutfitPreview(stage);
-    this.preview.set(this.outfit);
-    el('span', 'gate-hint', stage, 'Your hero');
+    el('span', 'gate-label', v, 'Appearance');
+    this.designer = new CharacterDesigner(v, this.appearance, (a) => (this.appearance = a));
 
     const skipLabel = el('label', 'gate-check', v);
     const skipBox = el('input', '', skipLabel);
@@ -312,8 +294,8 @@ export class StartScreen {
   }
 
   close(): void {
-    this.preview?.dispose();
-    this.preview = null;
+    this.designer?.dispose();
+    this.designer = null;
     this.root.remove();
   }
 }

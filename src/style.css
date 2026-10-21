@@ -269,14 +269,6 @@ html, body {
 .q-done { opacity: 0.6; }
 .help-grid { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; font-size: 13px; }
 .help-key { color: var(--gold); font-weight: 700; white-space: nowrap; }
-.outfit-top { display: flex; gap: 10px; align-items: flex-start; }
-.outfit-pv { background: radial-gradient(#3a4a2e, #1a2214); border: 1px solid #000; padding: 4px; }
-.outfit-preview { display: block; width: 112px; height: 144px; image-rendering: pixelated; }
-.outfit-types, .outfit-parts { display: flex; flex-wrap: wrap; gap: 3px; }
-.swatch { display: inline-block; width: 10px; height: 10px; margin-left: 5px; border: 1px solid #000; vertical-align: -1px; }
-.palette { display: grid; gap: 1px; }
-.pal { aspect-ratio: 1; min-width: 0; padding: 0; border: 1px solid #000; cursor: pointer; }
-.pal.on { outline: 2px solid #fff; outline-offset: -1px; }
 
 .ctx-menu {
   position: fixed; z-index: 20; display: flex; flex-direction: column; min-width: 160px;

@@ -22,7 +22,7 @@ import { migrateSave, SAVE_VERSION } from '../src/game/save/migrate';
 import {
   buildSnapshot, eventAudience, executeCommand, PROTOCOL_VERSION, type ClientMessage, type ServerMessage,
 } from '../src/game/net/protocol';
-import { isOutfit } from '../src/game/player/outfits';
+import { decodeAppearance } from '../src/game/player/appearance';
 import { setLevel } from '../src/game/admin';
 import { Bots } from './bots';
 import { PVP_ARENA, PVP_TEAM_MAX, PvpBots } from './pvpBots';
@@ -388,7 +388,7 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
   const s = game.addPlayer(name, { intent: c.intent, vocation: isVocation(m.vocation) ? m.vocation : 'knight' });
   c.session = s;
   if (owner) sessionOwner.set(s.id, owner);
-  // premium and founder looks first, so loading the save keeps a premium or founder outfit
+  // premium and founder looks first (cloak, title), so the first snapshot already shows them
   game.setPerks(s.id, perks, true);
   perksSeen.set(s.id, JSON.stringify(perks));
   sessionAccount.set(s.id, account);
@@ -411,7 +411,8 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
     }
     s.tutorial.canSkip = canSkip;
   } else {
-    if (isOutfit(m.outfit)) game.setOutfit(s.id, m.outfit);
+    const ap = decodeAppearance(m.ap);
+    if (ap) game.setAppearance(s.id, ap);
     // new characters start on Wayfarer's Isle, unless the account finished it before and the player chose to skip
     s.tutorial.canSkip = canSkip;
     if (m.skipTutorial === true && canSkip) game.startSkipped(s.id);

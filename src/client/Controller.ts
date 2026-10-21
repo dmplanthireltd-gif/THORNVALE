@@ -6,7 +6,7 @@ import type { CraftView } from '../game/production/recipes';
 import {
   applySnapshot, executeCommand, PROTOCOL_VERSION, type ClientMessage, type Command, type MirrorExtras, type ServerMessage,
 } from '../game/net/protocol';
-import type { Outfit } from '../game/player/outfits';
+import { encodeAppearance, type Appearance } from '../game/player/appearance';
 import type { Vocation } from '../game/player/vocations';
 import type { SaveSystem } from '../game/save/SaveSystem';
 import { parseStages } from '../game/progression/stages';
@@ -98,7 +98,7 @@ export class LocalController implements Controller {
   private autosave = AUTOSAVE_SECONDS;
   private backlog: Backlog;
 
-  constructor(readonly game: Game, readonly saves: SaveSystem, name: string, vocation: Vocation, opts: { load: boolean; outfit?: Outfit; skipTutorial?: boolean }) {
+  constructor(readonly game: Game, readonly saves: SaveSystem, name: string, vocation: Vocation, opts: { load: boolean; appearance?: Appearance; skipTutorial?: boolean }) {
     this.backlog = new Backlog(game);
     const s = game.addPlayer(name, { intent: this.intent, vocation });
     this.pid = s.id;
@@ -114,7 +114,7 @@ export class LocalController implements Controller {
       s.tutorial.canSkip = offlineTutorialDone();
       game.msg(s.id, `Welcome back, ${s.player.name}. Your progress was restored.`, 'info');
     } else {
-      if (opts.outfit) game.setOutfit(s.id, opts.outfit);
+      if (opts.appearance) game.setAppearance(s.id, opts.appearance);
       game.msg(s.id, `Welcome to Thornvale, ${name}.`, 'info');
       if (opts.skipTutorial && s.tutorial.canSkip) game.startSkipped(s.id);
       else game.beginTutorial(s.id);
@@ -183,7 +183,8 @@ export interface ConnectOptions {
   /** Supabase Auth access token (email login). */
   token?: string;
   vocation: Vocation;
-  outfit: Outfit;
+  /** Look for a new character (ignored for an existing one). */
+  appearance?: Appearance;
   /** New character only: start in Thornvale instead of the tutorial island (accounts that finished it once). */
   skipTutorial?: boolean;
   timeoutMs?: number;
@@ -228,7 +229,7 @@ export class NetController implements Controller {
         }
       }, o.timeoutMs ?? 8000);
       ws.onopen = () => {
-        const hello: ClientMessage = { t: 'hello', v: PROTOCOL_VERSION, name: o.name, password: o.password, token: o.token, vocation: o.vocation, outfit: o.outfit, skipTutorial: o.skipTutorial };
+        const hello: ClientMessage = { t: 'hello', v: PROTOCOL_VERSION, name: o.name, password: o.password, token: o.token, vocation: o.vocation, skipTutorial: o.skipTutorial, ...(o.appearance ? { ap: encodeAppearance(o.appearance) } : {}) };
         ws.send(JSON.stringify(hello));
       };
       ws.onerror = () => {

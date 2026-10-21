@@ -13,7 +13,8 @@ import { Npc } from '../game/npc/Npc';
 import { Player, spellLight } from '../game/player/Player';
 import { CreatureView } from './CreatureView';
 import { Effects, type FieldKind } from './Effects';
-import { applyGear, buildOutfitRig } from './models/humanoid';
+import { applyGear } from './models/humanoid';
+import { buildPlayerRig } from './models/playerModel';
 import { mat, toonGradient } from './models/parts';
 import { CAMERA_TILT_DEG, CameraController } from './CameraController';
 import { itemIcon } from '../ui/icons';
@@ -151,7 +152,7 @@ export class Renderer {
       rig.height *= sc;
       return rig;
     } else if (c instanceof Player) {
-      rig = buildOutfitRig(c.outfit);
+      rig = buildPlayerRig(c.appearance);
       this.gearUp(rig as BipedRig, c.id);
     } else if (c instanceof Npc) {
       rig = buildNpc(NPCS[c.key]);
@@ -666,7 +667,7 @@ export class Renderer {
         if (v && v.rig.type === 'biped' && !(v.creature instanceof Player && v.creature.illusion)) this.gearUp(v.rig, e.id);
         break;
       }
-      case 'outfitChanged':
+      case 'lookChanged':
         this.rebuildView(e.id);
         break;
       case 'gameLoaded':

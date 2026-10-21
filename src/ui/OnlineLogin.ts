@@ -1,4 +1,4 @@
-import type { Outfit } from '../game/player/outfits';
+import type { Appearance } from '../game/player/appearance';
 import { VOCATIONS, type Vocation } from '../game/player/vocations';
 import { button, el } from './dom';
 import { VOCATION_SVG } from './emblems';
@@ -17,14 +17,14 @@ export interface OnlinePick {
   password?: string;
   token?: string;
   vocation: Vocation;
-  outfit: Outfit;
+  appearance: Appearance;
   /** New heroes only: start in Thornvale instead of the tutorial island (accounts that finished it once). */
   skipTutorial?: boolean;
 }
 
 interface Hooks {
   serverUrl: string;
-  look: () => { vocation: Vocation; outfit: Outfit };
+  look: () => { vocation: Vocation; appearance: Appearance };
   validName: (raw: string) => string | null;
   play: (p: OnlinePick) => void;
   message: (text: string, ok?: boolean) => void;

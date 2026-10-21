@@ -27,13 +27,13 @@ async function boot(): Promise<void> {
     try {
       if (choice.mode === 'online') {
         start.setStatus(`Connecting to ${choice.url}…`);
-        ctl = await NetController.connect({ url: choice.url, name: choice.name, password: choice.password, token: choice.token, vocation: choice.vocation, outfit: choice.outfit, skipTutorial: choice.skipTutorial });
+        ctl = await NetController.connect({ url: choice.url, name: choice.name, password: choice.password, token: choice.token, vocation: choice.vocation, appearance: choice.appearance, skipTutorial: choice.skipTutorial });
       } else if (choice.mode === 'continue') {
         const peek = saves.peek();
         ctl = new LocalController(new Game({ stages: SEASON_STAGES }), saves, peek?.name ?? 'Adventurer', 'knight', { load: true });
       } else {
         saves.clear();
-        ctl = new LocalController(new Game({ stages: SEASON_STAGES }), saves, choice.name, choice.vocation, { load: false, outfit: choice.outfit, skipTutorial: choice.skipTutorial });
+        ctl = new LocalController(new Game({ stages: SEASON_STAGES }), saves, choice.name, choice.vocation, { load: false, appearance: choice.appearance, skipTutorial: choice.skipTutorial });
       }
     } catch (err) {
       start.setError(err instanceof Error ? err.message : String(err));

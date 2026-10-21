@@ -28,8 +28,7 @@ import { BOSS_UNIQUES, equipSlotFor, ITEMS, itemDef, type EquipSlot, type ItemDe
 import { SETS } from '../src/game/inventory/sets';
 import { SPELLS, type SpellId } from '../src/game/magic/spells';
 import { executeCommand } from '../src/game/net/protocol';
-import type { OutfitType } from '../src/game/player/outfits';
-import { PALETTE } from '../src/game/player/outfits';
+import { CLOTH_COLORS, encodeAppearance, randomAppearance } from '../src/game/player/appearance';
 import { expForLevel, type Player } from '../src/game/player/Player';
 import type { Vocation } from '../src/game/player/vocations';
 
@@ -55,7 +54,6 @@ const TEAM_INFO = [
   { name: 'Blue', colour: 0x2a5ad0, names: ['Halvard', 'Isolde', 'Brannoc', 'Ylva'] },
 ] as const;
 const ROLES: Vocation[] = ['knight', 'paladin', 'sorcerer', 'druid'];
-const OUTFIT_FOR: Record<Vocation, OutfitType> = { knight: 'knight', paladin: 'ranger', sorcerer: 'mage', druid: 'mage' };
 
 type TeamId = 0 | 1;
 
@@ -111,11 +109,11 @@ export interface PvpBotStats {
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
 
-/** Closest palette index to a colour (outfit colours are palette indices). */
-function paletteIndex(rgb: number): number {
+/** Closest clothing colour index to a colour (team shirts and trousers). */
+function clothIndex(rgb: number): number {
   let best = 0, bestD = Infinity;
-  for (let i = 0; i < PALETTE.length; i++) {
-    const c = PALETTE[i];
+  for (let i = 0; i < CLOTH_COLORS.length; i++) {
+    const c = CLOTH_COLORS[i].hex;
     const d = ((c >> 16) - (rgb >> 16)) ** 2 + (((c >> 8) & 255) - ((rgb >> 8) & 255)) ** 2 + ((c & 255) - (rgb & 255)) ** 2;
     if (d < bestD) { bestD = d; best = i; }
   }
@@ -250,8 +248,9 @@ export class PvpBots {
         this.bots.push(b);
         this.ids.add(s.id);
         this.teams[team].members.push(b);
-        const col = paletteIndex(info.colour);
-        executeCommand(game, s.id, { c: 'outfit', outfit: { ...s.player.outfit, type: OUTFIT_FOR[voc], body: col, legs: col, head: s.player.outfit.head, feet: s.player.outfit.feet } });
+        // a random look in the team's colour (shirt and trousers)
+        const col = clothIndex(info.colour);
+        executeCommand(game, s.id, { c: 'appearance', ap: encodeAppearance({ ...randomAppearance(), top: col, bottom: col }) });
         // they fight bots only, so secure mode off; "stand": they walk themselves (and never into a protection zone)
         executeCommand(game, s.id, { c: 'secureMode', on: false });
         executeCommand(game, s.id, { c: 'fightMode', mode: voc === 'knight' ? 'offensive' : 'balanced', chase: false });

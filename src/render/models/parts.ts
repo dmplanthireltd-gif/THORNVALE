@@ -134,3 +134,17 @@ export function matCache(): MatFn {
     return x;
   };
 }
+
+/**
+ * A rounded, tapered body piece: a low-poly cylinder with a flat face to the front,
+ * `wTop`/`wBot` wide (flat to flat) at its top and bottom, `d` deep. Torsos, limbs,
+ * boots and the armour over them use it so silhouettes taper instead of reading as blocks.
+ */
+export function sshell(wTop: number, wBot: number, h: number, d: number, m: THREE.Material, x = 0, y = 0, z = 0, seg = 8): THREE.Mesh {
+  const k = 1 / (2 * Math.cos(Math.PI / seg));
+  const rT = r3(wTop * k), rB = r3(wBot * k), hh = r3(h);
+  const me = mesh(sharedGeo(`h${rT},${rB},${hh},${seg}`, () => new THREE.CylinderGeometry(rT, rB, hh, seg).rotateY(Math.PI / seg)), m);
+  me.position.set(x, y, z);
+  me.scale.z = d / ((wTop + wBot) / 2);
+  return me;
+}

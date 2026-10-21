@@ -12,7 +12,7 @@ import type { WorldMark } from '../bosses/bosses';
 import { ENEMIES } from '../enemies/enemyDefs';
 import type { EnemyKind } from '../world/WorldMap';
 import { COMBAT_SKILLS, parseSkills } from '../player/skills';
-import { isOutfit, type Outfit } from '../player/outfits';
+import { decodeAppearance, encodeAppearance, sameAppearance } from '../player/appearance';
 import { emptyBuffs, FIGHT_MODE, type Buffs, type FightMode, type Player } from '../player/Player';
 import { isVocation, type Vocation } from '../player/vocations';
 import type { QuestLog } from '../quests/quests';
@@ -25,7 +25,7 @@ import type { ExpStages } from '../progression/stages';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 22;
+export const PROTOCOL_VERSION = 23;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -52,7 +52,8 @@ export type Command =
   | { c: 'equipTo'; from: number; slot: EquipSlot }
   | { c: 'dialogue'; action: string }
   | { c: 'closeDialogue' }
-  | { c: 'outfit'; outfit: Outfit }
+  /** Character designer: the appearance in its compact form (player/appearance.ts encodeAppearance). */
+  | { c: 'appearance'; ap: number[] }
   | { c: 'showGear'; on: boolean }
   /** PvP secure mode: on = never attack unmarked players. */
   | { c: 'secureMode'; on: boolean }
@@ -92,7 +93,7 @@ export type Command =
   | { c: 'tutorialSkip' };
 
 export type ClientMessage =
-  | { t: 'hello'; v: number; name: string; password?: string; token?: string; outfit?: Outfit; vocation?: Vocation; skipTutorial?: boolean }
+  | { t: 'hello'; v: number; name: string; password?: string; token?: string; ap?: number[]; vocation?: Vocation; skipTutorial?: boolean }
   | { t: 'intent'; dx: number; dy: number }
   | { t: 'tap'; dx: number; dy: number }
   | ({ t: 'cmd' } & Command);
@@ -107,7 +108,8 @@ export interface CreatureSnap {
   name?: string;
   lvl?: number;
   voc?: Vocation;
-  o?: Outfit;
+  /** Appearance, compact (encodeAppearance: nine small numbers). */
+  ap?: number[];
   eq?: Record<string, string | null>;
   /** Shows equipment on the model. */
   sg?: 0 | 1;
@@ -215,14 +217,14 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     const p = o.player;
     const eq: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(o.inventory.equipment)) eq[k] = v?.id ?? null;
-    const look = JSON.stringify([p.name, p.level, p.vocation, p.outfit, eq, p.showGear, p.illusion ?? '', p.cloak, p.title, p.premium]);
+    const look = JSON.stringify([p.name, p.level, p.vocation, encodeAppearance(p.appearance), eq, p.showGear, p.illusion ?? '', p.cloak, p.title, p.premium]);
     const full = looks.get(p.id) !== look;
     if (full) looks.set(p.id, look);
     c.push({
       id: p.id, k: 'p', x: p.x, y: p.y, z: p.z, fx: p.fromX, fy: p.fromY, mt: r3(p.moveT), md: r3(p.moveDur), f: r3(p.facing),
       hp: Math.ceil(p.hp), mhp: p.maxHp, d: p.dead ? 1 : 0,
       ...(full ? {
-        name: p.name, lvl: p.level, voc: p.vocation, o: p.outfit, eq, sg: p.showGear ? 1 as const : 0 as const, ill: p.illusion ?? '',
+        name: p.name, lvl: p.level, voc: p.vocation, ap: encodeAppearance(p.appearance), eq, sg: p.showGear ? 1 as const : 0 as const, ill: p.illusion ?? '',
         ck: p.cloak, tt: p.title, pr: p.premium ? 1 as const : 0 as const,
       } : {}),
       buffs: {
@@ -290,7 +292,7 @@ export function eventAudience(e: GameEvent): number | null {
     // derived by clients from snapshots
     case 'bagCreated': case 'bagRemoved': case 'bagChanged': case 'playerJoined': case 'playerLeft': case 'tileChanged':
     case 'inventoryChanged': case 'questChanged': case 'dialogueOpened': case 'dialogueClosed':
-    case 'gameLoaded': case 'equipmentChanged': case 'outfitChanged': case 'depotChanged': case 'tradeChanged': case 'partyChanged': case 'friendsChanged': case 'spellsChanged':
+    case 'gameLoaded': case 'equipmentChanged': case 'lookChanged': case 'depotChanged': case 'tradeChanged': case 'partyChanged': case 'friendsChanged': case 'spellsChanged':
     case 'marketChanged': case 'craftChanged': case 'tutorialChanged':
       return null;
     default:
@@ -333,7 +335,7 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'equipTo': if (num(m.from) && (EQUIP_SLOTS as readonly string[]).includes(m.slot)) game.equipTo(pid, Math.floor(m.from), m.slot); break;
     case 'dialogue': if (typeof m.action === 'string') game.dialogueAction(pid, m.action.slice(0, 80)); break;
     case 'closeDialogue': game.closeDialogue(pid); break;
-    case 'outfit': if (isOutfit(m.outfit)) game.setOutfit(pid, m.outfit); break;
+    case 'appearance': { const a = decodeAppearance(m.ap); if (a) game.setAppearance(pid, a); else game.msg(pid, 'That appearance is not possible.', 'warn'); break; }
     case 'showGear': game.setShowGear(pid, m.on === true); break;
     case 'secureMode': game.setSecureMode(pid, m.on !== false); break;
     case 'say': if (typeof m.text === 'string') game.say(pid, m.text); break;
@@ -394,9 +396,12 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
       if (c.name && p.name !== c.name) p.name = c.name;
       if (c.lvl) p.level = c.lvl;
       if (c.voc && isVocation(c.voc)) p.vocation = c.voc;
-      if (c.o && JSON.stringify(c.o) !== JSON.stringify(p.outfit)) {
-        p.outfit = { ...c.o };
-        ev.emit({ type: 'outfitChanged', id: p.id });
+      if (c.ap) {
+        const a = decodeAppearance(c.ap);
+        if (a && !sameAppearance(a, p.appearance)) {
+          p.appearance = a;
+          ev.emit({ type: 'lookChanged', id: p.id });
+        }
       }
       if (c.sg !== undefined && (c.sg === 1) !== p.showGear) {
         p.showGear = c.sg === 1;
@@ -419,14 +424,14 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
           p.cloak = ck;
           p.title = tt;
           p.premium = pr;
-          ev.emit({ type: 'outfitChanged', id: p.id });
+          ev.emit({ type: 'lookChanged', id: p.id });
         }
       }
       if (c.ill !== undefined) {
         const ill = c.ill || null;
         if (ill !== p.illusion) {
           p.illusion = ill;
-          ev.emit({ type: 'outfitChanged', id: p.id });
+          ev.emit({ type: 'lookChanged', id: p.id });
         }
       }
       if (c.eq && c.id !== game.localId) {

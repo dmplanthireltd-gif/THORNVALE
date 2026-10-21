@@ -9,7 +9,8 @@ import type { BipedRig } from './rigs';
 import { ARMOR_LOOK, makeShield, makeWeapon } from './weapons';
 
 /**
- * Chunky humanoid builder shared by player outfits, NPCs and humanoid monsters.
+ * Chunky humanoid builder shared by NPC outfits and humanoid monsters (players: playerModel.ts).
+ * applyGear dresses any biped, players included.
  * Proportions favour the top-down view: oversized head and headgear, broad
  * shoulders, and weapons that stick out past the silhouette.
  */
@@ -61,8 +62,38 @@ export function outfitSpec(o: Outfit): HumanoidSpec {
   }
 }
 
+/** NPC townsfolk (player characters use playerModel.ts). */
 export function buildOutfitRig(o: Outfit): BipedRig {
-  return buildHumanoid(outfitSpec(o));
+  return slimmer(buildHumanoid(outfitSpec(o)));
+}
+
+/**
+ * Slims a chunky humanoid towards the player proportions (owner, 2026-10-21: "slimmer,
+ * not like Minecraft"): narrower torso, thinner and longer limbs, a smaller head. Only
+ * group scales change, so held props and any gear stay attached where they were.
+ */
+function slimmer(rig: BipedRig): BipedRig {
+  const leg = 1.08;
+  const lift = 0.62 * (leg - 1);
+  rig.torso.scale.set(0.88, 1, 0.85);
+  for (const l of [rig.legL, rig.legR]) {
+    l.scale.set(0.84, leg, 0.84);
+    l.position.x *= 0.88;
+    l.position.y += lift;
+  }
+  for (const a of [rig.armL, rig.armR]) {
+    a.scale.set(0.84, 1.04, 0.84);
+    a.position.x *= 0.88;
+    a.position.y += lift;
+  }
+  rig.torso.position.y += lift;
+  rig.head.position.y += lift;
+  rig.head.scale.setScalar(0.9);
+  for (const m of [rig.gear?.weaponMount, rig.gear?.shieldMount]) {
+    if (m) m.scale.set(1 / 0.84, 1 / 1.04, 1 / 0.84);
+  }
+  rig.height += lift;
+  return rig;
 }
 
 export function buildHumanoid(spec: HumanoidSpec): BipedRig {
@@ -626,6 +657,11 @@ export interface GearLook {
   cloak?: string | null;
 }
 
+/** Helmets that cover the nape (long hair, ponytails and braids hide under them). */
+const NECK_HELMS = new Set<string>(['coif', 'hood', 'great', 'skull']);
+/** Closed helmets that cover the chin (beards hide under them). */
+const FACE_HELMS = new Set<string>(['great', 'full', 'skull']);
+
 /** Dresses a rig in its equipment: held items, helmet, armour plates, greaves and boots. */
 export function applyGear(rig: BipedRig, eq: GearLook): void {
   if (rig.prop) return; // NPCs keep their own held prop
@@ -657,15 +693,23 @@ export function applyGear(rig: BipedRig, eq: GearLook): void {
     for (const o of parts.armR) attach(rig.armR, o);
   }
 
-  // helmet replaces the outfit's headgear while worn
+  // helmet replaces the outfit's headgear while worn; on players (playerModel.ts) hair is
+  // tagged: crown hair always hides, long hair and beards only under helmets that cover them
   const helmDef = eq.head ? ITEMS[eq.head] : undefined;
+  const h = helmDef ? HELMETS[helmDef.id] : undefined;
+  const helmLook = helmDef ? gearLook(helmDef, h?.color, h?.trim) : undefined;
   for (const c of rig.head.children) {
-    if (!c.userData.face) c.visible = !helmDef;
+    if (c.userData.face) continue;
+    const cover = c.userData.cover as string | undefined;
+    if (!helmLook || !cover) c.visible = !helmLook;
+    else if (helmLook.helm === 'circlet') c.visible = true;
+    else if (cover === 'back') c.visible = !NECK_HELMS.has(helmLook.helm);
+    else if (cover === 'beard') c.visible = !FACE_HELMS.has(helmLook.helm);
+    else c.visible = false;
   }
-  if (helmDef) {
+  if (helmDef && helmLook) {
     const hasFace = rig.head.children.some((c) => c.userData.face);
-    const h = HELMETS[helmDef.id];
-    const hg = buildHelm(gearLook(helmDef, h?.color, h?.trim), M);
+    const hg = buildHelm(helmLook, M);
     if (!hasFace) {
       hg.add(sphere(0.19, g.skin, 0, 0, 0, 1, 1.02, 1));
       hg.add(box(0.05, 0.05, 0.03, M(0x14100c), 0.075, 0.02, 0.18));

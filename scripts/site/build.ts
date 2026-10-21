@@ -527,7 +527,6 @@ function storePage(): Page {
       ])}
       ${packCard('founder_warden', 'Warden', 'Everything in Wayfarer, and more.', [
         `<b>${PRODUCTS.founder_warden.days} days</b> of premium instead of ${PRODUCTS.founder_wayfarer.days}`,
-        'The founder-only <b>Warden outfit</b>',
         "Founder's Cloak in <b>gold</b>",
         'A <b>6th character slot</b>',
         `The <b>Thornvale soundtrack</b> (${MUSIC.length} tracks) to download`,
@@ -540,7 +539,7 @@ function storePage(): Page {
         'A <b>7th character slot</b>',
         "Your name carved on the <b>Founders' Stone</b> in the Thornvale temple",
         'A <b>vote</b> on the name of a future region or boss',
-        'The Warden outfit, the soundtrack and the 6th slot too',
+        'The soundtrack and the 6th slot too',
       ], { cls: 'pack-legend', badge: `Only ${LEGEND_CAP} · numbered`, leadExtra: ' <span class="left-n" data-left></span>' })}
     </div>
     <p class="faint small store-after">Already a founder? During the sale you can move up by paying only the difference: Wayfarer to Warden ${price('upgrade_wayfarer_warden')}, Wayfarer to Legend ${price('upgrade_wayfarer_legend')}, Warden to Legend ${price('upgrade_warden_legend')}. Log in and the upgrade price shows on the pack. Buying another pack on the same account adds its premium days, but not another title.</p>
@@ -572,7 +571,7 @@ function storePage(): Page {
           ${row('Market offers', `${FREE_MARKET_OFFERS} at a time`, `${PREMIUM_MARKET_OFFERS} at a time`)}
           ${row('Full server', 'Wait in the queue', 'A reserved place')}
           ${row('Health and mana regeneration', 'Normal', `${PREMIUM_REGEN} times faster, out of combat only`)}
-          ${row('Outfits', 'All free outfits', 'Plus Warlord and Mystic')}
+          ${row('Character appearance', 'Every option, free', 'The same', true)}
           ${row('Inspect window', '–', 'A premium crown')}
           ${row('Vocations, levels, spells, skills', 'All of them', 'The same', true)}
           ${row('PvP, parties, trading', 'All of them', 'The same', true)}
@@ -597,7 +596,6 @@ function storePage(): Page {
         <li>A character standing in a premium region is moved to a free temple, with everything it carries.</li>
         <li>An overfull depot keeps every item. New items wait until it's back under ${FREE_DEPOT_SLOTS}.</li>
         <li>Market offers above ${FREE_MARKET_OFFERS} stay up until they sell or expire.</li>
-        <li>Premium outfits switch to a free one, and unlock again when premium returns.</li>
       </ul>
     </div>
     <div class="store-panel plate warm">

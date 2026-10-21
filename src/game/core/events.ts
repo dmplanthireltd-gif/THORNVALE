@@ -65,7 +65,8 @@ export type GameEvent =
   | { type: 'playerRespawn'; id: number }
   | { type: 'inventoryChanged'; to: number }
   | { type: 'equipmentChanged'; id: number }
-  | { type: 'outfitChanged'; id: number }
+  /** A character's look changed: appearance, illusion, founder cloak/title. */
+  | { type: 'lookChanged'; id: number }
   | { type: 'questChanged'; to: number }
   | { type: 'dialogueClosed'; to: number }
   | { type: 'dialogueOpened'; npcId: number; to: number }

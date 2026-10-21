@@ -9,6 +9,7 @@ import { chebyshev } from '../src/game/core/types';
 import { equipSlotFor, ITEMS, type ItemDef } from '../src/game/inventory/items';
 import { executeCommand } from '../src/game/net/protocol';
 import type { Vocation } from '../src/game/player/vocations';
+import { randomAppearance } from '../src/game/player/appearance';
 
 const NAMES = ['Aldwyn', 'Brisa', 'Corvin', 'Dagny', 'Eskil', 'Fenna', 'Garreth', 'Hilde', 'Ivor', 'Jorunn', 'Kestrel', 'Lysa'];
 const VOCS: Vocation[] = ['knight', 'paladin', 'sorcerer', 'druid'];
@@ -57,6 +58,7 @@ export class Bots {
       const voc = VOCS[i % VOCS.length];
       const s = game.addPlayer(`${NAMES[i]} [Bot]`, { intent: new BufferedIntent(), vocation: voc });
       s.bot = true;
+      s.player.appearance = randomAppearance(); // every bot looks different (player/appearance.ts)
       setLevel(game, s, level);
       for (const d of bestGear(voc, level)) {
         const slot = equipSlotFor(d);

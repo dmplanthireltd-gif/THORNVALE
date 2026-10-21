@@ -4,8 +4,9 @@
  * Premium belongs to an account (Supabase Auth user), so every character on it
  * shares it. It sells access and comfort, never power: the far regions, more
  * depot space and market offers, a seat when the server is full, faster
- * regeneration out of combat and two extra outfits. Founder packs add premium
- * days plus looks (title, cloak, an outfit), never stats.
+ * regeneration out of combat. Founder packs add premium days plus looks
+ * (title, cloak), never stats. (Premium/founder outfits were removed with the
+ * outfit system in save v11: every appearance option is free for everyone.)
  *
  * Nothing here ever deletes anything when premium ends: characters in a
  * premium region are walked back to a free temple, overfull depots keep every
@@ -55,14 +56,12 @@ export interface TierInfo {
   cloak: CloakId;
   /** Extra character slots on the account. */
   extraSlots: number;
-  /** May wear the founder-only Warden outfit. */
-  wardenOutfit: boolean;
 }
 
 export const FOUNDER_TIERS: Record<FounderTier, TierInfo> = {
-  wayfarer: { name: 'Wayfarer', rank: 1, cloak: 'ember', extraSlots: 0, wardenOutfit: false },
-  warden: { name: 'Warden', rank: 2, cloak: 'gold', extraSlots: 1, wardenOutfit: true },
-  legend: { name: 'Legend', rank: 3, cloak: 'crimson', extraSlots: 2, wardenOutfit: true },
+  wayfarer: { name: 'Wayfarer', rank: 1, cloak: 'ember', extraSlots: 0 },
+  warden: { name: 'Warden', rank: 2, cloak: 'gold', extraSlots: 1 },
+  legend: { name: 'Legend', rank: 3, cloak: 'crimson', extraSlots: 2 },
 };
 
 export function isFounderTier(t: unknown): t is FounderTier {
@@ -158,13 +157,6 @@ export interface AccountPerks {
 }
 
 export const NO_PERKS: AccountPerks = { premiumUntil: 0, founderTier: null, founderNo: 0, extraSlots: 0, founderName: '', flagged: false };
-
-// ------------------------------------------------------------------ outfits
-
-/** Outfits only premium accounts may wear. */
-export const PREMIUM_OUTFITS = ['warlord', 'mystic'] as const;
-/** Founder-only outfit (Warden and Legend packs). */
-export const FOUNDER_OUTFITS = ['warden'] as const;
 
 // ------------------------------------------------------------------ the map
 

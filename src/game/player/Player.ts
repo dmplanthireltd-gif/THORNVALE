@@ -1,5 +1,5 @@
 import { Creature } from '../entities/Creature';
-import { DEFAULT_OUTFIT, type Outfit } from './outfits';
+import { DEFAULT_APPEARANCE, type Appearance } from './appearance';
 import { VOCATIONS, type Vocation } from './vocations';
 
 /** Total experience required to reach `level` (classic cubic curve). */
@@ -79,7 +79,10 @@ export class Player extends Creature {
   sinceCombat = 99;
   /** Seconds until another hazard tick may hurt us. */
   hazardTimer = 0;
-  outfit: Outfit = { ...DEFAULT_OUTFIT };
+  /** Body, skin, hair, beard, build, eyes and plain clothes (player/appearance.ts). Worn gear is drawn on top. */
+  appearance: Appearance = { ...DEFAULT_APPEARANCE };
+  /** The pre-v11 outfit from the save, written back unchanged so no old data is ever dropped. */
+  legacyOutfit: unknown = undefined;
   /** Test mode: takes no damage. Not saved. */
   god = false;
   /** Arena bots (server/pvpBots.ts): monsters never pick them as a target. Not saved. */
@@ -88,7 +91,7 @@ export class Player extends Creature {
   fightMode: FightMode = 'balanced';
   /** Chase: walk after your target. Stand: keep your position and only hit what comes into reach. */
   chase = true;
-  /** Show worn equipment on the model; off = classic outfit-only look. */
+  /** Show worn equipment on the model (always true since the classic-look option was removed). */
   showGear = true;
   /** Hitpoints lost per poison tick, and seconds to the next tick (see Buffs.poisoned). */
   poisonDamage = 0;

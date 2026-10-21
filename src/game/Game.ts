@@ -11,8 +11,8 @@ import type { Creature } from './entities/Creature';
 import { addToCapped, addToList, DEPOT_MAX_SLOTS, Inventory } from './inventory/Inventory';
 import { activeSets, type ActiveSet } from './inventory/sets';
 import {
-  FOUNDER_OUTFITS, FOUNDER_TIERS, founderTitle, FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, NO_PERKS, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS,
-  PREMIUM_OUTFITS, PREMIUM_REGEN, PREMIUM_WARN_MS, PremiumZone, type AccountPerks, type FounderTier,
+  FOUNDER_TIERS, founderTitle, FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, NO_PERKS, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS,
+  PREMIUM_REGEN, PREMIUM_WARN_MS, PremiumZone, type AccountPerks, type FounderTier,
 } from './premium/premium';
 import { describeItem, EQUIP_SLOTS, equipSlotFor, isItem, itemDef, POTION_BUFF_POWER, POTION_BUFF_SECONDS, runeGroup, type Bonus, type Element, type EquipSlot, type FieldKind, type ItemDef, type ItemStack } from './inventory/items';
 import { ENEMIES } from './enemies/enemyDefs';
@@ -43,7 +43,7 @@ import { GM_BOSS_LIFETIME, SUMMON_LIFETIME, type WorldMark } from './bosses/boss
 import { WorldEvents } from './bosses/WorldEvents';
 import { migrateSave, SAVE_VERSION } from './save/migrate';
 import { CLASSIC_STAGES, combatSkillRate, expRate, gatheringRate, scaleAmount, stagedGold, type ExpStages } from './progression/stages';
-import { DEFAULT_OUTFIT, isOutfit, type Outfit, type OutfitType } from './player/outfits';
+import { isAppearance, sameAppearance, sanitizeAppearance, type Appearance } from './player/appearance';
 import { BUFF_NAMES, emptyBuffs, expForLevel, FIGHT_MODE, Player, type FightMode } from './player/Player';
 import { isVocation, VOCATIONS, type Vocation } from './player/vocations';
 import { QUESTS, QuestLog } from './quests/quests';
@@ -200,7 +200,10 @@ export interface CharacterData {
   hp: number;
   mana: number;
   facing: number;
-  outfit?: Outfit;
+  /** Body, skin, hair, beard, build, eyes and clothes (save v11+). */
+  appearance?: Appearance;
+  /** The old outfit (saves before v12), kept untouched. */
+  outfit?: unknown;
   home?: string;
   /** false = classic look: worn equipment does not change the outfit. */
   showGear?: boolean;
@@ -246,7 +249,7 @@ export interface GameOptions {
   testMode?: boolean;
   /**
    * Premium rules are enforced (server: on unless TEST_MODE, or env PREMIUM). Off = every
-   * character gets the premium regions, depot and market limits and outfits.
+   * character gets the premium regions, depot and market limits.
    */
   premium?: boolean;
   /** Experience stages / server rates (progression/stages.ts). Left out = classic ×1 everywhere. */
@@ -260,9 +263,6 @@ export const DEATH_ITEM_CHANCE = 0.25;
 export const DEATH_PROTECTION_AMULET = 'hearthward_amulet';
 /** Seconds a player's dead body stays on the floor. */
 export const PLAYER_CORPSE_LIFETIME = 300;
-
-/** A premium or founder outfit falls back to this free one when it may no longer be worn. */
-const OUTFIT_FALLBACK: Partial<Record<OutfitType, OutfitType>> = { warlord: 'knight', mystic: 'mage', warden: 'knight' };
 
 /** "3 Mar 2027" (UTC; premium end dates are whole UK-winter days). */
 function shortDate(ms: number): string {
@@ -855,7 +855,7 @@ export class Game implements AIContext {
           if (bName === 'poisoned') p.poisonDamage = 0;
           if (bName === 'illusion' && p.illusion) {
             p.illusion = null;
-            this.events.emit({ type: 'outfitChanged', id: p.id });
+            this.events.emit({ type: 'lookChanged', id: p.id });
           }
           this.msg(s.id, BUFF_FADE[bName], 'info');
         }
@@ -2804,7 +2804,7 @@ export class Game implements AIContext {
     p.poisonDamage = 0;
     if (p.illusion) {
       p.illusion = null;
-      this.events.emit({ type: 'outfitChanged', id: p.id });
+      this.events.emit({ type: 'lookChanged', id: p.id });
     }
     this.refreshStats(s);
     this.events.emit({ type: 'playerRespawn', id: p.id });
@@ -3203,7 +3203,7 @@ export class Game implements AIContext {
         p.illusion = kind;
         p.buffs.illusion = sp.duration ?? 180;
         this.events.emit({ type: 'buff', id: p.id, buff: 'illusion', on: true });
-        this.events.emit({ type: 'outfitChanged', id: p.id });
+        this.events.emit({ type: 'lookChanged', id: p.id });
         this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'energy' });
         return;
       }
@@ -3752,17 +3752,22 @@ export class Game implements AIContext {
     this.events.emit({ type: 'equipmentChanged', id: pid });
   }
 
-  setOutfit(pid: number, o: Outfit): boolean {
+  /**
+   * Changes a character's appearance (the character designer: at creation and from the
+   * Appearance button, anywhere, free). Out-of-range values are refused, nothing changes.
+   */
+  setAppearance(pid: number, a: unknown): boolean {
     const p = this.getPlayer(pid);
     const s = this.sessions.get(pid);
-    if (!p || !s || !isOutfit(o)) return false;
-    const lock = this.outfitLock(s, o.type);
-    if (lock) {
-      this.msg(pid, lock, 'warn');
+    if (!p || !s) return false;
+    if (!isAppearance(a)) {
+      this.msg(pid, 'That appearance is not possible.', 'warn');
       return false;
     }
-    p.outfit = { ...o };
-    this.events.emit({ type: 'outfitChanged', id: pid });
+    if (sameAppearance(a, p.appearance)) return true;
+    p.appearance = sanitizeAppearance(a);
+    s.wantsSave = true;
+    this.events.emit({ type: 'lookChanged', id: pid });
     return true;
   }
 
@@ -3804,20 +3809,6 @@ export class Game implements AIContext {
     return this.isPremium(s) ? PREMIUM_MARKET_OFFERS : FREE_MARKET_OFFERS;
   }
 
-  private founderTierOf(s: Session): FounderTier | null {
-    return this.simulate ? s.perks.founderTier : s.premiumNet?.tier ?? null;
-  }
-
-  /** Why this outfit cannot be worn right now (null = it can). */
-  outfitLock(s: Session, type: OutfitType): string | null {
-    if ((PREMIUM_OUTFITS as readonly string[]).includes(type) && !this.isPremium(s)) return 'That outfit is for premium accounts.';
-    if ((FOUNDER_OUTFITS as readonly string[]).includes(type)) {
-      const t = this.founderTierOf(s);
-      if (!t || !FOUNDER_TIERS[t].wardenOutfit) return 'The Warden outfit belongs to Warden and Legend founders.';
-    }
-    return null;
-  }
-
   /** What the HUD shows about premium. */
   premiumView(pid: number): PremiumView | null {
     const s = this.sessions.get(pid);
@@ -3851,24 +3842,19 @@ export class Game implements AIContext {
     else if (this.premiumEnforced && wasOn && !on) this.checkPremium(s);
   }
 
-  /** Founder cloak and title (unless switched off), premium crown, and the outfit if it is no longer allowed. */
+  /** Founder cloak and title (unless switched off) and the premium crown. */
   refreshPerks(s: Session, emit = true): void {
     const p = s.player;
     const tier = s.perks.founderTier;
     const cloak = tier && !s.cosmetics.hideCloak ? FOUNDER_TIERS[tier].cloak : '';
     const title = tier && !s.cosmetics.hideTitle ? founderTitle(tier, s.perks.founderNo) : '';
     const premium = this.paidPremium(s);
-    let changed = cloak !== p.cloak || title !== p.title || premium !== p.premium;
+    const changed = cloak !== p.cloak || title !== p.title || premium !== p.premium;
     p.cloak = cloak;
     p.title = title;
     p.premium = premium;
-    // a premium or founder outfit switches to a free one; it can be picked again when premium returns
-    if (this.outfitLock(s, p.outfit.type)) {
-      p.outfit = { ...p.outfit, type: OUTFIT_FALLBACK[p.outfit.type] ?? 'citizen' };
-      changed = true;
-    }
     s.premiumWas = this.isPremium(s);
-    if (changed && emit) this.events.emit({ type: 'outfitChanged', id: p.id });
+    if (changed && emit) this.events.emit({ type: 'lookChanged', id: p.id });
   }
 
   /** Shows or hides the founder cloak and title for this character (saved). */
@@ -3889,7 +3875,7 @@ export class Game implements AIContext {
     if (!this.premiumEnforced || s.bot) return;
     const on = this.isPremium(s);
     if (s.premiumWas && !on) {
-      this.msg(s.id, 'Your premium time has ended. Everything you own is safe: the premium regions, the larger depot and premium outfits wait for your return.', 'warn');
+      this.msg(s.id, 'Your premium time has ended. Everything you own is safe: the premium regions, and the larger depot wait for your return.', 'warn');
       this.refreshPerks(s);
     }
     s.premiumWas = on;
@@ -4615,7 +4601,8 @@ export class Game implements AIContext {
       savedAt: Date.now(),
       player: {
         name: p.name, vocation: p.vocation, x: p.x, y: p.y, z: p.z, level: p.level, exp: p.exp,
-        hp: Math.round(p.hp), mana: Math.round(p.mana), facing: p.facing, outfit: { ...p.outfit }, home: p.home, showGear: p.showGear,
+        hp: Math.round(p.hp), mana: Math.round(p.mana), facing: p.facing, appearance: { ...p.appearance }, home: p.home, showGear: p.showGear,
+        ...(p.legacyOutfit !== undefined ? { outfit: p.legacyOutfit } : {}),
       },
       inventory: s.inventory.toJSON(),
       quests: JSON.parse(JSON.stringify(s.quests.state)),
@@ -4667,7 +4654,8 @@ export class Game implements AIContext {
     const f = this.freeTileNear(tgt.x, tgt.y, tgt.z);
     p.placeAt(f.x, f.y, f.z);
     p.facing = Number.isFinite(data.player.facing) ? data.player.facing : 0;
-    p.outfit = isOutfit(data.player.outfit) ? { ...data.player.outfit } : { ...DEFAULT_OUTFIT };
+    p.appearance = sanitizeAppearance(data.player.appearance);
+    p.legacyOutfit = data.player.outfit;
     p.home = typeof data.player.home === 'string' ? data.player.home : 'Thornvale';
     p.showGear = true; // worn equipment always shows (the old classic-look option was removed)
     const pv = data.pvp ?? {};
@@ -4682,7 +4670,7 @@ export class Game implements AIContext {
     s.marketClaimed = Array.isArray(data.market?.claimed) ? data.market!.claimed!.filter((x) => typeof x === 'string').slice(-MARKET_CLAIMS_KEPT) : [];
     s.marketOpen = null;
     this.refreshStats(s);
-    this.events.emit({ type: 'outfitChanged', id: pid });
+    this.events.emit({ type: 'lookChanged', id: pid });
     this.events.emit({ type: 'equipmentChanged', id: pid });
     this.events.emit({ type: 'teleport', id: pid });
     s.lostItems = data.lostItems ?? [];
@@ -4702,6 +4690,7 @@ export class Game implements AIContext {
       else this.msg(pid, `${describeStack(it)} from an older version of the game is waiting in your depot.`, 'loot');
     }
     if (m.lost.length) this.msg(pid, `Some of your items no longer exist in this version. They are kept safe and will come back if they return.`, 'warn');
+    if (m.from < 12) this.msg(pid, 'Outfits are gone: you now have your own appearance (body, skin, hair, beard, build and clothes), made from your old outfit\'s colours. Change it any time, free, with the Appearance button in the menu.', 'info');
     if (m.from < 5) this.msg(pid, 'Skills have arrived: your fighting skills and magic level were set from your level, so you hit just as hard as before. Train them by fighting (see the Skills panel).', 'info');
     this.claimMarketDeliveries(pid);
     this.events.emit({ type: 'gameLoaded', to: pid });
@@ -4739,8 +4728,8 @@ export class Game implements AIContext {
     const t = this.freeTileNear(this.world.playerSpawn.x, this.world.playerSpawn.y, this.world.playerSpawn.z);
     p.placeAt(t.x, t.y, t.z);
     p.facing = 0;
-    p.outfit = { ...DEFAULT_OUTFIT, type: vocation === 'paladin' ? 'ranger' : vocation === 'knight' ? 'knight' : 'mage' };
-    this.events.emit({ type: 'outfitChanged', id: pid });
+    p.legacyOutfit = undefined;
+    this.events.emit({ type: 'lookChanged', id: pid });
     this.events.emit({ type: 'equipmentChanged', id: pid });
     this.events.emit({ type: 'teleport', id: pid });
     this.events.emit({ type: 'gameLoaded', to: pid });

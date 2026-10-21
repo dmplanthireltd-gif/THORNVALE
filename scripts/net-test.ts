@@ -4,7 +4,9 @@
  * Two headless clients join, see each other, chat, and trade an item.
  */
 import { NetController } from '../src/client/Controller';
-import { DEFAULT_OUTFIT } from '../src/game/player/outfits';
+import { DEFAULT_APPEARANCE, type Appearance } from '../src/game/player/appearance';
+
+const ANN_LOOK: Appearance = { body: 'female', skin: 4, hair: 'braids', hairColor: 5, beard: 'none', build: 'slim', eyes: 2, top: 10, bottom: 13 };
 
 const process = (globalThis as unknown as { process: { argv: string[]; exit(code: number): never } }).process;
 const url = process.argv[2] ?? 'ws://localhost:8080/ws';
@@ -25,8 +27,8 @@ async function pump(clients: NetController[], secs: number): Promise<void> {
 
 async function main(): Promise<void> {
   const tag = Array.from({ length: 4 }, () => String.fromCharCode(97 + Math.floor(Math.random() * 26))).join('');
-  const a = await NetController.connect({ url, name: `Ann ${tag}`, password: 'secret1', vocation: 'paladin', outfit: DEFAULT_OUTFIT });
-  const b = await NetController.connect({ url, name: `Ben ${tag}`, password: 'secret2', vocation: 'sorcerer', outfit: DEFAULT_OUTFIT });
+  const a = await NetController.connect({ url, name: `Ann ${tag}`, password: 'secret1', vocation: 'paladin', appearance: ANN_LOOK });
+  const b = await NetController.connect({ url, name: `Ben ${tag}`, password: 'secret2', vocation: 'sorcerer', appearance: DEFAULT_APPEARANCE });
   await pump([a, b], 1);
   check(a.game.players().length >= 2 && b.game.players().length >= 2, 'both clients see each other');
   // new characters start on the tutorial island (a new name + password is a new account: it cannot skip)
@@ -43,6 +45,13 @@ async function main(): Promise<void> {
   a.send({ c: 'say', text: 'hi there' });
   await pump([a, b], 0.6);
   check(chats.includes('hi there'), 'chat reaches the other client');
+  check(JSON.stringify(b.game.getPlayer(a.pid)?.appearance) === JSON.stringify(ANN_LOOK), 'the look chosen at creation reaches other players');
+  a.send({ c: 'appearance', ap: [0, 6, 10, 0, 5, 2, 0, 3, 7] });
+  await pump([a, b], 0.6);
+  check(b.game.getPlayer(a.pid)?.appearance.hair === 'mohawk' && b.game.getPlayer(a.pid)?.appearance.beard === 'full', 'an appearance change reaches other players');
+  a.send({ c: 'appearance', ap: [1, 0, 0, 0, 3, 0, 0, 0, 0] });
+  await pump([a, b], 0.4);
+  check(a.game.getPlayer(a.pid)?.appearance.hair === 'mohawk', 'the server refuses an impossible appearance (female with a beard)');
 
   const bp = b.game.getPlayer(b.pid)!;
   const ap = a.game.getPlayer(a.pid)!;
@@ -71,7 +80,7 @@ async function main(): Promise<void> {
   check(bp.vocation === 'sorcerer', 'vocation chosen at login');
   let rejected = '';
   try {
-    const bad = await NetController.connect({ url, name: `Ben ${tag}`, password: 'wrong-pass', vocation: 'knight', outfit: DEFAULT_OUTFIT });
+    const bad = await NetController.connect({ url, name: `Ben ${tag}`, password: 'wrong-pass', vocation: 'knight', appearance: DEFAULT_APPEARANCE });
     bad.close();
   } catch (e) {
     rejected = e instanceof Error ? e.message : String(e);
@@ -97,7 +106,7 @@ async function main(): Promise<void> {
   await pump([b], 0.8);
   check(!b.game.players().some((p) => p.id === a.pid), 'leaving player disappears');
   // log back in: the character must come back exactly as it was left
-  const a2 = await NetController.connect({ url, name: `Ann ${tag}`, password: 'secret1', vocation: 'druid', outfit: DEFAULT_OUTFIT });
+  const a2 = await NetController.connect({ url, name: `Ann ${tag}`, password: 'secret1', vocation: 'druid', appearance: DEFAULT_APPEARANCE });
   await pump([a2, b], 0.6);
   const s2 = a2.game.session(a2.pid)!;
   check(s2.player.vocation === 'paladin', 'relogin keeps the vocation (not the one picked at login)');

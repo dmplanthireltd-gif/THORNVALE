@@ -160,7 +160,6 @@
 .gate-look { min-height: 32px; padding: 0 10px; cursor: pointer; background: #3a332b; border: 1px solid #0d0b09; box-shadow: inset 1px 1px 0 #6a5e50, inset -1px -1px 0 #120f0c; color: #e8dfcc; font: 600 12px var(--pixel); }
 .gate-look.on { background: #4f4126; border-color: #c9a24a; color: #ffe9a8; }
 .gate-stage { flex: none; width: 176px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; background: radial-gradient(ellipse 60% 60% at 50% 60%, #3a3228, #14110e 80%); border: 1px solid #0d0b09; box-shadow: inset 0 0 0 1px #4a4034; }
-.gate-stage .outfit-preview { width: 150px; height: 193px; }
 
 /* herald strip */
 .gate-herald {

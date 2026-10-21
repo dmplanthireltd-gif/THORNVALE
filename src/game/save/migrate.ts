@@ -2,6 +2,8 @@ import { isItem, type ItemStack } from '../inventory/items';
 import type { SaveData } from '../Game';
 import { legacySkills } from '../player/skills';
 import { isVocation } from '../player/vocations';
+import { appearanceFromOutfit } from '../player/appearance';
+import { PALETTE } from '../player/outfits';
 
 /**
  * Save-data versioning. Every save records the version that wrote it, and old
@@ -15,7 +17,7 @@ import { isVocation } from '../player/vocations';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -62,6 +64,12 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   // v10 → v11: the tutorial island. Everyone who existed before it counts as having finished it,
   // so nobody is moved, and their account may let new characters skip it. Nothing else changes.
   10: (d) => ({ ...d, tutorial: { state: 'done', step: 12 }, version: 11 }),
+  // v11 → v12: outfits are gone; each character gets an appearance (body, skin, hair, beard, build,
+  // clothes) made from its old outfit's colours and type. The old outfit stays in the save untouched.
+  11: (d) => {
+    const pl = (d.player ?? {}) as Record<string, unknown>;
+    return { ...d, player: { ...pl, appearance: appearanceFromOutfit(pl.outfit, PALETTE) }, version: 12 };
+  },
 };
 
 export interface MigrationResult {

@@ -308,17 +308,26 @@ export function makeWeapon(id: string | null, M: MatFn = matCache()): THREE.Grou
   const d = ITEMS[id];
   if (!d?.weaponType) return null;
   const l = LOOKS[id] ?? { c: 0xc9d0da };
-  switch (d.weaponType) {
-    case 'sword': return sword(d, l, M);
-    case 'axe': return axe(d, l, M);
-    case 'club': return club(d, l, M);
-    case 'bow': return bow(d, l, M);
-    case 'crossbow': return crossbow(d, l, M);
-    case 'throwing': return throwing(d, l, M);
-    case 'wand': return wand(l, M, false);
-    case 'rod': return wand(l, M, true);
-  }
+  const g = ((): THREE.Group => {
+    switch (d.weaponType) {
+      case 'sword': return sword(d, l, M);
+      case 'axe': return axe(d, l, M);
+      case 'club': return club(d, l, M);
+      case 'bow': return bow(d, l, M);
+      case 'crossbow': return crossbow(d, l, M);
+      case 'throwing': return throwing(d, l, M);
+      case 'wand': return wand(l, M, false);
+      case 'rod': return wand(l, M, true);
+    }
+  })();
+  // slimmer, more elegant blades, heads and hafts (owner, 2026-10-21); the length (+z) stays
+  const thin = WEAPON_THIN[d.weaponType] ?? 0.75;
+  g.scale.set(thin, thin, 1);
+  return g;
 }
+
+/** Thickness/width scale per weapon type (length is kept). */
+const WEAPON_THIN: Record<string, number> = { sword: 0.68, axe: 0.72, club: 0.74, throwing: 0.72, wand: 0.8, rod: 0.8, bow: 0.86, crossbow: 0.82 };
 
 export const SHIELDS: Record<string, { face: number; rim: number; shape: 'round' | 'kite' | 'tower' | 'book'; glow?: number; boss?: number }> = {
   wooden_shield: { face: 0x8a5a2c, rim: 0x6b7380, shape: 'round', boss: 0xc9d0da },

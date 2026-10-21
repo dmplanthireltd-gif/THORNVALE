@@ -1,0 +1,48 @@
+/* ---------------------------------------------------------------- character designer (CharacterDesigner.ts)
+   Used on the title screen (hero creator) and in the in-game Appearance window. BRAND.md: browns + gold,
+   square corners, Verdana labels with gold diamonds, gold borders on the active choice. */
+
+.cd { display: flex; gap: 14px; align-items: flex-start; color: #e8dfcc; font-family: var(--pixel); }
+.cd-stage {
+  flex: none; width: 184px; padding: 8px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  background: radial-gradient(ellipse 60% 55% at 50% 62%, #3a3228, #14110e 82%);
+  border: 1px solid #0d0b09; box-shadow: inset 0 0 0 1px #4a4034;
+}
+.char-preview { display: block; width: 168px; height: 224px; image-rendering: pixelated; cursor: grab; touch-action: none; }
+.char-preview:active { cursor: grabbing; }
+.cd-turn { display: flex; gap: 4px; align-self: stretch; }
+.cd-form { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.cd-row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; align-items: center; }
+.cd-label {
+  font: 700 10px var(--pixel); letter-spacing: 0.14em; text-transform: uppercase; color: #d4ad55; white-space: nowrap;
+}
+.cd-label::before { content: ''; display: inline-block; width: 5px; height: 5px; margin: 0 6px 1px 0; background: #c9a24a; transform: rotate(45deg); }
+.cd-toggle, .cd-step { display: flex; gap: 4px; }
+.cd-opt, .cd-arrow, .cd-random {
+  min-height: 26px; padding: 0 10px; cursor: pointer; background: #3a332b; border: 1px solid #0d0b09; border-radius: 0;
+  box-shadow: inset 1px 1px 0 #6a5e50, inset -1px -1px 0 #120f0c; color: #e8dfcc; font: 600 12px var(--pixel);
+}
+.cd-opt { flex: 1; }
+.cd-opt.on { background: #4f4126; border-color: #c9a24a; color: #ffe9a8; }
+.cd-arrow { flex: none; width: 28px; padding: 0; }
+.cd-random { flex: 1; }
+.cd-opt:hover, .cd-arrow:hover, .cd-random:hover { background: #4a4136; }
+.cd-opt:focus-visible, .cd-arrow:focus-visible, .cd-random:focus-visible, .cd-sw:focus-visible { outline: 2px solid #e8c26a; outline-offset: 1px; }
+.cd-value {
+  flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 0 6px;
+  background: #1a1714; border: 1px solid #0d0b09; box-shadow: inset 0 0 0 1px #4a4034; font: 600 12px var(--pixel); color: #e8c26a;
+}
+.cd-swatches { display: flex; flex-wrap: wrap; gap: 2px; }
+.cd-sw { width: 18px; height: 18px; padding: 0; cursor: pointer; border: 1px solid #0d0b09; border-radius: 0; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+.cd-sw.on { outline: 2px solid #e8c26a; outline-offset: 1px; }
+.cd-hint { margin: 2px 0 0; font-size: 11px; color: #a99d86; line-height: 1.4; }
+
+@media (max-width: 640px) {
+  .cd { flex-direction: column; align-items: stretch; }
+  .cd-stage { width: auto; }
+  .cd-row { grid-template-columns: 1fr; gap: 4px; }
+}
+
+/* in-game window */
+.appearance-win { width: min(560px, calc(100vw - 24px)); }
+.appearance-win .win-body { display: flex; flex-direction: column; gap: 10px; }

@@ -394,7 +394,7 @@ export class Sfx {
       case 'equipmentChanged':
         if (e.id === me) this.gearChanged();
         break;
-      case 'outfitChanged':
+      case 'lookChanged':
         if (e.id === me) this.play('pickupCloth', 0.6);
         break;
       case 'playerRespawn':

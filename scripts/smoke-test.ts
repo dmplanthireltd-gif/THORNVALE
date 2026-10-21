@@ -32,6 +32,8 @@ import { FISH_ITEMS } from '../src/game/gathering/fishing';
 import { ENEMIES } from '../src/game/enemies/enemyDefs';
 import { FOODS } from '../src/game/production/cooking';
 import { TOWNS } from '../src/game/world/townList';
+import { appearanceFromOutfit, decodeAppearance, encodeAppearance, isAppearance, randomAppearance, type Appearance } from '../src/game/player/appearance';
+import { PALETTE } from '../src/game/player/outfits';
 import {
   extendPremium, FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, FREE_TOWNS, LAUNCH_AT, NO_PERKS, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS, PRODUCTS,
 } from '../src/game/premium/premium';
@@ -552,7 +554,8 @@ console.log('Save / load');
     for (let y = 0; y < g.world.height && !up; y++) for (let x = 0; x < g.world.width; x++) if (g.world.isWalkable(x, y, 1)) { up = [x, y]; break; }
     g.teleport(s.player, up![0], up![1], 1);
   }
-  g.setOutfit(pid, { type: 'ranger', head: 7, body: 30, legs: 50, feet: 90 });
+  const look: Appearance = { body: 'female', skin: 5, hair: 'braids', hairColor: 6, beard: 'none', build: 'slim', eyes: 3, top: 10, bottom: 13 };
+  check(g.setAppearance(pid, look), 'appearance set');
   check(saves.save(g, pid), 'saved');
   const t = solo('knight');
   check(saves.load(t.g, t.pid), 'loaded');
@@ -561,7 +564,7 @@ console.log('Save / load');
   check(s2.inventory.count('wolf_pelt') === 3 && s2.bank === 1234, 'backpack and bank restored');
   check(s2.spells.has('exura_sio') && s2.chests.has('watchtower'), 'spells and opened chests restored');
   check(s2.player.z === s.player.z, `floor restored (z=${s2.player.z})`);
-  check(s2.player.outfit.type === 'ranger', 'outfit restored');
+  check(JSON.stringify(s2.player.appearance) === JSON.stringify(look), 'appearance restored after save and load');
   const v1 = { version: 1, savedAt: 0, player: { x: 1, y: 1, level: 5, exp: 900, hp: 100, mana: 20, facing: 0 }, inventory: { slots: [{ id: 'gold', qty: 7 }], equipment: { weapon: 'iron_sword', shield: null, armor: 'chain_armor' } }, quests: {} };
   check(t.g.applySave(t.pid, v1), 'old version-1 saves still load');
   check(s2.inventory.equipped('weapon') === 'iron_sword' && s2.inventory.equipped('armor') === 'chain_armor', 'old equipment migrates to the new slots');
@@ -1768,29 +1771,26 @@ console.log('Premium accounts and founder packs');
   run(g, 3.01);
   check(b.player.hp > a.player.hp * 1.3, `premium regenerates faster out of combat (${Math.round(a.player.hp)} vs ${Math.round(b.player.hp)})`);
 
-  // outfits
-  check(!g.setOutfit(a.id, { ...a.player.outfit, type: 'warlord' }) && g.setOutfit(b.id, { ...b.player.outfit, type: 'warlord' }), 'premium outfits need premium');
-  check(!g.setOutfit(b.id, { ...b.player.outfit, type: 'warden' }), 'the Warden outfit needs a Warden or Legend pack');
+  // appearance is free for everyone (outfits and their premium/founder locks are gone, save v11)
+  check(g.setAppearance(a.id, { ...a.player.appearance, hair: 'mohawk', build: 'broad' }) && a.player.appearance.hair === 'mohawk', 'a free account may pick any appearance');
   clock = b.perks.premiumUntil + 1000;
   run(g, 1.2);
-  check(b.player.outfit.type === 'knight', 'a premium outfit switches to a free one when premium ends');
 
   // founder looks
   g.setPerks(b.id, { ...NO_PERKS, premiumUntil: clock + 365 * DAY, founderTier: 'legend', founderNo: 27 });
   check(b.player.title === 'Legend #027' && b.player.cloak === 'crimson' && b.player.premium, 'a Legend founder gets the numbered title, the crimson cloak and the crown');
-  check(g.setOutfit(b.id, { ...b.player.outfit, type: 'warden' }), 'Legend founders may wear the Warden outfit');
   executeCommand(g, b.id, { c: 'cosmetics', cloak: false });
   check(b.player.cloak === '' && b.player.title === 'Legend #027', 'the cloak can be hidden');
   const saved = g.serialize(b.id);
-  check(saved.version === SAVE_VERSION && SAVE_VERSION >= 10 && saved.cosmetics?.hideCloak === true, 'save v10 keeps the cloak switch');
+  check(saved.version === SAVE_VERSION && SAVE_VERSION >= 10 && saved.cosmetics?.hideCloak === true, 'the save keeps the cloak switch');
   const g2 = new Game({ premium: true, now: () => clock });
   const c2 = g2.addPlayer('Patron', { intent: new BufferedIntent() });
   g2.setPerks(c2.id, { ...NO_PERKS, premiumUntil: clock + DAY, founderTier: 'legend', founderNo: 27 }, true);
-  check(g2.applySave(c2.id, saved) && c2.player.cloak === '' && c2.player.title === 'Legend #027' && c2.player.outfit.type === 'warden', 'perks set before loading keep the founder outfit and switches');
+  check(g2.applySave(c2.id, saved) && c2.player.cloak === '' && c2.player.title === 'Legend #027', 'perks set before loading keep the founder switches');
   const v8 = { ...JSON.parse(JSON.stringify(saved)), version: 8 } as Record<string, unknown>;
   delete v8.cosmetics;
   const m8 = migrateSave(v8);
-  check(typeof m8 !== 'string' && m8.data.version === SAVE_VERSION && m8.data.cosmetics?.hideCloak === false && m8.data.cosmetics?.hideTitle === false, 'an older save migrates to v10 with the founder looks shown');
+  check(typeof m8 !== 'string' && m8.data.version === SAVE_VERSION && m8.data.cosmetics?.hideCloak === false && m8.data.cosmetics?.hideTitle === false, 'an older save migrates with the founder looks shown');
 
   // online: other players see the looks, you see your premium state
   const mirror = new Game({ simulate: false });
@@ -2044,7 +2044,7 @@ console.log("Tutorial: Wayfarer's Isle (save v11)");
     const v9 = JSON.parse(JSON.stringify({ ...old.g.serialize(old.pid), version: 10 })) as Record<string, unknown>;
     delete v9.tutorial;
     const m = migrateSave(v9);
-    check(typeof m !== 'string' && m.from === 10 && m.data.version === SAVE_VERSION && SAVE_VERSION === 11 && m.data.tutorial?.state === 'done', 'a v10 save migrates to v11 as tutorial done');
+    check(typeof m !== 'string' && m.from === 10 && m.data.version === SAVE_VERSION && SAVE_VERSION >= 11 && m.data.tutorial?.state === 'done', 'a v10 save migrates as tutorial done');
     const t3 = solo('knight');
     const x0 = old.s.player.x, y0 = old.s.player.y;
     check(t3.g.applySave(t3.pid, v9) && t3.s.tutorial.state === 'done' && t3.s.player.x === x0 && t3.s.player.y === y0 && t3.s.bank === 777 && t3.s.inventory.count('iron_sword') === 1, 'a migrated v10 character keeps its place, items and bank');
@@ -2383,6 +2383,69 @@ console.log('Death loot, dead bodies and the Hearthward Amulet');
   const snap = buildSnapshot(g, s);
   check(snap.t === 'snap' && (snap.b as Array<{ id: number; cp?: string }>).some((b) => b.cp === p.name), 'snapshots mark dead bodies with the name');
   check(PROTOCOL_VERSION >= 19, 'protocol 19: dead bodies in snapshots');
+}
+
+console.log('Appearance and the character designer (save v11 → v12)');
+{
+  const { g, s, pid } = solo('paladin');
+  // an old v11 save with an outfit migrates to an appearance that keeps its colours
+  const v11 = JSON.parse(JSON.stringify({ ...g.serialize(pid), version: 11 })) as Record<string, unknown>;
+  const pl = v11.player as Record<string, unknown>;
+  delete pl.appearance;
+  pl.outfit = { type: 'barbarian', head: 3 * 19 + 1, body: 4 * 19 + 12, legs: 5 * 19 + 13, feet: 5 * 19 + 3 };
+  const mig = migrateSave(v11);
+  check(typeof mig !== 'string' && mig.from === 11 && mig.data.version === SAVE_VERSION && isAppearance(mig.data.player.appearance), 'a v11 save with an outfit migrates to a valid appearance');
+  const ap = typeof mig !== 'string' ? mig.data.player.appearance! : null;
+  check(ap?.hair === 'braids' && ap.beard === 'full' && ap.build === 'broad', 'the old outfit type picks hair, beard and build (barbarian → braids, full beard, broad)');
+  check(ap?.top !== ap?.bottom && JSON.stringify(mig !== 'newer' && mig !== 'invalid' && mig.data.player.outfit) === JSON.stringify(pl.outfit), 'shirt and trousers keep their colours; the old outfit stays in the save untouched');
+  const t = solo('knight');
+  check(t.g.applySave(t.pid, v11) && JSON.stringify(t.s.player.appearance) === JSON.stringify(ap), 'the migrated character loads with that appearance');
+  check(JSON.stringify(t.g.serialize(t.pid).player.outfit) === JSON.stringify(pl.outfit), 'saving again keeps the old outfit data');
+  // odd or missing outfit data never crashes a migration
+  for (const bad of [undefined, null, 'knight', { type: 'nope', head: -4, body: 9999 }]) {
+    const raw = JSON.parse(JSON.stringify({ ...g.serialize(pid), version: 11 })) as Record<string, unknown>;
+    (raw.player as Record<string, unknown>).outfit = bad;
+    delete (raw.player as Record<string, unknown>).appearance;
+    const m = migrateSave(raw);
+    check(typeof m !== 'string' && isAppearance(m.data.player.appearance), `an old save with outfit ${JSON.stringify(bad)} still migrates`);
+  }
+  check(isAppearance(appearanceFromOutfit({ type: 'warden', head: 0, body: 0, legs: 0, feet: 0 }, PALETTE)), 'founder and premium outfit types map too');
+
+  // round trip: save and load, wire encoding
+  const look: Appearance = { body: 'male', skin: 7, hair: 'topknot', hairColor: 11, beard: 'goatee', build: 'broad', eyes: 5, top: 15, bottom: 0 };
+  check(g.setAppearance(pid, look) && JSON.stringify(g.serialize(pid).player.appearance) === JSON.stringify(look), 'appearance goes into the save');
+  const t2 = solo('druid');
+  check(t2.g.applySave(t2.pid, g.serialize(pid)) && JSON.stringify(t2.s.player.appearance) === JSON.stringify(look), 'appearance round-trips save and load');
+  check(JSON.stringify(decodeAppearance(encodeAppearance(look))) === JSON.stringify(look) && encodeAppearance(look).length === 9, 'the wire form is nine small numbers and decodes back');
+  for (let i = 0; i < 200; i++) if (!isAppearance(randomAppearance())) { check(false, 'random appearances are valid'); break; }
+
+  // the command validates every value
+  const before = JSON.stringify(s.player.appearance);
+  const bad: number[][] = [[2, 0, 0, 0, 0, 0, 0, 0, 0], [0, 8, 0, 0, 0, 0, 0, 0, 0], [0, 0, 12, 0, 0, 0, 0, 0, 0], [0, 0, 0, 12, 0, 0, 0, 0, 0], [0, 0, 0, 0, 6, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 3, 0, 0, 0], [0, 0, 0, 0, 0, 0, 6, 0, 0], [0, 0, 0, 0, 0, 0, 0, 16, 0], [0, 0, 0, 0, 0, 0, 0, 0, -1], [1, 0, 0, 0, 2, 0, 0, 0, 0], [0, 0.5, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0]];
+  for (const ap2 of bad) executeCommand(g, pid, { c: 'appearance', ap: ap2 });
+  executeCommand(g, pid, { c: 'appearance', ap: 'junk' as unknown as number[] });
+  check(JSON.stringify(s.player.appearance) === before, 'out-of-range, female-with-beard and malformed appearances are refused');
+  check(!g.setAppearance(pid, { ...look, skin: 99 }) && !g.setAppearance(pid, { ...look, hair: 'afro' }), 'setAppearance refuses unknown values');
+  executeCommand(g, pid, { c: 'appearance', ap: [1, 3, 7, 4, 0, 0, 2, 6, 9] });
+  check(s.player.appearance.body === 'female' && s.player.appearance.hair === 'ponytail' && s.player.appearance.top === 6, 'a valid appearance command changes the look');
+
+  // other players see it (online snapshot → mirror)
+  const other = g.addPlayer('Watcher', { intent: new BufferedIntent() });
+  other.player.placeAt(s.player.x + 1, s.player.y, s.player.z);
+  const mirror = new Game({ simulate: false });
+  mirror.localId = other.id;
+  const looks: number[] = [];
+  mirror.events.on((e: GameEvent) => { if (e.type === 'lookChanged' && e.id === pid) looks.push(e.id); });
+  applySnapshot(mirror, buildSnapshot(g, other) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>, { depot: null, trade: null } as unknown as MirrorExtras);
+  check(JSON.stringify(mirror.getPlayer(pid)?.appearance) === JSON.stringify(s.player.appearance), 'other players receive the appearance');
+  executeCommand(g, pid, { c: 'appearance', ap: [0, 0, 10, 10, 5, 2, 0, 3, 3] });
+  const snap2 = buildSnapshot(g, other) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>;
+  check(snap2.c.find((c) => c.id === pid)?.ap?.join(',') === '0,0,10,10,5,2,0,3,3', 'a change goes out in the next snapshot');
+  applySnapshot(mirror, snap2, { depot: null, trade: null } as unknown as MirrorExtras);
+  check(mirror.getPlayer(pid)?.appearance.hair === 'mohawk' && looks.length >= 2, 'the mirror updates the look and tells the renderer');
+  const snap3 = buildSnapshot(g, other) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>;
+  check(snap3.c.find((c) => c.id === pid)?.ap === undefined, 'an unchanged look is not sent again');
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);
