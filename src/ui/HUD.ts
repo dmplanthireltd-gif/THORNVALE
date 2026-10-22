@@ -23,6 +23,7 @@ import { TUTORIAL_LAST, tutorialStep } from '../game/tutorial/tutorial';
 import { hpColor } from '../render/Overlay';
 import { makeBottomResizable, makePanelsMovable, resetPanelLayout } from './panels';
 import type { Renderer } from '../render/Renderer';
+import { GRAPHICS_NAMES } from '../render/graphics';
 import { button, el, fmtGold, paintSlot } from './dom';
 import { itemIcon, spellIcon } from './icons';
 import { SFX_CATS, type Sfx } from '../audio/Sfx';
@@ -446,6 +447,14 @@ export class HUD {
       wb.textContent = `Weather: ${wqName[next]}`;
     }, 'btn');
     wb.title = 'Weather effects: High, Low (half the rain, snow and sand) or Off (no weather pictures; sandstorms still limit how far you see)';
+    // graphics: High (full look) / Medium / Low (graphics.ts) — for slower computers
+    const gq = ['high', 'medium', 'low'] as const;
+    const gb = button(disp, `Graphics: ${GRAPHICS_NAMES[this.renderer.graphics]}`, () => {
+      const next = gq[(gq.indexOf(this.renderer.graphics) + 1) % gq.length];
+      this.renderer.setGraphics(next);
+      gb.textContent = `Graphics: ${GRAPHICS_NAMES[next]}`;
+    }, 'btn');
+    gb.title = 'Graphics: High (the full look), Medium (softer shadows, small props cast none) or Low (no shadows, no grass tufts, half the weather, a little less zoom-out) — for slower computers';
     const slider = (parent: HTMLElement, value: number, title: string, set: (v: number) => void, max = 100) => {
       const s = el('input', 'vol-slider', parent);
       s.type = 'range';
@@ -552,6 +561,8 @@ export class HUD {
     button(tools, 'Help', () => this.toggleWin('help'), 'btn tool');
     button(tools, 'Settings', () => this.toggleWin('settings'), 'btn tool');
     this.buildSettings();
+    // running slowly on High for a while: suggest a lower graphics setting once (never switch by itself)
+    this.renderer.onSlow = () => this.log('The game is running slowly here. Settings → Display → Graphics: Medium or Low can make it smoother.', 'info');
 
     const eqp = el('div', 'panel equipment', right);
     el('div', 'panel-title', eqp, 'Equipment');

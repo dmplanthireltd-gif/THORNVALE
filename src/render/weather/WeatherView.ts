@@ -55,6 +55,8 @@ export class WeatherView {
   readonly particles = new WeatherParticles();
   readonly haze = new WeatherHaze();
   quality: WeatherQuality = storedWeatherQuality();
+  /** Graphics setting cap on the particle share (graphics.ts: Low = half). */
+  particleShare = 1;
   private t = 0;
   // eased amounts
   private rain = 0;
@@ -110,7 +112,7 @@ export class WeatherView {
     const under = me.z < 0 || isUnderwater(game.world, me.x, me.y, me.z);
     const roof = !under && !!game.world.houseAt(me.x, me.y, me.z);
     const on = this.quality !== 'off';
-    const scale = this.quality === 'low' ? 0.5 : 1;
+    const scale = Math.min(this.quality === 'low' ? 0.5 : 1, this.particleShare);
 
     // surroundings, twice a second: trees for blowing leaves, sand for drifting dust
     this.sampleT -= dt;

@@ -28,6 +28,8 @@ export class CameraController {
   private screenH = 1;
   pixelMode = true;
   private pixelLevel = 3;
+  /** Graphics setting Low: the farthest zoom-out steps are left out (graphics.ts). */
+  private zoomOutCut = 0;
 
   constructor(x: number, z: number) {
     const tilt = THREE.MathUtils.degToRad(CAMERA_TILT_DEG);
@@ -70,12 +72,24 @@ export class CameraController {
   zoomBy(delta: number): void {
     if (this.pixelMode) {
       const step = delta > 0 ? -1 : 1;
-      this.pixelLevel = THREE.MathUtils.clamp(this.pixelLevel + step, 0, PIXEL_LEVELS.length - 1);
+      this.pixelLevel = THREE.MathUtils.clamp(this.pixelLevel + step, this.zoomOutCut, PIXEL_LEVELS.length - 1);
       this.applyProjection();
       return;
     }
     const factor = Math.pow(1.12, Math.sign(delta));
-    this.zoomTarget = THREE.MathUtils.clamp(this.zoomTarget * factor, 3.5, 12);
+    this.zoomTarget = THREE.MathUtils.clamp(this.zoomTarget * factor, 3.5, this.maxZoom);
+  }
+
+  private get maxZoom(): number {
+    return 12 * Math.pow(0.85, this.zoomOutCut);
+  }
+
+  /** Leaves out the `n` farthest zoom-out steps (a shorter view distance on Low graphics). */
+  setZoomOutCut(n: number): void {
+    this.zoomOutCut = Math.max(0, Math.min(n, PIXEL_LEVELS.length - 1));
+    if (this.pixelLevel < this.zoomOutCut) this.pixelLevel = this.zoomOutCut;
+    this.zoomTarget = Math.min(this.zoomTarget, this.maxZoom);
+    this.applyProjection();
   }
 
   setPixelMode(on: boolean): void {

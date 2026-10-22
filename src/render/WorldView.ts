@@ -10,6 +10,8 @@ import { mat, toonGradient, type Mat } from './models/parts';
 import { buildCaveRock, CAVE_ROCK_FLOORS, CAVE_UNIFORMS, type LightSource } from './caveRock';
 import { DecorBuilder } from './caveDecor';
 import { groundTex, objTex } from './textures';
+import type { GraphicsLevel } from './graphics';
+import { StaticMerger } from './staticMerge';
 import { applyWind, WIND_BUSH, WIND_CROP, WIND_GRASS, WIND_PALM, WIND_TREE } from './weather/wind';
 
 /** Vertical distance between floors in world units. */
@@ -35,46 +37,157 @@ const GROUND_TEX: Partial<Record<Ground, (v: number) => THREE.Texture>> = {
   [Ground.Seabed]: groundTex.seabed,
 };
 
-/** Collects instance transforms for one shared geometry/material pair. */
-class Batch {
-  matrices: THREE.Matrix4[] = [];
-  colors: THREE.Color[] = [];
-  tiles: number[] = [];
-  constructor(readonly geo: THREE.BufferGeometry, readonly material: THREE.Material, readonly shadows = true) {}
-  add(m: THREE.Matrix4, color: number | THREE.Color = 0xffffff, tile = -1): void {
-    this.matrices.push(m.clone());
-    this.colors.push(color instanceof THREE.Color ? color.clone() : new THREE.Color(color));
-    this.tiles.push(tile);
+/**
+ * Chunk size in tiles for the instanced world batches. Every batch is split into
+ * one InstancedMesh per CHUNK × CHUNK square of the map, each with its own
+ * bounding sphere, so three.js frustum-culls the squares the camera (and the sun's
+ * shadow camera) cannot see. Drawing whole-floor batches cost millions of
+ * triangles a frame (performance rules, BIBLE §6).
+ */
+export const CHUNK = 32;
+const chunkKey = (x: number, y: number) => Math.floor(y / CHUNK) * 4096 + Math.floor(x / CHUNK);
+const _bc = new THREE.Color();
+
+/** Columns in a ground variant atlas. */
+const VARIANTS = 3;
+const atlasCache = new Map<Ground, THREE.Texture | null>();
+/** The three 32 × 32 variants of a ground texture side by side (96 × 32), same filtering and wrapping. */
+function groundAtlas(g: Ground): THREE.Texture | null {
+  if (atlasCache.has(g)) return atlasCache.get(g)!;
+  const make = GROUND_TEX[g];
+  let out: THREE.Texture | null = null;
+  if (make) {
+    const first = make(0);
+    const img = first.image as HTMLCanvasElement;
+    const w = img.width, h = img.height;
+    const c = document.createElement('canvas');
+    c.width = w * VARIANTS;
+    c.height = h;
+    const ctx = c.getContext('2d')!;
+    for (let v = 0; v < VARIANTS; v++) ctx.drawImage(make(v).image as HTMLCanvasElement, v * w, 0);
+    const t = new THREE.CanvasTexture(c);
+    t.magFilter = first.magFilter;
+    t.minFilter = first.minFilter;
+    t.generateMipmaps = false;
+    t.colorSpace = first.colorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    out = t;
   }
-  build(): THREE.InstancedMesh | null {
-    if (!this.matrices.length) return null;
-    const im = new THREE.InstancedMesh(this.geo, this.material, this.matrices.length);
-    this.matrices.forEach((m, i) => {
-      im.setMatrixAt(i, m);
-      im.setColorAt(i, this.colors[i]);
-    });
-    im.instanceMatrix.needsUpdate = true;
-    if (im.instanceColor) im.instanceColor.needsUpdate = true;
-    im.castShadow = this.shadows;
-    im.receiveShadow = true;
-    im.computeBoundingSphere();
-    return im;
+  atlasCache.set(g, out);
+  return out;
+}
+
+/** Samples the tile's own variant column of the atlas (per-instance `aVariant`), wrapping inside that column. */
+function useVariantAtlas(m: THREE.Material): void {
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aVariant;\nvarying float vVariant;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\n  vVariant = aVariant;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vVariant;')
+      .replace('#include <map_fragment>', `#ifdef USE_MAP
+  vec2 atlasUv = vec2((fract(vMapUv.x) + vVariant) / ${VARIANTS.toFixed(1)}, vMapUv.y);
+  diffuseColor *= texture2D(map, atlasUv);
+#endif`);
+  };
+  m.customProgramCacheKey = () => 'groundAtlas';
+}
+
+/** Instance transforms + colours of one geometry/material pair, grouped by map chunk (flat arrays, no per-instance objects). */
+class Batch {
+  private chunks = new Map<number, { m: number[]; c: number[]; t: number[]; v: number[] }>();
+  /** Batches of ground tiles carry each tile's texture variant (column of the variant atlas, see groundAtlas). */
+  variants = false;
+  /**
+   * `tag` marks what the Graphics setting may trim: 'small' props stop casting
+   * shadows on Medium and Low, 'decor' (grass tufts, berries) is hidden on Low.
+   */
+  constructor(readonly geo: THREE.BufferGeometry, readonly material: THREE.Material, readonly shadows = true, readonly tag: '' | 'small' | 'decor' = '') {}
+  add(m: THREE.Matrix4, color: number | THREE.Color = 0xffffff, tile = -1, variant = 0): void {
+    const e = m.elements;
+    const key = chunkKey(e[12] + 0.5, e[14] + 0.5);
+    let ch = this.chunks.get(key);
+    if (!ch) this.chunks.set(key, (ch = { m: [], c: [], t: [], v: [] }));
+    if (this.variants) ch.v.push(variant);
+    for (let k = 0; k < 16; k++) ch.m.push(e[k]);
+    const c = color instanceof THREE.Color ? color : _bc.setHex(color);
+    ch.c.push(c.r, c.g, c.b);
+    ch.t.push(tile);
+  }
+  /**
+   * Adds one InstancedMesh per chunk to `group`. With a layer, records which
+   * instances belong to which tile (felled trees, faded canopies, mined rocks).
+   */
+  build(group: THREE.Group, layer?: TileLayer): THREE.InstancedMesh[] {
+    const out: THREE.InstancedMesh[] = [];
+    for (const ch of this.chunks.values()) {
+      const n = ch.t.length;
+      let g = this.geo;
+      if (this.variants) {
+        // same vertex buffers for every chunk, plus this chunk's variants
+        g = new THREE.BufferGeometry();
+        g.setIndex(this.geo.index);
+        for (const [name, a] of Object.entries(this.geo.attributes)) g.setAttribute(name, a);
+        g.setAttribute('aVariant', new THREE.InstancedBufferAttribute(new Float32Array(ch.v), 1));
+        if (!this.geo.boundingSphere) this.geo.computeBoundingSphere();
+        g.boundingSphere = this.geo.boundingSphere;
+      }
+      const im = new THREE.InstancedMesh(g, this.material, n);
+      im.instanceMatrix.array.set(ch.m);
+      im.instanceMatrix.needsUpdate = true;
+      im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(ch.c), 3);
+      im.castShadow = this.shadows;
+      im.receiveShadow = true;
+      if (this.tag) im.userData.gfx = this.tag;
+      im.computeBoundingSphere();
+      // wind sway and stump/rubble scaling stay well inside a little margin
+      im.boundingSphere!.radius += 0.6;
+      group.add(im);
+      if (layer) {
+        const mi = layer.meshes.length;
+        layer.meshes.push(im);
+        layer.originals.push(new Float32Array(ch.m));
+        ch.t.forEach((t, i) => {
+          if (t < 0) return;
+          const list = layer.byTile.get(t);
+          if (list) list.push(mi, i);
+          else layer.byTile.set(t, [mi, i]);
+        });
+      }
+      out.push(im);
+    }
+    this.chunks.clear();
+    return out;
   }
 }
 
-interface FadeLayer {
-  mesh: THREE.InstancedMesh;
-  byTile: Map<number, number>;
-  original: THREE.Matrix4[];
+/**
+ * Instances of a batch by tile (flat pairs: mesh index, instance index), so a
+ * felled tree can shrink to a stump, a canopy can fade, an ore rock can turn to rubble.
+ */
+interface TileLayer {
+  meshes: THREE.InstancedMesh[];
+  /** The built instance matrices of each mesh. */
+  originals: Float32Array[];
+  byTile: Map<number, number[]>;
+}
+
+function newLayer(): TileLayer {
+  return { meshes: [], originals: [], byTile: new Map() };
+}
+
+const _om = new THREE.Matrix4();
+/** The instance's built matrix (shared temp: copy before keeping). */
+function originalOf(L: TileLayer, mi: number, i: number): THREE.Matrix4 {
+  return _om.fromArray(L.originals[mi], i * 16);
+}
+
+interface FadeLayer extends TileLayer {
   proxyMat: THREE.Material;
 }
 
 /** Tree trunks by tile, so a felled tree can shrink to a stump (and grow back). */
-interface TrunkLayer {
-  mesh: THREE.InstancedMesh;
-  byTile: Map<number, number[]>;
-  original: THREE.Matrix4[];
-}
+type TrunkLayer = TileLayer;
 
 interface RoofView {
   house: House;
@@ -113,7 +226,11 @@ class FloorView {
   /** Torches, braziers, crystals and lava that light the floor around them (the nearest few get real lights). */
   lights: LightSource[] = [];
   dim = 1;
-  constructor(readonly z: number) {}
+  /** Bakes the floor's static props into merged chunk meshes (filled while building, emptied by build()). */
+  merger: StaticMerger;
+  constructor(readonly z: number, keep: (m: THREE.Material) => boolean) {
+    this.merger = new StaticMerger((c, o) => this.m(c, o), keep, chunkKey);
+  }
 
   /** Creates a cel material owned by this floor (so the floor can be dimmed). */
   m(color: number, opts: { emissive?: number; map?: THREE.Texture | null } = {}): Mat {
@@ -147,6 +264,23 @@ function compose(x: number, y: number, z: number, rotY = 0, sx = 1, sy = 1, sz =
   tmpS.set(sx, sy, sz);
   tmpP.set(x, y, z);
   return tmpM.compose(tmpP, tmpQ, tmpS);
+}
+
+/** Joins already-placed geometries into one (unindexed: position, normal, uv). */
+function joinGeometries(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const parts = list.map((g) => (g.index ? g.toNonIndexed() : g));
+  const out = new THREE.BufferGeometry();
+  for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2]] as const) {
+    const arr = new Float32Array(parts.reduce((n, g) => n + g.attributes[name].count * size, 0));
+    let o = 0;
+    for (const g of parts) {
+      arr.set(g.attributes[name].array as Float32Array, o);
+      o += g.attributes[name].count * size;
+    }
+    out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+  }
+  out.computeBoundingSphere();
+  return out;
 }
 
 function geo<T extends THREE.BufferGeometry>(g: T, ty = 0): T {
@@ -196,12 +330,13 @@ export class WorldView {
       scene.add(l);
     }
     for (const z of [...world.floors.keys()].sort((a, b) => a - b)) {
-      const fv = new FloorView(z);
+      const fv = new FloorView(z, (m) => this.flameMats.includes(m as Mat));
       this.floors.set(z, fv);
       this.group.add(fv.group);
       this.buildGround(fv);
       this.buildObjects(fv);
       for (const h of world.houses) if (h.z === z && !h.noRoof) this.buildRoof(fv, h);
+      fv.merger.build(fv.group);
       fv.group.visible = false;
     }
     const f0 = this.floors.get(0);
@@ -236,19 +371,22 @@ export class WorldView {
     const tileGeo = new THREE.BoxGeometry(1, 0.3, 1);
     const batches = new Map<string, Batch>();
     const matFor = new Map<string, Mat>();
-    const getBatch = (g: Ground, v: number) => {
-      const key = `${g}:${v}`;
+    // one batch per ground kind: its three texture variants sit side by side in one atlas (one draw call per chunk, not three)
+    const getBatch = (g: Ground) => {
+      const key = `${g}`;
       let b = batches.get(key);
       if (!b) {
-        const tex = GROUND_TEX[g]?.(v) ?? null;
-        if (tex && (g === Ground.Water || g === Ground.DeepWater)) this.waterTex.push(tex);
+        const tex = groundAtlas(g);
+        if (tex && (g === Ground.Water || g === Ground.DeepWater) && !this.waterTex.includes(tex)) this.waterTex.push(tex);
         let mm = matFor.get(key);
         if (!mm) {
           mm = fv.m(0xffffff, { map: tex, emissive: g === Ground.Lava ? 0xb8400c : 0x000000 });
+          if (tex) useVariantAtlas(mm);
           if (g === Ground.Lava) this.flameMats.push(mm);
           matFor.set(key, mm);
         }
         b = new Batch(tileGeo, mm, false);
+        b.variants = !!tex;
         batches.set(key, b);
       }
       return b;
@@ -284,24 +422,19 @@ export class WorldView {
         const shade = 0.92 + hash2(x, y) * 0.1;
         const water = g === Ground.Water || g === Ground.DeepWater || g === Ground.Lava;
         const raised = g === Ground.Stone || g === Ground.Wood || g === Ground.Marble ? 0.02 : 0;
-        getBatch(g, v).add(compose(x, water ? -0.33 : -0.15 + raised, y), c.setScalar(shade));
+        getBatch(g).add(compose(x, water ? -0.33 : -0.15 + raised, y), c.setScalar(shade), -1, v);
       }
     }
-    for (const b of batches.values()) {
-      const im = b.build();
-      if (im) fv.group.add(im);
-    }
-    const r = rock.build();
-    if (r) fv.group.add(r);
-    const rr = reefRock.build();
-    if (rr) fv.group.add(rr);
+    for (const b of batches.values()) b.build(fv.group);
+    rock.build(fv.group);
+    reefRock.build(fv.group);
 
     // grass tufts on the surface
     if (z === 0 || z === 1) {
       const tuftGeo = geo(new THREE.ConeGeometry(0.05, 0.22, 3), 0.11);
       const tuftMat = fv.m(0xffffff);
       applyWind(tuftMat, WIND_GRASS);
-      const tufts = new Batch(tuftGeo, tuftMat, false);
+      const tufts = new Batch(tuftGeo, tuftMat, false, 'decor');
       for (let y = 0; y < w.height; y++) {
         for (let x = 0; x < w.width; x++) {
           const g = w.getGround(x, y, z);
@@ -315,8 +448,7 @@ export class WorldView {
           }
         }
       }
-      const t = tufts.build();
-      if (t) fv.group.add(t);
+      tufts.build(fv.group);
     }
   }
 
@@ -343,7 +475,7 @@ export class WorldView {
     const w = this.world;
     const z = fv.z;
     const M = (color: number, map: THREE.Texture | null = null, emissive = 0) => fv.m(color, { map, emissive });
-    const B = (g: THREE.BufferGeometry, m: THREE.Material, shadows = true) => new Batch(g, m, shadows);
+    const B = (g: THREE.BufferGeometry, m: THREE.Material, shadows = true, tag: '' | 'small' | 'decor' = '') => new Batch(g, m, shadows, tag);
 
     const leaves = objTex.leaves();
     const bark = objTex.bark();
@@ -381,11 +513,11 @@ export class WorldView {
     const jungle1 = B(new THREE.IcosahedronGeometry(0.85, 0), leafMat);
     const palmTrunk = B(geo(new THREE.CylinderGeometry(0.07, 0.12, 2.2, 5), 1.1), palmMat);
     const frond = B(geo(new THREE.BoxGeometry(0.22, 0.05, 1.0), 0), leafMat);
-    const deadBranch = B(new THREE.CylinderGeometry(0.04, 0.07, 0.8, 5), M(0x5a5048));
+    const deadBranch = B(new THREE.CylinderGeometry(0.04, 0.07, 0.8, 5), M(0x5a5048), true, 'small');
     const rocks = B(new THREE.DodecahedronGeometry(0.42, 0), M(0xffffff, objTex.rock()));
     const bushes = B(new THREE.IcosahedronGeometry(0.42, 0), bushMat);
     const ferns = B(geo(new THREE.ConeGeometry(0.32, 0.4, 5), 0.2), bushMat, false);
-    const berry = B(new THREE.IcosahedronGeometry(0.06, 0), plainMat);
+    const berry = B(new THREE.IcosahedronGeometry(0.06, 0), plainMat, true, 'decor');
     const flowers = B(new THREE.IcosahedronGeometry(0.065, 0), flowerMat, false);
     const stems = B(geo(new THREE.CylinderGeometry(0.012, 0.012, 0.2, 3), 0.1), stemMat, false);
     const wheat = B(geo(new THREE.ConeGeometry(0.06, 0.55, 4), 0.27), wheatMat, false);
@@ -393,27 +525,27 @@ export class WorldView {
     const brick = M(0xffffff, objTex.brick());
     const wallsWood = B(geo(new THREE.BoxGeometry(1, 1.7, 1), 0.85), plaster);
     const wallsStone = B(geo(new THREE.BoxGeometry(1, 1.9, 1), 0.95), brick);
-    const beams = B(new THREE.BoxGeometry(1.02, 0.12, 1.02), M(0x4a2f1b));
+    const beams = B(new THREE.BoxGeometry(1.02, 0.12, 1.02), M(0x4a2f1b), true, 'small');
     const post = geo(new THREE.BoxGeometry(0.16, 1.7, 0.16), 0.85);
-    const doorPosts = B(post, M(0x4a2f1b));
-    const lintels = B(new THREE.BoxGeometry(1, 0.2, 0.22), M(0x4a2f1b));
-    const fPosts = B(geo(new THREE.BoxGeometry(0.12, 0.85, 0.12), 0.42), M(0x7a5634));
-    const rails = B(new THREE.BoxGeometry(1, 0.07, 0.06), M(0x8c6640));
-    const railPosts = B(geo(new THREE.BoxGeometry(0.1, 0.7, 0.1), 0.35), M(0x6a4a2c));
+    const doorPosts = B(post, M(0x4a2f1b), true, 'small');
+    const lintels = B(new THREE.BoxGeometry(1, 0.2, 0.22), M(0x4a2f1b), true, 'small');
+    const fPosts = B(geo(new THREE.BoxGeometry(0.12, 0.85, 0.12), 0.42), M(0x7a5634), true, 'small');
+    const rails = B(new THREE.BoxGeometry(1, 0.07, 0.06), M(0x8c6640), true, 'small');
+    const railPosts = B(geo(new THREE.BoxGeometry(0.1, 0.7, 0.1), 0.35), M(0x6a4a2c), true, 'small');
     const headstones = B(geo(new THREE.BoxGeometry(0.5, 0.7, 0.14), 0.35), M(0xffffff, objTex.rock()));
-    const mounds = B(new THREE.BoxGeometry(0.5, 0.14, 0.75), M(0x5a4530));
+    const mounds = B(new THREE.BoxGeometry(0.5, 0.14, 0.75), M(0x5a4530), true, 'small');
     const barrels = B(geo(new THREE.CylinderGeometry(0.28, 0.3, 0.7, 10), 0.35), M(0x7b5230));
-    const hoops = B(new THREE.CylinderGeometry(0.305, 0.305, 0.06, 10), M(0x3d3d42));
+    const hoops = B(new THREE.CylinderGeometry(0.305, 0.305, 0.06, 10), M(0x3d3d42), true, 'small');
     const crates = B(geo(new THREE.BoxGeometry(0.7, 0.6, 0.7), 0.3), M(0x9a7444, objTex.logs()));
     const tableTop = B(new THREE.BoxGeometry(0.9, 0.08, 0.7), M(0x80592f));
-    const tableLeg = B(geo(new THREE.BoxGeometry(0.08, 0.5, 0.08), 0.25), M(0x5b3d24));
+    const tableLeg = B(geo(new THREE.BoxGeometry(0.08, 0.5, 0.08), 0.25), M(0x5b3d24), true, 'small');
     const hay = B(geo(new THREE.BoxGeometry(0.85, 0.5, 0.75), 0.25), M(0xd9b95a));
-    const lampPost = B(geo(new THREE.CylinderGeometry(0.05, 0.07, 1.8, 6), 0.9), M(0x2d2d33));
+    const lampPost = B(geo(new THREE.CylinderGeometry(0.05, 0.07, 1.8, 6), 0.9), M(0x2d2d33), true, 'small');
     const glowMat = M(0xffd27a, null, 0xffb84a);
     const lampGlow = B(new THREE.BoxGeometry(0.22, 0.26, 0.22), glowMat, false);
     const cliffs = B(geo(new THREE.BoxGeometry(1, 3.1, 1), 1.55), M(0xffffff, objTex.cliff()));
     const stakes = B(geo(new THREE.BoxGeometry(1, 2.0, 0.35), 1.0), M(0xffffff, objTex.stakes()));
-    const stakeTips = B(geo(new THREE.ConeGeometry(0.12, 0.35, 4), 2.15), M(0x6a4a2c));
+    const stakeTips = B(geo(new THREE.ConeGeometry(0.12, 0.35, 4), 2.15), M(0x6a4a2c), true, 'small');
     const stoneWalls = B(geo(new THREE.BoxGeometry(1, 1.9, 1), 0.95), brick);
     const pillars = B(geo(new THREE.CylinderGeometry(0.28, 0.32, 2.1, 8), 1.05), M(0xd8d2c4, objTex.rock()));
     const counters = B(geo(new THREE.BoxGeometry(1, 0.85, 0.7), 0.42), M(0x7a5634, objTex.logs()));
@@ -424,11 +556,11 @@ export class WorldView {
     const fireMat = M(0xff8a2a, null, 0xff5a10);
     this.flameMats.push(fireMat);
     const flames = B(geo(new THREE.ConeGeometry(0.16, 0.5, 5), 0.25), fireMat, false);
-    const torchSticks = B(geo(new THREE.CylinderGeometry(0.03, 0.04, 0.5, 5), 1.2), M(0x5b3d24));
+    const torchSticks = B(geo(new THREE.CylinderGeometry(0.03, 0.04, 0.5, 5), 1.2), M(0x5b3d24), true, 'small');
     const torchFlame = B(geo(new THREE.ConeGeometry(0.08, 0.22, 5), 1.55), fireMat, false);
     // depot lockers: instanced (the big depot halls hold 15–19 each), same look as before
     const lockerBox = B(geo(new THREE.BoxGeometry(0.8, 1.6, 0.6), 0.8), M(0x6a4428, objTex.logs()));
-    const lockerTop = B(geo(new THREE.BoxGeometry(0.9, 0.08, 0.7), 1.62), M(0x4a2f1b));
+    const lockerTop = B(geo(new THREE.BoxGeometry(0.9, 0.08, 0.7), 1.62), M(0x4a2f1b), true, 'small');
     const lockerPlate = B(new THREE.BoxGeometry(0.3, 0.2, 0.04), M(0xe0b03c), false);
 
     const leafColors = [0x3f7d34, 0x4a8a38, 0x356f2e, 0x4f9340];
@@ -702,50 +834,25 @@ export class WorldView {
     const all = [trunks, rocks, bushes, ferns, berry, flowers, stems, wheat, wallsWood, wallsStone, beams, doorPosts, lintels, fPosts, rails, railPosts,
       headstones, mounds, barrels, hoops, crates, tableTop, tableLeg, hay, lampPost, lampGlow, deadBranch, stakes, stakeTips,
       stoneWalls, pillars, counters, altars, stalag, bones, skulls, flames, torchSticks, torchFlame, lockerBox, lockerTop, lockerPlate];
-    for (const b of all) {
-      const im = b.build();
-      if (im) fv.group.add(im);
-    }
+    for (const b of all) b.build(fv.group);
     for (const b of [treeTrunks, palmTrunk]) {
-      const im = b.build();
-      if (!im) continue;
-      fv.group.add(im);
-      const byTile = new Map<number, number[]>();
-      b.tiles.forEach((t, i) => {
-        if (t < 0) return;
-        const list = byTile.get(t);
-        if (list) list.push(i);
-        else byTile.set(t, [i]);
-      });
-      fv.trunkLayers.push({ mesh: im, byTile, original: b.matrices });
+      const L = newLayer();
+      b.build(fv.group, L);
+      if (L.meshes.length) fv.trunkLayers.push(L);
     }
     const fadeBatches: Array<[Batch, number]> = [[canopyLow, 0x4a8a38], [canopyHigh, 0x4a8a38], [pine1, 0x2f5e34], [pine2, 0x2f5e34], [pine3, 0x2f5e34], [jungle1, 0x2f6a26], [frond, 0x4a9a3a], [cliffs, 0x6a6058]];
     for (const [b, proxyColor] of fadeBatches) {
-      const im = b.build();
-      if (!im) continue;
-      fv.group.add(im);
-      const byTile = new Map<number, number>();
-      b.tiles.forEach((t, i) => {
-        if (t < 0) return;
-        // several instances per tile (palm fronds): keep the first and map extras by negative keys
-        if (!byTile.has(t)) byTile.set(t, i);
-        else byTile.set(-(t * 16 + byTile.size % 16) - 1, i);
-      });
       const proxyMat = new THREE.MeshToonMaterial({ color: proxyColor, gradientMap: toonGradient(), transparent: true, opacity: 0.25, depthWrite: false });
-      fv.fadeLayers.push({ mesh: im, byTile, original: b.matrices, proxyMat });
+      const L: FadeLayer = { ...newLayer(), proxyMat };
+      b.build(fv.group, L);
+      if (L.meshes.length) fv.fadeLayers.push(L);
     }
     for (const ti of stumpTiles) this.setStump(fv, ti, true);
     for (const b of [oreRock, oreVein]) {
-      const im = b.build();
-      if (!im) continue;
-      fv.group.add(im);
-      const byTile = new Map<number, number[]>();
-      b.tiles.forEach((t, i) => {
-        const list = byTile.get(t);
-        if (list) list.push(i);
-        else byTile.set(t, [i]);
-      });
-      fv.oreLayers.push({ mesh: im, byTile, original: b.matrices });
+      // index 0 = the boulders, 1 = the veins (even when a floor has no ore at all)
+      const L = newLayer();
+      b.build(fv.group, L);
+      fv.oreLayers.push(L);
     }
     for (const ti of rubbleTiles) this.setRubble(fv, ti, true);
   }
@@ -755,16 +862,18 @@ export class WorldView {
     if (on === fv.rubble.has(ti)) return;
     if (on) fv.rubble.add(ti);
     else fv.rubble.delete(ti);
-    const m = new THREE.Matrix4();
     fv.oreLayers.forEach((L, li) => {
-      for (const i of L.byTile.get(ti) ?? []) {
+      const list = L.byTile.get(ti) ?? [];
+      for (let k = 0; k < list.length; k += 2) {
+        const mesh = L.meshes[list[k]], i = list[k + 1];
+        const orig = originalOf(L, list[k], i);
         // layer 0 is the boulder (flattened), the others are veins (hidden)
-        L.mesh.setMatrixAt(i, !on ? L.original[i] : li === 0 ? m.copy(L.original[i]).multiply(RUBBLE_SCALE) : ZERO);
-        L.mesh.instanceMatrix.needsUpdate = true;
-        if (li === 0 && L.mesh.instanceColor) {
-          L.mesh.getColorAt(i, tmpC);
-          L.mesh.setColorAt(i, on ? tmpC.multiplyScalar(0.7) : tmpC.multiplyScalar(1 / 0.7));
-          L.mesh.instanceColor.needsUpdate = true;
+        mesh.setMatrixAt(i, !on ? orig : li === 0 ? orig.multiply(RUBBLE_SCALE) : ZERO);
+        mesh.instanceMatrix.needsUpdate = true;
+        if (li === 0 && mesh.instanceColor) {
+          mesh.getColorAt(i, tmpC);
+          mesh.setColorAt(i, on ? tmpC.multiplyScalar(0.7) : tmpC.multiplyScalar(1 / 0.7));
+          mesh.instanceColor.needsUpdate = true;
         }
       }
     });
@@ -910,20 +1019,27 @@ export class WorldView {
     if (on === fv.stumps.has(ti)) return;
     if (on) fv.stumps.add(ti);
     else fv.stumps.delete(ti);
-    const m = new THREE.Matrix4();
     for (const L of fv.trunkLayers) {
-      for (const i of L.byTile.get(ti) ?? []) {
-        L.mesh.setMatrixAt(i, on ? m.copy(L.original[i]).multiply(STUMP_SCALE) : L.original[i]);
-        L.mesh.instanceMatrix.needsUpdate = true;
+      const list = L.byTile.get(ti) ?? [];
+      for (let k = 0; k < list.length; k += 2) {
+        const orig = originalOf(L, list[k], list[k + 1]);
+        L.meshes[list[k]].setMatrixAt(list[k + 1], on ? orig.multiply(STUMP_SCALE) : orig);
+        L.meshes[list[k]].instanceMatrix.needsUpdate = true;
       }
     }
-    for (const L of fv.fadeLayers) {
-      for (const key of this.keysFor(L, ti)) {
-        const i = L.byTile.get(key);
-        if (i === undefined) continue;
-        L.mesh.setMatrixAt(i, on ? ZERO : L.original[i]);
-        L.mesh.instanceMatrix.needsUpdate = true;
-      }
+    // a stump that is faded right now gets its canopy back when the fade lets go (restoreTile skips stumps)
+    if (!on && fv === this.fadedFloor && this.faded.has(ti)) return;
+    for (const L of fv.fadeLayers) this.setTileMatrices(L, ti, on);
+  }
+
+  /** Hides (zero scale) or restores every instance of a tile in a layer. */
+  private setTileMatrices(L: TileLayer, ti: number, hide: boolean): void {
+    const list = L.byTile.get(ti);
+    if (!list) return;
+    for (let k = 0; k < list.length; k += 2) {
+      const mesh = L.meshes[list[k]];
+      mesh.setMatrixAt(list[k + 1], hide ? ZERO : originalOf(L, list[k], list[k + 1]));
+      mesh.instanceMatrix.needsUpdate = true;
     }
   }
 
@@ -956,7 +1072,21 @@ export class WorldView {
     this.add(fv, g);
   }
 
+  /** Adds static models to a floor: their plain parts are baked into the floor's merged chunk meshes (staticMerge.ts). */
   private add(fv: FloorView, ...meshes: THREE.Object3D[]): void {
+    for (const m of meshes) {
+      m.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+        }
+      });
+      if (!fv.merger.take(m)) fv.group.add(m);
+    }
+  }
+
+  /** Adds models that change at runtime (dig holes, roofs that fade): never merged. */
+  private addLive(fv: FloorView, ...meshes: THREE.Object3D[]): void {
     for (const m of meshes) {
       m.traverse((o) => {
         if ((o as THREE.Mesh).isMesh) {
@@ -1064,7 +1194,7 @@ export class WorldView {
     rim.position.set(x, 0.02, y);
     const holeG = new THREE.Group();
     holeG.add(hole, rim);
-    this.add(fv, stones, holeG);
+    this.addLive(fv, stones, holeG);
     const isDig = this.world.linkAt(x, y, fv.z) && (o === Obj.LooseStone || this.isDigLink(x, y, fv.z));
     const f: Feature = { x, y, looseStone: isDig ? stones : null, hole: holeG };
     stones.visible = o === Obj.LooseStone;
@@ -1114,31 +1244,47 @@ export class WorldView {
     const gableMat = fv.m(h.wallColor);
     const beamMat = fv.m(0x4a2f1b);
     const g = new THREE.Group();
+    // both slopes in one mesh and both gables in one (fewer draw calls; the roof still fades as one)
+    const slopes: THREE.BufferGeometry[] = [];
     for (const side of [-1, 1]) {
-      const slope = new THREE.Mesh(new THREE.BoxGeometry(length, 0.09, slopeLen), roofMat);
-      slope.position.set(0, rise / 2, (side * half) / 2);
-      slope.rotation.x = side * pitch;
-      g.add(slope);
+      const sg = new THREE.BoxGeometry(length, 0.09, slopeLen);
+      sg.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(0, rise / 2, (side * half) / 2), new THREE.Quaternion().setFromEuler(new THREE.Euler(side * pitch, 0, 0)), new THREE.Vector3(1, 1, 1)));
+      slopes.push(sg);
     }
+    g.add(new THREE.Mesh(joinGeometries(slopes), roofMat));
     const tri = new THREE.Shape();
     tri.moveTo(-half + overhang, 0);
     tri.lineTo(half - overhang, 0);
     tri.lineTo(0, rise - overhang * (rise / half));
     tri.lineTo(-half + overhang, 0);
-    const gableGeo = new THREE.ShapeGeometry(tri);
+    const gables: THREE.BufferGeometry[] = [];
     for (const end of [-1, 1]) {
-      const gable = new THREE.Mesh(gableGeo, gableMat);
-      gable.rotation.y = end === 1 ? Math.PI / 2 : -Math.PI / 2;
-      gable.position.x = end * (length / 2 - overhang);
-      g.add(gable);
+      const gg = new THREE.ShapeGeometry(tri);
+      gg.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(end * (length / 2 - overhang), 0, 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, end === 1 ? Math.PI / 2 : -Math.PI / 2, 0)), new THREE.Vector3(1, 1, 1)));
+      gables.push(gg);
     }
+    g.add(new THREE.Mesh(joinGeometries(gables), gableMat));
     const ridge = new THREE.Mesh(new THREE.BoxGeometry(length + 0.06, 0.14, 0.18), beamMat);
     ridge.position.y = rise + 0.03;
     g.add(ridge);
     g.position.set(h.x + (h.w - 1) / 2, eave, h.y + (h.h - 1) / 2);
     if (!alongX) g.rotation.y = Math.PI / 2;
-    this.add(fv, g);
+    this.addLive(fv, g);
     fv.roofs.push({ house: h, group: g, materials: [roofMat, gableMat, beamMat], opacity: 1 });
+  }
+
+  // ================================================================ graphics setting
+
+  /** Settings → Display → Graphics: small props stop casting shadows, decoration hides (graphics.ts). */
+  setGraphics(g: GraphicsLevel): void {
+    this.group.traverse((o) => {
+      const tag = o.userData.gfx as string | undefined;
+      if (o.name === 'dust') o.visible = g.decor;
+      if (!tag) return;
+      if (o.userData.cast === undefined) o.userData.cast = o.castShadow;
+      if (tag === 'small') o.castShadow = (o.userData.cast as boolean) && g.smallShadows;
+      if (tag === 'decor') o.visible = g.decor;
+    });
   }
 
   // ================================================================ per-frame
@@ -1282,23 +1428,31 @@ export class WorldView {
       }
     }
     // restore what no longer needs fading (and everything when the floor changed)
-    if (this.fadedFloor && this.fadedFloor !== fv) {
+    const floorChanged = this.fadedFloor !== fv;
+    if (this.fadedFloor && floorChanged) {
       for (const ti of this.faded) this.restoreTile(this.fadedFloor, ti);
       this.faded.clear();
     }
-    for (const ti of this.faded) if (!want.has(ti)) this.restoreTile(fv, ti);
+    let changed = floorChanged;
+    for (const ti of this.faded) if (!want.has(ti)) { this.restoreTile(fv, ti); changed = true; }
+    // only tiles that start fading touch the instance buffers (each touch re-uploads a chunk's buffer)
+    for (const ti of want) {
+      if (this.faded.has(ti)) continue;
+      changed = true;
+      for (const L of fv.fadeLayers) this.setTileMatrices(L, ti, true);
+    }
     this.faded = want;
     this.fadedFloor = fv;
+    if (!changed) return;
     let pi = 0;
     for (const ti of want) {
+      if (fv.stumps.has(ti)) continue;
       for (const L of fv.fadeLayers) {
-        for (const key of this.keysFor(L, ti)) {
-          const i = L.byTile.get(key);
-          if (i === undefined) continue;
-          L.mesh.setMatrixAt(i, ZERO);
-          L.mesh.instanceMatrix.needsUpdate = true;
-          const proxy = this.proxy(pi++, L);
-          proxy.matrix.copy(L.original[i]);
+        const list = L.byTile.get(ti);
+        if (!list) continue;
+        for (let k = 0; k < list.length; k += 2) {
+          const proxy = this.proxy(pi++, L, L.meshes[list[k]].geometry);
+          proxy.matrix.copy(originalOf(L, list[k], list[k + 1]));
           proxy.visible = true;
           if (proxy.parent !== fv.group) fv.group.add(proxy);
         }
@@ -1307,38 +1461,21 @@ export class WorldView {
     for (; pi < this.proxies.length; pi++) this.proxies[pi].visible = false;
   }
 
-  private keysFor(L: FadeLayer, ti: number): number[] {
-    const keys = [ti];
-    for (let k = 0; k < 16; k++) {
-      const neg = -(ti * 16 + k) - 1;
-      if (L.byTile.has(neg)) keys.push(neg);
-    }
-    return keys;
-  }
-
   private restoreTile(fv: FloorView, ti: number): void {
     // a stump keeps its canopy hidden
     if (fv.stumps.has(ti)) return;
-    for (const L of fv.fadeLayers) {
-      for (const key of this.keysFor(L, ti)) {
-        const i = L.byTile.get(key);
-        if (i !== undefined) {
-          L.mesh.setMatrixAt(i, L.original[i]);
-          L.mesh.instanceMatrix.needsUpdate = true;
-        }
-      }
-    }
+    for (const L of fv.fadeLayers) this.setTileMatrices(L, ti, false);
   }
 
-  private proxy(i: number, L: FadeLayer): THREE.Mesh {
+  private proxy(i: number, L: FadeLayer, geometry: THREE.BufferGeometry): THREE.Mesh {
     let p = this.proxies[i];
     if (!p) {
-      p = new THREE.Mesh(L.mesh.geometry, L.proxyMat);
+      p = new THREE.Mesh(geometry, L.proxyMat);
       p.matrixAutoUpdate = false;
       p.renderOrder = 2;
       this.proxies[i] = p;
     }
-    p.geometry = L.mesh.geometry;
+    p.geometry = geometry;
     p.material = L.proxyMat;
     return p;
   }

@@ -52,6 +52,20 @@ export class CreatureView {
     this.syncPosition();
   }
 
+  private castOn: boolean | null = null;
+  /**
+   * Turns the model's shadow on or off (only creatures whose shadow can reach the
+   * view cast one: renderer). `force` re-applies after the model was re-dressed.
+   */
+  setCastShadow(on: boolean, force = false): void {
+    if (on === this.castOn && !force) return;
+    this.castOn = on;
+    const hb = this.rig.hitbox;
+    this.rig.root.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh && o !== hb) o.castShadow = on;
+    });
+  }
+
   get hitbox(): THREE.Mesh {
     return this.rig.hitbox;
   }

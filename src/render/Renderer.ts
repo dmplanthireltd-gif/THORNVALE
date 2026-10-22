@@ -17,6 +17,7 @@ import { Effects, type FieldKind } from './Effects';
 import { applyGear } from './models/humanoid';
 import { buildPlayerRig } from './models/playerModel';
 import { mat, toonGradient } from './models/parts';
+import { mergeRig } from './models/rigMerge';
 import { CAMERA_TILT_DEG, CameraController } from './CameraController';
 import { itemIcon } from '../ui/icons';
 import { buildEnemy, buildNpc, ENEMY_SCALE, type BipedRig, type Rig } from './models/rigs';
@@ -32,6 +33,7 @@ import { stationAt } from '../game/production/recipes';
 import { Obj, WorldMap, type EnemyKind } from '../game/world/WorldMap';
 import { WeatherView, type WeatherQuality } from './weather/WeatherView';
 import { TrapView } from './weather/trapView';
+import { FpsWatch, GRAPHICS, storeGraphics, storedGraphics, type GraphicsQuality } from './graphics';
 
 export type PickResult =
   | { kind: 'enemy' | 'npc' | 'player'; id: number }
@@ -44,6 +46,9 @@ const BLOOD: Partial<Record<string, number>> = {
 };
 
 const VIEW_RANGE = 15;
+/** Where the sun stands relative to the camera focus (west, up, south). */
+const SUN_OFFSET = { x: 12, y: 40, z: 16 };
+const TILT_COS = Math.cos(THREE.MathUtils.degToRad(CAMERA_TILT_DEG));
 const DROP_RANGE = 22;
 
 /**
@@ -92,6 +97,11 @@ export class Renderer {
   private stormSky = new THREE.Color(0x3a4048);
   private skyNow = new THREE.Color();
   private skyFlash = new THREE.Color(0xdde6ff);
+  /** Settings → Display → Graphics (graphics.ts). */
+  graphics: GraphicsQuality = storedGraphics();
+  private fps = new FpsWatch();
+  /** Called once when the game has run slowly for a while on High (the HUD suggests a lower setting). */
+  onSlow: (() => void) | null = null;
 
   constructor(private readonly container: HTMLElement, private readonly ctl: Controller) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -112,6 +122,8 @@ export class Renderer {
     this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera;
     sc.left = -20; sc.right = 20; sc.top = 20; sc.bottom = -20; sc.near = 1; sc.far = 90;
+    // north-up shadow map, so the fitted box (fitShadow) is a tight rectangle around the view
+    sc.up.set(0, 0, -1);
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.03;
     this.scene.add(this.sun, this.sun.target);
@@ -137,6 +149,50 @@ export class Renderer {
     window.addEventListener('resize', () => this.resize());
     this.resize();
     this.worldView.update(0, p.z, [{ x: p.x, y: p.y }], []);
+    this.applyGraphics();
+    this.precompile();
+  }
+
+  /**
+   * Compiles every shader the world needs up front, in both light setups (sun
+   * shadows above ground, none below), so the first step underground or onto a
+   * new floor never freezes the game while shaders compile.
+   */
+  private precompile(): void {
+    try {
+      const cast = this.sun.castShadow;
+      this.sun.castShadow = true;
+      this.renderer.compile(this.scene, this.cam.camera);
+      this.sun.castShadow = false;
+      this.renderer.compile(this.scene, this.cam.camera);
+      this.sun.castShadow = cast;
+    } catch {
+      /* compiling early is only an optimisation */
+    }
+  }
+
+  /** Settings → Display → Graphics: High / Medium / Low. */
+  setGraphics(q: GraphicsQuality): void {
+    this.graphics = q;
+    storeGraphics(q);
+    this.applyGraphics();
+  }
+
+  private applyGraphics(): void {
+    const g = GRAPHICS[this.graphics];
+    if (this.sun.shadow.mapSize.x !== g.shadowMap) {
+      this.sun.shadow.mapSize.set(g.shadowMap, g.shadowMap);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+    this.lastPz = Number.NaN; // updateLighting turns the sun's shadows on/off
+    this.worldView.setGraphics(g);
+    this.weather.particleShare = g.particles;
+    this.cam.setZoomOutCut(g.zoomOutCut);
+    if (!this.cam.pixelMode) {
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, g.maxPixelRatio));
+      this.resize();
+    }
   }
 
   get canvas(): HTMLCanvasElement {
@@ -160,7 +216,7 @@ export class Renderer {
 
   setPixelMode(on: boolean): void {
     this.cam.setPixelMode(on);
-    this.renderer.setPixelRatio(on ? 1 : Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(on ? 1 : Math.min(window.devicePixelRatio, GRAPHICS[this.graphics].maxPixelRatio));
     this.resize();
   }
 
@@ -215,7 +271,10 @@ export class Renderer {
   private ensureView(c: Creature): CreatureView {
     let v = this.views.get(c.id);
     if (!v) {
-      v = new CreatureView(c, this.buildRig(c), this.scene);
+      const rig = this.buildRig(c);
+      // fewer draw calls per character, same look (models/rigMerge.ts)
+      mergeRig(rig);
+      v = new CreatureView(c, rig, this.scene);
       this.views.set(c.id, v);
     }
     return v;
@@ -705,7 +764,11 @@ export class Renderer {
       }
       case 'equipmentChanged': {
         const v = this.views.get(e.id);
-        if (v && v.rig.type === 'biped' && !(v.creature instanceof Player && v.creature.illusion)) this.gearUp(v.rig, e.id);
+        if (v && v.rig.type === 'biped' && !(v.creature instanceof Player && v.creature.illusion)) {
+          this.gearUp(v.rig, e.id);
+          mergeRig(v.rig);
+          v.setCastShadow(true, true);
+        }
         break;
       }
       case 'lookChanged':
@@ -854,6 +917,39 @@ export class Renderer {
 
   // ------------------------------------------------------------------ frame
 
+  private shadowFitKey = '';
+  /**
+   * Fits the sun's shadow camera tightly around what the camera can see (plus
+   * the casters just outside it whose shadows fall into view), instead of a fixed
+   * 40 × 40 tile square: far fewer objects go through the shadow pass.
+   */
+  private fitShadow(): void {
+    const c = this.cam.camera;
+    const key = `${c.right}:${c.top}`;
+    if (key === this.shadowFitKey) return;
+    this.shadowFitKey = key;
+    // ground rectangle the view covers (relative to the focus), with margins: tall things north of the
+    // view still show their tops, and casters up to ~6 high just west/south throw shadows into it
+    const halfW = c.right + 3;
+    const north = c.top / TILT_COS + 5;
+    const south = c.top / TILT_COS + 4;
+    const sc = this.sun.shadow.camera;
+    const eye = new THREE.Vector3(-SUN_OFFSET.x, SUN_OFFSET.y, SUN_OFFSET.z);
+    const basis = new THREE.Matrix4().lookAt(eye, new THREE.Vector3(), sc.up);
+    const ax = new THREE.Vector3().setFromMatrixColumn(basis, 0);
+    const ay = new THREE.Vector3().setFromMatrixColumn(basis, 1);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    const p = new THREE.Vector3();
+    for (const x of [-halfW, halfW]) for (const z of [-north, south]) for (const y of [0, 10]) {
+      p.set(x, y, z);
+      const lx = p.dot(ax), ly = p.dot(ay);
+      minX = Math.min(minX, lx); maxX = Math.max(maxX, lx);
+      minY = Math.min(minY, ly); maxY = Math.max(maxY, ly);
+    }
+    sc.left = minX; sc.right = maxX; sc.bottom = minY; sc.top = maxY;
+    sc.updateProjectionMatrix();
+  }
+
   private updateLighting(pz: number): void {
     if (pz === this.lastPz) return;
     this.lastPz = pz;
@@ -864,11 +960,12 @@ export class Renderer {
     this.baseHemi = this.hemi.intensity = under ? 0.3 : 1.15;
     this.hemi.color.setHex(under ? 0x9a948c : 0xcfe4ff);
     this.baseSun = this.sun.intensity = under ? 0.25 : 2.3;
-    this.sun.castShadow = !under;
+    this.sun.castShadow = !under && GRAPHICS[this.graphics].shadows;
   }
 
   update(dt: number): void {
     this.time += dt;
+    if (this.fps.frame(performance.now()) && this.graphics === 'high') this.onSlow?.();
     this.fxFrame++;
     const g = this.ctl.game;
     const p = this.me;
@@ -894,6 +991,11 @@ export class Renderer {
 
     // creatures: build models nearby, drop far ones
     const anchor = new THREE.Vector3();
+    // only creatures whose shadow can fall into the view cast one: the sun stands west and south,
+    // so shadows fall east and north (a little margin west/south, none east/north)
+    const cc = this.cam.camera, fo = this.cam.focus;
+    const sx0 = fo.x - cc.right - 2.5, sx1 = fo.x + cc.right + 1;
+    const sz0 = fo.z - cc.top / TILT_COS - 3, sz1 = fo.z + cc.top / TILT_COS + 3;
     const consider = (c: Creature) => {
       const d = chebyshev(c.x, c.y, p.x, p.y);
       const off = this.worldView.floorOffset(c.z);
@@ -917,6 +1019,8 @@ export class Renderer {
       if (!c.dead) view.rig.root.visible = true;
       if (c === p) view.block.guard = defensiveGuard(p);
       view.update(dt, corpse);
+      const rp = view.rig.root.position;
+      view.setCastShadow(rp.x >= sx0 && rp.x <= sx1 && rp.z >= sz0 && rp.z <= sz1);
       this.skillAnim.apply(view, dt);
       if (this.underwater.active && c instanceof Player && !c.dead && c.z === pz) this.underwater.swim(view, c.id);
       if (c.dead || c.z !== pz) {
@@ -997,8 +1101,9 @@ export class Renderer {
     const vp = p.visualPos();
     this.cam.update(dt, vp.x, vp.y);
     const f = this.cam.focus;
-    this.sun.position.set(f.x - 12, 40, f.z + 16);
+    this.sun.position.set(f.x - SUN_OFFSET.x, SUN_OFFSET.y, f.z + SUN_OFFSET.z);
     this.sun.target.position.set(f.x, 0, f.z);
+    this.fitShadow();
     const s = g.session(this.ctl.pid);
     const ringLight = s?.inventory.equipment.ring ? itemDef(s.inventory.equipment.ring.id).bonus?.light ?? 0 : 0;
     const light = (pz < 0 ? 2.5 : 0) + spellLight(p.buffs) + ringLight;
