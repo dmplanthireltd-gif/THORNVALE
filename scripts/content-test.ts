@@ -1192,10 +1192,10 @@ console.log('Gravewind Steppe and deeper caves');
     const f = w.floor(z)!;
     for (let i = 0; i < f.obj.length; i++) {
       const o = f.obj[i];
-      if (o === Obj.Brazier || o === Obj.Crystals || o === Obj.GlowShrooms) lights++;
+      if (o === Obj.Brazier || o === Obj.Crystals || o === Obj.GlowShrooms || o === Obj.Torch || f.ground[i] === Ground.Lava) lights++;
       if ((o === Obj.Brazier || o === Obj.Crystals) && f.ground[i] === Ground.Void) solidOnOpen++;
     }
-    check(lights > 20 && solidOnOpen === 0, `floor ${z}: ${lights} braziers, crystals and glowing mushrooms`);
+    check(lights >= areas.length * 3 && solidOnOpen === 0, `floor ${z}: ${lights} braziers, torches, crystals, glowing mushrooms and lava pools`);
   }
 
   // webs slow you down and wear off; poison clouds can poison (on an empty steppe: no other monsters about)

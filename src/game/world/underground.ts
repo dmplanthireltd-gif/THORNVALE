@@ -46,7 +46,7 @@ interface AreaSpec {
 }
 
 /** Floors that are enlarged (pushed floor by floor). */
-export const DEEPENED_FLOORS: number[] = [-1, -2];
+export const DEEPENED_FLOORS: number[] = [-1, -2, -3];
 
 export const UNDERGROUND_AREAS: AreaSpec[] = [
   // ---------------------------------------------------------------- floor −1
