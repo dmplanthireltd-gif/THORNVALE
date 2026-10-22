@@ -692,6 +692,8 @@ export class HUD {
       if (target.classList.contains('k-player')) this.ctl.send({ c: 'tradeItem', id: cid, slot: src.index });
       return;
     }
+    // dropped onto the pet window: the tortoise carries it (ui/petsUi.ts)
+    if (src.kind === 'inv' && under.closest('.pet-win')) return this.ctl.send({ c: 'pet', a: 'put', i: src.index });
     // dropped into the open trade window: add to your offer
     if (src.kind === 'inv' && under.closest('.trade-win')) {
       const t = this.ctl.trade();

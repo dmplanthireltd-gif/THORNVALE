@@ -19,6 +19,11 @@ import { isVocation, type Vocation } from '../player/vocations';
 import type { QuestLog } from '../quests/quests';
 import type { TutorialState } from '../tutorial/tutorial';
 import type { ExpStages } from '../progression/stages';
+import { applyPetsView, parsePetLook, petLook, petsView, type PetView } from '../pets/PetSystem';
+import { petForItem, petXpForLevel } from '../pets/petDefs';
+
+export type PetAction = 'dismiss' | 'pouch' | 'pouchClose' | 'put' | 'take';
+const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take'];
 
 /**
  * Wire protocol (JSON over WebSocket). The server runs the real Game; clients
@@ -26,7 +31,7 @@ import type { ExpStages } from '../progression/stages';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 25;
+export const PROTOCOL_VERSION = 26;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -91,7 +96,9 @@ export type Command =
   /** Founder looks: show (true) or hide the cloak / title. */
   | { c: 'cosmetics'; cloak?: boolean; title?: boolean }
   /** Leave the tutorial island now (accounts that finished it once). */
-  | { c: 'tutorialSkip' };
+  | { c: 'tutorialSkip' }
+  /** Pets (protocol 26): send the pet away, open/close the tortoise pouch, put a backpack slot in / take a pouch slot out. */
+  | { c: 'pet'; a: PetAction; i?: number };
 
 export type ClientMessage =
   | { t: 'hello'; v: number; name: string; password?: string; token?: string; ap?: number[]; vocation?: Vocation; skipTutorial?: boolean }
@@ -129,6 +136,8 @@ export interface CreatureSnap {
   pr?: 0 | 1;
   /** Players: what they are working on (tool + target tile, 0 = nothing); sent only when it changes. */
   ac?: ActivitySnap;
+  /** The pet that is out: "pet_fox:3" (item:level), '' = none (protocol 26; sent with the look). */
+  pe?: string;
 }
 
 export interface SelfSnap {
@@ -170,6 +179,8 @@ export interface SelfSnap {
   cos?: [0 | 1, 0 | 1];
   /** Tutorial: state, step, step flags, counter, may skip (1/0). Sent only when changed. */
   tu?: { s: TutorialState['state']; st: number; f: number; n: number; cs: 0 | 1 };
+  /** Pets: the pet that is out, pet experience, tortoise pouch, pouch window (sent only when changed). */
+  pet?: PetView;
 }
 
 export type ServerMessage =
@@ -227,7 +238,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     for (const [k, v] of Object.entries(o.inventory.equipment)) eq[k] = v?.id ?? null;
     // a hidden cape (the cloak switch) is hidden from everyone else too
     if (o.cosmetics.hideCloak) eq.cape = null;
-    const look = JSON.stringify([p.name, p.level, p.vocation, encodeAppearance(p.appearance), eq, p.showGear, p.illusion ?? '', p.cloak, p.title, p.premium]);
+    const look = JSON.stringify([p.name, p.level, p.vocation, encodeAppearance(p.appearance), eq, p.showGear, p.illusion ?? '', p.cloak, p.title, p.premium, petLook(o.pets)]);
     const full = looks.get(p.id) !== look;
     if (full) looks.set(p.id, look);
     const act = computeActivity(game, o);
@@ -239,7 +250,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
       hp: Math.ceil(p.hp), mhp: p.maxHp, d: p.dead ? 1 : 0,
       ...(full ? {
         name: p.name, lvl: p.level, voc: p.vocation, ap: encodeAppearance(p.appearance), eq, sg: p.showGear ? 1 as const : 0 as const, ill: p.illusion ?? '',
-        ck: p.cloak, tt: p.title, pr: p.premium ? 1 as const : 0 as const,
+        ck: p.cloak, tt: p.title, pr: p.premium ? 1 as const : 0 as const, pe: petLook(o.pets),
       } : {}),
       buffs: {
         haste: p.buffs.haste > 0 || p.buffs.strongHaste > 0 ? 1 : 0, magicShield: p.buffs.magicShield > 0 ? 1 : 0, light: p.buffs.light > 0 ? 1 : 0,
@@ -276,6 +287,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     cw: onlyChanged(s, 'cw', game.craftView(s.id)),
     pm: onlyChanged(s, 'pm', game.premiumView(s.id) ?? undefined),
     cos: onlyChanged(s, 'cos', [s.cosmetics.hideCloak ? 0 : 1, s.cosmetics.hideTitle ? 0 : 1] as [0 | 1, 0 | 1]),
+    pet: onlyChanged(s, 'pet', petsView(s.pets)),
     tu: onlyChanged(s, 'tu', { s: s.tutorial.state, st: s.tutorial.step, f: s.tutorial.flags, n: s.tutorial.count, cs: s.tutorial.canSkip ? 1 as const : 0 as const }),
   };
   // the market list is only sent when something in it (or in your depot or bank) changed
@@ -385,6 +397,7 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'craftClose': game.closeCraft(pid); break;
     case 'cosmetics': game.setCosmetics(pid, { cloak: typeof m.cloak === 'boolean' ? m.cloak : undefined, title: typeof m.title === 'boolean' ? m.title : undefined }); break;
     case 'tutorialSkip': game.skipTutorial(pid); break;
+    case 'pet': if (PET_ACTIONS.includes(m.a)) game.petCommand(pid, m.a, num(m.i) ? Math.floor(m.i) : -1); break;
   }
 }
 
@@ -446,6 +459,13 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
           p.premium = pr;
           ev.emit({ type: 'lookChanged', id: p.id });
         }
+      }
+      if (c.pe !== undefined && c.id !== game.localId) {
+        // other players' pets: which one is out and its level (for its size); own pet comes in `self.pet`
+        const look = parsePetLook(c.pe);
+        s.pets.active = look ? look.item : null;
+        const d = look ? petForItem(look.item) : null;
+        if (d && look) s.pets.xp[d.id] = petXpForLevel(look.level);
       }
       if (c.ill !== undefined) {
         const ill = c.ill || null;
@@ -544,6 +564,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     s.premiumNet = me.pm;
     ev.emit({ type: 'depotChanged', to: me.id });
   }
+  if (me.pet) applyPetsView(s.pets, me.pet);
   if (me.cos) {
     const hideCloak = me.cos[0] === 0;
     s.cosmetics = { hideCloak, hideTitle: me.cos[1] === 0 };

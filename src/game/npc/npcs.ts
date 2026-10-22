@@ -4,6 +4,7 @@ import type { Outfit } from '../player/outfits';
 import { SPELLS } from '../magic/spells';
 import { FERRIES, fare, TOWNS, type StaffRole } from '../world/townList';
 import { EXTRA_BUYS, EXTRA_SELLS, EXTRA_SPELLS, PRODUCTION_TOOLS } from './stock';
+import { PET_ITEMS, PET_KEEPER, PET_KEEPER_ROLE, PET_SELLS } from '../pets/petDefs';
 import { FISH_ITEMS, FISHING_ROD, RAW_FISH_ITEMS } from '../gathering/fishing';
 import { applyCapeStock } from '../inventory/capes';
 
@@ -296,4 +297,16 @@ applyCapeStock(NPCS);
 
 export function buyPrice(id: string): number {
   return ITEMS[id]?.value ?? 0;
+}
+
+// ---------------------------------------------------------------- pets (pets/petDefs.ts)
+// Thistle, the Elderglen outfitter, also keeps pets: she sells the common ones and buys back every pet.
+{
+  const keeper = NPCS[PET_KEEPER];
+  if (keeper) {
+    keeper.role = PET_KEEPER_ROLE;
+    keeper.sells = [...(keeper.sells ?? []), ...PET_SELLS.filter((e) => ITEMS[e.id]).map((e) => ({ ...e }))];
+    keeper.buys = [...new Set([...(keeper.buys ?? []), ...PET_ITEMS])];
+    keeper.greeting = 'Rope, arrows, a spare backpack — or a friend for the road, {name}? My tortoises, foxes and owls are well fed.';
+  }
 }

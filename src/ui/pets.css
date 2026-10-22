@@ -1,0 +1,23 @@
+/* ---------------------------------------------------------------- pets (ui/petsUi.ts) */
+.pet-win { width: min(330px, calc(100vw - var(--left) - var(--side) - 24px)); }
+.pet-strip {
+  display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 2px 4px;
+  font: 600 12px var(--pixel); color: var(--gold); cursor: pointer;
+  border: 1px solid #3a2c1c; background: rgba(0, 0, 0, 0.25);
+}
+.pet-strip:hover { background: #2a241e; }
+.pet-strip-icon { width: 20px; height: 20px; image-rendering: pixelated; }
+.pet-head { display: flex; gap: 10px; align-items: center; }
+.pet-slot { cursor: pointer; flex: none; }
+.pet-info { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pet-name { font: 700 15px var(--serif); color: var(--gold); }
+.pet-level { font: 600 12px var(--pixel); color: var(--muted); }
+.pet-bar { flex: none; height: 6px; }
+.pet-bar .bar-fill { background: var(--xp); }
+.pet-perk { color: var(--ink); }
+.pet-buttons { display: flex; gap: 6px; }
+.pet-pouch { grid-template-columns: repeat(4, 50px); }
+.pet-row { display: flex; align-items: center; gap: 6px; font: 600 12px var(--pixel); }
+.pet-row-icon { width: 22px; height: 22px; }
+.pet-row-name { flex: 1; color: var(--ink); }
+.pet-row-level { color: var(--gold); }

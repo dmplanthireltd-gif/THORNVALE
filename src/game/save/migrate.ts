@@ -17,7 +17,7 @@ import { PALETTE } from '../player/outfits';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -77,6 +77,8 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
     if (!('cape' in equipment)) equipment.cape = null;
     return { ...d, inventory: { ...inv, equipment }, feats: { bosses: [] }, version: 13 };
   },
+  // v13 → v14: pets. Nobody has a pet out yet, no pet experience, an empty tortoise pouch.
+  13: (d) => ({ ...d, pets: { active: null, xp: {}, pouch: [] }, version: 14 }),
 };
 
 export interface MigrationResult {
@@ -131,6 +133,15 @@ export function migrateSave(raw: unknown): MigrationResult | MigrationError {
     for (const k of Object.keys(inv.equipment)) inv.equipment[k] = mapStack(inv.equipment[k], lost);
   }
   if (Array.isArray(d.depot)) d.depot = (d.depot as unknown[]).map((s) => mapStack(s, lost));
+  // the pet that is out carries its item, and the tortoise pouch holds items: both follow renames and removals
+  const pets = d.pets as { active?: unknown; pouch?: unknown } | undefined;
+  if (pets && typeof pets === 'object') {
+    if (Array.isArray(pets.pouch)) pets.pouch = pets.pouch.map((s) => mapStack(s, lost));
+    if (pets.active) {
+      const a = mapStack(pets.active, lost);
+      pets.active = a ? a.id : null;
+    }
+  }
 
   // items set aside by earlier updates: give back whatever exists again
   const restored: ItemStack[] = [];

@@ -1,10 +1,13 @@
 import type { Vocation } from '../player/vocations';
 import { bonusParts, PIECE_SET, SET_BY_ID, SET_ITEM_SPECS, setSummary } from './sets';
 import { CAPE_BY_ID, CAPE_ITEM_SPECS, capeSummary } from './capes';
+import { PET_ITEM_SPECS, petForItem } from '../pets/petDefs';
 
 export type ItemKind =
   | 'gold' | 'consumable' | 'rune' | 'tool' | 'material'
-  | 'weapon' | 'shield' | 'helmet' | 'armor' | 'legs' | 'boots' | 'amulet' | 'ring' | 'backpack' | 'ammo' | 'cape';
+  | 'weapon' | 'shield' | 'helmet' | 'armor' | 'legs' | 'boots' | 'amulet' | 'ring' | 'backpack' | 'ammo' | 'cape'
+  /** Calls a pet (pets/petDefs.ts). */
+  | 'pet';
 
 /** `cape` (save v13+): skill, town, boss, deed and seasonal capes worn on the back (capes.ts). */
 export type EquipSlot = 'head' | 'amulet' | 'backpack' | 'armor' | 'weapon' | 'shield' | 'legs' | 'ring' | 'ammo' | 'feet' | 'cape';
@@ -507,6 +510,9 @@ const defs: ItemDef[] = [
 
   // --- capes (capes.ts): the cape slot --------------------------------------------------------
   ...CAPE_ITEM_SPECS.map(def),
+
+  // --- pets (pets/petDefs.ts) -------------------------------------------------------------------
+  ...PET_ITEM_SPECS.map(def),
 ];
 
 /** Unique items only bosses drop (bosses/bosses.ts). */
@@ -590,6 +596,8 @@ export function describeItem(d: ItemDef): string {
   if (d.bonus) parts.push(...bonusParts(d.bonus));
   if (d.level) parts.push(`lvl ${d.level}+`);
   if (d.vocations) parts.push(d.vocations.map((v) => v[0].toUpperCase() + v.slice(1) + 's').join('/') + ' only');
+  const pet = d.kind === 'pet' ? petForItem(d.id) : null;
+  if (pet) parts.push(`pet: ${pet.perk}`);
   parts.push(`${d.weight} oz`);
   const set = d.setId ? SET_BY_ID[d.setId] : undefined;
   return parts.join(' · ') + (d.note ? `. ${d.note}` : '') + (set ? `. ${setSummary(set)}` : '');

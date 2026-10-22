@@ -43,6 +43,7 @@ import { runAdminCommand } from './admin';
 import { GM_BOSS_LIFETIME, SUMMON_LIFETIME, type WorldMark } from './bosses/bosses';
 import { WorldEvents } from './bosses/WorldEvents';
 import { migrateSave, SAVE_VERSION } from './save/migrate';
+import { emptyPets, parsePets, PetSystem, savePets, type PetState } from './pets/PetSystem';
 import { CLASSIC_STAGES, combatSkillRate, expRate, gatheringRate, scaleAmount, stagedGold, type ExpStages } from './progression/stages';
 import { isAppearance, sameAppearance, sanitizeAppearance, type Appearance } from './player/appearance';
 import { BUFF_NAMES, emptyBuffs, expForLevel, FIGHT_MODE, Player, type FightMode } from './player/Player';
@@ -171,6 +172,8 @@ export interface Session {
   premiumWas?: boolean;
   /** Tutorial progress on Wayfarer's Isle (save v11+); `canSkip` comes from the account, not the save. */
   tutorial: TutorialState;
+  /** Pets (save v12+): the pet that is out, pet experience, tortoise pouch (pets/PetSystem.ts). */
+  pets: PetState;
 }
 
 export interface Cosmetics {
@@ -241,6 +244,8 @@ export interface SaveData {
   tutorial?: { state: TutorialState['state']; step: number; flags?: number; count?: number };
   /** Deeds for deed capes (save v13+): boss kinds helped slay. */
   feats?: { bosses?: string[] };
+  /** Pets (save v14+): item of the pet that is out, experience per pet, tortoise pouch. */
+  pets?: { active: string | null; xp: Record<string, number>; pouch: (ItemStack | null)[] };
 }
 
 export interface GameOptions {
@@ -368,6 +373,8 @@ export class Game implements AIContext {
   readonly testMode: boolean;
   /** Server rates (exp stages). The online mirror gets the server's table in the welcome message. */
   stages: ExpStages;
+  /** Pets: calling, perks, pouch, finds (pets/PetSystem.ts). */
+  readonly petSys: PetSystem;
   /** World bosses and raids (schedule, broadcasts, loot by contribution). */
   readonly worldEvents: WorldEvents;
   /** Online mirror: active world boss / raid markers as last sent by the server. */
@@ -380,6 +387,7 @@ export class Game implements AIContext {
     this.pvp = opts.pvp ?? false;
     this.testMode = opts.testMode ?? false;
     this.stages = opts.stages ?? CLASSIC_STAGES;
+    this.petSys = new PetSystem(this);
     this.worldEvents = new WorldEvents(this);
     // a mirror drops raid monsters, summons and world bosses when the server says they left
     if (!this.simulate) this.events.on((e) => { if (e.type === 'despawn') this.removeEnemyNow(e.id); });
@@ -420,7 +428,7 @@ export class Game implements AIContext {
       bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
       skills: startSkills(), gathering: emptySkillXp(), craftOpen: null, marketOpen: null, marketClaimed: [],
       // bots, mirror copies and old characters have nothing to do on the island; new ones are sent there by beginTutorial
-      tutorial: finishedTutorial(),
+      tutorial: finishedTutorial(), pets: emptyPets(),
     };
     if (opts.starter !== false) giveStarterKit(session.inventory, voc);
     this.sessions.set(id, session);
@@ -518,6 +526,9 @@ export class Game implements AIContext {
     const out: Bonus[] = [];
     for (const d of defs) if (d.bonus) out.push(d.bonus);
     for (const a of activeSets(defs.map((d) => d.id))) out.push(...a.bonuses);
+    // the pet that is out adds its small perk (regeneration, speed, light, resistance)
+    const pet = this.petSys.bonus(s);
+    if (pet) out.push(pet);
     return out;
   }
 
@@ -789,6 +800,7 @@ export class Game implements AIContext {
     this.updateFires(dt);
     this.updateFishSpots(dt);
     this.worldEvents.update(dt);
+    this.petSys.update(dt);
     this.flushDespawns();
     this.premiumTimer -= dt;
     if (this.premiumTimer <= 0) {
@@ -1321,6 +1333,8 @@ export class Game implements AIContext {
       this.events.emit({ type: 'skillUp', skill: id, level: after, to: s.id });
       s.wantsSave = true;
     }
+    // pets learn along; logs, ores and catches may turn up a pet
+    this.petSys.onSkill(s, id, xp);
   }
 
   /** Woodcutting level (1–99). */
@@ -1386,7 +1400,7 @@ export class Game implements AIContext {
       p.chop = null;
       return this.msg(s.id, 'You need an axe to chop trees.', 'warn');
     }
-    const got = Math.random() < chopChance(this.woodcuttingLevel(s), tree, axe.attack ?? 0);
+    const got = Math.random() < chopChance(this.woodcuttingLevel(s), tree, axe.attack ?? 0) * this.petSys.gatherBoost(s, 'woodcutting');
     let felled = false;
     if (got) {
       const log = itemDef(tree.log);
@@ -1483,7 +1497,7 @@ export class Game implements AIContext {
         what = `Something glitters on your hook: ${itemDef(catchId).name.toLowerCase()}!`;
       }
       xp = 10;
-    } else if (Math.random() < biteChance(lvl, spot?.n ?? 0)) {
+    } else if (Math.random() < biteChance(lvl, spot?.n ?? 0) * this.petSys.gatherBoost(s, 'fishing')) {
       const fish = rollFish(fishFor(this.world, f.x, f.y, f.z, lvl), lvl);
       if (fish) {
         catchId = fish.raw;
@@ -1584,7 +1598,7 @@ export class Game implements AIContext {
       p.mine = null;
       return this.msg(s.id, 'You need a pickaxe to mine.', 'warn');
     }
-    const got = Math.random() < mineChance(this.miningLevel(s), ore, pick.tier);
+    const got = Math.random() < mineChance(this.miningLevel(s), ore, pick.tier) * this.petSys.gatherBoost(s, 'mining');
     let depleted = false;
     if (got) {
       const d = itemDef(ore.ore);
@@ -2351,6 +2365,7 @@ export class Game implements AIContext {
     }
     const names = items.length ? items.map(describeStack).join(', ') : 'nothing';
     for (const pid of looters) this.msg(pid, `Loot of ${who}: ${names}.`, 'loot');
+    this.petSys.onLoot(looters, items, who);
     if (items.length) this.dropBag(e.x, e.y, e.z, items);
   }
 
@@ -2705,6 +2720,7 @@ export class Game implements AIContext {
     this.events.emit({ type: 'xp', amount: exp, atId, to: s.id });
     this.msg(s.id, `You gained ${exp} experience points ${why}.`, 'info');
     const levels = p.gainExp(exp);
+    this.petSys.onExp(s, exp);
     if (levels > 0) {
       this.refreshStats(s);
       p.hp = p.maxHp;
@@ -2785,6 +2801,8 @@ export class Game implements AIContext {
       lost.push({ ...st });
       inv.slots[i] = null;
     }
+    // the tortoise's pouch counts as carried: it empties into the body too (the pet itself is safe)
+    lost.push(...this.petSys.takePouch(s));
     const worn: string[] = [];
     for (const slot of EQUIP_SLOTS) {
       const st = inv.equipment[slot];
@@ -3531,6 +3549,7 @@ export class Game implements AIContext {
     const st = inv.slots[slot];
     if (!st || p.dead) return;
     const d = itemDef(st.id);
+    if (d.kind === 'pet') return this.petSys.useSlot(s, slot);
     const eq = equipSlotFor(d);
     if (eq) return this.equipFromSlot(s, slot, eq, d);
     if (d.rune) return this.useRune(pid, slot);
@@ -4634,6 +4653,19 @@ export class Game implements AIContext {
     this.events.emit({ type: 'dialogueOpened', npcId: d.npcId, to: pid });
   }
 
+  /** Pet window actions (protocol `pet`): dismiss, pouch open/close, put a backpack slot in, take a pouch slot out. */
+  petCommand(pid: number, a: 'dismiss' | 'pouch' | 'pouchClose' | 'put' | 'take', i: number): void {
+    const s = this.sessions.get(pid);
+    if (!s || !this.simulate) return;
+    switch (a) {
+      case 'dismiss': return this.petSys.dismiss(s);
+      case 'pouch': return this.petSys.setPouchOpen(s, true);
+      case 'pouchClose': return this.petSys.setPouchOpen(s, false);
+      case 'put': if (i >= 0 && i < s.inventory.size()) this.petSys.put(s, i); return;
+      case 'take': if (i >= 0) this.petSys.take(s, i); return;
+    }
+  }
+
   // ================================================================ persistence
 
   serialize(pid: number): SaveData {
@@ -4663,6 +4695,7 @@ export class Game implements AIContext {
       cosmetics: { hideCloak: s.cosmetics.hideCloak, hideTitle: s.cosmetics.hideTitle },
       tutorial: saveTutorial(s.tutorial),
       feats: { bosses: [...s.bossKills] },
+      pets: savePets(s.pets),
     };
   }
 
@@ -4719,6 +4752,9 @@ export class Game implements AIContext {
     this.events.emit({ type: 'equipmentChanged', id: pid });
     this.events.emit({ type: 'teleport', id: pid });
     s.lostItems = data.lostItems ?? [];
+    // pets: anything the pouch held that no longer exists is kept with the lost items
+    s.pets = parsePets(data.pets, s.lostItems);
+    this.refreshStats(s);
     s.friends = Array.isArray(data.friends) ? data.friends.filter((n): n is string => typeof n === 'string').slice(0, 100) : [];
     s.cosmetics = { hideCloak: data.cosmetics?.hideCloak === true, hideTitle: data.cosmetics?.hideTitle === true };
     s.bossKills = parseBossKills(data.feats?.bosses);
@@ -4769,6 +4805,7 @@ export class Game implements AIContext {
     s.craftOpen = null;
     s.marketOpen = null;
     s.tutorial = { ...finishedTutorial(), canSkip: s.tutorial.canSkip };
+    s.pets = emptyPets();
     this.refreshStats(s);
     p.hp = p.maxHp;
     p.mana = p.maxMana;

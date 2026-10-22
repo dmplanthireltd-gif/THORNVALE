@@ -2,6 +2,7 @@ import type { Element } from '../inventory/items';
 import type { EnemyKind } from '../world/WorldMap';
 import { SET_DROPS } from '../inventory/sets';
 import { CAPE_DROPS } from '../inventory/capes';
+import { PET_DROPS } from '../pets/petDefs';
 
 export interface LootEntry {
   id: string;
@@ -626,4 +627,10 @@ for (const [kind, drops] of Object.entries(SET_DROPS)) {
 for (const [kind, drops] of Object.entries(CAPE_DROPS)) {
   const e = ENEMIES[kind as EnemyKind];
   if (e) for (const [id, chance] of drops ?? []) if (!e.loot.some((l) => l.id === id)) e.loot.push(L(id, chance));
+}
+
+// pets (pets/petDefs.ts): rare drops of the monsters and bosses that bring them
+for (const [kind, drops] of Object.entries(PET_DROPS)) {
+  const e = ENEMIES[kind as EnemyKind];
+  if (e) for (const [id, chance] of drops) if (!e.loot.some((l) => l.id === id)) e.loot.push(L(id, chance));
 }

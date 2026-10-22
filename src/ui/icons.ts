@@ -2,6 +2,7 @@ import { ITEMS, type ItemDef } from '../game/inventory/items';
 import { SPELLS, type SpellDef, type SpellId } from '../game/magic/spells';
 import { drawGear } from './gearIcons';
 import { drawRuneStone } from './runeIcons';
+import { drawPetIcon } from './petIcons';
 
 /**
  * Hand-drawn item and spell icons, painted once on a canvas and cached as
@@ -576,6 +577,7 @@ function draw(x: Ctx, d: ItemDef): void {
     case 'tool': return drawTool(x, d);
     case 'ammo': return drawAmmo(x, d);
     case 'material': return d.id === 'blank_rune' ? drawRuneStone(x, d) : drawMaterial(x, d);
+    case 'pet': if (!drawPetIcon(x, d.id)) glyph(x, d.icon, 16, 16, 18, d.tint); return;
     default: glyph(x, d.icon, 16, 16, 18, d.tint);
   }
 }

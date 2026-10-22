@@ -128,6 +128,15 @@ async function main(): Promise<void> {
   const s2 = t.addPlayer('Dawid', { vocation: 'knight' });
   check(t.applySave(s2.id, ch!.data) && s2.player.vocation === 'druid' && s2.inventory.count('gold') >= 1234, 'stored save loads into a game');
   check(s2.inventory.equipment.cape?.id === 'starweave_cape' && s2.bossKills.includes('wb_mountain'), 'a worn cape and boss deeds survive Supabase save and load');
+  // pets (save v14+): the pet that is out, pet experience and the tortoise pouch survive storage
+  s.pets.active = 'pet_tortoise';
+  s.pets.xp = { tortoise: 30_000, fox: 5 };
+  s.pets.pouch[2] = { id: 'iron_ore', qty: 7 };
+  await st.saveCharacter('dawid', 'Dawid', g.serialize(s.id));
+  const chp = await st.getCharacter('dawid');
+  const tp = new Game();
+  const sp = tp.addPlayer('Dawid', { vocation: 'knight' });
+  check(tp.applySave(sp.id, chp!.data) && sp.pets.active === 'pet_tortoise' && sp.pets.xp.tortoise === 30_000 && sp.pets.pouch[2]?.qty === 7, 'pets: active pet, pet experience and pouch stored and read back');
   await st.backupCharacter('dawid', ch!.data, 2, 'test');
   check(tables.character_backups.length === 1, 'backup row written');
   check((await st.allCharacters()).length === 1, 'all characters listed for export');

@@ -10,6 +10,8 @@ import { Music } from './audio/Music';
 import { StartScreen } from './ui/StartScreen';
 import { SEASON_STAGES } from './game/progression/stages';
 import { previewPlazaStyle } from './game/world/spawnPlaza';
+import { PetsView } from './render/PetsView';
+import { PetsUi } from './ui/petsUi';
 
 async function boot(): Promise<void> {
   const container = document.getElementById('app');
@@ -52,6 +54,9 @@ function run(container: HTMLElement, ctl: Controller, music: Music): void {
   const sfx = new Sfx(ctl);
   music.attach(ctl);
   const hud = new HUD(ctl, renderer, container, sfx, music);
+  // pets: models that follow their owners, the pet window and the tortoise pouch
+  const pets = new PetsView(renderer, ctl);
+  const petsUi = new PetsUi(ctl, hud.root);
   new Input(ctl, renderer, hud);
   hud.applyStoredPixelSetting();
   const first = (() => {
@@ -72,11 +77,14 @@ function run(container: HTMLElement, ctl: Controller, music: Music): void {
 
   let last = performance.now();
   const frame = (now: number) => {
-    const dt = Math.min(0.1, (now - last) / 1000);
+    // the first animation frame can carry a timestamp from before `last`: never step backwards
+    const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
     last = now;
     ctl.update(dt);
     renderer.update(dt);
+    pets.update(dt);
     hud.update(dt);
+    petsUi.update(dt);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
@@ -85,7 +93,7 @@ function run(container: HTMLElement, ctl: Controller, music: Music): void {
     if (!ctl.online) ctl.save();
   });
   // handy for debugging from the console
-  (window as unknown as { thornvale: unknown }).thornvale = { ctl, renderer, hud };
+  (window as unknown as { thornvale: unknown }).thornvale = { ctl, renderer, hud, pets, petsUi };
 }
 
 void boot();
