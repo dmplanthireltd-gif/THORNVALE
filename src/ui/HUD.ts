@@ -454,7 +454,7 @@ export class HUD {
       this.renderer.setGraphics(next);
       gb.textContent = `Graphics: ${GRAPHICS_NAMES[next]}`;
     }, 'btn');
-    gb.title = 'Graphics: High (the full look), Medium (softer shadows, small props cast none) or Low (no shadows, no grass tufts, half the weather) — for slower computers';
+    gb.title = 'Graphics: High (the full look), Medium (softer shadows, small props cast none) or Low (no shadows, no grass tufts, half the weather, a little less zoom-out) — for slower computers';
     const slider = (parent: HTMLElement, value: number, title: string, set: (v: number) => void, max = 100) => {
       const s = el('input', 'vol-slider', parent);
       s.type = 'range';
@@ -2102,7 +2102,7 @@ export class HUD {
       ['Enter', 'Chat; saying spell words casts spells (e.g. exura)'],
       ['Tab / Space', 'Target the next monster'],
       ['Esc', 'Close windows / clear target'],
-      ['Mouse wheel', 'Zoom the minimap and the world map (the game view has a fixed height)'],
+      ['Mouse wheel', 'Zoom'],
       ['M', 'World map (every floor, click to walk)'],
       ['Ctrl + direction / Ctrl+R', 'Turn without moving'],
       ['` (key under Esc)', 'Test console: levels, gold, items, teleports (also /help in chat)'],
