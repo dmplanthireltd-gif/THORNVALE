@@ -147,6 +147,8 @@ export class WeatherView {
     this.mist = ease(this.mist, mistT, dt, fast);
     this.leaves = ease(this.leaves, leafT, dt, tau);
     this.cover = ease(this.cover, coverT, dt, under ? 0.4 : 5);
+    // going down stairs: nothing keeps falling in a cave while the fade would run
+    if (under) this.rain = this.snow = this.sand = this.mist = this.leaves = 0;
     this.wind = ease(this.wind, under ? 0 : windT, dt, 3);
     this.dirX = ease(this.dirX, Math.cos(w.dir), dt, 6);
     this.dirZ = ease(this.dirZ, Math.sin(w.dir), dt, 6);
