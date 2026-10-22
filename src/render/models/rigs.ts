@@ -54,6 +54,8 @@ export interface QuadRig {
   materials: Mat[];
   hitbox: THREE.Mesh;
   height: number;
+  /** Separate necks (the hydra): each sways on its own and they strike in turn. */
+  necks?: { neck: THREE.Group; jaw: THREE.Group | null; yaw: number; crest: THREE.Group }[];
 }
 
 export type Rig = BipedRig | QuadRig;
@@ -885,9 +887,11 @@ function buildBoss(look: BossLook): Rig {
   }
   // the crown sits on top of the head, wherever this rig keeps it
   rig.root.updateMatrixWorld(true);
+  // (a many-headed rig wears it on the middle head, which carries a crest pivot)
+  const crestOn = rig.type === 'quad' && rig.necks ? rig.necks[Math.floor(rig.necks.length / 2)].crest : null;
   const box = new THREE.Box3().setFromObject(rig.head);
-  const top = rig.head.worldToLocal(new THREE.Vector3((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2));
-  const w = Math.max(0.12, Math.min(0.24, (box.max.x - box.min.x) * 0.38));
+  const top = crestOn ? new THREE.Vector3() : rig.head.worldToLocal(new THREE.Vector3((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2));
+  const w = crestOn ? 0.14 : Math.max(0.12, Math.min(0.24, (box.max.x - box.min.x) * 0.38));
   const gold = mat(look.crown, { emissive: new THREE.Color(look.crown).multiplyScalar(0.35).getHex() });
   const crown = group(top.x, top.y - 0.02, top.z, cyl(w, w * 0.92, 0.07, gold, 0, 0.035, 0, 10));
   for (let i = 0; i < 5; i++) {
@@ -895,7 +899,7 @@ function buildBoss(look: BossLook): Rig {
     crown.add(cone(w * 0.22, 0.11, gold, Math.sin(a) * w * 0.9, 0.12, Math.cos(a) * w * 0.9, 4));
   }
   crown.add(sphere(w * 0.2, mat(0xd02a2a, { emissive: 0x500808 }), 0, 0.06, w * 0.95));
-  rig.head.add(crown);
+  (crestOn ?? rig.head).add(crown);
   // a glowing ring at the feet marks a boss from afar
   const aura = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.6, 28), mat(look.aura, { emissive: look.aura }));
   aura.rotation.x = -Math.PI / 2;

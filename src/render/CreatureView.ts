@@ -192,6 +192,21 @@ export class CreatureView {
       headPitch = k * 0.5;
     }
     rig.body.position.z = lunge;
+    if (rig.necks) {
+      // independent sway; on attack the heads strike one after another, jaws gaping
+      headPitch = 0;
+      for (let i = 0; i < rig.necks.length; i++) {
+        const n = rig.necks[i];
+        // each head: rear back with the jaws opening, snap forward, recover
+        const t = atk >= 0 ? Math.min(1, Math.max(0, (atk - i * 0.18) / 0.64)) : 0;
+        const strike = t <= 0 ? 0 : t < 0.35 ? -0.35 * Math.sin((t / 0.35) * Math.PI / 2) : t < 0.55 ? lerp(-0.35, 0.5, (t - 0.35) / 0.2) : lerp(0.5, 0, (t - 0.55) / 0.45);
+        const gape = t <= 0 ? 0 : Math.sin(Math.min(1, t / 0.6) * Math.PI);
+        n.neck.rotation.y = n.yaw + Math.sin(this.time * 1.3 + i * 2.1) * 0.16;
+        n.neck.rotation.x = Math.sin(this.time * 1.7 + i * 1.3) * 0.07 + strike;
+        n.neck.rotation.z = Math.sin(this.time * 1.1 + i * 2.7) * 0.07;
+        if (n.jaw) n.jaw.rotation.x = 0.06 + Math.max(0, Math.sin(this.time * 0.9 + i * 1.9)) * 0.1 + gape * 0.8;
+      }
+    }
     rig.head.rotation.x = headPitch;
     rig.body.rotation.x = -hurt * 0.25;
     rig.wings.forEach((wg, i) => {
