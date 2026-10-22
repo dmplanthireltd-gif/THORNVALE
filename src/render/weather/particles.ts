@@ -53,9 +53,9 @@ void main() {
   vKind = aMeta.x;
   vTone = aSeed.w;
   vAlpha = 0.0;
-  float active = 0.0;
-  for (int i = 0; i < 6; i++) if (i == layer) active = step(idx + 0.5, uCount[i]) * uAlpha[i];
-  if (active <= 0.001) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+  float act = 0.0;
+  for (int i = 0; i < 6; i++) if (i == layer) act = step(idx + 0.5, uCount[i]) * uAlpha[i];
+  if (act <= 0.001) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
 
   vec3 P;
   vec2 c = position.xy;
@@ -75,8 +75,8 @@ void main() {
     vec3 A = normalize(vel);
     vec3 S = normalize(cross(A, uCamDir));
     float L = 0.5 + 0.35 * aSeed.w;
-    P = ctr + S * (c.x * 0.036) + A * (c.y * L);
-    vAlpha = active * (0.55 + 0.45 * aSeed.w);
+    P = ctr + S * (c.x * 0.055) + A * (c.y * L);
+    vAlpha = act * (0.55 + 0.45 * aSeed.w);
   } else if (layer == 1) {
     // splashes: rings that open on the ground and on water
     float life = 0.38 + 0.2 * aSeed.w;
@@ -86,7 +86,7 @@ void main() {
     float z = wrapC(aSeed.y * D + h1(id * 3.1 + aSeed.y * 7.0) * D * 3.0, D * 0.8, uCenter.z);
     float r = 0.05 + 0.2 * ph;
     P = vec3(x, uCenter.y + 0.035, z) + vec3(c.x * r * 2.0, 0.0, c.y * r * 2.0);
-    vAlpha = active * (1.0 - ph) * (1.0 - ph);
+    vAlpha = act * (1.0 - ph) * (1.0 - ph);
   } else if (layer == 2) {
     // snow: soft flakes drifting down, swept sideways in a blizzard
     float speed = 1.0 + 0.7 * aSeed.w + uGale * 1.6;
@@ -100,7 +100,7 @@ void main() {
     vec3 ctr = vec3(wrapC(base.x, W, uCenter.x), uCenter.y + base.y, wrapC(base.z, D, uCenter.z));
     float s = 0.055 + 0.05 * aSeed.w;
     P = ctr + uCamRight * (c.x * s) + uCamUp * (c.y * s);
-    vAlpha = active;
+    vAlpha = act;
   } else if (layer == 3) {
     // sand: low sheets racing along the wind, fading in and out
     float speed = 6.0 + 6.0 * aSeed.w;
@@ -114,7 +114,7 @@ void main() {
     vec3 S = normalize(cross(A, uCamDir));
     float L = 0.5 + 1.4 * aSeed.w;
     P = ctr + S * (c.x * (0.04 + 0.05 * aSeed.y)) + A * (c.y * L);
-    vAlpha = active * sin(ph * 3.14159);
+    vAlpha = act * sin(ph * 3.14159);
   } else if (layer == 4) {
     // mist / blown cloud: big soft puffs drifting low over the ground
     float ph = fract(aSeed.z + uTime * 0.035 * (0.6 + aSeed.w));
@@ -123,7 +123,7 @@ void main() {
     vec3 ctr = vec3(wrapC(p.x, W, uCenter.x), uCenter.y + 0.25 + aSeed.w * 1.2, wrapC(p.y, D, uCenter.z));
     float s = 2.6 + 3.0 * aSeed.w;
     P = ctr + uCamRight * (c.x * s) + uCamUp * (c.y * s * 0.7);
-    vAlpha = active * sin(ph * 3.14159);
+    vAlpha = act * sin(ph * 3.14159);
   } else {
     // leaves: tumbling along the wind
     float speed = 2.0 + 3.0 * aSeed.w;
@@ -137,7 +137,7 @@ void main() {
     vec2 rc = vec2(c.x * cos(a) - c.y * sin(a), c.x * sin(a) + c.y * cos(a) * 0.6);
     float s = 0.085;
     P = ctr + uCamRight * (rc.x * s) + uCamUp * (rc.y * s);
-    vAlpha = active * min(1.0, sin(ph * 3.14159) * 3.0);
+    vAlpha = act * min(1.0, sin(ph * 3.14159) * 3.0);
   }
   gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
 }`;
@@ -161,7 +161,7 @@ void main() {
   if (k == 0) {
     // streak: brighter head, fading tail
     col = uRainColor;
-    a = (1.0 - abs(q.x)) * smoothstep(-1.0, 0.6, q.y) * 0.5;
+    a = (1.0 - smoothstep(0.55, 1.0, abs(q.x))) * smoothstep(-1.0, 0.5, q.y) * 0.62;
   } else if (k == 1) {
     float d = length(q);
     col = uRainColor * 1.1;
@@ -228,7 +228,7 @@ export class WeatherParticles {
       uTime: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uBox: { value: new THREE.Vector3(46, 14, 46) },
       uCount: { value: [0, 0, 0, 0, 0, 0] }, uAlpha: { value: [0, 0, 0, 0, 0, 0] }, uWind: { value: new THREE.Vector2(1, 0) }, uGale: { value: 0 },
       uCamDir: { value: new THREE.Vector3(0, -1, 0) }, uCamRight: { value: new THREE.Vector3(1, 0, 0) }, uCamUp: { value: new THREE.Vector3(0, 0, -1) },
-      uRainColor: { value: new THREE.Color(0xb8cce0) }, uSnowColor: { value: new THREE.Color(0xf4f8ff) }, uSandColor: { value: new THREE.Color(0xd2ad6e) },
+      uRainColor: { value: new THREE.Color(0xd2e0f0) }, uSnowColor: { value: new THREE.Color(0xf4f8ff) }, uSandColor: { value: new THREE.Color(0xd2ad6e) },
       uMistColor: { value: new THREE.Color(0xd8e2d8) }, uLight: { value: 1 },
     };
     const m = new THREE.ShaderMaterial({

@@ -4,6 +4,7 @@ import { Ground, type WorldMap } from '../../game/world/WorldMap';
 import type { PlazaProp, SpawnPlaza } from '../../game/world/spawnPlaza';
 import { Mesher, type V3 } from './darkRigsCore';
 import type { Mat } from './parts';
+import { applyWind, WIND, WIND_CLOTH } from '../weather/wind';
 
 /** Makes a cel material; WorldView passes its floor-tracked factory so the plaza dims with its floor. */
 export type MatFn = (color: number, opts?: { emissive?: number; map?: THREE.Texture | null }) => Mat;
@@ -461,10 +462,16 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   const S = new Mesher();
   S.ao = 0.1;
   const X = pz.cx, Z = pz.cy;
+  // banner cloth goes into its own meshes (one per banner type, by the height it hangs from) so it can sway in the wind
+  const CLOTH = { column: new Mesher(), pole: new Mesher(), wall: new Mesher() };
+  const CLOTH_TOP = { column: 2.42, pole: 2.53, wall: 1.66 };
+  for (const m of Object.values(CLOTH)) m.ao = 0.1;
   const at = (p: PlazaProp, f: () => void) => {
     S.push([p.x, 0, p.y], [0, p.r ?? 0, 0]);
+    for (const m of Object.values(CLOTH)) m.push([p.x, 0, p.y], [0, p.r ?? 0, 0]);
     f();
     S.pop();
+    for (const m of Object.values(CLOTH)) m.pop();
   };
 
   /** Hollow round wall: inner and outer faces plus a flat top. */
@@ -727,12 +734,13 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   const bannerColumn = (v: number) => {
     const cloth = v ? 0x2f4a3e : 0x8a2420;
     S.box(0.5, 0.05, 0.05, 0xd8b04a, [0, 2.45, 0.3], { flat: true });
-    S.box(0.44, 1.2, 0.02, cloth, [0, 1.82, 0.31], { grit: 0.05 });
-    S.poly([[-0.22, 0], [0.22, 0], [0, -0.22]], cloth, [0, 1.22, 0.31], { grit: 0.05 });
+    const C = CLOTH.column;
+    C.box(0.44, 1.2, 0.02, cloth, [0, 1.82, 0.31], { grit: 0.05 });
+    C.poly([[-0.22, 0], [0.22, 0], [0, -0.22]], cloth, [0, 1.22, 0.31], { grit: 0.05 });
     // gold diamond emblem and trim
-    S.box(0.16, 0.16, 0.02, 0xe6c25a, [0, 1.95, 0.33], { r: [0, 0, Math.PI / 4], flat: true });
-    S.box(0.44, 0.03, 0.02, 0xe6c25a, [0, 2.38, 0.325], { flat: true });
-    S.box(0.44, 0.03, 0.02, 0xe6c25a, [0, 1.28, 0.325], { flat: true });
+    C.box(0.16, 0.16, 0.02, 0xe6c25a, [0, 1.95, 0.33], { r: [0, 0, Math.PI / 4], flat: true });
+    C.box(0.44, 0.03, 0.02, 0xe6c25a, [0, 2.38, 0.325], { flat: true });
+    C.box(0.44, 0.03, 0.02, 0xe6c25a, [0, 1.28, 0.325], { flat: true });
   };
   const brazierGold = () => {
     const gold = 0xc89a3a;
@@ -904,12 +912,13 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
     S.cyl(0.05, 0.06, 2.7, iron, [0, 1.35, 0], {}, 6);
     S.box(0.6, 0.04, 0.04, iron, [0, 2.55, 0.06]);
     S.spike([0, 2.7, 0], [0, 1, 0], 0.25, 0.05, iron);
-    S.poly([[-0.26, 0], [0.26, 0], [0.26, -1.25], [0.12, -1.05], [0.02, -1.3], [-0.1, -1.0], [-0.26, -1.2]], cloth, [0, 2.53, 0.08], { grit: 0.08 });
-    S.poly([[-0.26, 0], [0.26, 0], [0.26, -0.06], [-0.26, -0.06]], 0x111014, [0, 2.53, 0.09], { flat: true });
+    const C = CLOTH.pole;
+    C.poly([[-0.26, 0], [0.26, 0], [0.26, -1.25], [0.12, -1.05], [0.02, -1.3], [-0.1, -1.0], [-0.26, -1.2]], cloth, [0, 2.53, 0.08], { grit: 0.08 });
+    C.poly([[-0.26, 0], [0.26, 0], [0.26, -0.06], [-0.26, -0.06]], 0x111014, [0, 2.53, 0.09], { flat: true });
     // a pale horned emblem
-    S.box(0.14, 0.14, 0.02, 0x8a8478, [0, 2.0, 0.095], { r: [0, 0, Math.PI / 4], flat: true });
-    S.spike([-0.06, 2.06, 0.095], [-0.5, 1, 0], 0.14, 0.02, 0x8a8478, { flat: true });
-    S.spike([0.06, 2.06, 0.095], [0.5, 1, 0], 0.14, 0.02, 0x8a8478, { flat: true });
+    C.box(0.14, 0.14, 0.02, 0x8a8478, [0, 2.0, 0.095], { r: [0, 0, Math.PI / 4], flat: true });
+    C.spike([-0.06, 2.06, 0.095], [-0.5, 1, 0], 0.14, 0.02, 0x8a8478, { flat: true });
+    C.spike([0.06, 2.06, 0.095], [0.5, 1, 0], 0.14, 0.02, 0x8a8478, { flat: true });
   };
   const treeCaged = () => {
     const iron = 0x2a2a2e, bark = 0x3a3028;
@@ -1037,11 +1046,12 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   };
   const wallBanner = () => {
     S.box(0.06, 0.06, 0.4, GOLD, [0, 1.75, 0.25], { flat: true });
-    S.box(0.5, 1.3, 0.03, 0xf0ead8, [0, 1.05, 0.47], { grit: 0.04 });
-    S.poly([[-0.25, 0], [0.25, 0], [0, -0.25]], 0xf0ead8, [0, 0.4, 0.47]);
-    S.box(0.5, 0.05, 0.035, GOLD, [0, 1.66, 0.48], { flat: true });
-    S.box(0.18, 0.18, 0.04, GOLD, [0, 1.15, 0.49], { r: [0, 0, Math.PI / 4], flat: true });
-    S.box(0.08, 0.08, 0.045, 0x3c5a8c, [0, 1.15, 0.5], { r: [0, 0, Math.PI / 4], flat: true });
+    const C = CLOTH.wall;
+    C.box(0.5, 1.3, 0.03, 0xf0ead8, [0, 1.05, 0.47], { grit: 0.04 });
+    C.poly([[-0.25, 0], [0.25, 0], [0, -0.25]], 0xf0ead8, [0, 0.4, 0.47]);
+    C.box(0.5, 0.05, 0.035, GOLD, [0, 1.66, 0.48], { flat: true });
+    C.box(0.18, 0.18, 0.04, GOLD, [0, 1.15, 0.49], { r: [0, 0, Math.PI / 4], flat: true });
+    C.box(0.08, 0.08, 0.045, 0x3c5a8c, [0, 1.15, 0.5], { r: [0, 0, Math.PI / 4], flat: true });
   };
   const bellTower = () => {
     const st = 0xe6dfcc, tr = 0xc8bfa8;
@@ -1292,6 +1302,19 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
     me.receiveShadow = true;
     group.add(me);
   }
+  for (const k of ['column', 'pole', 'wall'] as const) {
+    const geo = CLOTH[k].build('base');
+    if (!geo) continue;
+    const cm = M(0xffffff);
+    cm.vertexColors = true;
+    cm.side = THREE.DoubleSide;
+    // wall banners hang flat against a wall: they only stir
+    applyWind(cm, k === 'wall' ? { ...WIND_CLOTH, gale: 0.05, calm: 0.01 } : WIND_CLOTH, `max(0.0, ${CLOTH_TOP[k].toFixed(2)} - wLocal.y)`);
+    const me = new THREE.Mesh(geo, cm);
+    me.castShadow = true;
+    me.receiveShadow = true;
+    group.add(me);
+  }
   // flames, lantern glass and runes are unlit (full colour) and flicker together
   const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
   if (glow) group.add(new THREE.Mesh(glow, glowMat));
@@ -1322,6 +1345,7 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   }
 
   let time = 0;
+  let flagPhase = 0, flagWind = 0.3;
   return {
     group,
     flameMats,
@@ -1336,11 +1360,14 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
       sparks?.update(dt, -1);
       fumes?.update(dt, -1);
       beamMat.opacity = 0.18 + Math.sin(time * 1.6) * 0.06;
+      flagWind = WIND.enabled.value ? WIND.strength.value : 0.3;
+      flagPhase += dt * (4 + flagWind * 5);
       for (const f of flagMeshes) {
         const pos = f.geo.attributes.position as THREE.BufferAttribute;
         for (let i = 0; i < pos.count; i++) {
           const x = f.base[i * 3];
-          pos.setZ(i, Math.sin(time * 5 - x * 4) * 0.12 * x);
+          // flags flap harder and faster in a strong wind (render/weather/wind.ts)
+          pos.setZ(i, Math.sin(flagPhase - x * 4) * (0.07 + flagWind * 0.16) * x);
         }
         pos.needsUpdate = true;
       }

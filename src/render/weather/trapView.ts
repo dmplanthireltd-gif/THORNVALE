@@ -73,7 +73,7 @@ export class TrapView {
     this.spent.instanceMatrix.needsUpdate = true;
 
     // the animation pool
-    const vineMat = mat(0x3f6a26);
+    const vineMat = mat(0x6a9a34, { emissive: 0x0c1806 });
     const petalMat = mat(0xb03050, { emissive: 0x2a0610 });
     const headMat = mat(0x6a8a2a);
     const vineGeo = (k: number) => {
@@ -83,7 +83,7 @@ export class TrapView {
         const r = 0.34 - u * 0.18;
         pts.push(new THREE.Vector3(Math.cos(a) * r, u * 1.25, Math.sin(a) * r));
       }
-      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.035, 4);
+      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.05, 4);
     };
     const petalGeo = new THREE.ConeGeometry(0.16, 0.5, 4).translate(0, 0.25, 0).scale(1, 1, 0.3);
     for (let i = 0; i < POOL; i++) {
@@ -150,6 +150,7 @@ export class TrapView {
   }
 
   update(dt: number, px: number, py: number, pz: number): void {
+    dt = Math.max(0, Math.min(dt, 0.25));
     const off = this.offsetY();
     const show = off !== null && pz >= 0;
     this.leaves.visible = this.buds.visible = this.spent.visible = show;

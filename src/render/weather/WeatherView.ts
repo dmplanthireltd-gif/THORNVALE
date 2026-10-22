@@ -92,6 +92,8 @@ export class WeatherView {
 
   /** Every frame. Returns the light multipliers for this frame. */
   update(dt: number, game: Game, me: Player, cam: THREE.OrthographicCamera, groundY: number, focusX: number, focusZ: number): WeatherLight {
+    // the first frame after a long load can arrive with a negative step: never ease backwards
+    dt = Math.max(0, Math.min(dt, 0.25));
     this.t += dt;
     const w = game.weatherView(me.id);
     const under = me.z < 0;
