@@ -152,7 +152,7 @@ export class UnderwaterFx {
     L.hemi.intensity = 0.95;
     L.sun.color.setHex(0xa8e4ff);
     L.sun.intensity = 1.25 + Math.sin(t * 0.7) * 0.08;
-    L.sun.castShadow = true;
+    L.sun.castShadow = false;
     L.torch.color.setHex(0x8adcff);
     L.torch.intensity = 1.2;
     L.torch.distance = 6;

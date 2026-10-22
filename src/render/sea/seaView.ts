@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { hash2 } from '../../game/core/rng';
-import { Obj, type WorldMap } from '../../game/world/WorldMap';
+import { Ground, Obj, type WorldMap } from '../../game/world/WorldMap';
 import type { SeaLayout, SeaPropKind } from '../../game/world/sea';
 import { Mesher, type V3 } from '../models/darkRigsCore';
 import { toonGradient } from '../models/parts';
@@ -226,19 +226,22 @@ function swayMat(time: { value: number }, sway: number, glow = 0): THREE.MeshToo
   return mt;
 }
 
-/** The planked hull of a wreck: one block per hull tile. */
-function hullGeo(): THREE.BufferGeometry {
+/** The planked hull of a wreck: one block per hull tile; `rib` adds a broken rib arching above the planks. */
+function hullGeo(rib: boolean): THREE.BufferGeometry {
   const m = new Mesher();
-  m.ao = 0.4;
+  m.ao = 0.45;
   for (let i = 0; i < 5; i++) {
     const y = 0.12 + i * 0.26;
-    m.box(1.02, 0.22, 0.9 - (i % 2) * 0.06, i % 2 ? 0x3a2a1e : 0x4a3424, [0, y, 0], { grit: 0.4 });
-    m.box(1.04, 0.03, 0.92, 0x1e1610, [0, y + 0.12, 0], { flat: true });
+    m.box(1.02, 0.22, 0.78 - (i % 2) * 0.05, i % 2 ? 0x5a4026 : 0x6e4e30, [0, y, 0], { grit: 0.45 });
+    m.box(1.04, 0.03, 0.8, 0x24180e, [0, y + 0.12, 0], { flat: true });
   }
-  m.box(0.16, 1.5, 0.16, 0x2a1e14, [0.4, 0.75, 0.4], { grit: 0.3 }); // a rib post
-  m.box(1.06, 0.08, 1.0, 0x5a4a36, [0, 1.42, 0], { grit: 0.35 }); // gunwale
-  for (const [x, y, z] of [[-0.3, 0.3, 0.46], [0.2, 0.6, 0.47], [0.35, 0.2, -0.46], [-0.2, 0.9, -0.47]] as const) m.cyl(0.05, 0.07, 0.06, 0xa8a090, [x, y, z], { r: [Math.PI / 2, 0, 0] }, 5);
-  m.sph(0.2, 0x3a5030, [0.1, 1.46, 0], { s: [1.6, 0.25, 1.2], grit: 0.4 }); // weed on the rail
+  m.box(1.06, 0.07, 0.86, 0x6a4a30, [0, 1.42, 0], { grit: 0.4 }); // gunwale
+  for (const [x, y, z] of [[-0.3, 0.3, 0.4], [0.2, 0.6, 0.41], [0.35, 0.2, -0.4], [-0.2, 0.9, -0.41]] as const) m.cyl(0.05, 0.07, 0.06, 0xb8b0a0, [x, y, z], { r: [Math.PI / 2, 0, 0] }, 5);
+  m.box(0.18, 0.03, 0.5, 0x4a5a34, [0.3, 1.46, 0.1], { grit: 0.5 }); // a tuft of weed
+  if (rib) {
+    // a rib timber rising past the planks, snapped and blackened
+    m.horn([[0, 1.3, 0], [0, 1.9, 0.12], [0.05, 2.4, 0.42], [0.1, 2.7, 0.8]], 0.09, 0x3a2818, 0x24180e);
+  }
   return m.build('base')!;
 }
 
@@ -288,7 +291,7 @@ float net(vec2 p, float t) {
 void main() {
   vec2 p = vW * 0.85;
   float k = net(p, uTime) * 0.7 + net(p * 1.9 + 3.1, uTime * 1.3) * 0.45;
-  gl_FragColor = vec4(uColor * k * 0.32, 1.0);
+  gl_FragColor = vec4(uColor * k * 0.15, 1.0);
 }`,
     transparent: true,
     depthWrite: false,
@@ -343,10 +346,12 @@ export function buildSeaView(world: WorldMap, sea: SeaLayout): SeaView {
   // ---- wreck hulls
   const hullTiles: Array<[number, number]> = [];
   for (let y = sea.y0; y <= sea.y1; y++) for (let x = sea.x0; x <= sea.x1; x++) if (world.getObj(x, y, sea.z) === Obj.Hull) hullTiles.push([x, y]);
-  if (hullTiles.length) {
-    const im = new THREE.InstancedMesh(hullGeo(), new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: toonGradient() }), hullTiles.length);
-    hullTiles.forEach(([x, y], i) => {
-      // broken, uneven hull tops: some planks rotted lower than others
+  for (const rib of [false, true]) {
+    const tiles = hullTiles.filter(([x, y]) => (hash2(x, y, 426) < 0.28) === rib);
+    if (!tiles.length) continue;
+    const im = new THREE.InstancedMesh(hullGeo(rib), new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: toonGradient() }), tiles.length);
+    tiles.forEach(([x, y], i) => {
+      // broken, uneven hull tops: some planks rotted lower than others; ribs lean outward
       const h = 0.55 + hash2(x, y, 421) * 0.5;
       M.compose(V.set(x, 0, y), Q.setFromEuler(E.set((hash2(x, y, 422) - 0.5) * 0.08, Math.floor(hash2(x, y, 423) * 4) * (Math.PI / 2), (hash2(x, y, 424) - 0.5) * 0.08)), S.set(1, h, 1));
       im.setMatrixAt(i, M);
@@ -360,11 +365,19 @@ export function buildSeaView(world: WorldMap, sea: SeaLayout): SeaView {
     floor.add(im);
   }
 
-  // ---- caustics over the whole sea floor
-  const w = sea.x1 - sea.x0 + 1, h = sea.y1 - sea.y0 + 1;
-  const caustics = new THREE.Mesh(new THREE.PlaneGeometry(w, h), causticMaterial(time));
-  caustics.rotation.x = -Math.PI / 2;
-  caustics.position.set(sea.x0 + w / 2 - 0.5, 0.012, sea.y0 + h / 2 - 0.5);
+  // ---- caustics: one quad per open tile of sea floor (never over the dark beyond the reef)
+  const quads: number[] = [];
+  for (let y = sea.y0; y <= sea.y1; y++) for (let x = sea.x0; x <= sea.x1; x++) {
+    const gr = world.getGround(x, y, sea.z);
+    if (gr === Ground.Void) continue;
+    const h = gr === Ground.Wood ? 0.035 : 0.012;
+    const a = x - 0.5, b = y - 0.5;
+    quads.push(a, h, b, a, h, b + 1, a + 1, h, b + 1, a, h, b, a + 1, h, b + 1, a + 1, h, b);
+  }
+  const cg = new THREE.BufferGeometry();
+  cg.setAttribute('position', new THREE.Float32BufferAttribute(quads, 3));
+  cg.computeBoundingSphere();
+  const caustics = new THREE.Mesh(cg, causticMaterial(time));
   caustics.renderOrder = 1;
   floor.add(caustics);
 

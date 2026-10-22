@@ -72,17 +72,17 @@ function darkJelly(L: JellyLook): BipedRig {
 
 function darkCrab(): QuadRig {
   const K = new Kit('ironshell_crab', 0xffa040, 1.8);
-  const SH = 0x4a3428;
-  const SH_L = 0x6e4c34;
-  const SH_D = 0x24180f;
-  const BELLY = 0x8a7a64;
+  const SH = 0x7a3a22;
+  const SH_L = 0xa0583a;
+  const SH_D = 0x3a1a10;
+  const BELLY = 0xb8a084;
   const BARN = 0xa8a090;
   const ALGAE = 0x3a5034;
   const body = K.limb('body', [0, 0, 0], (m) => {
     m.ao = 0.32;
     // a broad armoured carapace, ridged and spiked at the front edge
-    m.sph(0.5, SH, [0, 0.44, -0.02], { s: [0.66, 0.22, 0.52], grit: 0.32 });
-    m.sph(0.5, SH_L, [0, 0.5, 0.0], { s: [0.46, 0.13, 0.36], grit: 0.3 });
+    m.sph(0.5, SH, [0, 0.44, -0.02], { s: [0.86, 0.26, 0.62], grit: 0.32 });
+    m.sph(0.5, SH_L, [0, 0.52, 0.0], { s: [0.6, 0.16, 0.44], grit: 0.3 });
     m.sph(0.5, BELLY, [0, 0.34, -0.02], { s: [0.56, 0.12, 0.42], grit: 0.2 });
     for (let i = 0; i < 7; i++) {
       const a = -0.9 + i * 0.3;
@@ -106,7 +106,7 @@ function darkCrab(): QuadRig {
     }
     // two great claws, the right one bigger; open pincers with serrated edges
     for (const s of [-1, 1]) {
-      const big = s < 0 ? 1.25 : 0.95;
+      const big = s < 0 ? 1.7 : 1.3;
       m.push([s * 0.2, -0.02, 0.02], [0, s * 0.35, 0]);
       m.seg([0, 0, 0], [s * 0.12, 0.02, 0.14], 0.05, 0.045, SH, { grit: 0.3 });
       m.sph(0.05, SH_D, [s * 0.12, 0.02, 0.14], {}, 0);
@@ -124,10 +124,10 @@ function darkCrab(): QuadRig {
   const legZ = [0.12, 0.02, -0.08, -0.18];
   for (let p = 0; p < 4; p++) for (const s of [1, -1]) {
     const g = K.limb('leg' + p, [s * 0.26, 0.4, legZ[p]], (m) => {
-      m.seg([0, 0, 0], [0.24, 0.14, 0], 0.04, 0.034, SH, { grit: 0.3 });
-      m.sph(0.035, SH_D, [0.24, 0.14, 0], {}, 0);
-      m.seg([0.24, 0.14, 0], [0.4, -0.38, 0], 0.03, 0.012, SH_L, { grit: 0.3 });
-      m.spike([0.4, -0.38, 0], [0.1, -1, 0], 0.05, 0.012, SH_D);
+      m.seg([0, 0, 0], [0.18, 0.12, 0], 0.06, 0.05, SH, { grit: 0.3 });
+      m.sph(0.05, SH_D, [0.18, 0.12, 0], {}, 0);
+      m.seg([0.18, 0.12, 0], [0.3, -0.36, 0], 0.045, 0.02, SH_L, { grit: 0.3 });
+      m.spike([0.3, -0.36, 0], [0.1, -1, 0], 0.05, 0.016, SH_D);
     });
     g.rotation.y = s > 0 ? -(0.55 - p * 0.36) : Math.PI + (0.55 - p * 0.36);
     legs.push(g);
@@ -137,11 +137,11 @@ function darkCrab(): QuadRig {
 
 // ------------------------------------------------------------------ deepfins (fish-folk bipeds)
 
-const DF = 0x2c4648;
-const DF_D = 0x162426;
-const DF_L = 0x52726a;
-const BELLY = 0x8a957e;
-const FIN = 0x4a2632;
+const DF = 0x3e6a64;
+const DF_D = 0x1e3634;
+const DF_L = 0x6a9a86;
+const BELLY = 0xb4b896;
+const FIN = 0x8a3a36;
 const SHELL = 0x8a7656;
 const CORAL = 0x9a3a2e;
 const KELP = 0x2c3c1c;
@@ -339,10 +339,10 @@ function darkDeepfinTidecaller(): BipedRig {
 
 function darkEel(): QuadRig {
   const K = new Kit('gloom_eel', 0x7affd8, 2.0);
-  const SK = 0x1c2830;
+  const SK = 0x2e4250;
   const SK_D = 0x0c1216;
-  const BELLY2 = 0x4a5a58;
-  const FIN2 = 0x2a2030;
+  const BELLY2 = 0x7a8a7a;
+  const FIN2 = 0x5a2a3a;
   const spots = (m: Mesher, a: V3, b: V3, n: number, r: number) => {
     for (let i = 0; i < n; i++) {
       const t = (i + 0.5) / n;
