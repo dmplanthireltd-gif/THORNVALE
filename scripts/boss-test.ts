@@ -59,7 +59,7 @@ console.log('Boss definitions');
   const dungeon = ALL_BOSSES.filter((k) => ENEMIES[k].boss === 'dungeon');
   const world = ALL_BOSSES.filter((k) => ENEMIES[k].boss === 'world');
   const raid = ALL_BOSSES.filter((k) => ENEMIES[k].boss === 'raid');
-  check(dungeon.length === 10 && world.length === 3 && raid.length === 4, `10 dungeon bosses, 3 world bosses, 4 raid bosses (${dungeon.length}/${world.length}/${raid.length})`);
+  check(dungeon.length === DUNGEON_BOSSES.length && dungeon.length >= 11 && world.length === 3 && raid.length === 4, `${DUNGEON_BOSSES.length} dungeon bosses, 3 world bosses, 4 raid bosses (${dungeon.length}/${world.length}/${raid.length})`);
   check(ALL_BOSSES.every((k) => ENEMIES[k].elite && ENEMIES[k].title && ENEMIES[k].enrage), 'every boss is elite, has a title and enrages');
   const names = new Set(ALL_BOSSES.map((k) => ENEMIES[k].name));
   check(names.size === ALL_BOSSES.length, 'boss names are unique');
@@ -118,7 +118,7 @@ console.log('Dungeon bosses');
 {
   const g = new Game();
   const placed = g.enemies.filter((e) => e.def.boss === 'dungeon');
-  check(placed.length === 10 && new Set(placed.map((e) => e.enemyKind)).size === 10, `each dungeon boss is placed once (${placed.length})`);
+  check(placed.length === DUNGEON_BOSSES.length && new Set(placed.map((e) => e.enemyKind)).size === DUNGEON_BOSSES.length, `each dungeon boss is placed once (${placed.length})`);
   const reach = floodFill3D(g.world);
   const wrong = DUNGEON_BOSSES.filter((b) => {
     const e = placed.find((x) => x.enemyKind === b.kind);

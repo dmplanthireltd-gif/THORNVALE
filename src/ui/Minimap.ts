@@ -5,7 +5,7 @@ export const GROUND_RGB: Record<number, string> = {
   [Ground.Grass]: '#3f8a2e', [Ground.Path]: '#a08a62', [Ground.Stone]: '#8a8a88', [Ground.Wood]: '#7a5530', [Ground.Water]: '#2f6ab0',
   [Ground.Dirt]: '#7a6040', [Ground.Crop]: '#8a7a32', [Ground.Sand]: '#d8c88a', [Ground.DarkGrass]: '#2f6a24', [Ground.Lava]: '#e0501a',
   [Ground.Ash]: '#4a4440', [Ground.Swamp]: '#4a5a2a', [Ground.Cave]: '#6a5a4a', [Ground.Jungle]: '#2a6a1e', [Ground.Marble]: '#d0ccc4',
-  [Ground.DeepWater]: '#1f4a8a', [Ground.Snow]: '#eef2f6', [Ground.Ice]: '#b4dcee',
+  [Ground.DeepWater]: '#1f4a8a', [Ground.Snow]: '#eef2f6', [Ground.Ice]: '#b4dcee', [Ground.Seabed]: '#6a8a96',
 };
 
 export const OBJ_RGB: Partial<Record<number, string>> = {

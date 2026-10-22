@@ -744,7 +744,7 @@ export class Game implements AIContext {
         // players path around floor changes unless that is the destination
         if (isPlayer && !(x === tx && y === ty)) {
           const o = this.world.getObj(x, y, z);
-          if (o === Obj.StairsUp || o === Obj.StairsDown || o === Obj.Hole) return true;
+          if (o === Obj.StairsUp || o === Obj.StairsDown || o === Obj.Hole || o === Obj.Whirlpool) return true;
         }
         return false;
       },
@@ -968,12 +968,14 @@ export class Game implements AIContext {
   private onPlayerStepComplete(s: Session): boolean {
     const p = s.player;
     const o = this.world.getObj(p.x, p.y, p.z);
-    if (o === Obj.StairsUp || o === Obj.StairsDown || o === Obj.Hole) {
+    if (o === Obj.StairsUp || o === Obj.StairsDown || o === Obj.Hole || o === Obj.Whirlpool) {
       const link = this.world.linkAt(p.x, p.y, p.z);
       if (link && link.kind === 'walk') {
         const goingDown = link.to.z < p.z;
         this.teleport(p, link.to.x, link.to.y, link.to.z);
         if (o === Obj.Hole && goingDown) this.msg(s.id, 'You fall down a hole.', 'info');
+        // the Sunken Reach (world/sea.ts): dive in at Pearl Pier, ride the bubbles back up
+        if (o === Obj.Whirlpool) this.msg(s.id, goingDown ? 'The whirlpool pulls you down into the Sunken Reach. The rising bubbles in Pearl Grotto carry you back up.' : 'The rising bubbles carry you back up to Pearl Pier.', 'info');
         p.path = [];
         return true;
       }

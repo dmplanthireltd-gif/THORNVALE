@@ -5,6 +5,7 @@ import { oreAt } from '../game/gathering/mining';
 import { buildFoundersStone } from './models/foundersStone';
 import { buildDepotHallsView, type DepotHallsView } from './models/depotHalls';
 import { buildPlazaView, type PlazaView } from './models/spawnPlaza';
+import { buildSeaView, type SeaView } from './sea/seaView';
 import { mat, toonGradient, type Mat } from './models/parts';
 import { groundTex, objTex } from './textures';
 
@@ -28,6 +29,7 @@ const GROUND_TEX: Partial<Record<Ground, (v: number) => THREE.Texture>> = {
   [Ground.Jungle]: groundTex.jungle,
   [Ground.Marble]: groundTex.marble,
   [Ground.DeepWater]: groundTex.deepWater,
+  [Ground.Seabed]: groundTex.seabed,
 };
 
 /** Collects instance transforms for one shared geometry/material pair. */
@@ -166,6 +168,8 @@ export class WorldView {
   private plaza: PlazaView | null = null;
   /** The big depot halls of the other towns (signs, lanterns, lit interiors). */
   private depotHalls: DepotHallsView | null = null;
+  /** The Sunken Reach (game/world/sea.ts): reef, wrecks, caustics, whirlpool. */
+  private sea: SeaView | null = null;
   currentZ = 0;
   /** Fields laid by runes: they are drawn by the animated field sprites, not as static flames. */
   isRuneField: (x: number, y: number, z: number) => boolean = () => false;
@@ -194,6 +198,11 @@ export class WorldView {
     if (world.depotHalls.length && f0) {
       this.depotHalls = buildDepotHallsView(world.depotHalls, (c, o) => f0.m(c, o));
       f0.group.add(this.depotHalls.group);
+    }
+    if (world.sea) {
+      this.sea = buildSeaView(world, world.sea);
+      this.floors.get(0)?.group.add(this.sea.surface);
+      this.floors.get(world.sea.z)?.group.add(this.sea.floor);
     }
     // the meadow beyond the map edge
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), mat(0x2a4f6e));
@@ -230,13 +239,21 @@ export class WorldView {
       return b;
     };
     const rock = new Batch(geo(new THREE.BoxGeometry(1, 1.9, 1), 0.95), fv.m(0x7a7068, { map: objTex.cliff() }));
+    const sea = w.sea;
+    // reef walls of the Sunken Reach: paler weathered stone, some of it crusted with red coral
+    const reefRock = new Batch(geo(new THREE.BoxGeometry(1, 1.9, 1), 0.95), fv.m(0xffffff, { map: objTex.rock() }));
     const c = new THREE.Color();
     for (let y = 0; y < w.height; y++) {
       for (let x = 0; x < w.width; x++) {
         const g = w.getGround(x, y, z);
         if (g === Ground.Void) {
           // underground: solid rock next to any open tile
-          if (z < 0 && this.bordersOpen(x, y, z)) rock.add(compose(x, 0, y, 0, 1, 0.9 + hash2(x, y, 3) * 0.25, 1), c.setScalar(0.85 + hash2(x, y, 4) * 0.25));
+          if (z < 0 && this.bordersOpen(x, y, z)) {
+            // the Sunken Reach: reef walls, paler and blue-green instead of cave rock
+            const reef = sea && z === sea.z && x >= sea.x0 && x <= sea.x1 && y >= sea.y0 && y <= sea.y1;
+            if (reef) reefRock.add(compose(x, 0, y, hash2(x, y, 5) * 0.3, 1.02, 0.55 + hash2(x, y, 3) * 0.45, 1.02), c.setHex(hash2(x, y, 6) < 0.15 ? 0x9a6a5a : 0x7a9898).multiplyScalar(0.8 + hash2(x, y, 4) * 0.35));
+            else rock.add(compose(x, 0, y, 0, 1, 0.9 + hash2(x, y, 3) * 0.25, 1), c.setScalar(0.85 + hash2(x, y, 4) * 0.25));
+          }
           continue;
         }
         if (z === 0 && g === Ground.DeepWater && !this.nearLand(x, y)) continue; // the open sea is the backdrop plane
@@ -253,6 +270,8 @@ export class WorldView {
     }
     const r = rock.build();
     if (r) fv.group.add(r);
+    const rr = reefRock.build();
+    if (rr) fv.group.add(rr);
 
     // grass tufts on the surface
     if (z === 0 || z === 1) {
@@ -1117,6 +1136,7 @@ export class WorldView {
       t.offset.y = this.time * 0.02;
     }
     if (this.plaza && pz >= 0) this.plaza.update(dt);
+    this.sea?.update(dt, pz);
     const flick = 0.75 + Math.sin(this.time * 9) * 0.12 + Math.sin(this.time * 23) * 0.08;
     for (const m of this.flameMats) m.emissiveIntensity = flick;
 

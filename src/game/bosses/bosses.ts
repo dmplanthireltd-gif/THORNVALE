@@ -168,6 +168,7 @@ export const DUNGEON_BOSSES: Array<{ kind: EnemyKind; region: string }> = [
   { kind: 'boss_mire_hydra', region: 'Hydra Nest' },
   { kind: 'boss_rime_wyrm', region: 'Frost Dragon Lair' },
   { kind: 'boss_ashen_sovereign', region: 'The Demon Pit' },
+  { kind: 'boss_drowned_tyrant', region: 'The Drowned Crown' },
 ];
 
 /** A marker for the world map: an active world boss or raid. */

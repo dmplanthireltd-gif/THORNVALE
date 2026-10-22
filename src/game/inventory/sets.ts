@@ -137,6 +137,11 @@ export const SETS: GearSet[] = [
     id: 'voidweave', name: 'Voidweave', level: 90, vocations: MAGES, pieces: ['voidweave_hood', 'voidweave_robe', 'voidweave_skirt', 'voidweave_boots', 'void_codex'],
     two: { magic: 4, mana: 150 }, four: { magic: 6, manaRegen: 4, resist: { death: 6 } }, source: 'Very rare: demons, ice witches, hydras and frost dragons',
   },
+  // --- the Sunken Reach (world/sea.ts): deepfin-forged sea gear, any vocation -----------------
+  {
+    id: 'tidewrought', name: 'Tidewrought', level: 50, pieces: ['tidewrought_helm', 'tidewrought_mail', 'tidewrought_legs', 'tidewrought_boots', 'tidewrought_shield'],
+    two: { resist: { ice: 4, energy: 3 } }, four: { hp: 70, mana: 50, speed: 4 }, source: 'Deepfins, ironshell crabs and gloom eels of the Sunken Reach; Ulmaroth, the Drowned Tyrant',
+  },
 ];
 
 export const SET_BY_ID: Record<string, GearSet> = Object.fromEntries(SETS.map((s) => [s.id, s]));
@@ -285,6 +290,12 @@ export const SET_ITEM_SPECS: ItemSpec[] = [
   P('voidweave_skirt', 'Voidweave Skirt', 'legs', 5, 95, 14000, 22, { vocations: MAGES, rarity: 'legendary', bonus: { mana: 120, magic: 3 } }),
   P('voidweave_boots', 'Voidweave Slippers', 'boots', 2, 90, 12000, 7, { vocations: MAGES, rarity: 'legendary', bonus: { speed: 5, manaRegen: 2 } }),
   P('void_codex', 'Void Codex', 'shield', 20, 95, 18000, 25, { vocations: MAGES, rarity: 'legendary', bonus: { magic: 6, mana: 100, resist: { death: 4 } } }),
+  // tidewrought (the Sunken Reach): scale-and-coral armour worked by the deepfins, any vocation
+  P('tidewrought_helm', 'Tidewrought Helm', 'helmet', 5, 50, 1500, 30, { rarity: 'rare', bonus: { resist: { ice: 2 } } }),
+  P('tidewrought_mail', 'Tidewrought Scalemail', 'armor', 10, 55, 3800, 80, { rarity: 'rare', bonus: { resist: { ice: 3, energy: 2 } } }),
+  P('tidewrought_legs', 'Tidewrought Greaves', 'legs', 6, 50, 2200, 44, { rarity: 'rare' }),
+  P('tidewrought_boots', 'Tidewrought Boots', 'boots', 2, 50, 1200, 16, { rarity: 'rare', bonus: { speed: 3 } }),
+  P('tidewrought_shield', 'Tidewrought Shell', 'shield', 27, 55, 2400, 50, { rarity: 'rare', bonus: { resist: { energy: 2 } } }),
 ];
 
 // ------------------------------------------------------------------------- where pieces come from
@@ -327,6 +338,13 @@ export const SET_DROPS: Record<string, Array<[string, number]>> = {
   fire_elemental: [['starsteel_boots', 0.008], ['starsteel_helm', 0.005]],
   behemoth: [['plate_boots', 0.04], ['steel_helmet', 0.03], ['starsteel_legs', 0.008], ['gilded_legs', 0.004], ['gilded_armor', 0.002], ['wardbreaker_legs', 0.0015]],
   hydra: [['skyfeather_legs', 0.002], ['voidweave_skirt', 0.002]],
+  // the Sunken Reach
+  deepfin_raider: [['tidewrought_helm', 0.008], ['tidewrought_mail', 0.004]],
+  deepfin_harpooner: [['tidewrought_legs', 0.008], ['tidewrought_boots', 0.01]],
+  deepfin_tidecaller: [['tidewrought_helm', 0.01], ['tidewrought_boots', 0.01]],
+  ironshell_crab: [['tidewrought_shield', 0.01], ['tidewrought_legs', 0.005]],
+  gloom_eel: [['tidewrought_boots', 0.01], ['tidewrought_mail', 0.004]],
+  boss_drowned_tyrant: [['tidewrought_mail', 0.35], ['tidewrought_shield', 0.35]],
   demon: [
     ['hellforged_boots', 0.01], ['darkstone_helm', 0.01], ['darkstone_shield', 0.008],
     ['wardbreaker_plate', 0.0015], ['wardbreaker_maul', 0.0015], ['skyfeather_vest', 0.0015], ['skyfeather_boots', 0.002], ['voidweave_robe', 0.0015], ['void_codex', 0.0015],

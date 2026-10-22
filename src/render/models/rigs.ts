@@ -876,6 +876,7 @@ export const BOSS_LOOK: Partial<Record<EnemyKind, BossLook>> = {
   raid_grave_warden: { base: 'ghoul', tint: 0x4a5a6a, amt: 0.4, crown: 0xc0c0d0, aura: 0x9ab0ff, glow: 0x0a1018 },
   raid_frost_jarl: { base: 'frost_giant', tint: 0xd0e8ff, amt: 0.35, crown: 0xf0f8ff, aura: 0x8ae8ff },
   raid_swarm_queen: { base: 'scarab', tint: 0xd0a020, amt: 0.45, crown: 0xffe070, aura: 0xffd040 },
+  boss_drowned_tyrant: { base: 'deepfin_raider', tint: 0x1a4a5a, amt: 0.35, crown: 0xd8443a, aura: 0x4ad8e8, glow: 0x061a20 },
 };
 
 function buildBoss(look: BossLook): Rig {
@@ -958,5 +959,8 @@ export const ENEMY_SCALE: Record<EnemyKind, number> = {
   boss_ember_matriarch: 2.7, boss_sand_king: 2.1, boss_mire_hydra: 2.5, boss_rime_wyrm: 2.8, boss_ashen_sovereign: 2.6,
   wb_mountain: 3.6, wb_storm_serpent: 3.4, wb_blight_mother: 3.6,
   raid_tusk_warlord: 2.0, raid_grave_warden: 1.9, raid_frost_jarl: 2.4, raid_swarm_queen: 2.3,
+  // the Sunken Reach (darkRigsSea.ts)
+  lantern_jelly: 1.15, blight_jelly: 1.15, ironshell_crab: 1.5, deepfin_raider: 1.36, deepfin_harpooner: 1.34, deepfin_tidecaller: 1.32, gloom_eel: 1.45,
+  boss_drowned_tyrant: 2.2,
 };
 

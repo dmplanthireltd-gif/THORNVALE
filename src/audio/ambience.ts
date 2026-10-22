@@ -8,12 +8,15 @@ import { Ground, Obj } from '../game/world/WorldMap';
  * lava, crackling near campfires, and a low drone with water drips underground. Synthesized live; very quiet by design.
  */
 
-type Bed = 'wind' | 'insects' | 'sea' | 'lava' | 'cave' | 'fire';
+type Bed = 'wind' | 'insects' | 'sea' | 'lava' | 'cave' | 'fire' | 'deep';
 
 export class Ambience {
   private beds = new Map<Bed, GainNode>();
   private lastSample = 0;
-  private level: Record<Bed, number> = { wind: 0, insects: 0, sea: 0, lava: 0, cave: 0, fire: 0 };
+  private level: Record<Bed, number> = { wind: 0, insects: 0, sea: 0, lava: 0, cave: 0, fire: 0, deep: 0 };
+  /** Share of sea floor around you (the Sunken Reach): muffled swell and rising bubbles. */
+  private bubbles = 0;
+  private nextBubble = 0;
   private nextCrackle = 0;
   private birds = 0;
   private frogs = 0;
@@ -48,6 +51,7 @@ export class Ambience {
     mk('lava', 'lowpass', 140, 0.8, 0.2, 40);
     mk('cave', 'lowpass', 180, 0.6, 0.05, 50);
     mk('fire', 'bandpass', 1800, 0.7, 0.6, 600);
+    mk('deep', 'lowpass', 260, 0.9, 0.07, 120);
   }
 
   /** Called every frame; samples the surroundings twice a second. */
@@ -64,6 +68,14 @@ export class Ambience {
       this.chirp(now, this.birds);
     }
     if (this.frogs > 0.05 && now > this.nextChirp - 1 && Math.random() < 0.004) this.croak(now, this.frogs);
+    if (this.bubbles > 0.05 && now > this.nextBubble) {
+      this.nextBubble = now + 0.6 + Math.random() * 2.4;
+      const n = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < n; i++) {
+        const f = 220 + Math.random() * 160;
+        this.blip('sine', f, f * 2.6, now + i * 0.07, 0.07, 0.018 * Math.min(1, this.bubbles * 1.5));
+      }
+    }
     if (this.level.cave > 0.01 && now > this.nextDrip) {
       this.nextDrip = now + 1.5 + Math.random() * 4.5;
       this.drip(now);
@@ -80,7 +92,7 @@ export class Ambience {
 
   private sample(g: Game, me: Player): void {
     const cx = Math.round(me.x), cy = Math.round(me.y), z = me.z;
-    let snow = 0, sand = 0, green = 0, wild = 0, water = 0, lava = 0, n = 0;
+    let snow = 0, sand = 0, green = 0, wild = 0, water = 0, lava = 0, seabed = 0, n = 0;
     for (let dy = -6; dy <= 6; dy += 2) {
       for (let dx = -6; dx <= 6; dx += 2) {
         const gr = g.world.getGround(cx + dx, cy + dy, z);
@@ -92,6 +104,7 @@ export class Ambience {
         else if (gr === Ground.Jungle || gr === Ground.Swamp) wild++;
         else if (gr === Ground.Water || gr === Ground.DeepWater) water++;
         else if (gr === Ground.Lava || gr === Ground.Ash) lava++;
+        else if (gr === Ground.Seabed) seabed++;
       }
     }
     // campfires within 5 tiles crackle, louder the closer you stand
@@ -107,9 +120,11 @@ export class Ambience {
       insects: under ? 0 : f(wild) * 0.025,
       sea: under ? 0 : Math.min(1, f(water) * 1.6) * 0.07,
       lava: f(lava) * 0.12,
-      cave: under ? 0.06 : 0,
+      cave: under ? (f(seabed) > 0.3 ? 0.01 : 0.06) : 0,
       fire: fire * 0.035,
+      deep: under ? Math.min(1, f(seabed) * 1.4) * 0.1 : 0,
     };
+    this.bubbles = under ? f(seabed) : 0;
     this.birds = under || indoors ? 0 : f(green) + f(wild) * 0.5;
     this.frogs = under ? 0 : f(wild);
   }

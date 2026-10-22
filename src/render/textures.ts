@@ -127,6 +127,20 @@ export const groundTex = {
   sand: (v: number) => make('sand', (ctx, rng) => {
     noise(ctx, rng, ['#d4bd86', '#dcc690', '#c7af78', '#e3d09c'], [5, 2, 2, 1]);
   }, v),
+  /** The sea floor of the Sunken Reach: pale silty sand with ripples, shell grit and dark weed specks. */
+  seabed: (v: number) => make('seabed', (ctx, rng) => {
+    noise(ctx, rng, ['#b8ab84', '#c4b890', '#a89a74', '#cfc49c'], [5, 2, 2, 1]);
+    for (let y = 3 + rng.int(0, 3); y < 32; y += 6) {
+      for (let x = 0; x < 32; x++) {
+        const yy = y + Math.round(Math.sin((x + y * 1.7) * 0.4) * 1.2);
+        px(ctx, x, yy, '#d8cea8');
+        px(ctx, x, yy + 1, '#9a8c68');
+      }
+    }
+    blobs(ctx, rng, '#9a8e6c', 2, 1, 2);
+    for (let i = 0; i < 6; i++) px(ctx, rng.int(0, 31), rng.int(0, 31), '#efe8d8');
+    for (let i = 0; i < 5; i++) px(ctx, rng.int(0, 31), rng.int(0, 31), '#5a6a3a');
+  }, v),
   crop: (v: number) => make('crop', (ctx, rng) => {
     noise(ctx, rng, ['#5c432a', '#664b2f', '#523b24'], [4, 2, 2]);
     for (let y = 2; y < 32; y += 8) px(ctx, 0, y, '#3f2d1a', 32, 2);

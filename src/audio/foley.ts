@@ -117,6 +117,10 @@ export function footstep(k: Kit, g: Ground, vol: number, alt: boolean, heavy = f
       k.noise('bandpass', 800 * p, 1600, t, 0.12, 0.28 * vol, 1.5, 0.01);
       k.tone('sine', 320 * p, 150, t + 0.02, 0.07, 0.14 * vol);
       break;
+    case Ground.Seabed:
+      // a slow, muffled push through water over soft sand
+      k.noise('lowpass', 520 * p, 180, t, 0.14, 0.22 * vol, 1, 0.025);
+      break;
     case Ground.Lava: case Ground.Ash:
       k.noise('lowpass', 1500 * p, 400, t, 0.07, 0.24 * vol, 1);
       k.noise('highpass', 6000, 5000, t + 0.03, 0.12, 0.05 * vol, 1);

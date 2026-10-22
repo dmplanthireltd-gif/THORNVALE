@@ -5,6 +5,7 @@ import { buildAllTowns } from './townSites';
 import { Biome, computeGeography, fbm } from './terrain';
 import { placeOreRocks } from './mines';
 import { buildTutorialIsle } from './tutorialIsle';
+import { buildSunkenReach } from './sea';
 import { FLOOR_MAX, FLOOR_MIN, Ground, Obj, SOLID_OBJ, UNWALKABLE_GROUND, WorldMap, type House } from './WorldMap';
 
 /**
@@ -69,6 +70,8 @@ function generate(seed: number): WorldMap {
   // the tutorial island last: it uses no random numbers and touches only open sea, so the rest
   // of the world stays exactly as it was; it is reached through its destination (new characters)
   buildTutorialIsle(m);
+  // the Sunken Reach under the bay west of Millbrook: fixed layout, only open sea (world/sea.ts)
+  buildSunkenReach(m);
   return m;
 }
 
@@ -398,7 +401,7 @@ export class Reach {
 const D8: Array<[number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 const LINK_OBJ = new Uint8Array(256);
-for (const o of [Obj.StairsUp, Obj.StairsDown, Obj.Hole, Obj.LooseStone, Obj.Ladder, Obj.RopeSpot]) LINK_OBJ[o] = 1;
+for (const o of [Obj.StairsUp, Obj.StairsDown, Obj.Hole, Obj.LooseStone, Obj.Ladder, Obj.RopeSpot, Obj.Whirlpool]) LINK_OBJ[o] = 1;
 
 /** Every (x,y,z) a player can reach from the spawn, following stairs, ladders, ropes, dig spots and ships. */
 export function floodFill3D(m: WorldMap): Reach {

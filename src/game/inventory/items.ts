@@ -2,6 +2,7 @@ import type { Vocation } from '../player/vocations';
 import { bonusParts, PIECE_SET, SET_BY_ID, SET_ITEM_SPECS, setSummary } from './sets';
 import { CAPE_BY_ID, CAPE_ITEM_SPECS, capeSummary } from './capes';
 import { PET_ITEM_SPECS, petForItem } from '../pets/petDefs';
+import { SEA_ITEM_SPECS, SEA_UNIQUES } from './seaItems';
 
 export type ItemKind =
   | 'gold' | 'consumable' | 'rune' | 'tool' | 'material'
@@ -513,13 +514,15 @@ const defs: ItemDef[] = [
 
   // --- pets (pets/petDefs.ts) -------------------------------------------------------------------
   ...PET_ITEM_SPECS.map(def),
+  // --- the Sunken Reach (seaItems.ts): sea materials and Ulmaroth's uniques -------------------
+  ...SEA_ITEM_SPECS.map(def),
 ];
 
 /** Unique items only bosses drop (bosses/bosses.ts). */
 export const BOSS_UNIQUES = [
   'ironjaw_helm', 'bonebound_amulet', 'ashanvil_hammer', 'labyrinth_greaves', 'oracle_rod', 'matriarch_scalemail', 'sandking_crown', 'hundred_fang_bow',
   'hrimgaard_fang', 'sovereign_wand', 'ashen_will_ring', 'mountainheart_shield', 'colossus_maul', 'stormcoil_wand', 'tidecrest_boots', 'blightweave_robe',
-  'broodmother_crossbow',
+  'broodmother_crossbow', ...SEA_UNIQUES,
 ];
 
 /** Logs from woodcutting, cheapest first. */

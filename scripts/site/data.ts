@@ -93,7 +93,7 @@ const GROUND: Record<number, [number, number, number]> = {
   [Ground.Water]: [36, 70, 98], [Ground.Dirt]: [104, 84, 58], [Ground.Crop]: [128, 112, 54], [Ground.Sand]: [196, 172, 116],
   [Ground.DarkGrass]: [46, 78, 38], [Ground.Lava]: [226, 92, 30], [Ground.Ash]: [62, 56, 52], [Ground.Void]: [16, 24, 34],
   [Ground.Swamp]: [70, 80, 46], [Ground.Cave]: [90, 78, 64], [Ground.Jungle]: [38, 86, 34], [Ground.Marble]: [196, 188, 172],
-  [Ground.DeepWater]: [20, 40, 64], [Ground.Snow]: [222, 226, 228], [Ground.Ice]: [168, 200, 214],
+  [Ground.DeepWater]: [20, 40, 64], [Ground.Snow]: [222, 226, 228], [Ground.Ice]: [168, 200, 214], [Ground.Seabed]: [106, 138, 150],
 };
 const TREES = new Set<number>([Obj.Tree, Obj.Pine, Obj.JungleTree, Obj.Palm]);
 const BUILT = new Set<number>([Obj.Wall, Obj.StoneWall, Obj.Palisade, Obj.SandWall, Obj.Door]);

@@ -1060,7 +1060,8 @@ console.log('Capes');
   check(CAPES.some((c) => c.kind === 'mastery'), 'a mastery cape for every skill');
   // boss lists match the monsters
   const bossKinds = (b: string) => Object.entries(ENEMIES).filter(([, e]) => e.boss === b).map(([k]) => k).sort().join();
-  check(bossKinds('dungeon') === [...DUNGEON_BOSS_KINDS].sort().join(), 'the Tyrantbane Cape lists every dungeon boss');
+  // Ulmaroth of the Sunken Reach came later and is not part of the deed (it stays "all ten")
+  check(bossKinds('dungeon').split(',').filter((k) => k !== 'boss_drowned_tyrant').join() === [...DUNGEON_BOSS_KINDS].sort().join(), 'the Tyrantbane Cape lists every original dungeon boss');
   check(bossKinds('world') === [...WORLD_BOSS_KINDS].sort().join(), 'the Worldbreaker Mantle lists every world boss');
   const capeLooks = new Set<string>();
   const world = new Game();
