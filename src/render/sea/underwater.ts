@@ -35,6 +35,10 @@ export class UnderwaterFx {
   active = false;
   private time = 0;
   private fog = new THREE.Fog(FOG.getHex(), 54, 80);
+  /** The sea-floor fog, for compiling shaders ahead of the first dive (Renderer.precompile). */
+  get fogForCompile(): THREE.Fog {
+    return this.fog;
+  }
   private saved: { hemiGround: THREE.Color; sunColor: THREE.Color; torchColor: THREE.Color } | null = null;
   // bubbles (pooled)
   private bubbleMesh: THREE.InstancedMesh;

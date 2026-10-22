@@ -150,7 +150,6 @@ export class Renderer {
     this.resize();
     this.worldView.update(0, p.z, [{ x: p.x, y: p.y }], []);
     this.applyGraphics();
-    this.precompile();
   }
 
   /**
@@ -158,17 +157,158 @@ export class Renderer {
    * shadows above ground, none below), so the first step underground or onto a
    * new floor never freezes the game while shaders compile.
    */
+  private precompiled = '';
   private precompile(): void {
+    const mode = this.cam.pixelMode ? 'pixel' : 'screen';
+    if (this.precompiled === mode) return;
+    this.precompiled = mode;
+    const cast = this.sun.castShadow;
+    const fog = this.scene.fog;
+    // shader variants that only appear later: characters fading in and out (teleports, deaths), faded
+    // canopies and roofs (transparent cel materials), with and without textures, vertex colours, instancing
+    const probes = this.shaderProbes();
+    this.scene.add(probes);
+    const compile = () => (this.cam.pixelMode ? this.pixel.compile(this.renderer, this.scene, this.cam.camera) : this.renderer.compile(this.scene, this.cam.camera));
     try {
-      const cast = this.sun.castShadow;
+      // above ground (sun shadows), below ground (none) and on the sea floor (none, with fog)
+      this.scene.fog = null;
       this.sun.castShadow = true;
-      this.renderer.compile(this.scene, this.cam.camera);
+      compile();
       this.sun.castShadow = false;
-      this.renderer.compile(this.scene, this.cam.camera);
-      this.sun.castShadow = cast;
+      compile();
+      this.scene.fog = this.underwater.fogForCompile;
+      compile();
     } catch {
       /* compiling early is only an optimisation */
     }
+    this.sun.castShadow = cast;
+    this.scene.fog = fog;
+    this.warmUp(probes);
+    // the probes leave the scene but their materials are kept: disposing them would delete the compiled shaders
+    this.scene.remove(probes);
+    this.probeKeep.push(probes);
+  }
+  private probeKeep: THREE.Object3D[] = [];
+
+  private finished = new WeakSet<object>();
+  private finishedCount = -1;
+  private parallelShaders: boolean | null = null;
+  /**
+   * Shaders compiled ahead (precompile) are finished by the driver in the
+   * background; the first draw that uses one waits for it. After loading, this
+   * takes the shaders the driver reports finished (KHR_parallel_shader_compile)
+   * a few a frame, so no later draw has to wait.
+   */
+  private finishShaders(): void {
+    const progs = this.renderer.info.programs as unknown as Array<{ getUniforms(): unknown; isReady(): boolean }> | null;
+    if (!progs || progs.length === this.finishedCount) return;
+    // without the driver's background compiling there is no way to tell "ready" from "would freeze": leave it to the first draw
+    if (this.parallelShaders === null) this.parallelShaders = this.renderer.extensions.has('KHR_parallel_shader_compile');
+    if (!this.parallelShaders) { this.finishedCount = progs.length; return; }
+    const t0 = performance.now();
+    let pending = false;
+    for (const pr of progs) {
+      if (this.finished.has(pr)) continue;
+      if (performance.now() - t0 > 3 || !pr.isReady()) { pending = true; continue; }
+      pr.getUniforms();
+      this.finished.add(pr);
+    }
+    if (!pending) this.finishedCount = progs.length;
+  }
+
+  /** Small throw-away meshes covering the cel-material variants the world switches to at runtime. */
+  private shaderProbes(): THREE.Group {
+    const g = new THREE.Group();
+    g.name = 'shaderProbes';
+    const tex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    const f = this.cam.focus;
+    for (const transparent of [false, true]) for (const map of [false, true]) for (const vc of [false, true]) for (const inst of [false, true]) {
+      const m = mat(0xffffff, { map: map ? tex : null });
+      m.transparent = transparent;
+      m.depthWrite = !transparent;
+      m.opacity = transparent ? 0.5 : 1;
+      m.vertexColors = vc;
+      const geo = new THREE.BoxGeometry(0.01, 0.01, 0.01);
+      if (vc) geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3).fill(1), 3));
+      let me: THREE.Mesh;
+      if (inst) {
+        const im = new THREE.InstancedMesh(geo, m, 1);
+        im.setMatrixAt(0, new THREE.Matrix4());
+        im.setColorAt(0, new THREE.Color(1, 1, 1));
+        me = im;
+      } else me = new THREE.Mesh(geo, m);
+      me.castShadow = true;
+      me.receiveShadow = true;
+      me.position.set(f.x, -5, f.z);
+      g.add(me);
+    }
+    return g;
+  }
+
+  /**
+   * Draws one example of every kind of world mesh once into a 1 × 1 pixel buffer,
+   * in the light it will be seen in (surface, underground, sea floor). Drivers
+   * finish preparing a shader and upload its buffers on the first real draw; doing
+   * that here, while the game starts, keeps the first trip below ground or to a
+   * new place from freezing the game.
+   */
+  private warmUp(probes: THREE.Object3D): void {
+    const W = 31;
+    const { floors, sea } = this.worldView.floorGroups();
+    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: true });
+    const lights: THREE.Object3D[] = [];
+    this.scene.traverse((o) => { if ((o as THREE.Light).isLight) lights.push(o); });
+    const cam = this.cam.camera;
+    const camLayers = cam.layers.mask;
+    const cast = this.sun.castShadow;
+    const fog = this.scene.fog;
+    const shown = floors.map(([, g]) => g.visible);
+    const sig = (o: THREE.Mesh) => {
+      const m = o.material as THREE.Material;
+      const im = o as THREE.InstancedMesh;
+      const g = o.geometry;
+      return `${m.type}|${m.customProgramCacheKey()}|${(m as THREE.MeshToonMaterial).map ? 1 : 0}|${m.vertexColors}|${im.isInstancedMesh ? 1 : 0}|${im.instanceColor ? 1 : 0}|${m.transparent}|${m.side}|${o.receiveShadow}|${Object.keys(g.attributes).join(',')}`;
+    };
+    const states: Array<{ cast: boolean; fog: THREE.Fog | null; roots: THREE.Object3D[] }> = [
+      { cast: GRAPHICS[this.graphics].shadows, fog: null, roots: [...floors.filter(([z]) => z >= 0).map(([, g]) => g), probes] },
+      { cast: false, fog: null, roots: [...floors.filter(([z]) => z < 0).map(([, g]) => g), probes] },
+    ];
+    if (sea) states.push({ cast: false, fog: this.underwater.fogForCompile, roots: [sea, probes] });
+    try {
+      for (const L of lights) L.layers.enable(W);
+      cam.layers.set(W);
+      for (const [, g] of floors) g.visible = true;
+      this.renderer.setRenderTarget(this.cam.pixelMode ? rt : null);
+      if (!this.cam.pixelMode) { this.renderer.setScissorTest(true); this.renderer.setScissor(0, 0, 1, 1); }
+      for (const st of states) {
+        this.sun.castShadow = st.cast;
+        this.scene.fog = st.fog;
+        const picked = new Map<string, THREE.Mesh>();
+        for (const r of st.roots) r.traverseVisible((o) => {
+          const me = o as THREE.Mesh;
+          if (!me.isMesh || Array.isArray(me.material)) return;
+          const k = sig(me);
+          if (!picked.has(k)) picked.set(k, me);
+        });
+        const culled: boolean[] = [];
+        for (const me of picked.values()) { me.layers.enable(W); culled.push(me.frustumCulled); me.frustumCulled = false; }
+        this.renderer.render(this.scene, cam);
+        let i = 0;
+        for (const me of picked.values()) { me.layers.disable(W); me.frustumCulled = culled[i++]; }
+      }
+    } catch {
+      /* warming up is only an optimisation */
+    }
+    if (!this.cam.pixelMode) this.renderer.setScissorTest(false);
+    this.renderer.setRenderTarget(null);
+    for (const L of lights) L.layers.disable(W);
+    cam.layers.mask = camLayers;
+    floors.forEach(([, g], i) => { g.visible = shown[i]; });
+    this.sun.castShadow = cast;
+    this.scene.fog = fog;
+    rt.dispose();
   }
 
   /** Settings → Display → Graphics: High / Medium / Low. */
@@ -1142,6 +1282,8 @@ export class Renderer {
     this.effects.update(dt);
     this.blood.update(dt);
     this.overlay.update(dt);
+    // the first frame (and the first after switching the pixel look) compiles every shader the world uses
+    this.precompile();
     if (this.cam.pixelMode) {
       const a = this.cam.artSize();
       if (this.renderer.getPixelRatio() !== 1) this.renderer.setPixelRatio(1);
@@ -1150,5 +1292,6 @@ export class Renderer {
     } else {
       this.renderer.render(this.scene, this.cam.camera);
     }
+    this.finishShaders();
   }
 }

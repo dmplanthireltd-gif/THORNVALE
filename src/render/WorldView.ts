@@ -1379,6 +1379,11 @@ export class WorldView {
     }
   }
 
+  /** Every floor's group by floor number (for warming up the GPU at load), plus the sea floor's own group. */
+  floorGroups(): { floors: Array<[number, THREE.Group]>; sea: THREE.Object3D | null } {
+    return { floors: [...this.floors].map(([z, fv]) => [z, fv.group] as [number, THREE.Group]), sea: this.sea?.floor ?? null };
+  }
+
   /** Vertical offset a floor is drawn at, or null when that floor is hidden. */
   floorOffset(z: number): number | null {
     const fv = this.floors.get(z);

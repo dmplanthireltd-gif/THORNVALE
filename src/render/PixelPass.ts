@@ -95,6 +95,14 @@ export class PixelPass {
     this.material.uniforms.texel.value.set(1 / w, 1 / h);
   }
 
+  /** Compiles the scene's shaders for drawing into this pass's buffer (render targets use other shader variants than the screen). */
+  compile(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(this.target);
+    renderer.compile(scene, camera);
+    renderer.setRenderTarget(prev);
+  }
+
   render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
     renderer.setRenderTarget(this.target);
     renderer.clear();
