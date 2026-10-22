@@ -410,6 +410,7 @@ select.text-input { flex: 1; }
 
 /* other players: name in white with a coloured health bar, like the classic client */
 .nameplate.other-player .np-name { color: #f4f4f4 !important; }
+.nameplate.titled .np-name { color: #f0d79a !important; }
 .battle-row.k-player .battle-name { color: #f4f4f4; }
 
 

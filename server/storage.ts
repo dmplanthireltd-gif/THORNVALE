@@ -8,6 +8,7 @@
  * Both keep a backup copy of a character before an update migrates it to a new
  * save format, so a broken migration can always be rolled back.
  */
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { SaveData } from '../src/game/Game';
@@ -114,6 +115,13 @@ export interface Storage {
   markTutorialDone(account: string): Promise<void>;
   /** Start-up check: 'table' when the account_flags table exists, 'derived' when only character saves can tell. */
   accountFlagsMode(): Promise<'table' | 'derived'>;
+  /**
+   * "Tell me when the gates open": keeps an email (lower case) for launch news, once. Throws when
+   * this storage has no launch_signups table yet (the form then says sign-up isn't open).
+   */
+  addSignup(email: string, source: string): Promise<'added' | 'already'>;
+  /** Removes a sign-up by its unsubscribe token; false when the token is unknown. */
+  removeSignup(token: string): Promise<boolean>;
 }
 
 /** A stored save that counts as "finished the tutorial": made before it existed (v10 and older) or done on the island. */
@@ -147,6 +155,7 @@ export class FileStorage implements Storage {
     private readonly marketFile = join(dirname(charFile), 'market.json'),
     private readonly storeFile = join(dirname(charFile), 'store.json'),
     private readonly flagFile = join(dirname(charFile), 'account-flags.json'),
+    private readonly signupFile = join(dirname(charFile), 'signups.json'),
   ) {
     this.flags = FileStorage.read(flagFile, {});
     this.chars = FileStorage.read(charFile, {});
@@ -358,6 +367,24 @@ export class FileStorage implements Storage {
 
   async accountFlagsMode(): Promise<'table' | 'derived'> {
     return 'table';
+  }
+
+  // launch sign-ups: written on every change (a lost email can't be asked for again)
+  async addSignup(email: string, source: string): Promise<'added' | 'already'> {
+    const all = FileStorage.read<Record<string, { source: string; token: string; at: number }>>(this.signupFile, {});
+    if (all[email]) return 'already';
+    all[email] = { source, token: randomUUID(), at: Date.now() };
+    FileStorage.write(this.signupFile, all);
+    return 'added';
+  }
+
+  async removeSignup(token: string): Promise<boolean> {
+    const all = FileStorage.read<Record<string, { source: string; token: string; at: number }>>(this.signupFile, {});
+    const key = Object.keys(all).find((k) => all[k].token === token);
+    if (!key) return false;
+    delete all[key];
+    FileStorage.write(this.signupFile, all);
+    return true;
   }
 }
 
@@ -595,6 +622,17 @@ export class SupabaseStorage implements Storage {
 
   /** null = not checked yet; false = the table is missing (migration not applied): saves alone decide. */
   private flagsTable: boolean | null = null;
+
+  async addSignup(email: string, source: string): Promise<'added' | 'already'> {
+    const rows = (await this.req('POST', 'launch_signups?on_conflict=email', { email, source }, 'resolution=ignore-duplicates,return=representation')) as unknown[] | null;
+    return rows && rows.length ? 'added' : 'already';
+  }
+
+  async removeSignup(token: string): Promise<boolean> {
+    if (!/^[0-9a-f-]{36}$/i.test(token)) return false;
+    const rows = (await this.req('DELETE', `launch_signups?unsubscribe_token=eq.${token}`, undefined, 'return=representation')) as unknown[] | null;
+    return !!rows && rows.length > 0;
+  }
 
   async accountFlagsMode(): Promise<'table' | 'derived'> {
     try {

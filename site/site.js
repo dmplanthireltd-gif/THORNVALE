@@ -280,6 +280,31 @@
     load();
   }
 
+  // ---------------------------------------------------------------- opening news sign-up
+  $$('[data-notify]').forEach((form) => {
+    const msg = $('[data-notify-msg]', form);
+    const say = (text, ok) => { msg.textContent = text; msg.classList.toggle('ok', !!ok); };
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = form.email.value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return say('Enter a valid email address.');
+      if (!form.consent.checked) return say('Tick the box to say we may email you about the opening.');
+      const btn = $('button', form);
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, consent: true, source: form.dataset.source || 'website' }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'Something went wrong. Please try again.');
+        form.classList.add('done');
+        say('Thank you! We will email you when the gates open.', true);
+      } catch (err) {
+        say(err.message || 'Something went wrong. Please try again.');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
   // ---------------------------------------------------------------- reveal on scroll
   if (!calm && 'IntersectionObserver' in window) {
     const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { const t = e.target; t.classList.add('in'); io.unobserve(t); setTimeout(() => { t.classList.remove('reveal', 'in'); t.style.transitionDelay = ''; }, 1200); } }), { rootMargin: '0px 0px -8% 0px' });

@@ -91,6 +91,8 @@ export class Overlay {
     l.el.style.transform = `translate(${p.x.toFixed(1)}px, ${(p.y - 10).toFixed(1)}px) translate(-50%, -100%)`;
     const col = opts.npc ? '#9fd3ff' : hpColor(hpFrac);
     l.el.classList.toggle('other-player', !!opts.other);
+    // titled heroes (Pioneers, founders) wear a soft gold name
+    l.el.classList.toggle('titled', !!opts.title && !opts.boss && !opts.npc);
     if (l.name.textContent !== name) l.name.textContent = name;
     // title sits between the name and the bar; DOM is only touched when it changes
     const title = opts.boss ?? opts.title ?? '';

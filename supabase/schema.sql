@@ -215,3 +215,13 @@ create table if not exists public.account_flags (
 );
 
 alter table public.account_flags enable row level security;
+
+-- "Tell me when the gates open" (website). Migration 20261023_launch_signups.sql.
+create table if not exists public.launch_signups (
+  email              text primary key check (email = lower(email) and length(email) <= 254),
+  source             text not null default 'website',
+  unsubscribe_token  uuid not null unique default gen_random_uuid(),
+  created_at         timestamptz not null default now()
+);
+
+alter table public.launch_signups enable row level security;

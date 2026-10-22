@@ -13,7 +13,7 @@ import { activeSets, type ActiveSet } from './inventory/sets';
 import { CAPE_BY_ID, capeProblem, capeTrainingBonus, parseBossKills, recordBossKill, DUNGEON_BOSS_KINDS, WORLD_BOSS_KINDS, type CapeContext } from './inventory/capes';
 import {
   FOUNDER_TIERS, founderTitle, FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, NO_PERKS, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS,
-  PREMIUM_REGEN, PREMIUM_WARN_MS, PremiumZone, type AccountPerks, type FounderTier,
+  PREMIUM_REGEN, PREMIUM_WARN_MS, PremiumZone, type AccountPerks, type FounderTier, PIONEER_TITLE,
 } from './premium/premium';
 import { describeItem, EQUIP_SLOTS, equipSlotFor, isItem, itemDef, POTION_BUFF_POWER, POTION_BUFF_SECONDS, runeGroup, type Bonus, type Element, type EquipSlot, type FieldKind, type ItemDef, type ItemStack } from './inventory/items';
 import { ENEMIES } from './enemies/enemyDefs';
@@ -3980,7 +3980,7 @@ export class Game implements AIContext {
     const p = s.player;
     const tier = s.perks.founderTier;
     const cloak = tier && !s.cosmetics.hideCloak ? FOUNDER_TIERS[tier].cloak : '';
-    const title = tier && !s.cosmetics.hideTitle ? founderTitle(tier, s.perks.founderNo) : '';
+    const title = s.cosmetics.hideTitle ? '' : tier ? founderTitle(tier, s.perks.founderNo) : s.perks.pioneer ? PIONEER_TITLE : '';
     const premium = this.paidPremium(s);
     const changed = cloak !== p.cloak || title !== p.title || premium !== p.premium;
     p.cloak = cloak;

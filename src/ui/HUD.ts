@@ -1893,18 +1893,22 @@ export class HUD {
     const tier = this.ctl.game.premiumView(this.ctl.pid)?.tier ?? null;
     // a worn cape can be hidden with the same switch as the founder cloak
     const capeOn = !!this.s.inventory.equipment.cape;
-    if (tier || capeOn) {
+    // a Pioneer (no founder tier) can still switch the title off
+    const titled = !!this.ctl.game.getPlayer(this.ctl.pid)?.title || this.s.cosmetics.hideTitle;
+    if (tier || capeOn || titled) {
       const fr = el('div', 'dev-row', b);
-      el('span', 'dev-label', fr, tier ? 'Founder' : 'Cape');
+      el('span', 'dev-label', fr, tier ? 'Founder' : capeOn ? 'Cape' : 'Pioneer');
       const cos = this.s.cosmetics;
-      const what = tier ? (capeOn ? 'Cloak & cape' : 'Cloak') : 'Cape';
-      const cb = button(fr, cos.hideCloak ? `${what}: hidden` : `${what}: shown`, () => {
-        this.ctl.send({ c: 'cosmetics', cloak: cos.hideCloak });
-        cos.hideCloak = !cos.hideCloak;
-        cb.textContent = cos.hideCloak ? `${what}: hidden` : `${what}: shown`;
-        cb.classList.toggle('on', !cos.hideCloak);
-      }, `btn small${cos.hideCloak ? '' : ' on'}`);
-      if (tier) {
+      if (tier || capeOn) {
+        const what = tier ? (capeOn ? 'Cloak & cape' : 'Cloak') : 'Cape';
+        const cb = button(fr, cos.hideCloak ? `${what}: hidden` : `${what}: shown`, () => {
+          this.ctl.send({ c: 'cosmetics', cloak: cos.hideCloak });
+          cos.hideCloak = !cos.hideCloak;
+          cb.textContent = cos.hideCloak ? `${what}: hidden` : `${what}: shown`;
+          cb.classList.toggle('on', !cos.hideCloak);
+        }, `btn small${cos.hideCloak ? '' : ' on'}`);
+      }
+      if (tier || titled) {
         const tb = button(fr, cos.hideTitle ? 'Title: hidden' : 'Title: shown', () => {
           this.ctl.send({ c: 'cosmetics', title: cos.hideTitle });
           cos.hideTitle = !cos.hideTitle;

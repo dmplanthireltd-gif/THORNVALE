@@ -1781,6 +1781,17 @@ console.log('Premium accounts and founder packs');
   check(b.player.title === 'Legend #027' && b.player.cloak === 'crimson' && b.player.premium, 'a Legend founder gets the numbered title, the crimson cloak and the crown');
   executeCommand(g, b.id, { c: 'cosmetics', cloak: false });
   check(b.player.cloak === '' && b.player.title === 'Legend #027', 'the cloak can be hidden');
+  // Pioneers: free title for accounts made before the opening; a founder title wins
+  const perksA = { ...g.session(a.id)!.perks };
+  g.setPerks(a.id, { ...NO_PERKS, pioneer: true });
+  check(a.player.title === 'Pioneer' && a.player.cloak === '', 'an account made before the opening is a Pioneer (title only, no cloak)');
+  g.setPerks(b.id, { ...NO_PERKS, premiumUntil: clock + 365 * DAY, founderTier: 'legend', founderNo: 27, pioneer: true });
+  check(b.player.title === 'Legend #027', 'a founder who is also a Pioneer shows the founder title');
+  executeCommand(g, a.id, { c: 'cosmetics', title: false });
+  check(a.player.title === '', 'the Pioneer title can be hidden');
+  executeCommand(g, a.id, { c: 'cosmetics', title: true });
+  check(a.player.title === 'Pioneer', 'and shown again');
+  g.setPerks(a.id, perksA);
   const saved = g.serialize(b.id);
   check(saved.version === SAVE_VERSION && SAVE_VERSION >= 10 && saved.cosmetics?.hideCloak === true, 'the save keeps the cloak switch');
   const g2 = new Game({ premium: true, now: () => clock });

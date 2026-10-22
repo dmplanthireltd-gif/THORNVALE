@@ -7,7 +7,7 @@ import { SAVE_VERSION } from '../src/game/save/migrate';
 import { createServer } from 'node:http';
 import { FileStorage, SupabaseStorage, type Storage } from '../server/storage';
 import type { MarketDelivery, MarketOffer } from '../src/game/market/market';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Game } from '../src/game/Game';
@@ -216,6 +216,11 @@ async function main(): Promise<void> {
   check(!(await ff.tutorialDone('name:zed')), 'files: no flag yet');
   await ff.markTutorialDone('name:zed');
   check(await new FileStorage(join(dir2, 'characters.json')).tutorialDone('name:zed'), 'files: the flag survives a restart');
+  // launch news sign-ups
+  check((await ff.addSignup('hero@example.com', 'website')) === 'added', 'files: a launch sign-up is kept');
+  check((await ff.addSignup('hero@example.com', 'website')) === 'already', 'files: the same email twice is kept once');
+  const tok = (JSON.parse(readFileSync(join(dir2, 'signups.json'), 'utf8')) as Record<string, { token: string }>)['hero@example.com'].token;
+  check(!(await ff.removeSignup('not-a-token')) && (await ff.removeSignup(tok)), 'files: the unsubscribe token removes the sign-up, a wrong one does not');
   rmSync(dir2, { recursive: true, force: true });
   mock.close();
   console.log(failed ? `\n${failed} check(s) failed.` : '\nAll storage checks passed.');

@@ -75,6 +75,9 @@ export function bestTier(a: FounderTier | null, b: FounderTier | null): FounderT
   return FOUNDER_TIERS[a].rank >= FOUNDER_TIERS[b].rank ? a : b;
 }
 
+/** Free title for every account made before the grand opening (paid founder titles take priority). */
+export const PIONEER_TITLE = 'Pioneer';
+
 /** Title shown under the name and in the Inspect window. */
 export function founderTitle(tier: FounderTier | null, no = 0): string {
   if (tier === 'legend') return no > 0 ? `Legend #${String(no).padStart(3, '0')}` : 'Legend';
@@ -154,6 +157,8 @@ export interface AccountPerks {
   founderName: string;
   /** Set when a chargeback came in, so the owner can have a look. */
   flagged: boolean;
+  /** Pioneer: the account was made before the grand opening (free title, set by the server at login). */
+  pioneer?: boolean;
 }
 
 export const NO_PERKS: AccountPerks = { premiumUntil: 0, founderTier: null, founderNo: 0, extraSlots: 0, founderName: '', flagged: false };

@@ -100,13 +100,13 @@ async function authenticate(name: string, password: string): Promise<'ok' | 'cre
 }
 
 /** Checks a Supabase Auth access token and returns the user it belongs to. */
-async function verifyToken(token: string): Promise<{ id: string; email: string } | null> {
+async function verifyToken(token: string): Promise<{ id: string; email: string; created: number } | null> {
   if (!token || token.length > 4096) return null;
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}` } });
     if (!res.ok) return null;
-    const u = (await res.json()) as { id?: string; email?: string };
-    return u.id ? { id: u.id, email: u.email ?? '' } : null;
+    const u = (await res.json()) as { id?: string; email?: string; created_at?: string };
+    return u.id ? { id: u.id, email: u.email ?? '', created: Date.parse(u.created_at ?? '') || Date.now() } : null;
   } catch {
     return null;
   }
@@ -314,6 +314,8 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
       return;
     }
     perks = await perksOf(user.id);
+    // Pioneer: accounts made before the grand opening keep a free title for good
+    perks.pioneer = user.created < LAUNCH_AT;
     const maxChars = MAX_CHARACTERS_PER_ACCOUNT + perks.extraSlots;
     if (!existing && (await storage.listCharacters(user.id)).length >= maxChars) {
       send(c, { t: 'error', text: `An account can have at most ${maxChars} characters.` });
@@ -335,6 +337,7 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
     return;
   }
   failedLogins.delete(c.addr);
+  if (!EMAIL_AUTH) perks.pioneer = ((await storage.getAccount(key))?.created ?? Date.now()) < LAUNCH_AT;
   if ([...game.sessions.values()].some((s) => s.player.name.toLowerCase() === name.toLowerCase())) {
     send(c, { t: 'error', text: `${name} is already online.` });
     c.ws.close(4002);
@@ -585,6 +588,53 @@ async function readBody(req: IncomingMessage, limit: number): Promise<string | n
   return Buffer.concat(chunks).toString('utf8');
 }
 
+// ------------------------------------------------------------------ launch news sign-up (website)
+
+/** Sign-ups per address in the last hour: a little friction against floods. */
+const signupTries = new Map<string, { count: number; since: number }>();
+
+/** POST /api/notify {email, consent}: "tell me when the gates open". */
+async function notifySignup(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const fwd = req.headers['x-forwarded-for'];
+  const addr = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0].trim() || req.socket.remoteAddress || '?';
+  const now = Date.now();
+  const t = signupTries.get(addr);
+  if (t && now - t.since < 3_600_000 && t.count >= 5) return json(res, 429, { error: 'Too many sign-ups from here. Please try again later.' });
+  signupTries.set(addr, t && now - t.since < 3_600_000 ? { count: t.count + 1, since: t.since } : { count: 1, since: now });
+  const raw = await readBody(req, 2048);
+  let body: { email?: unknown; consent?: unknown; source?: unknown } = {};
+  try {
+    body = JSON.parse(raw ?? '{}');
+  } catch {
+    /* empty */
+  }
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return json(res, 400, { error: 'Enter a valid email address.' });
+  if (body.consent !== true) return json(res, 400, { error: 'Tick the box to say we may email you about the opening.' });
+  const source = typeof body.source === 'string' && /^[a-z-]{1,24}$/.test(body.source) ? body.source : 'website';
+  try {
+    await storage.addSignup(email, source);
+    // the same answer either way, so the form can't be used to test which emails are on the list
+    return json(res, 200, { ok: true });
+  } catch (err) {
+    console.error('Launch sign-up failed:', String((err as Error).message).slice(0, 200));
+    return json(res, 503, { error: 'Sign-up is not open yet. Please try again later.' });
+  }
+}
+
+/** GET /api/notify/unsubscribe?token=…: the link in every launch email. */
+async function notifyUnsubscribe(res: ServerResponse, url: URL): Promise<void> {
+  const token = url.searchParams.get('token') ?? '';
+  let done = false;
+  try {
+    done = await storage.removeSignup(token);
+  } catch {
+    done = false;
+  }
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+  res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thornvale</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#1d1915;color:#e8dfcc;font:18px/1.5 'Palatino Linotype',Palatino,Georgia,serif;text-align:center;padding:24px"><div><p style="font:700 15px Verdana,sans-serif;letter-spacing:.22em;color:#e8c26a">THORNVALE</p><p>${done ? 'You will not get any more launch emails from us.' : 'That link has already been used, or it is not valid any more.'}</p><p><a style="color:#e8c26a" href="/">Back to thornvaleonline.com</a></p></div></body>`);
+}
+
 async function handleStore(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   const now = Date.now();
   if (url.pathname === '/api/store/config') {
@@ -679,6 +729,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): P
   if (url.pathname.startsWith('/api/store/') || url.pathname === '/api/founders' || url.pathname === '/api/pay/webhook') {
     if (await handleStore(req, res, url)) return;
   }
+  if (url.pathname === '/api/notify' && req.method === 'POST') return notifySignup(req, res);
+  if (url.pathname === '/api/notify/unsubscribe') return notifyUnsubscribe(res, url);
   if (url.pathname === '/api/auth-config') {
     // the publishable key is meant for browsers; the secret key never leaves the server
     return json(res, 200, EMAIL_AUTH ? { mode: 'email', url: SUPABASE_URL, key: SUPABASE_PUBLISHABLE_KEY, maxCharacters: MAX_CHARACTERS_PER_ACCOUNT } : { mode: 'local' });

@@ -58,7 +58,17 @@
         <div><b data-minutes>–</b><span>minutes</span></div>
         <div><b data-seconds>–</b><span>seconds</span></div>
       </div>
-      <p class="gate-note">The test realm is open now. Accounts and names you claim today carry over to launch.</p>
+      <p class="gate-note">The test realm is open now. Every account made before the opening becomes a <b>Pioneer</b>: a title and a gold name, kept for good.</p>
+      <form class="notify" data-notify data-source="hero" novalidate>
+  <p class="notify-k">Get the opening news</p>
+  <div class="notify-row">
+    <label class="sr" for="notify-hero">Your email</label>
+    <input id="notify-hero" type="email" name="email" autocomplete="email" placeholder="you@example.com" required>
+    <button class="btn" type="submit">Tell me</button>
+  </div>
+  <label class="notify-ok"><input type="checkbox" name="consent"> Email me when the gates open, and with news before then. Nothing else, and I can unsubscribe any time (<a href="/privacy/">privacy</a>).</label>
+  <p class="notify-msg" data-notify-msg role="status" aria-live="polite"></p>
+</form>
     </div>
   </div>
   <a class="scroll-cue" href="#paths" aria-label="Scroll down"><span aria-hidden="true"></span></a>
@@ -268,6 +278,16 @@
     <h2 class="mega small">Your legend starts tonight</h2>
     <p class="lede">Free in your browser. No download. The gates open fully on 1 January 2027.</p>
     <div class="cta"><a class="btn ember big" href="/play/">Enter Thornvale</a><a class="btn iron big" href="/guide/">Read the guide</a></div>
+    <form class="notify" data-notify data-source="final" novalidate>
+  <p class="notify-k">Not ready yet? We will tell you when the gates open</p>
+  <div class="notify-row">
+    <label class="sr" for="notify-final">Your email</label>
+    <input id="notify-final" type="email" name="email" autocomplete="email" placeholder="you@example.com" required>
+    <button class="btn" type="submit">Tell me</button>
+  </div>
+  <label class="notify-ok"><input type="checkbox" name="consent"> Email me when the gates open, and with news before then. Nothing else, and I can unsubscribe any time (<a href="/privacy/">privacy</a>).</label>
+  <p class="notify-msg" data-notify-msg role="status" aria-live="polite"></p>
+</form>
   </div>
 </section>
 </main>
@@ -291,6 +311,7 @@
     <div class="foot-col">
       <h2>Contact</h2>
       <span class="sel">support@thornvaleonline.com</span>
+      <a href="/press/">Press kit</a>
       <a href="/terms/">Terms of sale</a>
       <a href="/privacy/">Privacy</a>
     </div>

@@ -25,6 +25,21 @@ const CONTENT = join(dirname(fileURLToPath(import.meta.url)), 'content');
 const ORIGIN = 'https://thornvaleonline.com';
 const OPENING = '2027-01-01T00:00:00Z'; // midnight UK time (GMT in January)
 
+/** Discord invite (e.g. 'https://discord.gg/abc123'). Empty = no Discord links anywhere on the site. */
+const DISCORD_URL = '';
+
+/** "Tell me when the gates open": posts to /api/notify (site.js). Consent is a separate, unticked box. */
+const notifyForm = (source: string, title = 'Get the opening news') => `<form class="notify" data-notify data-source="${source}" novalidate>
+  <p class="notify-k">${title}</p>
+  <div class="notify-row">
+    <label class="sr" for="notify-${source}">Your email</label>
+    <input id="notify-${source}" type="email" name="email" autocomplete="email" placeholder="you@example.com" required>
+    <button class="btn" type="submit">Tell me</button>
+  </div>
+  <label class="notify-ok"><input type="checkbox" name="consent"> Email me when the gates open, and with news before then. Nothing else, and I can unsubscribe any time (<a href="/privacy/">privacy</a>).</label>
+  <p class="notify-msg" data-notify-msg role="status" aria-live="polite"></p>
+</form>`;
+
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const content = (name: string) => readFileSync(join(CONTENT, `${name}.html`), 'utf8');
 const C = counts();
@@ -124,7 +139,7 @@ ${p.body}
     </div>
     <nav class="foot-col" aria-label="Play">
       <h2>Play</h2>
-      <a href="/play/">Enter the realm</a><a href="/guide/">Game guide</a><a href="/store/">Store</a><a href="/faq/">FAQ</a><a href="/rules/">Rules</a>
+      <a href="/play/">Enter the realm</a><a href="/guide/">Game guide</a><a href="/store/">Store</a><a href="/faq/">FAQ</a><a href="/rules/">Rules</a>${DISCORD_URL ? `<a href="${DISCORD_URL}" rel="noopener">Discord</a>` : ''}
     </nav>
     <nav class="foot-col" aria-label="The world">
       <h2>The world</h2>
@@ -133,6 +148,7 @@ ${p.body}
     <div class="foot-col">
       <h2>Contact</h2>
       <span class="sel">support@thornvaleonline.com</span>
+      <a href="/press/">Press kit</a>
       <a href="/terms/">Terms of sale</a>
       <a href="/privacy/">Privacy</a>
     </div>
@@ -242,7 +258,8 @@ function home(): Page {
         <div><b data-minutes>–</b><span>minutes</span></div>
         <div><b data-seconds>–</b><span>seconds</span></div>
       </div>
-      <p class="gate-note">The test realm is open now. Accounts and names you claim today carry over to launch.</p>
+      <p class="gate-note">The test realm is open now. Every account made before the opening becomes a <b>Pioneer</b>: a title and a gold name, kept for good.</p>
+      ${notifyForm('hero')}
     </div>
   </div>
   <a class="scroll-cue" href="#paths" aria-label="Scroll down"><span aria-hidden="true"></span></a>
@@ -362,6 +379,7 @@ function home(): Page {
     <h2 class="mega small">Your legend starts tonight</h2>
     <p class="lede">Free in your browser. No download. The gates open fully on 1 January 2027.</p>
     <div class="cta"><a class="btn ember big" href="/play/">Enter Thornvale</a><a class="btn iron big" href="/guide/">Read the guide</a></div>
+    ${notifyForm('final', 'Not ready yet? We will tell you when the gates open')}
   </div>
 </section>`;
   return {
@@ -662,6 +680,68 @@ function newsList(): Page {
   return { path: '/news/', title: 'News – Thornvale', description: 'News and updates from Thornvale.', body };
 }
 
+function pressPage(): Page {
+  const fact = (k: string, v: string) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
+  const shot = (src: string, alt: string, w: number, h: number) => `<figure class="shot plate"><a href="${src}" download><img src="${src}" alt="${esc(alt)}" width="${w}" height="${h}" loading="lazy"></a><figcaption>${esc(alt)}</figcaption></figure>`;
+  const body = `${banner('For press and creators', 'Press kit', 'Everything you need to write about or stream Thornvale: facts, a short and a long description, the trailer, screenshots and the logo. All of it is free to use when covering the game.')}
+<section class="sec tight">
+  <div class="sec-in press">
+    <div class="press-cols">
+      <div class="plate press-box">
+        <h2 class="side-h">Fact sheet</h2>
+        <dl class="facts-list">
+          ${fact('Game', 'Thornvale')}
+          ${fact('Genre', 'Free-to-play fantasy MMORPG, tile-based, 3D, seen from above')}
+          ${fact('Platform', 'Web browser (Chrome, Edge, Firefox, Safari) on a computer. Nothing to install.')}
+          ${fact('Developer', 'Dawid Mlynarczyk, United Kingdom (independent)')}
+          ${fact('Grand opening', '1 January 2027, 00:00 UK time. The test realm is open now.')}
+          ${fact('Price', 'Free to play. Optional premium time and founder packs (see the <a href="/store/">store</a>).')}
+          ${fact('World', `${C.towns} towns, ${C.monsters} kinds of monster, ${C.spells} spells and runes, ${C.items} items, four vocations`)}
+          ${fact('Website', '<a href="/">thornvaleonline.com</a>')}
+          ${fact('Play', '<a href="/play/">thornvaleonline.com/play</a>')}
+          ${fact('Contact', '<span class="sel">support@thornvaleonline.com</span>')}
+        </dl>
+      </div>
+      <div class="plate press-box">
+        <h2 class="side-h">In one line</h2>
+        <p>Thornvale is a free fantasy MMORPG in your browser: pick a vocation, hunt across ${C.towns} towns and wild regions, and carve your name into the hall of heroes.</p>
+        <h2 class="side-h">In a paragraph</h2>
+        <p>Thornvale brings back the feel of the classic tile-based online RPGs of the 2000s: a dangerous world, spells cast by their words, runes, depots and real trading between players. Pick a Knight, Paladin, Sorcerer or Druid and explore an archipelago of ${C.towns} towns, from snowbound halls to desert tombs and lava caves, seven floors deep. Mine and smith your own gear, fish and cook, fight bosses and raids with friends, and decide whether to trust the other players in an open PvP world. It runs in any modern browser with nothing to download, and every town, creature, song and line of text is original.</p>
+        <h2 class="side-h">Key features</h2>
+        <ul class="press-list">
+          <li>Free, in the browser, nothing to install</li>
+          <li>Four vocations and ${C.spells} spells and runes</li>
+          <li>${C.monsters} kinds of monster, bosses, world bosses and raids</li>
+          <li>Gathering and crafting: mining, smithing, fishing, cooking, woodcutting, fletching</li>
+          <li>Open PvP with skulls, protection zones and secure mode</li>
+          <li>A player market and face-to-face trading</li>
+          <li>An original soundtrack: every region has its own band of instruments</li>
+        </ul>
+      </div>
+    </div>
+    <h2 class="side-h">Trailer</h2>
+    <div class="press-trailer plate"><video controls playsinline preload="none" poster="/media/trailer-full-poster.jpg"><source src="/media/trailer-full.webm" type="video/webm"><source src="/media/trailer-full.mp4" type="video/mp4"></video></div>
+    <p class="faint small">Download: <a href="/media/trailer-full.mp4" download>MP4</a> · <a href="/media/trailer-full.webm" download>WebM</a></p>
+    <h2 class="side-h">Screenshots</h2>
+    <div class="press-shots">
+      ${shot('/media/world-towns.jpg', 'A walled town', 1200, 675)}
+      ${shot('/media/world-hunting.jpg', 'Hunting in the wilds', 1200, 675)}
+      ${shot('/media/world-dungeons.jpg', 'A torch-lit dungeon', 1200, 675)}
+      ${shot('/media/news-server-live.jpg', 'A frost dragon on the glacier', 800, 450)}
+      ${shot('/media/atlas.webp', 'The map of the archipelago', 1280, 1600)}
+      ${shot('/media/og-image.jpg', 'Share image', 1200, 630)}
+    </div>
+    <h2 class="side-h">Logo</h2>
+    <div class="press-logo plate">
+      ${CREST(96)}
+      <div><p>The crest is a gold-edged diamond holding a gold T; the name is written <b>THORNVALE</b> in wide-spaced gold capitals. Please keep both on a dark background and don't recolour or stretch them.</p>
+      <p class="small"><a href="/favicon.svg" download="thornvale-crest.svg">Crest (SVG)</a></p></div>
+    </div>
+  </div>
+</section>`;
+  return { path: '/press/', title: 'Press kit – Thornvale', description: 'Facts, descriptions, trailer, screenshots and logo for writing about or streaming Thornvale.', body };
+}
+
 function notFound(): Page {
   const body = `<section class="lost"><canvas class="embers" data-embers aria-hidden="true"></canvas><div class="lost-in">
   <p class="kicker"><span>404</span></p>
@@ -689,6 +769,7 @@ const pages: Page[] = [
   storePage(), foundersPage(),
   doc('/terms/', 'Terms of sale – Thornvale', 'The terms for buying premium time and founder packs for Thornvale, and how refunds work.', 'terms'),
   doc('/privacy/', 'Privacy – Thornvale', 'What Thornvale collects and why.', 'privacy'),
+  pressPage(),
   notFound(),
 ];
 for (const p of pages) write(p.path, layout(p));
