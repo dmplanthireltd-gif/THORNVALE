@@ -34,13 +34,14 @@ export interface WeatherLight {
 const TILT = THREE.MathUtils.degToRad(CAMERA_TILT_DEG);
 /** How dark each kind makes the day at full strength. */
 const COVER: Record<WeatherKind, number> = {
-  [WeatherKind.Clear]: 0, [WeatherKind.Cloudy]: 0.2, [WeatherKind.Rain]: 0.36, [WeatherKind.Storm]: 0.6,
-  [WeatherKind.Snow]: 0.22, [WeatherKind.Blizzard]: 0.42, [WeatherKind.Dust]: 0.08, [WeatherKind.Sandstorm]: 0.3,
-  [WeatherKind.Mist]: 0.14, [WeatherKind.Downpour]: 0.48,
+  [WeatherKind.Clear]: 0, [WeatherKind.Cloudy]: 0.22, [WeatherKind.Rain]: 0.42, [WeatherKind.Storm]: 0.66,
+  [WeatherKind.Snow]: 0.24, [WeatherKind.Blizzard]: 0.45, [WeatherKind.Dust]: 0.08, [WeatherKind.Sandstorm]: 0.32,
+  [WeatherKind.Mist]: 0.16, [WeatherKind.Downpour]: 0.52,
 };
 
 /** Eases a value toward its target with time constant `tau` seconds. */
-const ease = (v: number, target: number, dt: number, tau: number) => v + (target - v) * (1 - Math.exp(-dt / tau));
+let settling = false;
+const ease = (v: number, target: number, dt: number, tau: number) => (settling ? target : v + (target - v) * (1 - Math.exp(-dt / tau)));
 
 /**
  * Turns the server's weather for the player's zone into what you see: rain,
@@ -76,6 +77,7 @@ export class WeatherView {
   private forest = 0;
   private desert = 0;
   private reduced = false;
+  private settleNext = false;
   private readonly light: WeatherLight = { hemi: 1, sun: 1, overcast: 0, flash: 0 };
   private readonly hazeCol = new THREE.Color();
   private readonly tmpCol = new THREE.Color();
@@ -83,6 +85,11 @@ export class WeatherView {
   constructor(scene: THREE.Scene) {
     scene.add(this.particles.mesh, this.haze.mesh);
     try { this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* old browser */ }
+  }
+
+  /** Jump straight to the current weather on the next frame (no easing): screenshots, the dev console. */
+  settle(): void {
+    this.settleNext = true;
   }
 
   setQuality(q: WeatherQuality): void {
@@ -94,6 +101,8 @@ export class WeatherView {
   update(dt: number, game: Game, me: Player, cam: THREE.OrthographicCamera, groundY: number, focusX: number, focusZ: number): WeatherLight {
     // the first frame after a long load can arrive with a negative step: never ease backwards
     dt = Math.max(0, Math.min(dt, 0.25));
+    settling = this.settleNext;
+    this.settleNext = false;
     this.t += dt;
     const w = game.weatherView(me.id);
     const under = me.z < 0;
@@ -121,7 +130,7 @@ export class WeatherView {
     let coverT = 0;
     coverT += COVER[w.kind] * (w.kind === WeatherKind.Clear ? 0 : w.amount);
     coverT += COVER[w.prev] * w.prevAmount;
-    coverT = Math.min(0.7, coverT) * sky;
+    coverT = Math.min(0.72, coverT) * sky;
     const leafT = open * this.forest * THREE.MathUtils.smoothstep(windT, 0.3, 0.9) * (w.climate === Climate.Frost || w.climate === Climate.Desert ? 0 : 1);
 
     // a new zone or a fresh login eases in a little faster
@@ -212,8 +221,8 @@ export class WeatherView {
 
     // light
     const c = on ? this.cover : 0;
-    this.light.hemi = 1 - c * 0.5 + flash * 2.2;
-    this.light.sun = 1 - c * 0.8 + flash * 1.2;
+    this.light.hemi = 1 - c * 0.6 + flash * 2.2;
+    this.light.sun = 1 - c * 0.9 + flash * 1.2;
     this.light.overcast = c / 0.7;
     this.light.flash = flash;
     return this.light;

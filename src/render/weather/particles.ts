@@ -74,7 +74,7 @@ void main() {
     vec3 ctr = vec3(wrapC(base.x, W, uCenter.x), uCenter.y + base.y, wrapC(base.z, D, uCenter.z));
     vec3 A = normalize(vel);
     vec3 S = normalize(cross(A, uCamDir));
-    float L = 0.5 + 0.35 * aSeed.w;
+    float L = 0.6 + 0.45 * aSeed.w;
     P = ctr + S * (c.x * 0.055) + A * (c.y * L);
     vAlpha = act * (0.55 + 0.45 * aSeed.w);
   } else if (layer == 1) {
@@ -98,7 +98,7 @@ void main() {
     base.x += sin(uTime * (0.9 + aSeed.w) + aSeed.x * 40.0) * 0.4;
     base.z += cos(uTime * (0.7 + aSeed.w) + aSeed.y * 30.0) * 0.3;
     vec3 ctr = vec3(wrapC(base.x, W, uCenter.x), uCenter.y + base.y, wrapC(base.z, D, uCenter.z));
-    float s = 0.055 + 0.05 * aSeed.w;
+    float s = 0.075 + 0.06 * aSeed.w;
     P = ctr + uCamRight * (c.x * s) + uCamUp * (c.y * s);
     vAlpha = act;
   } else if (layer == 3) {
@@ -167,9 +167,10 @@ void main() {
     col = uRainColor * 1.1;
     a = smoothstep(0.55, 0.78, d) * (1.0 - smoothstep(0.8, 1.0, d)) * 0.75;
   } else if (k == 2) {
+    // white core with a cool grey rim, so flakes still read against snowy ground
     float d = length(q);
-    col = uSnowColor;
-    a = 1.0 - smoothstep(0.35, 1.0, d);
+    col = mix(vec3(0.58, 0.64, 0.74), uSnowColor, 1.0 - smoothstep(0.3, 0.75, d));
+    a = 1.0 - smoothstep(0.7, 1.0, d);
   } else if (k == 3) {
     col = uSandColor * (0.85 + 0.3 * vTone);
     a = (1.0 - abs(q.x)) * (1.0 - abs(q.y)) * 0.5;
@@ -225,10 +226,10 @@ export class WeatherParticles {
     g.setAttribute('aMeta', new THREE.InstancedBufferAttribute(meta, 2));
     g.instanceCount = total;
     this.uniforms = {
-      uTime: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uBox: { value: new THREE.Vector3(46, 14, 46) },
+      uTime: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uBox: { value: new THREE.Vector3(40, 12, 40) },
       uCount: { value: [0, 0, 0, 0, 0, 0] }, uAlpha: { value: [0, 0, 0, 0, 0, 0] }, uWind: { value: new THREE.Vector2(1, 0) }, uGale: { value: 0 },
       uCamDir: { value: new THREE.Vector3(0, -1, 0) }, uCamRight: { value: new THREE.Vector3(1, 0, 0) }, uCamUp: { value: new THREE.Vector3(0, 0, -1) },
-      uRainColor: { value: new THREE.Color(0xd2e0f0) }, uSnowColor: { value: new THREE.Color(0xf4f8ff) }, uSandColor: { value: new THREE.Color(0xd2ad6e) },
+      uRainColor: { value: new THREE.Color(0xd2e0f0) }, uSnowColor: { value: new THREE.Color(0xf6f9ff) }, uSandColor: { value: new THREE.Color(0xd2ad6e) },
       uMistColor: { value: new THREE.Color(0xd8e2d8) }, uLight: { value: 1 },
     };
     const m = new THREE.ShaderMaterial({
