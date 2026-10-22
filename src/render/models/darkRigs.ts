@@ -9,6 +9,7 @@ import { darkHydra } from './darkRigsHydra';
 import { DARK_FOLK } from './darkRigsFolk';
 import { DARK_NORTH } from './darkRigsNorth';
 import { DARK_BRUTES } from './darkRigsBrutes';
+import { DARK_CRAWLERS } from './darkRigsCrawlers';
 
 export { DARK_MONSTERS } from './darkRigsCore';
 
@@ -383,6 +384,7 @@ const DARK: Partial<Record<EnemyKind, () => Rig>> = {
   ...DARK_FOLK,
   ...DARK_NORTH,
   ...DARK_BRUTES,
+  ...DARK_CRAWLERS,
 };
 
 /** The dark model for a monster kind, or null to use the classic one. */
