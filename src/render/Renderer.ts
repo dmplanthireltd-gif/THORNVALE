@@ -24,6 +24,7 @@ import { PixelPass, TILE_PX } from './PixelPass';
 import { WorldView } from './WorldView';
 import { Blood } from './Blood';
 import { playSkillFx } from './skillFx';
+import { SkillAnimator } from './skillAnim';
 import { oreAt } from '../game/gathering/mining';
 import { stationAt } from '../game/production/recipes';
 import { Obj, WorldMap, type EnemyKind } from '../game/world/WorldMap';
@@ -72,6 +73,8 @@ export class Renderer {
   private time = 0;
   private lastPz = Number.NaN;
   private blood!: Blood;
+  /** Tools in hand and work loops for mining, woodcutting, fishing and production (skillAnim.ts). */
+  private skillAnim!: SkillAnimator;
   private sky = new THREE.Color(0x2a4f6e);
   private dark = new THREE.Color(0x000000);
 
@@ -106,6 +109,7 @@ export class Renderer {
     this.worldView.isRuneField = (x, y, z) => this.ctl.game.fieldAt(x, y, z) !== null;
     this.effects = new Effects(this.scene);
     this.blood = new Blood(this.scene, (z) => this.worldView.floorOffset(z));
+    this.skillAnim = new SkillAnimator(this.scene, this.effects, { game: () => this.ctl.game, near: (x, y) => chebyshev(x, y, this.me.x, this.me.y) <= VIEW_RANGE + 2 });
     this.overlay = new Overlay(container, this.cam.camera);
     for (const b of ctl.game.bags) this.addBag(b);
 
@@ -187,6 +191,7 @@ export class Renderer {
   private dropView(id: number): void {
     const v = this.views.get(id);
     if (!v) return;
+    this.skillAnim.forget(id);
     v.dispose();
     this.views.delete(id);
     this.overlay.removeLabel(id);
@@ -451,6 +456,7 @@ export class Renderer {
 
   private onEvent(e: GameEvent): void {
     const me = this.ctl.pid;
+    if (e.type === 'mine' || e.type === 'chop' || e.type === 'fish' || e.type === 'craft') this.skillAnim.onEvent(e);
     switch (e.type) {
       case 'attack':
         this.visibleView(e.attackerId)?.onAttack();
@@ -873,6 +879,7 @@ export class Renderer {
       const corpse = c instanceof Enemy ? c.corpseTimer > 0 : true;
       if (!c.dead) view.rig.root.visible = true;
       view.update(dt, corpse);
+      this.skillAnim.apply(view, dt);
       if (c.dead || c.z !== pz) {
         this.overlay.setLabel(c.id, null, c.name, 0);
       } else {
@@ -890,6 +897,7 @@ export class Renderer {
     for (const c of g.players()) consider(c);
     for (const c of g.npcs) consider(c);
     for (const c of g.enemies) consider(c);
+    this.skillAnim.frame(dt);
 
     this.updateFieldMeshes(dt);
 

@@ -6,6 +6,7 @@ import { EQUIP_SLOTS, isItem, type EquipSlot, type ItemStack } from '../inventor
 import { isSpellId, type SpellId } from '../magic/spells';
 import type { MarketView } from '../market/market';
 import { NONCOMBAT_IDS, type NonCombatSkill } from '../gathering/skills';
+import { activityKey, computeActivity, decodeActivity, encodeActivity, setNetActivity, type ActivitySnap } from '../gathering/activity';
 import type { CraftView } from '../production/recipes';
 import type { DialogueState } from '../npc/dialogue';
 import type { WorldMark } from '../bosses/bosses';
@@ -25,7 +26,7 @@ import type { ExpStages } from '../progression/stages';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 23;
+export const PROTOCOL_VERSION = 24;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -126,6 +127,8 @@ export interface CreatureSnap {
   ck?: string;
   tt?: string;
   pr?: 0 | 1;
+  /** Players: what they are working on (tool + target tile, 0 = nothing); sent only when it changes. */
+  ac?: ActivitySnap;
 }
 
 export interface SelfSnap {
@@ -190,6 +193,8 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const selfSent = new WeakMap<Session, Record<string, string>>();
 /** Per receiving session: the last name/look/gear signature sent for each player. */
 const lookSent = new WeakMap<Session, Map<number, string>>();
+/** Per receiving session: the last activity signature sent for each player (gathering/activity.ts). */
+const activitySent = new WeakMap<Session, Map<number, string>>();
 
 /** Leaves out a part that has not changed since the last snapshot to this session. */
 function onlyChanged<T>(s: Session, key: string, value: T): T | undefined {
@@ -205,6 +210,7 @@ function onlyChanged<T>(s: Session, key: string, value: T): T | undefined {
 export function resendAll(s: Session): void {
   selfSent.delete(s);
   lookSent.delete(s);
+  activitySent.delete(s);
 }
 
 export function buildSnapshot(game: Game, s: Session): ServerMessage {
@@ -213,6 +219,8 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
   // a player's name, look and gear only go out again when they change
   let looks = lookSent.get(s);
   if (!looks) lookSent.set(s, (looks = new Map()));
+  let acts = activitySent.get(s);
+  if (!acts) activitySent.set(s, (acts = new Map()));
   for (const o of game.sessions.values()) {
     const p = o.player;
     const eq: Record<string, string | null> = {};
@@ -220,6 +228,10 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     const look = JSON.stringify([p.name, p.level, p.vocation, encodeAppearance(p.appearance), eq, p.showGear, p.illusion ?? '', p.cloak, p.title, p.premium]);
     const full = looks.get(p.id) !== look;
     if (full) looks.set(p.id, look);
+    const act = computeActivity(game, o);
+    const actKey = activityKey(act);
+    const actChanged = acts.get(p.id) !== actKey;
+    if (actChanged) acts.set(p.id, actKey);
     c.push({
       id: p.id, k: 'p', x: p.x, y: p.y, z: p.z, fx: p.fromX, fy: p.fromY, mt: r3(p.moveT), md: r3(p.moveDur), f: r3(p.facing),
       hp: Math.ceil(p.hp), mhp: p.maxHp, d: p.dead ? 1 : 0,
@@ -233,9 +245,11 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
       },
       sk: game.skullOf(p),
       pt: game.partyFlag(me.id, p.id) || undefined,
+      ...(actChanged ? { ac: encodeActivity(act) } : {}),
     });
   }
   for (const id of [...looks.keys()]) if (!game.sessions.has(id)) looks.delete(id);
+  for (const id of [...acts.keys()]) if (!game.sessions.has(id)) acts.delete(id);
   for (const n of game.npcs) {
     if (n.z !== me.z || chebyshev(n.x, n.y, me.x, me.y) > VIEW_RADIUS) continue;
     c.push({ id: n.id, k: 'n', x: n.x, y: n.y, z: n.z, fx: n.fromX, fy: n.fromY, mt: 1, md: 1, f: r3(n.facing), hp: n.hp, mhp: n.maxHp, d: 0 });
@@ -408,6 +422,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
         ev.emit({ type: 'equipmentChanged', id: p.id });
       }
       p.netSkull = c.sk === 1 || c.sk === 2 ? c.sk : 0;
+      if (c.ac !== undefined) setNetActivity(p, decodeActivity(c.ac));
       if (c.pt) game.netPartyFlags.set(p.id, c.pt);
       else game.netPartyFlags.delete(p.id);
       if (c.buffs) {
