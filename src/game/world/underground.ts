@@ -46,7 +46,7 @@ interface AreaSpec {
 }
 
 /** Floors that are enlarged (pushed floor by floor). */
-export const DEEPENED_FLOORS: number[] = [];
+export const DEEPENED_FLOORS: number[] = [-1];
 
 export const UNDERGROUND_AREAS: AreaSpec[] = [
   // ---------------------------------------------------------------- floor −1
@@ -95,6 +95,11 @@ const KEEP_OUT: Array<[number, number, number, number]> = [
   [66, 300, 134, 366], // Wayfarer's Isle
   [SEA_BOX.x0 - 8, SEA_BOX.y0 - 8, SEA_BOX.x1 + 8, SEA_BOX.y1 + 8], // the Sunken Reach (built after this, world/sea.ts)
 ];
+
+function keepOut(x: number, y: number): boolean {
+  for (const [a, b, c, d] of KEEP_OUT) if (x >= a && x <= c && y >= b && y <= d) return true;
+  return false;
+}
 
 /** Gap of rock kept between two different dungeons. */
 const GAP = 5;
@@ -206,8 +211,10 @@ function deepenArea(g: Gen, spec: AreaSpec, region: Region, z: number, isle: Int
   const pad = spec.grow + GAP + 2;
   const win = new Win(Math.max(1, region.x0 - pad), Math.max(1, region.y0 - pad), Math.min(W - 2, region.x1 + pad), Math.min(H - 2, region.y1 + pad));
   const N = win.w * win.h;
-  const ground = (x: number, y: number) => m.getGround(x, y, z);
-  const isOpen = (x: number, y: number) => ground(x, y) !== Ground.Void;
+  // direct reads of the floor arrays (the window never touches the map edge)
+  const GZ = m.floor(z)!.ground;
+  const ground = (x: number, y: number) => GZ[y * W + x] as Ground;
+  const isOpen = (x: number, y: number) => GZ[y * W + x] !== Ground.Void;
   const inBox = (x: number, y: number, r: Region, grow = 0) => x >= r.x0 - grow && x <= r.x1 + grow && y >= r.y0 - grow && y <= r.y1 + grow;
 
   // --- which open tiles belong to this area: components (4-way) holding its stairs/spawns, or lying inside its box
@@ -293,7 +300,7 @@ function deepenArea(g: Gen, spec: AreaSpec, region: Region, z: number, isle: Int
     if (!inBox(x, y, region, spec.grow)) continue;
     if (x < 3 || y < 3 || x > W - 4 || y > H - 4) continue;
     if (isle[y * W + x] !== isleId) continue;
-    if (KEEP_OUT.some(([a, b, c, d]) => x >= a && x <= c && y >= b && y <= d)) continue;
+    if (keepOut(x, y)) continue;
     allowed[k] = 1;
   }
 
@@ -315,20 +322,23 @@ function deepenArea(g: Gen, spec: AreaSpec, region: Region, z: number, isle: Int
 
   if (spec.kind === 'cave') growCave(g, win, own, allowed, fresh, dig, target);
   else growRooms(g, win, own, allowed, fresh, dig, target, spec);
-  loops(g, win, own, fresh, allowed, dig, spec);
+  const tunnels = loops(g, win, own, fresh, allowed, dig, spec);
 
   let added = 0;
   for (let k = 0; k < N; k++) if (fresh[k]) added++;
   if (!added) return { name: spec.name, z, before, added: 0, spawns: 0 };
 
   const flavour = spec.flavour ?? (floorGround === Ground.Ice ? 'ice' : floorGround === Ground.Ash ? 'volcanic' : floorGround === Ground.Sand ? 'tomb' : floorGround === Ground.Stone || floorGround === Ground.Marble ? 'crypt' : 'earth');
-  dress(g, win, own, fresh, z, flavour, spec);
+  dress(g, win, own, fresh, z, flavour, spec, tunnels);
 
   // --- spawns in the new ground
   const kinds = spec.monsters ?? livingHere(m, region, z);
   let spawned = 0;
   if (kinds.length) {
-    const want = Math.max(1, Math.round(added / (spec.density ?? (spec.kind === 'cave' ? 48 : 40))));
+    // as crowded as the area already is (never denser than one per `density` tiles)
+    const living = m.spawns.filter((sp) => sp.z === z && sp.x >= region.x0 && sp.x <= region.x1 && sp.y >= region.y0 && sp.y <= region.y1 && !/^(boss_|wb_|raid_)/.test(sp.kind)).length;
+    const perTile = Math.min(living / Math.max(1, before), 1 / (spec.density ?? (spec.kind === 'cave' ? 48 : 40)));
+    const want = Math.max(1, Math.round(added * Math.max(perTile, 1 / 90)));
     const total = kinds.reduce((a, [, w]) => a + w, 0);
     const taken: Array<{ x: number; y: number }> = m.spawns.filter((s) => s.z === z && win.in(s.x, s.y)).map((s) => ({ x: s.x, y: s.y }));
     const cand: number[] = [];
@@ -428,9 +438,39 @@ function growCave(g: Gen, win: Win, own: Uint8Array, allowed: Uint8Array, fresh:
       const x = c % win.w, y = (c / win.w) | 0;
       return D4.some(([dx, dy]) => { const nx = x + dx, ny = y + dy; return nx >= 0 && ny >= 0 && nx < win.w && ny < win.h && own[ny * win.w + nx]; });
     });
-    if (!touches && !tunnelTo(g, win, own, fresh, allowed, dig, blob)) continue;
-    for (const c of blob) if (dig(c)) added++;
+    // a chamber bigger than what is left of the target is cut back to the part nearest the cave
+    const room = Math.round(target * 1.25) - added;
+    let take = blob;
+    if (blob.length > room) {
+      if (!touches || room < 40) continue;
+      take = nearestPart(win, own, blob, room);
+    }
+    if (!touches && !tunnelTo(g, win, own, fresh, allowed, dig, take)) continue;
+    for (const c of take) if (dig(c)) added++;
   }
+}
+
+/** The `n` tiles of a blob closest (on foot) to the open cave it touches. */
+function nearestPart(win: Win, own: Uint8Array, blob: number[], n: number): number[] {
+  const inBlob = new Set(blob);
+  const seen = new Set<number>();
+  const q: number[] = [];
+  for (const c of blob) {
+    const x = c % win.w, y = (c / win.w) | 0;
+    if (D4.some(([dx, dy]) => { const nx = x + dx, ny = y + dy; return nx >= 0 && ny >= 0 && nx < win.w && ny < win.h && own[ny * win.w + nx]; })) { seen.add(c); q.push(c); }
+  }
+  for (let h = 0; h < q.length && q.length < n; h++) {
+    const c = q[h];
+    const x = c % win.w, y = (c / win.w) | 0;
+    for (const [dx, dy] of D4) {
+      const j = (y + dy) * win.w + (x + dx);
+      if (!inBlob.has(j) || seen.has(j)) continue;
+      seen.add(j);
+      q.push(j);
+      if (q.length >= n) break;
+    }
+  }
+  return q;
 }
 
 /** Carves a 2-wide tunnel from a detached blob to the nearest open tile of the area (through allowed rock only). */
@@ -565,13 +605,14 @@ function lCorridor(win: Win, allowed: Uint8Array, dig: Dig, ax: number, ay: numb
  * Loop tunnels: pairs of open tiles that are close as the crow flies but far
  * apart on foot get a tunnel between them, so hunters can lure monsters round.
  */
-function loops(g: Gen, win: Win, own: Uint8Array, fresh: Uint8Array, allowed: Uint8Array, dig: Dig, spec: AreaSpec): void {
+function loops(g: Gen, win: Win, own: Uint8Array, fresh: Uint8Array, allowed: Uint8Array, dig: Dig, spec: AreaSpec): number[][] {
   const { rng } = g;
   const N = win.w * win.h;
   const openK = (k: number) => own[k] || fresh[k];
   const tiles: number[] = [];
+  const tunnels: number[][] = [];
   for (let k = 0; k < N; k++) if (openK(k)) tiles.push(k);
-  if (tiles.length < 40) return;
+  if (tiles.length < 40) return tunnels;
   const want = spec.kind === 'cave' ? 4 : 3;
   let made = 0;
   const dist = new Int32Array(N);
@@ -621,12 +662,14 @@ function loops(g: Gen, win: Win, own: Uint8Array, fresh: Uint8Array, allowed: Ui
     }
     if (!ok) continue;
     for (const k of path) if (!openK(k)) dig(k);
+    tunnels.push(path);
     made++;
   }
+  return tunnels;
 }
 
 /** Dresses old and new ground for its region; solid things only ever go on new ground. */
-function dress(g: Gen, win: Win, own: Uint8Array, fresh: Uint8Array, z: number, flavour: Flavour, spec: AreaSpec): void {
+function dress(g: Gen, win: Win, own: Uint8Array, fresh: Uint8Array, z: number, flavour: Flavour, spec: AreaSpec, tunnels: number[][]): void {
   const { m, rng } = g;
   const N = win.w * win.h;
   // tiles beside stairs, ladders and rope spots stay bare
@@ -680,18 +723,12 @@ function dress(g: Gen, win: Win, own: Uint8Array, fresh: Uint8Array, z: number, 
     else if (p > 0.982 && p <= 0.988) m.setObj(x, y, Obj.Bones, z);
   }
   if (flavour === 'mine') {
-    // rails along straight runs of new gallery (a mine-cart track you can follow)
-    let runs = 0;
-    for (let k = 0; k < N && runs < 6; k++) {
-      if (!fresh[k]) continue;
-      const x = win.x(k), y = win.y(k);
-      for (const [dx, dy] of [[1, 0], [0, 1]]) {
-        let len = 0;
-        while (len < 14 && m.getObj(x + dx * len, y + dy * len, z) === Obj.None && m.isWalkable(x + dx * len, y + dy * len, z) && !nearLink(x + dx * len, y + dy * len) && fresh[win.in(x + dx * len, y + dy * len) ? win.i(x + dx * len, y + dy * len) : 0]) len++;
-        if (len < 9) continue;
-        for (let s = 0; s < len; s++) m.setObj(x + dx * s, y + dy * s, Obj.Rails, z);
-        runs++;
-        break;
+    // mine-cart rails along the new loop galleries (a track you can follow round)
+    for (const path of tunnels) {
+      if (path.length < 8) continue;
+      for (const k of path) {
+        const x = win.x(k), y = win.y(k);
+        if (m.getObj(x, y, z) === Obj.None && m.isWalkable(x, y, z) && !nearLink(x, y)) m.setObj(x, y, Obj.Rails, z);
       }
     }
   }

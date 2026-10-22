@@ -860,8 +860,9 @@ export class Renderer {
     this.blood?.refresh();
     const under = pz < 0;
     (this.scene.background as THREE.Color).copy(under ? this.dark : this.sky);
-    this.baseHemi = this.hemi.intensity = under ? 0.18 : 1.15;
-    this.hemi.color.setHex(under ? 0x8a8aa8 : 0xcfe4ff);
+    // below ground a dim, warm-grey ambient keeps rock and floor readable beyond your light
+    this.baseHemi = this.hemi.intensity = under ? 0.3 : 1.15;
+    this.hemi.color.setHex(under ? 0x9a948c : 0xcfe4ff);
     this.baseSun = this.sun.intensity = under ? 0.25 : 2.3;
     this.sun.castShadow = !under;
   }

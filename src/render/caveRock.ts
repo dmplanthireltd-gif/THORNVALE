@@ -27,16 +27,16 @@ export enum RockStyle { Earth = 0, Ice = 1, Sandstone = 2, Volcanic = 3, Crypt =
 
 /** Base colour of each style (walls and rock top). */
 export const ROCK_COLOR: Record<RockStyle, number> = {
-  [RockStyle.Earth]: 0x6e5a48,
-  [RockStyle.Ice]: 0x8eaec4,
+  [RockStyle.Earth]: 0x7a6858,
+  [RockStyle.Ice]: 0x6e8494,
   [RockStyle.Sandstone]: 0xb08c58,
   [RockStyle.Volcanic]: 0x3e3230,
-  [RockStyle.Crypt]: 0x6a6660,
+  [RockStyle.Crypt]: 0x524e4a,
   [RockStyle.Swamp]: 0x4e5640,
 };
 
 /** Floors drawn with solid rock (rolled out floor by floor). */
-export const CAVE_ROCK_FLOORS: number[] = [];
+export const CAVE_ROCK_FLOORS: number[] = [-1];
 
 /** Height of the rock top above the floor. */
 export const ROCK_TOP = 1.85;
@@ -79,29 +79,42 @@ function compose(x: number, y: number, z: number, rotY = 0, sx = 1, sy = 1, sz =
 }
 
 /** Collects instances for one geometry/material pair. */
+/**
+ * Collects instances for one geometry/material pair, split into square chunks
+ * of the map so the camera only draws the few chunks it can see.
+ */
 class Inst {
-  m: number[] = [];
-  c: number[] = [];
+  private chunks = new Map<number, { m: number[]; c: number[] }>();
   constructor(readonly geo: THREE.BufferGeometry, readonly mat: THREE.Material, readonly shadows = false) {}
   add(mx: THREE.Matrix4, color: THREE.Color | number = 0xffffff): void {
-    for (const e of mx.elements) this.m.push(e);
+    const e = mx.elements;
+    const key = Math.floor(e[14] / CHUNK) * 4096 + Math.floor(e[12] / CHUNK);
+    let ch = this.chunks.get(key);
+    if (!ch) this.chunks.set(key, (ch = { m: [], c: [] }));
+    for (let k = 0; k < 16; k++) ch.m.push(e[k]);
     const c = color instanceof THREE.Color ? color : _c.setHex(color);
-    this.c.push(c.r, c.g, c.b);
+    ch.c.push(c.r, c.g, c.b);
   }
-  build(group: THREE.Group): THREE.InstancedMesh | null {
-    const n = this.m.length / 16;
-    if (!n) return null;
-    const im = new THREE.InstancedMesh(this.geo, this.mat, n);
-    im.instanceMatrix.array.set(this.m);
-    im.instanceMatrix.needsUpdate = true;
-    im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.c), 3);
-    im.castShadow = this.shadows;
-    im.receiveShadow = true;
-    im.computeBoundingSphere();
-    group.add(im);
-    return im;
+  build(group: THREE.Group, order = 0): THREE.InstancedMesh[] {
+    const out: THREE.InstancedMesh[] = [];
+    for (const ch of this.chunks.values()) {
+      const n = ch.m.length / 16;
+      const im = new THREE.InstancedMesh(this.geo, this.mat, n);
+      im.instanceMatrix.array.set(ch.m);
+      im.instanceMatrix.needsUpdate = true;
+      im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(ch.c), 3);
+      im.castShadow = this.shadows;
+      im.receiveShadow = true;
+      im.renderOrder = order;
+      im.computeBoundingSphere();
+      group.add(im);
+      out.push(im);
+    }
+    return out;
   }
 }
+/** Chunk size in tiles for instanced batches. */
+const CHUNK = 24;
 const _c = new THREE.Color();
 
 // ------------------------------------------------------------------ shared textures and geometry
@@ -160,7 +173,7 @@ export function glowTex(): THREE.Texture {
 const jagCache: THREE.BufferGeometry[] = [];
 function jaggedBlock(v: number): THREE.BufferGeometry {
   if (jagCache[v]) return jagCache[v];
-  const g = new THREE.BoxGeometry(1.1, 1, 1.1, 3, 4, 3);
+  const g = new THREE.BoxGeometry(1.1, 1, 1.1, 2, 3, 2);
   g.translate(0, 0.5, 0);
   const p = g.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < p.count; i++) {
@@ -178,6 +191,15 @@ function jaggedBlock(v: number): THREE.BufferGeometry {
   jagCache[v] = g.toNonIndexed();
   jagCache[v].computeVertexNormals();
   return jagCache[v];
+}
+
+/** Adds a share of a material's own (textured, instance-tinted) colour as glow, so unlit rock still reads as rock. */
+export function selfLit<T extends THREE.Material>(m: T, k: number): T {
+  m.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * ${k.toFixed(3)};`);
+  };
+  m.customProgramCacheKey = () => 'selfLit' + k;
+  return m;
 }
 
 // ------------------------------------------------------------------ the rock top shader
@@ -210,17 +232,25 @@ void main() {
   if (tile.x < 0.0 || tile.y < 0.0 || tile.x >= uSize.x || tile.y >= uSize.y) discard;
   vec4 m = texture2D(uMask, (tile + 0.5) / uSize);
   if (m.r > 0.25) discard; // open floor or a wall block stands here
-  int st = int(m.g * 255.0 + 0.5);
+  // the style is read a little off the tile (by noise), so regions blend along ragged seams, not tile edges
+  vec2 jit = vec2(vn(vWorld.xz * 0.8 + 11.0), vn(vWorld.xz * 0.8 + 23.0)) - 0.5;
+  vec4 ms = texture2D(uMask, (floor(vWorld.xz + 0.5 + jit * 1.6) + 0.5) / uSize);
+  int st = int(ms.g * 255.0 + 0.5);
   vec3 base = uPal[0];
   if (st == 1) base = uPal[1]; else if (st == 2) base = uPal[2]; else if (st == 3) base = uPal[3]; else if (st == 4) base = uPal[4]; else if (st == 5) base = uPal[5];
   vec2 q = vWorld.xz;
   // pixel-art friendly: quantise to the 32-px art grid
   q = floor(q * 16.0) / 16.0;
   float n = vn(q * 1.7) * 0.55 + vn(q * 4.1) * 0.3 + vn(q * 9.3) * 0.15;
-  // boulders: soft lumps with dark gaps between them
-  float cell = vn(q * 0.9 + 7.0);
-  float lump = smoothstep(0.25, 0.75, cell);
-  vec3 col = base * (0.62 + n * 0.55) * (0.78 + lump * 0.32);
+  // boulders: a lumpy height field, lit from the upper left (normal from its slope)
+  float e = 0.12;
+  float h0 = vn(q * 0.9 + 7.0) * 0.7 + vn(q * 2.2 + 3.0) * 0.3;
+  float hx = vn((q + vec2(e, 0.0)) * 0.9 + 7.0) * 0.7 + vn((q + vec2(e, 0.0)) * 2.2 + 3.0) * 0.3;
+  float hz = vn((q + vec2(0.0, e)) * 0.9 + 7.0) * 0.7 + vn((q + vec2(0.0, e)) * 2.2 + 3.0) * 0.3;
+  vec3 nrm = normalize(vec3((h0 - hx) * 6.0, 1.0, (h0 - hz) * 6.0));
+  float sun = clamp(dot(nrm, normalize(vec3(-0.5, 1.0, 0.45))), 0.0, 1.0);
+  float lump = smoothstep(0.3, 0.7, h0);
+  vec3 col = base * (0.62 + n * 0.5) * (0.55 + sun * 0.6) * (0.85 + lump * 0.25);
   // cracks
   float cr = abs(vn(q * 2.3 + 3.1) - 0.5);
   float crack = 1.0 - smoothstep(0.015, 0.05, cr);
@@ -229,7 +259,7 @@ void main() {
     // crypt: rough-hewn blocks
     vec2 b = fract(vec2(q.x * 1.0 + floor(q.y * 2.0) * 0.5, q.y * 2.0));
     float mortar = step(b.x, 0.06) + step(b.y, 0.1);
-    col *= 1.0 - clamp(mortar, 0.0, 1.0) * 0.35;
+    col *= (1.0 - clamp(mortar, 0.0, 1.0) * 0.35) * 0.62;
   }
   if (st == 1) col += vec3(0.10, 0.14, 0.18) * pow(vn(q * 6.0), 6.0) * 2.0; // ice glints
   // deep rock darkens away from the caves, but never to black
@@ -237,7 +267,8 @@ void main() {
   col *= mix(1.0, 0.52, smoothstep(1.0, 10.0, dist));
   // light: a little ambient, the carried light, and glowing seams in volcanic rock
   float d = length(vWorld.xz - uLight.xz);
-  float lit = 0.42 + 1.05 * pow(clamp(1.0 - d / uLightR, 0.0, 1.0), 1.6);
+  // rock tops catch more light than the cave floor (they stand nearer the roof), so they read as rock, not as void
+  float lit = 0.8 + 1.0 * pow(clamp(1.0 - d / uLightR, 0.0, 1.0), 1.6);
   col *= lit;
   if (st == 3) {
     float seam = crack * (0.6 + 0.4 * sin(uTime * 1.7 + q.x * 0.7 + q.y * 0.5));
@@ -327,8 +358,9 @@ export function buildCaveRock(world: WorldMap, z: number, M: (color: number, opt
   group.add(plane);
 
   // ---------------------------------------------------------------- wall blocks along every cave edge
-  const wallMat = M(0xffffff, { map: wallTex() });
-  const brickMat = M(0xffffff, { map: objTex.brick() });
+  // rock is never fully black: a little of its own colour glows back (fake bounce light)
+  const wallMat = selfLit(M(0xffffff, { map: wallTex() }), 0.42);
+  const brickMat = selfLit(M(0xffffff, { map: objTex.brick() }), 0.36);
   const jag = [0, 1, 2].map((v) => new Inst(jaggedBlock(v), wallMat, true));
   const bricks = new Inst(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), brickMat, true);
   const capRocks = new Inst(new THREE.DodecahedronGeometry(0.34, 0), wallMat, false);
@@ -395,15 +427,15 @@ export function buildCaveRock(world: WorldMap, z: number, M: (color: number, opt
         bracket.add(compose(x, 1.05, y + 0.5));
         torchStick.add(compose(x, 1.0, y + 0.56, 0, 1, 1, 1, 0.35));
         torchFlame.add(compose(x, 1.36, y + 0.66));
-        glows.add(compose(x, 0.04, y + 1, 0, 3.2, 1, 3.2), 0x8a4a14);
-        glows.add(compose(x, 1.4, y + 0.7, 0, 0.9, 1, 0.9, Math.PI / 2), 0xffa040);
+        glows.add(compose(x, 0.04, y + 1, 0, 3.0, 1, 3.0), 0x5a3010);
+        glows.add(compose(x, 1.4, y + 0.7, 0, 0.8, 1, 0.8, Math.PI / 2), 0x8a5020);
         lights.push({ x, y: y + 0.8, h: 1.4, color: 0xffa050, power: 1 });
       } else if (st === RockStyle.Ice && t < 0.14) {
         for (let k = 0; k < 3; k++) wallCrystal.add(compose(x - 0.25 + k * 0.25, 0.25 + hash2(x, y, 42 + k) * 0.9, y + 0.52, 0, 1, 0.8 + hash2(x, y, 45 + k) * 0.6, 1, 0.5 + k * 0.1, (k - 1) * 0.5));
-        glows.add(compose(x, 0.04, y + 0.9, 0, 2.2, 1, 2.2), 0x1a5a7a);
+        glows.add(compose(x, 0.04, y + 0.9, 0, 2.0, 1, 2.0), 0x0e3446);
       } else if (st === RockStyle.Earth && t > 0.975) {
         for (let k = 0; k < 3; k++) wallAmethyst.add(compose(x - 0.2 + k * 0.2, 0.4 + hash2(x, y, 46 + k) * 0.7, y + 0.52, 0, 1, 0.8 + hash2(x, y, 49 + k) * 0.5, 1, 0.5, (k - 1) * 0.5));
-        glows.add(compose(x, 0.04, y + 0.9, 0, 1.8, 1, 1.8), 0x3a1a6a);
+        glows.add(compose(x, 0.04, y + 0.9, 0, 1.6, 1, 1.6), 0x1e0e38);
       }
     }
   }
@@ -412,20 +444,19 @@ export function buildCaveRock(world: WorldMap, z: number, M: (color: number, opt
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = y * W + x;
     if (G[i] === Ground.Lava) {
-      if ((x + y) % 2 === 0) glows.add(compose(x, 0.02, y, 0, 2.6, 1, 2.6), 0x6a1e04);
+      if ((x + y) % 2 === 0) glows.add(compose(x, 0.02, y, 0, 2.4, 1, 2.4), 0x4a1503);
       if (hash2(x, y, 60) < 0.05) lights.push({ x, y, h: 0.6, color: 0xff6a20, power: 0.8 });
       continue;
     }
     const o = O[i];
     if (o === Obj.Torch || o === Obj.FireField || o === Obj.Campfire || o === Obj.Altar) {
-      glows.add(compose(x, 0.04, y, 0, o === Obj.Torch ? 2.6 : 3.2, 1, o === Obj.Torch ? 2.6 : 3.2), 0x7a3a10);
+      glows.add(compose(x, 0.04, y, 0, o === Obj.Torch ? 2.6 : 3.0, 1, o === Obj.Torch ? 2.6 : 3.0), 0x4e2a0c);
       lights.push({ x, y, h: 1.1, color: 0xff9a40, power: o === Obj.Torch ? 0.8 : 1 });
     }
   }
 
   for (const b of [...jag, bricks, capRocks, stalactite, rubble, stalagmite, torchStick, bracket, torchFlame, wallCrystal, wallAmethyst]) b.build(group);
-  const gm = glows.build(group);
-  if (gm) { gm.renderOrder = 3; gm.name = 'caveGlow'; }
+  for (const gm of glows.build(group, 3)) gm.name = 'caveGlow';
 
   // ---------------------------------------------------------------- dust motes drifting around the player
   group.add(dustMotes());

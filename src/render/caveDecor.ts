@@ -22,29 +22,42 @@ function compose(x: number, y: number, z: number, rotY = 0, sx = 1, sy = 1, sz =
 }
 const _c = new THREE.Color();
 
+/**
+ * Collects instances for one geometry/material pair, split into square chunks
+ * of the map so the camera only draws the few chunks it can see.
+ */
 class Inst {
-  m: number[] = [];
-  c: number[] = [];
+  private chunks = new Map<number, { m: number[]; c: number[] }>();
   constructor(readonly geo: THREE.BufferGeometry, readonly mat: THREE.Material, readonly shadows = false) {}
-  add(mx: THREE.Matrix4, color: number | THREE.Color = 0xffffff): void {
-    for (const e of mx.elements) this.m.push(e);
+  add(mx: THREE.Matrix4, color: THREE.Color | number = 0xffffff): void {
+    const e = mx.elements;
+    const key = Math.floor(e[14] / CHUNK) * 4096 + Math.floor(e[12] / CHUNK);
+    let ch = this.chunks.get(key);
+    if (!ch) this.chunks.set(key, (ch = { m: [], c: [] }));
+    for (let k = 0; k < 16; k++) ch.m.push(e[k]);
     const c = color instanceof THREE.Color ? color : _c.setHex(color);
-    this.c.push(c.r, c.g, c.b);
+    ch.c.push(c.r, c.g, c.b);
   }
-  build(group: THREE.Group, order = 0): void {
-    const n = this.m.length / 16;
-    if (!n) return;
-    const im = new THREE.InstancedMesh(this.geo, this.mat, n);
-    im.instanceMatrix.array.set(this.m);
-    im.instanceMatrix.needsUpdate = true;
-    im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.c), 3);
-    im.castShadow = this.shadows;
-    im.receiveShadow = true;
-    im.renderOrder = order;
-    im.computeBoundingSphere();
-    group.add(im);
+  build(group: THREE.Group, order = 0): THREE.InstancedMesh[] {
+    const out: THREE.InstancedMesh[] = [];
+    for (const ch of this.chunks.values()) {
+      const n = ch.m.length / 16;
+      const im = new THREE.InstancedMesh(this.geo, this.mat, n);
+      im.instanceMatrix.array.set(ch.m);
+      im.instanceMatrix.needsUpdate = true;
+      im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(ch.c), 3);
+      im.castShadow = this.shadows;
+      im.receiveShadow = true;
+      im.renderOrder = order;
+      im.computeBoundingSphere();
+      group.add(im);
+      out.push(im);
+    }
+    return out;
   }
 }
+/** Chunk size in tiles for instanced batches. */
+const CHUNK = 24;
 
 let webTexCache: THREE.Texture | null = null;
 /** A torn spider web: spokes and a spiral, white on transparent. */
@@ -97,7 +110,7 @@ void main() {
 }`;
 const DROP_FRAG = /* glsl */ `
 varying float vA;
-void main() { if (vA < 0.5) discard; gl_FragColor = vec4(0.62, 0.78, 0.95, 0.85); }`;
+void main() { if (vA < 0.5) discard; gl_FragColor = vec4(0.25, 0.4, 0.6, 1.0); }`;
 
 const RIPPLE_VERT = /* glsl */ `
 varying vec2 vUv;
@@ -120,8 +133,9 @@ void main() {
   float t = fract(uTime * 0.38 + vPh);
   float lt = clamp((t - 0.674) / 0.326, 0.0, 1.0);
   float ring = (1.0 - smoothstep(0.0, 0.08, abs(r - lt * 0.9))) * (1.0 - lt) * step(0.001, lt);
-  vec3 water = vec3(0.07, 0.10, 0.14) + vec3(0.25, 0.35, 0.45) * ring;
-  float a = 0.82 * (1.0 - smoothstep(0.8, 1.0, r));
+  // dark water with a faint sheen toward the rim, and the ring of the last drop
+  vec3 water = vec3(0.012, 0.02, 0.032) + vec3(0.02, 0.03, 0.045) * smoothstep(0.4, 0.95, r) + vec3(0.06, 0.09, 0.12) * ring;
+  float a = 0.62 * (1.0 - smoothstep(0.75, 1.0, r));
   gl_FragColor = vec4(water, a);
 }`;
 
@@ -190,7 +204,7 @@ export class DecorBuilder {
           this.stems.add(compose(x + ox, 0, y + oz, 0, s, s, s));
           this.caps.add(compose(x + ox, 0, y + oz, rot, s, s, s), _c.setHex(tint).multiplyScalar(1.2));
         }
-        this.glows.add(compose(x, 0.03, y, 0, 2.0, 1, 2.0), _c.setHex(tint).multiplyScalar(0.28));
+        this.glows.add(compose(x, 0.03, y, 0, 1.6, 1, 1.6), _c.setHex(tint).multiplyScalar(0.14));
         return true;
       }
       case Obj.Crystals: {
@@ -201,7 +215,7 @@ export class DecorBuilder {
           const s = 0.7 + hash2(x, y, 50 + i) * 0.8;
           this.crystal.add(compose(x + Math.cos(a) * 0.12, 0.02, y + Math.sin(a) * 0.12, a, s, s, s, Math.sin(a) * lean, -Math.cos(a) * lean));
         }
-        this.glows.add(compose(x, 0.03, y, 0, 2.8, 1, 2.8), 0x1a4a6a);
+        this.glows.add(compose(x, 0.03, y, 0, 2.4, 1, 2.4), 0x0e3040);
         this.lights.push({ x, y, h: 0.9, color: 0x6ad0ff, power: 0.6 });
         return true;
       }
@@ -213,7 +227,7 @@ export class DecorBuilder {
         }
         this.coals.add(compose(x, 0, y));
         for (let i = 0; i < 3; i++) this.flames.add(compose(x + Math.cos(rot + i * 2.1) * 0.1, 0, y + Math.sin(rot + i * 2.1) * 0.1, 0, 1, 0.8 + hash2(x, y, 60 + i) * 0.5, 1));
-        this.glows.add(compose(x, 0.03, y, 0, under ? 4.2 : 2.5, 1, under ? 4.2 : 2.5), 0x8a4a14);
+        this.glows.add(compose(x, 0.03, y, 0, under ? 3.6 : 2.5, 1, under ? 3.6 : 2.5), 0x5a3010);
         this.lights.push({ x, y, h: 1.4, color: 0xffa050, power: 1.2 });
         return true;
       case Obj.Puddle:
