@@ -13,6 +13,7 @@ import { ENEMIES } from './enemies/enemyDefs';
 import type { EnemyKind } from './world/WorldMap';
 import { isFounderTier } from './premium/premium';
 import { TUTORIAL_LAST, tutorialStep } from './tutorial/tutorial';
+import { Climate, WEATHER_NAMES, weatherKindByName } from './world/weather';
 
 /**
  * Test / game-master commands, typed in chat with a leading "/".
@@ -36,6 +37,7 @@ export const ADMIN_HELP = [
   '/worldboss name — wake a world boss at one of its spots now (game masters; everyone in test mode)',
   '/boss name — a boss right next to you, for 30 minutes (game masters only)',
   '/events — world boss, raid and dungeon boss timers (game masters only)',
+  '/weather — the weather where you stand; /weather rain|storm|snow|blizzard|dust|sandstorm|mist|downpour|cloudy|clear [0–100] sets it everywhere, /weather off goes back to the real weather (game masters; everyone in test mode)',
   '/tutorial — where you are in the tutorial; /tutorial step N, /tutorial done, /tutorial skip, /tutorial reset (back to the island; game masters)',
   '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing, fletching, crafting, cooking, firemaking); also /fishing N, /mining N, /smithing N, /fletching N, /crafting N, /cooking N, /firemaking N',
   '/premium N — give yourself N days of premium for this session (0 = none; game masters only, never saved)',
@@ -251,6 +253,23 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       const e = game.spawnBossNear(p, k);
       if (!e) return say('There is no room for it next to you.', 'warn');
       return say(`${bossTitle(k)} appears next to you (it leaves in 30 minutes).`);
+    }
+    case 'weather': {
+      const w = game.weatherView(pid);
+      if (!rest[0]) {
+        const pct = (v: number) => `${Math.round(v * 100)}%`;
+        return say(`Weather here: ${WEATHER_NAMES[w.kind]}${w.kind ? ` ${pct(w.amount)}` : ''}${w.prevAmount > 0 ? ` (clearing ${WEATHER_NAMES[w.prev]} ${pct(w.prevAmount)})` : ''}, wind ${pct(w.wind)}, ${Climate[w.climate].toLowerCase()} zone ${w.zone}${game.weather.forcedKind !== null ? ' — set by /weather' : ''}.`);
+      }
+      if (s.testOnly && !game.testMode) return say('Only game masters can change the weather.', 'warn');
+      if (rest[0].toLowerCase() === 'off' || rest[0].toLowerCase() === 'real') {
+        game.weather.force(null);
+        return say('The weather follows the sky again.');
+      }
+      const k = weatherKindByName(rest[0]);
+      if (k === null) return say(`Weather kinds: ${Object.values(WEATHER_NAMES).join(', ')}, off.`, 'warn');
+      const amt = Math.max(5, Math.min(100, num(rest[1], 100))) / 100;
+      game.weather.force(k, amt);
+      return say(`Weather everywhere: ${WEATHER_NAMES[k]} ${Math.round(amt * 100)}% (until /weather off or a restart).`);
     }
     case 'events': {
       if (s.testOnly) return say('Only game masters can see the event timers.', 'warn');

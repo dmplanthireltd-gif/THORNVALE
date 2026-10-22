@@ -46,6 +46,8 @@ import { migrateSave, SAVE_VERSION } from './save/migrate';
 import { emptyPets, parsePets, PetSystem, savePets, type PetState } from './pets/PetSystem';
 import { CLASSIC_STAGES, combatSkillRate, expRate, gatheringRate, scaleAmount, stagedGold, type ExpStages } from './progression/stages';
 import { isAppearance, sameAppearance, sanitizeAppearance, type Appearance } from './player/appearance';
+import { TrapSystem, VINE_ROOT_SECONDS, FLOWER_POISON_BASE, FLOWER_POISON_SECONDS } from './world/traps';
+import { CALM, snowStepFactor, WeatherSystem, type WeatherState } from './world/weather';
 import { BUFF_NAMES, emptyBuffs, expForLevel, FIGHT_MODE, Player, type FightMode } from './player/Player';
 import { isVocation, VOCATIONS, type Vocation } from './player/vocations';
 import { QUESTS, QuestLog } from './quests/quests';
@@ -264,6 +266,8 @@ export interface GameOptions {
   premium?: boolean;
   /** Experience stages / server rates (progression/stages.ts). Left out = classic ×1 everywhere. */
   stages?: ExpStages;
+  /** Weather seed (world/weather.ts); every game with the same seed shows the same weather at the same moment. */
+  weatherSeed?: number;
 }
 
 export const BAG_LIFETIME = 180;
@@ -381,6 +385,12 @@ export class Game implements AIContext {
   netWorldMarks: WorldMark[] = [];
   /** Dynamic monsters to take out of the world at the end of this update. */
   private despawnQueue: Enemy[] = [];
+  /** Regional weather from the wall clock (world/weather.ts). */
+  readonly weather: WeatherSystem;
+  /** Online mirror: the weather of the local player's zone as last sent by the server. */
+  netWeather: WeatherState | null = null;
+  /** Jungle traps (world/traps.ts). */
+  readonly traps: TrapSystem;
 
   constructor(opts: GameOptions = {}) {
     this.simulate = opts.simulate ?? true;
@@ -394,6 +404,8 @@ export class Game implements AIContext {
     this.now = opts.now ?? (() => Date.now());
     this.premiumEnforced = opts.premium ?? false;
     this.world = buildWorld();
+    this.weather = new WeatherSystem(this.world, this.now, opts.weatherSeed);
+    this.traps = new TrapSystem(this.world);
     // NPCs and monsters always take the first ids, so a server and its clients agree on them
     for (const n of this.world.npcs) {
       const def = NPCS[n.key];
@@ -710,6 +722,8 @@ export class Game implements AIContext {
       return false;
     }
     c.beginStep(dx, dy);
+    // fresh snow and blizzards slow walking on snow ground outside towns (world/weather.ts)
+    if (c instanceof Player) c.moveDur *= snowStepFactor(this.world, this.weather.at(c.x, c.y), c.x, c.y, c.z);
     return true;
   }
 
@@ -799,6 +813,7 @@ export class Game implements AIContext {
     this.updateStumps(dt);
     this.updateFires(dt);
     this.updateFishSpots(dt);
+    this.traps.update(dt);
     this.worldEvents.update(dt);
     this.petSys.update(dt);
     this.flushDespawns();
@@ -915,6 +930,11 @@ export class Game implements AIContext {
     const queued = s.intent.takeQueued();
     const held = s.intent.held();
     const dir = held.dx || held.dy ? held : queued;
+    // held by strangling vines: no step (the path is kept for afterwards)
+    if (p.buffs.rooted > 0) {
+      if (dir && (dir.dx || dir.dy)) p.facing = facingFromDelta(dir.dx, dir.dy);
+      return false;
+    }
 
     if (dir && (dir.dx || dir.dy)) {
       p.path = [];
@@ -983,6 +1003,7 @@ export class Game implements AIContext {
     for (const b of [...this.bags]) {
       if (!b.corpse && b.x === p.x && b.y === p.y && b.z === p.z) this.pickupBag(s, b);
     }
+    this.springTrap(s);
     // entering a town makes its temple your home
     const r = this.world.regionAt(p.x, p.y, p.z);
     // (the island's shrine only while the tutorial is on: nobody else should wake up there)
@@ -994,6 +1015,30 @@ export class Game implements AIContext {
       }
     }
     return false;
+  }
+
+  /** Jungle traps (world/traps.ts): players spring them by stepping on them, monsters never. */
+  private springTrap(s: Session): void {
+    const p = s.player;
+    if (p.dead || p.god || p.ignoredByMonsters) return;
+    const t = this.traps.spring(p.x, p.y, p.z);
+    if (!t) return;
+    if (t.kind === 'vines') {
+      p.buffs.rooted = Math.max(p.buffs.rooted, VINE_ROOT_SECONDS);
+      this.events.emit({ type: 'buff', id: p.id, buff: 'rooted', on: true });
+      this.msg(s.id, 'Strangling vines wrap around your legs!', 'warn');
+    } else {
+      this.msg(s.id, 'A snapping flower bites you!', 'warn');
+      this.poison(s, FLOWER_POISON_BASE + Math.floor(p.level / 15), FLOWER_POISON_SECONDS);
+    }
+    this.events.emit({ type: 'trap', kind: t.kind, i: t.i, x: t.x, y: t.y, z: t.z, id: p.id });
+  }
+
+  /** The weather where a player stands (online mirror: what the server sent). */
+  weatherView(pid: number | null): WeatherState {
+    if (!this.simulate) return this.netWeather ?? CALM;
+    const p = this.getPlayer(pid);
+    return p ? this.weather.at(p.x, p.y) : CALM;
   }
 
   private updateHazards(s: Session): void {
@@ -5096,7 +5141,7 @@ const BUFF_FADE: Record<(typeof BUFF_NAMES)[number], string> = {
   haste: 'Your haste wears off.', magicShield: 'Your magic shield fades.', light: 'Your light fades.',
   berserk: 'Your fury subsides.', bullseye: 'Your eagle eye fades.', mastermind: 'Your thoughts lose their clarity.',
   strongHaste: 'Your strong haste wears off.', greatLight: 'Your light fades.', ultimateLight: 'Your light fades.',
-  invisible: 'You are visible again.', illusion: 'Your illusion fades.', poisoned: 'You are no longer poisoned.',
+  invisible: 'You are visible again.', illusion: 'Your illusion fades.', poisoned: 'You are no longer poisoned.', rooted: 'You tear free of the vines.',
 };
 
 const BUFF_START: Record<'berserk' | 'bullseye' | 'mastermind', string> = {

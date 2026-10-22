@@ -437,6 +437,15 @@ export class HUD {
     const disp = sec('Display');
     this.pixelBtn = button(disp, 'Pixels: on', () => this.togglePixels(), 'btn');
     this.pixelBtn.title = 'Pixel-art look on or off';
+    // weather effects: High / Low (half the particles) / Off (sandstorm visibility stays: it is gameplay)
+    const wq = ['high', 'low', 'off'] as const;
+    const wqName = { high: 'High', low: 'Low', off: 'Off' };
+    const wb = button(disp, `Weather: ${wqName[this.renderer.weatherQuality]}`, () => {
+      const next = wq[(wq.indexOf(this.renderer.weatherQuality) + 1) % wq.length];
+      this.renderer.setWeatherQuality(next);
+      wb.textContent = `Weather: ${wqName[next]}`;
+    }, 'btn');
+    wb.title = 'Weather effects: High, Low (half the rain, snow and sand) or Off (no weather pictures; sandstorms still limit how far you see)';
     const slider = (parent: HTMLElement, value: number, title: string, set: (v: number) => void, max = 100) => {
       const s = el('input', 'vol-slider', parent);
       s.type = 'range';
@@ -2420,6 +2429,7 @@ export class HUD {
     if (p.buffs.invisible > 0) buffs.push('◌ invisible');
     if (p.buffs.illusion > 0 && p.illusion) buffs.push(`◐ illusion`);
     if (p.buffs.poisoned > 0) buffs.push('☣ poisoned');
+    if (p.buffs.rooted > 0) buffs.push('❦ rooted');
     const mins = (t: number) => `${Math.ceil(t / 60)}m`;
     if (p.buffs.berserk > 0) buffs.push(`⚔ fury ${mins(p.buffs.berserk)}`);
     if (p.buffs.bullseye > 0) buffs.push(`◎ hawk eye ${mins(p.buffs.bullseye)}`);

@@ -46,6 +46,8 @@ export type GameEvent =
   | { type: 'mine'; id: number; x: number; y: number; z: number; got: boolean; depleted: boolean }
   /** Work at a production station (furnace, anvil); `made` = an item came out. */
   | { type: 'craft'; id: number; x: number; y: number; z: number; station: string; made: boolean }
+  /** A player sprang a jungle trap (world/traps.ts): `i` = trap index, `id` = the player. */
+  | { type: 'trap'; kind: 'vines' | 'flower'; i: number; x: number; y: number; z: number; id: number }
   /** The station window (smithing etc.) opened, closed or changed. */
   | { type: 'craftChanged'; to: number }
   /** A skill advanced (shown in the Skills panel). */

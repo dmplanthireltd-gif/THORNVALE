@@ -341,8 +341,13 @@ export class Sfx {
       case 'mana':
         if (e.to === me) this.play('mana', 0.8);
         break;
+      case 'trap': {
+        const v = this.atId(e.id);
+        if (v) this.play(e.kind === 'vines' ? 'earth' : 'swingFist', v * 0.8);
+        break;
+      }
       case 'buff':
-        if (e.on && e.id === me) this.play(e.buff === 'magicShield' ? 'shield' : e.buff === 'haste' ? 'buff' : 'holy', 0.8);
+        if (e.on && e.id === me && e.buff !== 'rooted') this.play(e.buff === 'magicShield' ? 'shield' : e.buff === 'haste' ? 'buff' : 'holy', 0.8);
         break;
       case 'levelUp':
         if (e.id === me) this.play('levelUp');

@@ -25,17 +25,19 @@ export interface Buffs {
   illusion: number;
   /** Condition, not a buff: loses health every few seconds until it ends or is cured. */
   poisoned: number;
+  /** Condition: held in place by strangling vines (jungle traps, world/traps.ts). */
+  rooted: number;
 }
 
 export type BuffName = keyof Buffs;
 export const BUFF_NAMES: BuffName[] = [
-  'haste', 'magicShield', 'light', 'berserk', 'bullseye', 'mastermind', 'strongHaste', 'greatLight', 'ultimateLight', 'invisible', 'illusion', 'poisoned',
+  'haste', 'magicShield', 'light', 'berserk', 'bullseye', 'mastermind', 'strongHaste', 'greatLight', 'ultimateLight', 'invisible', 'illusion', 'poisoned', 'rooted',
 ];
 
 export function emptyBuffs(): Buffs {
   return {
     haste: 0, magicShield: 0, light: 0, berserk: 0, bullseye: 0, mastermind: 0,
-    strongHaste: 0, greatLight: 0, ultimateLight: 0, invisible: 0, illusion: 0, poisoned: 0,
+    strongHaste: 0, greatLight: 0, ultimateLight: 0, invisible: 0, illusion: 0, poisoned: 0, rooted: 0,
   };
 }
 

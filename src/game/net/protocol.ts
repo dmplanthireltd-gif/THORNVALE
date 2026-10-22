@@ -21,6 +21,7 @@ import type { TutorialState } from '../tutorial/tutorial';
 import type { ExpStages } from '../progression/stages';
 import { applyPetsView, parsePetLook, petLook, petsView, type PetView } from '../pets/PetSystem';
 import { petForItem, petXpForLevel } from '../pets/petDefs';
+import { decodeWeather, encodeWeather, type WeatherSnap } from '../world/weather';
 
 export type PetAction = 'dismiss' | 'pouch' | 'pouchClose' | 'put' | 'take';
 const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take'];
@@ -31,7 +32,7 @@ const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 26;
+export const PROTOCOL_VERSION = 27;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -192,6 +193,10 @@ export type ServerMessage =
     fi?: string[];
     /** Active world boss and raid markers for the world map; only sent when they change. */
     wev?: WorldMark[];
+    /** Weather of the player's zone (world/weather.ts encodeWeather); only sent when it changes. */
+    wx?: WeatherSnap;
+    /** Sprung jungle traps near the player (trap indexes, world/traps.ts); only sent when the list changes. */
+    tr?: number[];
   }
   | { t: 'ev'; e: GameEvent }
   | { t: 'error'; text: string };
@@ -308,6 +313,8 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     st: game.stumpsNear(me.x, me.y, me.z, VIEW_RADIUS + 4),
     fi: onlyChanged(s, 'fires', game.firesNear(me.x, me.y, me.z, VIEW_RADIUS + 4)),
     wev: onlyChanged(s, 'wev', game.worldMarks()),
+    wx: onlyChanged(s, 'wx', encodeWeather(game.weatherView(me.id))),
+    tr: onlyChanged(s, 'tr', game.traps.sprungNear(me.x, me.y, me.z, VIEW_RADIUS + 4)),
   };
 }
 
@@ -534,6 +541,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   if (snap.wev) game.netWorldMarks = snap.wev;
   game.syncFields(snap.fields ?? []);
   if (snap.fi) game.syncFires(snap.fi);
+  if (snap.wx) game.netWeather = decodeWeather(snap.wx) ?? game.netWeather;
 
   const me = snap.self;
   const s = game.session(me.id);
@@ -576,6 +584,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     }
   }
   if (snap.st) game.syncStumps(snap.st, p.x, p.y, p.z, VIEW_RADIUS + 4);
+  if (snap.tr) game.traps.sync(snap.tr, p.x, p.y, VIEW_RADIUS + 4);
   if (me.tu) {
     const state = me.tu.s === 'active' || me.tu.s === 'skipped' ? me.tu.s : 'done';
     s.tutorial = { state, step: me.tu.st, flags: me.tu.f, count: me.tu.n, canSkip: me.tu.cs === 1 };

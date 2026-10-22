@@ -30,6 +30,8 @@ import { SkillAnimator } from './skillAnim';
 import { oreAt } from '../game/gathering/mining';
 import { stationAt } from '../game/production/recipes';
 import { Obj, WorldMap, type EnemyKind } from '../game/world/WorldMap';
+import { WeatherView, type WeatherQuality } from './weather/WeatherView';
+import { TrapView } from './weather/trapView';
 
 export type PickResult =
   | { kind: 'enemy' | 'npc' | 'player'; id: number }
@@ -81,6 +83,15 @@ export class Renderer {
   private underwater!: UnderwaterFx;
   private sky = new THREE.Color(0x2a4f6e);
   private dark = new THREE.Color(0x000000);
+  /** Rain, snow, sand, mist, wind and lightning (render/weather/). */
+  private weather!: WeatherView;
+  /** Jungle traps: tell-tale leaves and the spring animations. */
+  private trapView!: TrapView;
+  private baseHemi = 1.15;
+  private baseSun = 2.3;
+  private stormSky = new THREE.Color(0x3a4048);
+  private skyNow = new THREE.Color();
+  private skyFlash = new THREE.Color(0xdde6ff);
 
   constructor(private readonly container: HTMLElement, private readonly ctl: Controller) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -118,6 +129,8 @@ export class Renderer {
       this.lastPz = Number.NaN;
     });
     this.overlay = new Overlay(container, this.cam.camera);
+    this.weather = new WeatherView(this.scene);
+    this.trapView = new TrapView(this.scene, ctl.game, () => this.worldView.floorOffset(0));
     for (const b of ctl.game.bags) this.addBag(b);
 
     ctl.game.events.on((e) => this.onEvent(e));
@@ -134,6 +147,15 @@ export class Renderer {
     const p = this.ctl.game.getPlayer(this.ctl.pid);
     if (!p) throw new Error('Local player missing');
     return p;
+  }
+
+  /** Settings → Weather effects (High / Low / Off). */
+  setWeatherQuality(q: WeatherQuality): void {
+    this.weather.setQuality(q);
+  }
+
+  get weatherQuality(): WeatherQuality {
+    return this.weather.quality;
   }
 
   setPixelMode(on: boolean): void {
@@ -838,9 +860,9 @@ export class Renderer {
     this.blood?.refresh();
     const under = pz < 0;
     (this.scene.background as THREE.Color).copy(under ? this.dark : this.sky);
-    this.hemi.intensity = under ? 0.18 : 1.15;
+    this.baseHemi = this.hemi.intensity = under ? 0.18 : 1.15;
     this.hemi.color.setHex(under ? 0x8a8aa8 : 0xcfe4ff);
-    this.sun.intensity = under ? 0.25 : 2.3;
+    this.baseSun = this.sun.intensity = under ? 0.25 : 2.3;
     this.sun.castShadow = !under;
   }
 
@@ -991,6 +1013,17 @@ export class Renderer {
       }
     }
     this.underwater.update(dt, p, f, breathers);
+
+    // weather: particles, haze, wind, storm light and lightning (nothing of it underground)
+    const wl = this.weather.update(dt, g, p, this.cam.camera, this.worldView.floorOffset(pz) ?? 0, f.x, f.z);
+    this.trapView.update(dt, p.x, p.y, pz);
+    if (pz >= 0) {
+      this.hemi.intensity = this.baseHemi * wl.hemi;
+      this.sun.intensity = this.baseSun * wl.sun;
+      this.skyNow.copy(this.sky).lerp(this.stormSky, wl.overcast * 0.75);
+      if (wl.flash > 0) this.skyNow.lerp(this.skyFlash, wl.flash * 0.6);
+      (this.scene.background as THREE.Color).copy(this.skyNow);
+    }
 
     // shake the view in whole art pixels so the pixel grid never swims
     const sh = this.effects.shakeOffset();

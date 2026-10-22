@@ -1,6 +1,7 @@
 import type { Game } from '../game/Game';
 import type { Player } from '../game/player/Player';
 import { Ground, Obj } from '../game/world/WorldMap';
+import { flashInfo, kindAmount, WeatherKind } from '../game/world/weather';
 
 /**
  * Background ambience that follows the surroundings: wind on snow, ice and sand, birds in grass
@@ -8,15 +9,18 @@ import { Ground, Obj } from '../game/world/WorldMap';
  * lava, crackling near campfires, and a low drone with water drips underground. Synthesized live; very quiet by design.
  */
 
-type Bed = 'wind' | 'insects' | 'sea' | 'lava' | 'cave' | 'fire' | 'deep';
+type Bed = 'wind' | 'insects' | 'sea' | 'lava' | 'cave' | 'fire' | 'deep' | 'rain' | 'gale';
 
 export class Ambience {
   private beds = new Map<Bed, GainNode>();
   private lastSample = 0;
-  private level: Record<Bed, number> = { wind: 0, insects: 0, sea: 0, lava: 0, cave: 0, fire: 0, deep: 0 };
+  private level: Record<Bed, number> = { wind: 0, insects: 0, sea: 0, lava: 0, cave: 0, fire: 0, deep: 0, rain: 0, gale: 0 };
   /** Share of sea floor around you (the Sunken Reach): muffled swell and rising bubbles. */
   private bubbles = 0;
   private nextBubble = 0;
+  /** Last lightning flash heard (weather), so each one thunders once; -1 = not seen any yet. */
+  private lastFlash = -1;
+  private readonly noise: AudioBuffer;
   private nextCrackle = 0;
   private birds = 0;
   private frogs = 0;
@@ -25,6 +29,7 @@ export class Ambience {
   private nextPop = 0;
 
   constructor(private readonly ctx: AudioContext, private readonly out: AudioNode, noise: AudioBuffer) {
+    this.noise = noise;
     const mk = (bed: Bed, type: BiquadFilterType, freq: number, q: number, lfoRate: number, lfoDepth: number) => {
       const src = ctx.createBufferSource();
       src.buffer = noise;
@@ -52,6 +57,9 @@ export class Ambience {
     mk('cave', 'lowpass', 180, 0.6, 0.05, 50);
     mk('fire', 'bandpass', 1800, 0.7, 0.6, 600);
     mk('deep', 'lowpass', 260, 0.9, 0.07, 120);
+    // weather: a soft hiss of rain and a deeper gale for storms, blizzards and sandstorms
+    mk('rain', 'bandpass', 2600, 0.45, 0.17, 900);
+    mk('gale', 'bandpass', 320, 0.7, 0.07, 160);
   }
 
   /** Called every frame; samples the surroundings twice a second. */
@@ -115,6 +123,18 @@ export class Ambience {
     const f = (v: number) => (n ? v / n : 0);
     const under = z < 0;
     const indoors = g.world.isSafe(cx, cy, z);
+    // weather of the zone: rain is muffled under a roof, nothing reaches you underground
+    const w = g.weatherView(me.id);
+    const roofed = !!g.world.houseAt(cx, cy, z);
+    const wet = Math.min(1.3, kindAmount(w, WeatherKind.Rain) + kindAmount(w, WeatherKind.Storm) + kindAmount(w, WeatherKind.Downpour) * 1.3);
+    const gale = Math.max(0, w.wind - 0.45) / 0.55;
+    if (w.flash !== this.lastFlash) {
+      if (this.lastFlash !== -1 && w.flash > 0 && !under) {
+        const fi = flashInfo(w.flash, w.zone);
+        this.thunder(this.ctx.currentTime + fi.delay, fi.power * (roofed ? 0.6 : 1));
+      }
+      this.lastFlash = w.flash;
+    }
     this.level = {
       wind: under ? 0 : (f(snow) * 0.09 + f(sand) * 0.06 + (z > 0 ? 0.03 : 0)) * (indoors ? 0.3 : 1),
       insects: under ? 0 : f(wild) * 0.025,
@@ -123,6 +143,8 @@ export class Ambience {
       cave: under ? (f(seabed) > 0.3 ? 0.01 : 0.06) : 0,
       fire: fire * 0.035,
       deep: under ? Math.min(1, f(seabed) * 1.4) * 0.1 : 0,
+      rain: under ? 0 : wet * (roofed ? 0.035 : 0.075),
+      gale: under ? 0 : gale * (roofed || indoors ? 0.03 : 0.08),
     };
     this.bubbles = under ? f(seabed) : 0;
     this.birds = under || indoors ? 0 : f(green) + f(wild) * 0.5;
@@ -155,6 +177,30 @@ export class Ambience {
   private drip(t: number): void {
     const f = 1300 + Math.random() * 900;
     this.blip('sine', f, f * 1.7, t, 0.08, 0.035);
+  }
+
+  /** Thunder: a sharp crack (louder when close) and a long low roll. */
+  private thunder(t: number, power: number): void {
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(900 * power + 200, t);
+    lp.frequency.exponentialRampToValueAtTime(90, t + 3.5);
+    const g = ctx.createGain();
+    const peak = 0.22 * power;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.04 + (1 - power) * 0.3);
+    g.gain.exponentialRampToValueAtTime(peak * 0.35, t + 0.6);
+    g.gain.linearRampToValueAtTime(peak * 0.5, t + 1.1);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 4.2);
+    src.connect(lp).connect(g).connect(this.out);
+    src.start(t, Math.random() * 0.5);
+    src.stop(t + 4.4);
+    // the rumble underneath
+    this.blip('sine', 60 + power * 20, 34, t, 2.8, 0.09 * power);
   }
 
   private pop(t: number, amount: number): void {
