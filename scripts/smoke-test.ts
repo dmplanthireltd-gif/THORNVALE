@@ -244,7 +244,7 @@ console.log('Equipment & capacity');
   check(g.armor(s) > a0 + 8, `armour from helmet/armour/legs (${a0} → ${g.armor(s)})`);
   check(g.resist(s, 'physical') === 6, 'amulet gives physical resistance');
   const step0 = p.stepTime;
-  check(p.stepTime < 0.27, `ring of swiftness speeds you up (step ${step0.toFixed(3)}s)`);
+  check(p.stepTime < p.baseStep * 0.95, `ring of swiftness speeds you up (step ${step0.toFixed(3)}s, base ${p.baseStep.toFixed(3)}s)`);
   const size0 = inv.size();
   inv.add('explorer_pack', 1);
   g.useItem(pid, 'explorer_pack');
@@ -2085,7 +2085,10 @@ console.log('Walking speed grows with level');
   s.player.level = 100;
   g.refreshStats(s);
   const t100 = s.player.baseStep;
-  check(t1 > 0.5 && t100 < 0.32 && t100 > 0.25, `level 1 takes ${t1.toFixed(2)} s per tile, level 100 ${t100.toFixed(2)} s`);
+  s.player.level = 500;
+  g.refreshStats(s);
+  const t500 = s.player.baseStep;
+  check(t1 > 0.5 && t100 < 0.4 && t100 > 0.35 && t500 >= 0.25, `level 1 takes ${t1.toFixed(2)} s per tile, level 100 ${t100.toFixed(2)} s, level 500 ${t500.toFixed(2)} s (never under 0.25)`);
 }
 
 console.log('Fletching, crafting, cooking and firemaking');

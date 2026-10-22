@@ -6,6 +6,11 @@ export const CAMERA_TILT_DEG = 32;
 const DISTANCE = 60;
 /** Screen pixels per art pixel, from far to close. */
 const PIXEL_LEVELS = [1.5, 2, 2.5, 3, 3.5, 4, 5];
+/**
+ * The zoom is fixed (owner's call): four steps closer than the old default (about 12 tiles of
+ * height), the same for every player; the mouse wheel no longer zooms the game view.
+ */
+export const ZOOM_LOCK_STEPS = 4;
 
 /**
  * Orthographic, near-top-down camera. North (−Z) is always screen-up; the view
@@ -55,7 +60,8 @@ export class CameraController {
     const first = this.screenH === 1;
     this.screenW = Math.max(1, width);
     this.screenH = Math.max(1, height);
-    if (first) this.pixelLevel = this.defaultPixelLevel();
+    if (first) this.pixelLevel = this.lockedPixelLevel();
+    else this.pixelLevel = this.lockedPixelLevel();
     this.applyProjection();
   }
 
@@ -68,16 +74,14 @@ export class CameraController {
     return { w: Math.ceil(this.screenW / this.pixelSize), h: Math.ceil(this.screenH / this.pixelSize) };
   }
 
-  /** Positive delta zooms out. */
-  zoomBy(delta: number): void {
-    if (this.pixelMode) {
-      const step = delta > 0 ? -1 : 1;
-      this.pixelLevel = THREE.MathUtils.clamp(this.pixelLevel + step, this.zoomOutCut, PIXEL_LEVELS.length - 1);
-      this.applyProjection();
-      return;
-    }
-    const factor = Math.pow(1.12, Math.sign(delta));
-    this.zoomTarget = THREE.MathUtils.clamp(this.zoomTarget * factor, 3.5, this.maxZoom);
+  /** The fixed zoom: ZOOM_LOCK_STEPS closer than the screen's default. */
+  private lockedPixelLevel(): number {
+    return Math.min(PIXEL_LEVELS.length - 1, this.defaultPixelLevel() + ZOOM_LOCK_STEPS);
+  }
+
+  /** The zoom is locked; kept so callers (mouse wheel, settings) need no changes. */
+  zoomBy(_delta: number): void {
+    return;
   }
 
   private get maxZoom(): number {
@@ -87,14 +91,15 @@ export class CameraController {
   /** Leaves out the `n` farthest zoom-out steps (a shorter view distance on Low graphics). */
   setZoomOutCut(n: number): void {
     this.zoomOutCut = Math.max(0, Math.min(n, PIXEL_LEVELS.length - 1));
-    if (this.pixelLevel < this.zoomOutCut) this.pixelLevel = this.zoomOutCut;
+    this.pixelLevel = Math.max(this.zoomOutCut, this.lockedPixelLevel());
     this.zoomTarget = Math.min(this.zoomTarget, this.maxZoom);
     this.applyProjection();
   }
 
   setPixelMode(on: boolean): void {
     this.pixelMode = on;
-    if (!on) this.zoom = this.zoomTarget = this.camera.top;
+    // smooth mode keeps the same locked height as pixel mode
+    if (!on) this.zoom = this.zoomTarget = (this.screenH / PIXEL_LEVELS[this.lockedPixelLevel()]) / (2 * TILE_PX);
     this.apply();
   }
 

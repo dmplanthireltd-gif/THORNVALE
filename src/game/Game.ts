@@ -513,7 +513,8 @@ export class Game implements AIContext {
     p.capacity = voc.baseCap + (p.level - 1) * voc.capPerLevel;
     // classic speed curve: speed 220 at level 1, +2 per level; a tile takes 120/speed seconds
     // (level 1 ≈ 0.55 s, level 20 ≈ 0.46 s, level 100 ≈ 0.29 s, level 500 ≈ 0.10 s)
-    p.baseStep = Math.min(0.6, Math.max(0.1, 120 / (220 + 2 * (p.level - 1))));
+    // speed 220 + (level − 1); never faster than 4 tiles a second before haste (owner: high levels walked too fast)
+    p.baseStep = Math.min(0.6, Math.max(0.25, 120 / (220 + (p.level - 1))));
     p.stepTime = p.baseStep * 100 / (100 + speed);
     // caught in a web (dread weavers): every step takes longer until it tears loose
     if (p.webbed > 0) p.stepTime *= WEB_SLOW;
