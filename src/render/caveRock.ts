@@ -36,7 +36,7 @@ export const ROCK_COLOR: Record<RockStyle, number> = {
 };
 
 /** Floors drawn with solid rock (rolled out floor by floor). */
-export const CAVE_ROCK_FLOORS: number[] = [-1];
+export const CAVE_ROCK_FLOORS: number[] = [-1, -2];
 
 /** Height of the rock top above the floor. */
 export const ROCK_TOP = 1.85;
