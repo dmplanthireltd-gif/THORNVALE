@@ -41,6 +41,10 @@ import { activeSets, SETS, SET_BY_ID } from '../src/game/inventory/sets';
 import { CAPE_IDS, CAPES, capeProblem, capeTrainingBonus, DUNGEON_BOSS_KINDS, recordBossKill, WORLD_BOSS_KINDS } from '../src/game/inventory/capes';
 import { CAPE_LOOK, capeLook } from '../src/render/models/capeLooks';
 import { COMBAT_SKILLS } from '../src/game/player/skills';
+import { SILK_THRONE, STEPPE } from '../src/game/world/spiderSteppe';
+import { DEEPEN_REPORT, DEEPENED_FLOORS, UNDERGROUND_AREAS } from '../src/game/world/underground';
+import { TOWNS } from '../src/game/world/townList';
+import { WEB_SLOW } from '../src/game/Game';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -634,6 +638,8 @@ console.log('Spells update');
     g.say(k.pid, 'exeta res');
     check(bears.every((b) => b.targetId === k.pid), 'exeta res: nearby monsters turn on the knight');
     for (const b of bears) b.dead = true;
+    // the knight and his friend step away, so the next monster has one player to see
+    for (const o of [k, friend]) o.s.player.placeAt(g.world.temple.x, g.world.temple.y, g.world.temple.z);
 
     const m = solo('sorcerer', g);
     setLevel(g, m.s, 40);
@@ -644,7 +650,7 @@ console.log('Spells update');
     m.s.player.god = true;
     const wolf = dummy(g, 'polar_bear', { x: b2.x + 2, y: b2.y, z: 0 });
     for (let i = 0; i < 5; i++) g.update(0.1);
-    check(wolf.targetId === m.pid, 'a monster hunts a visible player');
+    check(wolf.targetId === m.pid, `a monster hunts a visible player${wolf.targetId === m.pid ? '' : ` (target ${wolf.targetId}, sorcerer ${m.pid} at ${b2.x},${b2.y}, bear at ${wolf.x},${wolf.y} ${wolf.state} dead=${wolf.dead})`}`);
     g.say(m.pid, 'utana vid');
     for (let i = 0; i < 5; i++) g.update(0.1);
     check(m.s.player.buffs.invisible > 0 && wolf.targetId !== m.pid, 'utana vid: monsters lose track of you');
@@ -707,11 +713,15 @@ console.log('Spells update');
     setLevel(g, dr.s, 60);
     const b = openSpot(g, 4);
     park(g, dr.s, b);
-    const slow = dummy(g, 'polar_bear', { x: b.x + 2, y: b.y, z: 0 });
+    // only the practice bear about (a wild monster on its tile would take the snare)
+    for (const e of g.enemies) if (e.id < 900000 && e.z === 0 && Math.max(Math.abs(e.x - b.x), Math.abs(e.y - b.y)) <= 8) e.dead = true;
+    // a free tile two steps away (earlier tests left players standing about)
+    const bx = [2, -2].map((dx) => b.x + dx).find((x) => !g.isOccupied(x, b.y, 0) && !g.players().some((o) => o.x === x && o.y === b.y && o.z === 0)) ?? b.x + 2;
+    const slow = dummy(g, 'polar_bear', { x: bx, y: b.y, z: 0 });
     dr.s.inventory.add('snare_rune', 1);
-    g.useRune(dr.pid, dr.s.inventory.slots.findIndex((x) => x?.id === 'snare_rune'), { x: b.x + 2, y: b.y });
+    g.useRune(dr.pid, dr.s.inventory.slots.findIndex((x) => x?.id === 'snare_rune'), { x: bx, y: b.y });
     g.update(0.05);
-    check(slow.slowTimer > 0 && slow.stepTime > slow.def.stepTime * 2, 'snare rune paralyses a monster');
+    check(slow.slowTimer > 0 && slow.stepTime > slow.def.stepTime * 2, `snare rune paralyses a monster${slow.slowTimer > 0 ? '' : ` (at ${b.x},${b.y}: timer ${slow.slowTimer}, step ${slow.stepTime}, dead=${slow.dead})`}`);
     slow.dead = true;
     g.removePlayer(so.pid);
     g.removePlayer(dr.pid);
@@ -1126,6 +1136,121 @@ console.log('Capes');
   // first boss kills count once
   const kills: string[] = [];
   check(recordBossKill(kills, 'wb_mountain') && !recordBossKill(kills, 'wb_mountain') && !recordBossKill(kills, 'rat') && kills.length === 1, 'boss deeds count each boss once');
+}
+
+// ---------------------------------------------------------------- the Gravewind Steppe and the deeper caves
+console.log('Gravewind Steppe and deeper caves');
+{
+  const dw = ENEMIES.dread_weaver, gc = ENEMIES.gravesilk_colossus;
+  check(dw.abilities.some((a) => (a.web ?? 0) > 0) && dw.abilities.some((a) => a.kind === 'blast' && a.element === 'earth' && (a.poison ?? 0) > 0.35), 'dread weavers spit binding webs and poison clouds');
+  check(gc.elite === true && !gc.boss && !!gc.herald && gc.respawn >= 3600 && gc.maxHp > dw.maxHp * 8, 'the colossus is a rare elite (not a boss) that the world hears about');
+  const setDrops = dw.loot.filter((l) => !!ITEMS[l.id]?.setId).length;
+  check(setDrops >= 4 && dw.loot.every((l) => !!ITEMS[l.id]), `dread weavers drop ${setDrops} gear-set pieces`);
+  check(['gravesilk_wraps', 'silk_throne_amulet'].every((id) => ITEMS[id]?.rarity === 'legendary' && gc.loot.some((l) => l.id === id)) && !Object.entries(ENEMIES).some(([k, e]) => k !== 'gravesilk_colossus' && e.loot.some((l) => l.id === 'gravesilk_wraps' || l.id === 'silk_throne_amulet')),
+    'only the colossus drops its two unique items');
+  const buyers = Object.values(NPCS).filter((n) => (n.buys ?? []).includes('dread_silk')).length;
+  check(['dread_silk', 'venom_gland', 'colossus_eye'].every((id) => ITEMS[id]?.kind === 'material' && !!MATERIAL_SHAPE[id]) && buyers > 3, `new spider materials have icons and ${buyers} buyers`);
+  // stages: a level 60-80 hunt pays like its neighbours
+  check(dw.exp > ENEMIES.crystal_spider.exp && dw.exp < ENEMIES.hydra.exp && dw.maxHp > ENEMIES.crystal_spider.maxHp && dw.maxHp < ENEMIES.hydra.maxHp, 'dread weavers sit between crystal spiders and hydras');
+
+  const g = new Game();
+  const w = g.world;
+  const reach = floodFill3D(w);
+  const inSteppe = (x: number, y: number) => x >= STEPPE.x0 && x <= STEPPE.x1 && y >= STEPPE.y0 && y <= STEPPE.y1;
+  const weavers = w.spawns.filter((sp) => sp.kind === 'dread_weaver');
+  const colossi = w.spawns.filter((sp) => sp.kind === 'gravesilk_colossus');
+  check(weavers.length >= 15 && weavers.every((sp) => sp.z === 0 && inSteppe(sp.x, sp.y)), `${weavers.length} dread weavers, all on the steppe`);
+  check(colossi.length === 1 && Math.max(Math.abs(colossi[0].x - SILK_THRONE.x), Math.abs(colossi[0].y - SILK_THRONE.y)) <= 6, 'one Gravesilk Colossus, on the Silk Throne');
+  const townDist = Math.min(...[...weavers, ...colossi].flatMap((sp) => TOWNS.map((t) => Math.max(Math.abs(t.x - sp.x), Math.abs(t.y - sp.y)))));
+  check(townDist >= 40, `the giant spiders live away from every town (nearest ${townDist} tiles)`);
+  check(w.regionAt(575, 60, 0)?.name === 'Gravewind Steppe' && w.regionAt(SILK_THRONE.x, SILK_THRONE.y, 0)?.name === 'The Silk Throne' && !w.regions.some((r) => r.name === 'Charwood'), 'the steppe region (it swallowed the Charwood)');
+  let road = 0;
+  for (let y = STEPPE.y0; y <= STEPPE.y1; y++) for (let x = STEPPE.x0; x <= STEPPE.x1; x++) if (w.getGround(x, y, 0) === Ground.Path && reach.at(x, y, 0)) road++;
+  let webs = 0;
+  for (let y = STEPPE.y0; y <= STEPPE.y1; y++) for (let x = STEPPE.x0; x <= STEPPE.x1; x++) if (w.getObj(x, y, 0) === Obj.Cobweb || w.getObj(x, y, 0) === Obj.EggSacs) webs++;
+  check(road > 60 && webs > 150, `a road runs into the steppe (${road} tiles) through webs and egg sacs (${webs})`);
+  const brr = TOWNS.find((t) => t.key === 'briarwatch')!;
+  check(reach.at(574, 70, 0) && reach.at(brr.x, brr.y + 2, 0), 'the steppe is reachable on foot from Briarwatch');
+
+  // every spawn, chest and floor link is reachable; every stair lands on open ground
+  const lost = w.spawns.filter((sp) => !reach.at(sp.x, sp.y, sp.z) || !w.isWalkable(sp.x, sp.y, sp.z));
+  check(lost.length === 0, `all ${w.spawns.length} spawns stand on reachable open ground${lost.length ? ` (${lost.slice(0, 4).map((sp) => `${sp.kind}@${sp.x},${sp.y},${sp.z}`).join(' ')})` : ''}`);
+  const badLinks = [...w.links.values()].filter((l) => !w.isWalkable(l.to.x, l.to.y, l.to.z) || !reach.at(l.to.x, l.to.y, l.to.z));
+  check(badLinks.length === 0, `all ${w.links.size} stairs, ladders and ropes land on reachable open ground`);
+  const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+  check(w.chests.every((c) => D8.some(([dx, dy]) => reach.at(c.x + dx, c.y + dy, c.z))), 'every chest can be reached');
+  check(DUNGEON_BOSS_KINDS.every((k) => w.spawns.filter((sp) => sp.kind === k).length === 1), 'every dungeon boss still has its lair');
+
+  // the deeper caves grew on every enlarged floor
+  for (const z of DEEPENED_FLOORS) {
+    const areas = UNDERGROUND_AREAS.filter((a) => a.z === z);
+    const rep = DEEPEN_REPORT.filter((r) => r.z === z);
+    const grown = rep.filter((r) => r.added >= 30);
+    const added = rep.reduce((a, r) => a + r.added, 0), spawns = rep.reduce((a, r) => a + r.spawns, 0);
+    check(grown.length >= Math.ceil(areas.length * 0.8), `floor ${z}: ${grown.length}/${areas.length} hunting grounds grew (${added} new tiles, ${spawns} new spawns)${grown.length < areas.length ? ` — small: ${rep.filter((r) => r.added < 30).map((r) => r.name).join(', ')}` : ''}`);
+    let lights = 0, solidOnOpen = 0;
+    const f = w.floor(z)!;
+    for (let i = 0; i < f.obj.length; i++) {
+      const o = f.obj[i];
+      if (o === Obj.Brazier || o === Obj.Crystals || o === Obj.GlowShrooms) lights++;
+      if ((o === Obj.Brazier || o === Obj.Crystals) && f.ground[i] === Ground.Void) solidOnOpen++;
+    }
+    check(lights > 20 && solidOnOpen === 0, `floor ${z}: ${lights} braziers, crystals and glowing mushrooms`);
+  }
+
+  // webs slow you down and wear off; poison clouds can poison (on an empty steppe: no other monsters about)
+  const t = solo('knight', g);
+  const live = g.enemies.slice();
+  g.enemies.length = 0;
+  const spot = { x: 575, y: 70, z: 0 };
+  t.s.player.placeAt(spot.x, spot.y, spot.z);
+  setLevel(g, t.s, 400);
+  const before = t.s.player.stepTime;
+  const web = dummy(g, 'dread_weaver', { x: spot.x + 1, y: spot.y, z: 0 });
+  g.useAbility(web, dw.abilities.find((a) => a.web)!, t.s.player);
+  const slowed = t.s.player.stepTime;
+  check(t.s.player.webbed > 0 && Math.abs(slowed - before * WEB_SLOW) < 1e-6, `a binding web slows your steps (${before.toFixed(3)} → ${slowed.toFixed(3)} s)`);
+  web.dead = true;
+  for (let i = 0; i < 20 * 8; i++) g.update(0.05);
+  check(t.s.player.webbed === 0 && Math.abs(t.s.player.stepTime - before) < 1e-6, 'the web wears off');
+  let poisoned = false;
+  const cloud = dummy(g, 'dread_weaver', { x: spot.x + 1, y: spot.y, z: 0 });
+  for (let i = 0; i < 12 && !poisoned; i++) { g.useAbility(cloud, dw.abilities.find((a) => a.kind === 'blast')!, t.s.player); poisoned = t.s.player.buffs.poisoned > 0; }
+  check(poisoned, 'the poison cloud poisons');
+  cloud.dead = true;
+  g.enemies.push(...live);
+  // the colossus: the world hears when it falls, and who brought it down
+  const news: string[] = [];
+  const off = g.events.on((e) => { if (e.type === 'announce') news.push(e.text); });
+  const col = g.enemies.find((e) => e.enemyKind === 'gravesilk_colossus' && !e.dead)!;
+  col.hp = 1;
+  col.damageBy.set(t.pid, 17_999);
+  t.s.player.placeAt(col.x + 1, col.y, col.z);
+  (g as unknown as { killEnemy(e: Enemy): void }).killEnemy(col);
+  off();
+  check(news.some((n) => n.includes('Gravesilk Colossus') && n.includes(t.s.player.name)), `the kill is broadcast (${news[0]})`);
+
+  // safe login: a character saved on a tile that is now solid wakes in the temple; one on open cave ground stays
+  const save = g.serialize(t.pid) as unknown as { player: { x: number; y: number; z: number } };
+  let solid: { x: number; y: number; z: number } | null = null, open: { x: number; y: number; z: number } | null = null;
+  const f1 = w.floor(-1)!;
+  for (let i = 0; i < f1.obj.length && (!solid || !open); i++) {
+    const x = i % w.width, y = (i / w.width) | 0;
+    if (!solid && f1.ground[i] !== Ground.Void && !w.isWalkable(x, y, -1) && (f1.obj[i] === Obj.Brazier || f1.obj[i] === Obj.Crystals || f1.obj[i] === Obj.Stalagmite)) solid = { x, y, z: -1 };
+    if (!open && f1.ground[i] === Ground.Cave && w.isWalkable(x, y, -1) && reach.at(x, y, -1) && !w.isSafe(x, y, -1)) open = { x, y, z: -1 };
+  }
+  const login = (at: { x: number; y: number; z: number }) => {
+    const u = solo('knight', new Game());
+    const data = JSON.parse(JSON.stringify(save));
+    data.player.x = at.x; data.player.y = at.y; data.player.z = at.z;
+    const ok = u.g.applySave(u.pid, data);
+    return { ok, p: u.s.player, temple: u.g.world.temple };
+  };
+  const a = login(solid!);
+  check(a.ok && a.p.z === a.temple.z && Math.max(Math.abs(a.p.x - a.temple.x), Math.abs(a.p.y - a.temple.y)) <= 6 && u_walk(a.p), `logging in on a tile that is now solid (a brazier, crystals, a stalagmite) moves you to the temple (${solid!.x},${solid!.y},${solid!.z} → ${a.p.x},${a.p.y},${a.p.z})`);
+  const b = login(open!);
+  check(b.ok && b.p.x === open!.x && b.p.y === open!.y && b.p.z === -1, 'logging in on open cave ground keeps you where you were');
+  function u_walk(p: { x: number; y: number; z: number }): boolean { return w.isWalkable(p.x, p.y, p.z); }
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll content checks passed.');

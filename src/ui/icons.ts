@@ -275,7 +275,7 @@ function drawTool(x: Ctx, d: ItemDef): void {
 export const MATERIAL_SHAPE: Record<string, [string, string]> = {
   rat_tail: ['tail', '#c48a8a'], wolf_pelt: ['pelt', '#7a7a82'], bone: ['bone', '#efe6cc'], orc_tooth: ['fang', '#f0e6c8'],
   orc_charm: ['orb', '#7affb0'], orc_banner: ['flag', '#a8281f'], elvish_talisman: ['orb', '#9ad0a0'], elven_scroll: ['scroll', '#efe6cf'],
-  crocodile_leather: ['pelt', '#5a7a3a'], spider_silk: ['spiral', '#f0f0f0'], troll_hair: ['pelt', '#3a4a2a'], hydra_head: ['head', '#2f7a5a'],
+  crocodile_leather: ['pelt', '#5a7a3a'], spider_silk: ['spiral', '#f0f0f0'], dread_silk: ['spiral', '#9a8fb8'], venom_gland: ['blob', '#7ac84a'], colossus_eye: ['orb', '#c83a2a'], troll_hair: ['pelt', '#3a4a2a'], hydra_head: ['head', '#2f7a5a'],
   hydra_egg: ['egg', '#b0c070'], ghoul_snack: ['blob', '#6a8a4a'], fiery_heart: ['heart', '#ff6a1a'], behemoth_claw: ['fang', '#d8d0b8'],
   demon_horn: ['horn', '#3a1a14'], demonic_essence: ['orb', '#c040ff'], dragon_scale: ['scale', '#3f9a52'], red_dragon_scale: ['scale', '#c0281f'],
   small_ruby: ['gem', '#e8243a'], small_sapphire: ['gem', '#2a6ae8'], small_emerald: ['gem', '#24c060'], small_diamond: ['gem', '#e8f4ff'],

@@ -7,6 +7,8 @@ import { buildDepotHallsView, type DepotHallsView } from './models/depotHalls';
 import { buildPlazaView, type PlazaView } from './models/spawnPlaza';
 import { buildSeaView, type SeaView } from './sea/seaView';
 import { mat, toonGradient, type Mat } from './models/parts';
+import { buildCaveRock, CAVE_ROCK_FLOORS, CAVE_UNIFORMS, type LightSource } from './caveRock';
+import { DecorBuilder } from './caveDecor';
 import { groundTex, objTex } from './textures';
 
 /** Vertical distance between floors in world units. */
@@ -107,6 +109,8 @@ class FloorView {
   litMats: { wood: Mat; flame: Mat; glow: THREE.MeshBasicMaterial } | null = null;
   roofs: RoofView[] = [];
   features = new Map<number, Feature>();
+  /** Torches, braziers, crystals and lava that light the floor around them (the nearest few get real lights). */
+  lights: LightSource[] = [];
   dim = 1;
   constructor(readonly z: number) {}
 
@@ -171,6 +175,10 @@ export class WorldView {
   /** The Sunken Reach (game/world/sea.ts): reef, wrecks, caustics, whirlpool. */
   private sea: SeaView | null = null;
   currentZ = 0;
+  /** A few real lights that follow the nearest torches and braziers on the current floor. */
+  private pool: THREE.PointLight[] = [];
+  private poolPick: LightSource[] = [];
+  private poolTimer = 0;
   /** Fields laid by runes: they are drawn by the animated field sprites, not as static flames. */
   isRuneField: (x: number, y: number, z: number) => boolean = () => false;
 
@@ -180,6 +188,12 @@ export class WorldView {
    */
   constructor(private readonly world: WorldMap, scene: THREE.Scene, private readonly stumpOf: (x: number, y: number, z: number) => Obj | null = () => null) {
     scene.add(this.group);
+    // always in the scene (intensity 0 when unused), so the number of lights never changes shaders
+    for (let i = 0; i < 4; i++) {
+      const l = new THREE.PointLight(0xffa050, 0, 7, 1.6);
+      this.pool.push(l);
+      scene.add(l);
+    }
     for (const z of [...world.floors.keys()].sort((a, b) => a - b)) {
       const fv = new FloorView(z);
       this.floors.set(z, fv);
@@ -243,6 +257,13 @@ export class WorldView {
     // reef walls of the Sunken Reach: paler weathered stone, some of it crusted with red coral
     const reefRock = new Batch(geo(new THREE.BoxGeometry(1, 1.9, 1), 0.95), fv.m(0xffffff, { map: objTex.rock() }));
     const c = new THREE.Color();
+    // below ground every rock tile is drawn as rock: a shaded rock top, jagged walls, torches, glows (caveRock.ts)
+    const caveRock = z < 0 && CAVE_ROCK_FLOORS.includes(z);
+    if (caveRock) {
+      const cave = buildCaveRock(w, z, (col, o) => fv.m(col, o), this.flameMats);
+      fv.group.add(cave.group);
+      fv.lights.push(...cave.lights);
+    }
     for (let y = 0; y < w.height; y++) {
       for (let x = 0; x < w.width; x++) {
         const g = w.getGround(x, y, z);
@@ -252,7 +273,8 @@ export class WorldView {
             // the Sunken Reach: reef walls, paler and blue-green instead of cave rock
             const reef = sea && z === sea.z && x >= sea.x0 && x <= sea.x1 && y >= sea.y0 && y <= sea.y1;
             if (reef) reefRock.add(compose(x, 0, y, hash2(x, y, 5) * 0.3, 1.02, 0.55 + hash2(x, y, 3) * 0.45, 1.02), c.setHex(hash2(x, y, 6) < 0.15 ? 0x9a6a5a : 0x7a9898).multiplyScalar(0.8 + hash2(x, y, 4) * 0.35));
-            else rock.add(compose(x, 0, y, 0, 1, 0.9 + hash2(x, y, 3) * 0.25, 1), c.setScalar(0.85 + hash2(x, y, 4) * 0.25));
+            // floors not yet rolled out to the solid-rock look keep the old plain rock blocks
+            else if (!caveRock) rock.add(compose(x, 0, y, 0, 1, 0.9 + hash2(x, y, 3) * 0.25, 1), c.setScalar(0.85 + hash2(x, y, 4) * 0.25));
           }
           continue;
         }
@@ -395,6 +417,7 @@ export class WorldView {
     const leafColors = [0x3f7d34, 0x4a8a38, 0x356f2e, 0x4f9340];
     const pineColors = [0x2f5e34, 0x2a5530, 0x356a3a, 0x284f2d];
     const isA = (xx: number, yy: number, objs: Obj[]) => w.inBounds(xx, yy) && objs.includes(w.getObj(xx, yy, z));
+    const decor = new DecorBuilder(w, z, (col, o) => fv.m(col, o), this.flameMats);
 
     for (let y = 0; y < w.height; y++) {
       for (let x = 0; x < w.width; x++) {
@@ -651,10 +674,13 @@ export class WorldView {
             break;
           }
           default:
+            decor.add(o, x, y);
             break;
         }
       }
     }
+    decor.build(fv.group);
+    fv.lights.push(...decor.lights);
 
     const all = [trunks, rocks, bushes, ferns, berry, flowers, stems, wheat, wallsWood, wallsStone, beams, doorPosts, lintels, fPosts, rails, railPosts,
       headstones, mounds, barrels, hoops, crates, tableTop, tableLeg, hay, lampPost, lampGlow, deadBranch, stakes, stakeTips,
@@ -1142,6 +1168,9 @@ export class WorldView {
 
     const p0 = playerTiles[playerTiles.length - 1] ?? { x: 0, y: 0 };
     this.depotHalls?.update(dt, Math.round(p0.x), Math.round(p0.y), pz);
+    CAVE_UNIFORMS.uTime.value = this.time;
+    CAVE_UNIFORMS.uLight.value.set(p0.x, 0, p0.y);
+    this.updateLightPool(dt, pz, p0);
     const covered = this.underCover(Math.round(p0.x), Math.round(p0.y), pz);
     for (const [z, fv] of this.floors) {
       let visible = false;
@@ -1159,6 +1188,31 @@ export class WorldView {
     if (cur) {
       this.updateRoofs(cur, dt, playerTiles);
       this.updateCanopies(cur, [...playerTiles, ...watchTiles]);
+    }
+  }
+
+  /** Points the few real lights at the torches, braziers and lava nearest the player, flickering. */
+  private updateLightPool(dt: number, pz: number, p: { x: number; y: number }): void {
+    this.poolTimer -= dt;
+    if (this.poolTimer <= 0) {
+      this.poolTimer = 0.3;
+      const list = this.floors.get(pz)?.lights ?? [];
+      const near: Array<[number, LightSource]> = [];
+      for (const l of list) {
+        const d = Math.max(Math.abs(l.x - p.x), Math.abs(l.y - p.y));
+        if (d < 14) near.push([d, l]);
+      }
+      near.sort((a, b) => a[0] - b[0]);
+      this.poolPick = near.slice(0, this.pool.length).map((n) => n[1]);
+    }
+    for (let i = 0; i < this.pool.length; i++) {
+      const L = this.pool[i];
+      const s = this.poolPick[i];
+      if (!s) { L.intensity = 0; continue; }
+      L.color.setHex(s.color);
+      L.position.set(s.x, s.h, s.y);
+      L.distance = 4.5 + s.power * 2.5;
+      L.intensity = s.power * (3.2 + Math.sin(this.time * (8 + i) + s.x) * 0.5 + Math.sin(this.time * (19 + i * 3) + s.y) * 0.35);
     }
   }
 

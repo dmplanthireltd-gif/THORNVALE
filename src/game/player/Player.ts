@@ -95,6 +95,8 @@ export class Player extends Creature {
   showGear = true;
   /** Hitpoints lost per poison tick, and seconds to the next tick (see Buffs.poisoned). */
   poisonDamage = 0;
+  /** Seconds left stuck in a spider's web: walking is slower until it wears off (Game.web). Not saved. */
+  webbed = 0;
   poisonTick = 0;
   /** Monster kind this player looks like (Creature Illusion), or null. Not saved. */
   illusion: string | null = null;

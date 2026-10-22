@@ -18,6 +18,7 @@ export const OBJ_RGB: Partial<Record<number, string>> = {
   [Obj.GoldRock]: '#d8b040', [Obj.StarsteelRock]: '#5a7ab8', [Obj.DarkstoneRock]: '#5a3a6a', [Obj.DepletedRock]: '#6a665e',
   [Obj.Furnace]: '#c86a2a', [Obj.Anvil]: '#4a4e56', [Obj.Stove]: '#c86a2a', [Obj.TanningRack]: '#a8743f', [Obj.Campfire]: '#ff7a1a', [Obj.FoundersStone]: '#e0b03c',
   [Obj.Fountain]: '#3f86c8', [Obj.PlazaDecor]: '#7a746c',
+  [Obj.Crystals]: '#8ad8f0', [Obj.Brazier]: '#ff7a1a', [Obj.Rails]: '#5a4a3a',
 };
 
 /** Canvas size in pixels; the zoom decides how many tiles fit in it. */

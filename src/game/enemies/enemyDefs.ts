@@ -33,6 +33,10 @@ export interface Ability {
   summon?: EnemyKind;
   count?: number;
   maxAlive?: number;
+  /** Sticky webs: seconds a player it hurts walks slowed (Game.web). */
+  web?: number;
+  /** Chance (0–1) that a hit poisons, instead of the usual 35% for earth attacks. */
+  poison?: number;
 }
 
 /** Bosses: dungeon bosses (one per region, long respawn), world bosses (scheduled, overworld), raid bosses (end a raid). */
@@ -67,6 +71,8 @@ export interface EnemyDef {
   title?: string;
   /** Below this share of health the monster enrages once: +50% damage, faster attacks and abilities. */
   enrage?: number;
+  /** Rare monsters the whole world hears about: a broadcast when it returns and when someone slays it. */
+  herald?: { spawn: string; kill: string };
 }
 
 const A = (kind: Ability['kind'], name: string, element: Element, min: number, max: number, interval: number, effect: Ability['effect'], range = 4, radius = 0): Ability =>
@@ -442,6 +448,44 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     ],
   }),
 
+  // --- the Gravewind Steppe (world/spiderSteppe.ts) -------------------------------------
+  dread_weaver: E('dread_weaver', {
+    name: 'Dread Weaver', maxHp: 1650, minDmg: 40, maxDmg: 195, armor: 20, attackInterval: 1.6, stepTime: 0.29, aggroRange: 7, leash: 10, wanderRadius: 3, exp: 1350, respawn: 75,
+    resist: { earth: 80, death: 10, fire: -15, energy: -5 },
+    abilities: [
+      { ...A('ranged', 'venom spit', 'earth', 60, 150, 4, 'earth', 4), poison: 0.5 },
+      { ...A('ranged', 'binding web', 'physical', 20, 60, 8, 'stone', 4), web: 4 },
+      { ...A('blast', 'poison cloud', 'earth', 55, 130, 9, 'earth', 4, 1), poison: 0.6 },
+    ],
+    loot: [
+      L('gold', 1, 40, 160), L('spider_silk', 0.5, 1, 3), L('dread_silk', 0.18), L('venom_gland', 0.12), L('strong_health_potion', 0.2), L('strong_mana_potion', 0.15),
+      L('poison_arrow', 0.15, 4, 10), L('jade_amulet', 0.02), L('small_emerald', 0.06),
+      // set pieces for a level 60-80 hunt
+      L('darkstone_legs', 0.006), L('darkstone_boots', 0.008), L('crownguard_helm', 0.01), L('crownguard_legs', 0.008), L('glacier_boots', 0.01), L('elven_boots', 0.012),
+    ],
+  }),
+  gravesilk_colossus: E('gravesilk_colossus', {
+    name: 'Gravesilk Colossus', elite: true, enrage: 0.25,
+    maxHp: 18000, minDmg: 120, maxDmg: 470, armor: 36, attackInterval: 1.8, stepTime: 0.32, aggroRange: 8, leash: 10, wanderRadius: 2, exp: 14000, respawn: 7200,
+    resist: { earth: 100, death: 25, physical: 10, fire: -15, holy: -5 },
+    abilities: [
+      { ...A('blast', 'grave venom', 'earth', 140, 330, 6, 'earth', 5, 2), poison: 0.7 },
+      { ...A('ranged', 'shroud web', 'physical', 60, 150, 7, 'stone', 5), web: 6 },
+      A('beam', 'silk lance', 'earth', 160, 340, 9, 'earth', 6),
+      S('brood call', 'dread_weaver', 1, 2, 30),
+      A('heal', 'cocoon mending', 'holy', 500, 900, 16, 'heal'),
+    ],
+    herald: {
+      spawn: 'The ground of the Gravewind Steppe trembles: the Gravesilk Colossus has woken in its nest.',
+      kill: 'The Gravesilk Colossus has been slain on the Gravewind Steppe',
+    },
+    loot: [
+      L('gold', 1, 600, 1500), L('dread_silk', 1, 2, 5), L('venom_gland', 1, 1, 3), L('colossus_eye', 0.5), L('great_health_potion', 0.6, 1, 3), L('great_mana_potion', 0.6, 1, 3),
+      L('small_emerald', 0.6, 1, 3), L('small_diamond', 0.3, 1, 2),
+      L('gravesilk_wraps', 0.05), L('silk_throne_amulet', 0.05),
+      L('darkstone_plate', 0.03), L('darkstone_helm', 0.04), L('crownguard_armor', 0.05), L('voidweave_boots', 0.01), L('skyfeather_boots', 0.01),
+    ],
+  }),
   // =================================================================== bosses (see bosses/bosses.ts)
   // Dungeon bosses: one per region, elite, slow to respawn (1–4 hours), guaranteed rare loot and a chance at their unique item.
   boss_ironjaw: E('boss_ironjaw', {

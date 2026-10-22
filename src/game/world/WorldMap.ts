@@ -116,6 +116,21 @@ export enum Obj {
   Coral = 64,
   /** The planked hull of a sunken ship (blocks sight like a wall). */
   Hull = 65,
+  // cave and wilderness dressing (world/underground.ts, world/spiderSteppe.ts); drawn by render/caveDecor.ts
+  /** Spider webs strung across a tile (walk through them). */
+  Cobweb = 66,
+  /** A patch of glowing cave mushrooms (walk over them). */
+  GlowShrooms = 67,
+  /** A cluster of glowing crystals growing out of the floor (solid). */
+  Crystals = 68,
+  /** A burning iron brazier (solid, lights the cave around it). */
+  Brazier = 69,
+  /** A puddle fed by water dripping from the cave roof. */
+  Puddle = 70,
+  /** Mine-cart rails along a mine gallery (walk over them). */
+  Rails = 71,
+  /** Spider egg sacs in a nest (walk over them). */
+  EggSacs = 72,
 }
 
 const SOLID = new Set<number>([
@@ -125,6 +140,7 @@ const SOLID = new Set<number>([
   Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall, Obj.MagicWall, Obj.MarketBoard, Obj.Stump,
   Obj.CopperRock, Obj.TinRock, Obj.IronRock, Obj.CoalRock, Obj.SilverRock, Obj.GoldRock, Obj.StarsteelRock, Obj.DarkstoneRock, Obj.DepletedRock,
   Obj.Furnace, Obj.Anvil, Obj.Stove, Obj.TanningRack, Obj.FoundersStone, Obj.Fountain, Obj.PlazaDecor, Obj.Coral, Obj.Hull,
+  Obj.Crystals, Obj.Brazier,
 ]);
 
 /** Objects that stop arrows and spells. Trees and fences do not. */
@@ -174,6 +190,8 @@ export type EnemyKind =
   // desert, mountains, plains and coasts of the new world
   | 'scorpion' | 'mummy' | 'scarab' | 'minotaur' | 'minotaur_archer' | 'minotaur_mage' | 'cyclops'
   | 'dwarf' | 'dwarf_soldier' | 'dwarf_guard' | 'bandit' | 'amazon' | 'valkyrie' | 'bear' | 'deer' | 'snake' | 'lizard_sentinel' | 'lizard_templar'
+  // the Gravewind Steppe (world/spiderSteppe.ts): giant spiders and their rare colossus
+  | 'dread_weaver' | 'gravesilk_colossus'
   // bosses (bosses/bosses.ts): one per dungeon, three world bosses, four raid bosses
   | 'boss_rime_wyrm' | 'boss_sand_king' | 'boss_venom_oracle' | 'boss_delving_king' | 'boss_ironjaw'
   | 'boss_ashen_sovereign' | 'boss_ember_matriarch' | 'boss_mire_hydra' | 'boss_bonebound' | 'boss_labyrinth_lord'

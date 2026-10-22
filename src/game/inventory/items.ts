@@ -381,6 +381,8 @@ const defs: ItemDef[] = [
     ['scorpion_tail', 'Scorpion Tail', 40], ['scarab_coin', 'Scarab Coin', 100], ['mummy_wrapping', 'Mummy Wrapping', 35],
     ['lizard_scale', 'Lizard Scale', 70], ['giant_beard', 'Frost Giant Beard', 180], ['crystal_shard', 'Ice Crystal Shard', 150],
     ['frozen_heart', 'Frozen Heart', 500], ['frost_dragon_scale', 'Frost Dragon Scale', 220],
+    // the Gravewind Steppe
+    ['dread_silk', 'Dread Silk', 180], ['venom_gland', 'Venom Gland', 240], ['colossus_eye', 'Eye of the Colossus', 4500],
   ] as Array<[string, string, number]>).map(([id, name, value]) => def({ id, name, kind: 'material', weight: id === 'golden_goblet' ? 30 : id === 'iron_ore' ? 12 : id === 'skull_trophy' ? 20 : id === 'polar_bear_fur' ? 15 : 2, value })),
 
   // --- woodcutting: logs from felled trees (traders buy them) ------------------------------
@@ -505,6 +507,10 @@ const defs: ItemDef[] = [
   def({ id: 'tidecrest_boots', name: 'Tidecrest Boots', kind: 'boots', armor: 2, level: 70, weight: 9, value: 12000, rarity: 'legendary', bonus: { speed: 20, resist: { energy: 6, ice: 6 } }, note: 'Unique: from the hide of Vaelith, the Storm Serpent.' }),
   def({ id: 'blightweave_robe', name: 'Blightweave Robe', kind: 'armor', armor: 7, level: 70, vocations: MAGES, weight: 38, value: 12000, rarity: 'legendary', bonus: { mana: 180, magic: 7, resist: { earth: 6 } }, note: 'Unique: woven from the silk of Nhalgrith, the Blight Mother.' }),
   W('broodmother_crossbow', 'Broodmother Crossbow', 'crossbow', 10, 0, 75, 12000, 48, { twoHanded: true, range: 7, ammoType: 'bolt', vocations: PALADIN, rarity: 'legendary', bonus: { resist: { earth: 5 } }, note: 'Unique: Nhalgrith, the Blight Mother, spun its string.' }),
+
+  // the Gravesilk Colossus (Gravewind Steppe): rare, not a boss, so not in BOSS_UNIQUES
+  def({ id: 'gravesilk_wraps', name: 'Gravesilk Legwraps', kind: 'legs', armor: 7, level: 70, weight: 22, value: 9000, rarity: 'legendary', bonus: { speed: 6, resist: { earth: 6, death: 3 } }, note: 'Unique: spun from the grave-silk of the Gravesilk Colossus.' }),
+  def({ id: 'silk_throne_amulet', name: 'Amulet of the Silk Throne', kind: 'amulet', level: 70, weight: 5, value: 9000, rarity: 'legendary', bonus: { hp: 80, mana: 80, resist: { earth: 8, physical: 2 } }, note: 'Unique: a clutch of venom-dark eggs set in bone, from the nest of the Gravesilk Colossus.' }),
 
   // --- gear sets: the pieces the sets were missing (sets.ts) ----------------------------------
   ...SET_ITEM_SPECS.map(def),

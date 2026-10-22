@@ -928,6 +928,7 @@ export function buildEnemy(kind: EnemyKind): Rig {
     case 'hydra': return buildHydra();
     case 'frost_dragon': return buildFrostDragon();
     case 'crystal_spider': return buildCrystalSpider();
+    case 'dread_weaver': case 'gravesilk_colossus': return buildTarantula();
     case 'scorpion': return buildScorpion();
     case 'scarab': return buildScarab();
     case 'silver_rabbit': return buildRabbit();
@@ -954,6 +955,7 @@ export const ENEMY_SCALE: Record<EnemyKind, number> = {
   scorpion: 1.35, mummy: 1.32, scarab: 1.3, minotaur: 1.4, minotaur_archer: 1.38, minotaur_mage: 1.36, cyclops: 1.6,
   dwarf: 1.25, dwarf_soldier: 1.25, dwarf_guard: 1.3, bandit: 1.3, amazon: 1.3, valkyrie: 1.32, bear: 1.4, deer: 1.3, snake: 1.25,
   lizard_sentinel: 1.34, lizard_templar: 1.42,
+  dread_weaver: 1.7, gravesilk_colossus: 2.15,
   // bosses: clearly bigger than their kin, world bosses colossal
   boss_ironjaw: 2.0, boss_bonebound: 1.9, boss_delving_king: 1.9, boss_labyrinth_lord: 2.1, boss_venom_oracle: 2.1,
   boss_ember_matriarch: 2.7, boss_sand_king: 2.1, boss_mire_hydra: 2.5, boss_rime_wyrm: 2.8, boss_ashen_sovereign: 2.6,

@@ -292,6 +292,8 @@ export const UNJUST_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const UNJUST_KILLS_FOR_RED = 3;
 /** Seconds you cannot enter a protection zone after attacking a player. */
 export const PZ_LOCK_SECONDS = 60;
+/** Steps take this many times longer while caught in a web (dread weavers, Game.web). */
+export const WEB_SLOW = 1.6;
 /** How long the victim of an attack may hit back without getting a skull. */
 const SELF_DEFENCE_MS = WHITE_SKULL_MS;
 const HOLE_OPEN_SECONDS = 90;
@@ -305,6 +307,8 @@ interface TempField {
   owner: number;
 }
 
+/** Cave and steppe dressing a rune field may cover (world/underground.ts, world/spiderSteppe.ts). */
+const WALK_OVER_DECOR = new Set<Obj>([Obj.Cobweb, Obj.GlowShrooms, Obj.Puddle, Obj.Rails, Obj.EggSacs]);
 const FIELD_OBJ: Record<FieldKind, Obj> = { fire: Obj.FireField, energy: Obj.EnergyField, poison: Obj.PoisonField, wall: Obj.MagicWall };
 const FIELD_ELEMENT: Partial<Record<Obj, Element>> = { [Obj.FireField]: 'fire', [Obj.EnergyField]: 'energy', [Obj.PoisonField]: 'earth' };
 const TRADE_RANGE = 3;
@@ -499,6 +503,8 @@ export class Game implements AIContext {
     // (level 1 ≈ 0.55 s, level 20 ≈ 0.46 s, level 100 ≈ 0.29 s, level 500 ≈ 0.10 s)
     p.baseStep = Math.min(0.6, Math.max(0.1, 120 / (220 + 2 * (p.level - 1))));
     p.stepTime = p.baseStep * 100 / (100 + speed);
+    // caught in a web (dread weavers): every step takes longer until it tears loose
+    if (p.webbed > 0) p.stepTime *= WEB_SLOW;
     p.hpRegen = hpRegen;
     p.manaRegen = manaRegen;
     p.hp = Math.min(p.hp, p.maxHp);
@@ -854,6 +860,13 @@ export class Game implements AIContext {
     }
     for (const k of Object.keys(p.spellCooldowns)) p.spellCooldowns[k] -= dt;
     for (const g of ['attack', 'heal', 'support', 'potion'] as const) p.groupCooldowns[g] = Math.max(0, p.groupCooldowns[g] - dt);
+    if (p.webbed > 0) {
+      p.webbed = Math.max(0, p.webbed - dt);
+      if (p.webbed === 0) {
+        this.refreshStats(s);
+        this.msg(s.id, 'You tear free of the web.', 'info');
+      }
+    }
     if (p.buffs.poisoned > 0) {
       p.poisonTick -= dt;
       if (p.poisonTick <= 0) {
@@ -1166,6 +1179,7 @@ export class Game implements AIContext {
           e.rage = 1;
           e.damageBy.clear();
           this.events.emit({ type: 'spawn', id: e.id });
+          if (e.def.herald) this.announce(e.def.name, e.def.herald.spawn, 'boss', true);
         } else {
           e.respawnTimer = 3;
         }
@@ -1273,7 +1287,8 @@ export class Game implements AIContext {
     if (!w.inBounds(x, y) || !w.isWalkable(x, y, z) || w.isSafe(x, y, z) || w.linkAt(x, y, z)) return false;
     const cur = this.fields.get(k);
     const o = w.getObj(x, y, z);
-    if (!cur && o !== Obj.None) return false;
+    // fields go on bare ground, or over cave dressing you can walk across (it comes back when the field ends)
+    if (!cur && o !== Obj.None && !WALK_OVER_DECOR.has(o)) return false;
     if (kind === 'wall' && this.isOccupied(x, y, z)) return false;
     const obj = FIELD_OBJ[kind];
     this.fields.set(k, { obj, prev: cur ? cur.prev : o, ttl, owner });
@@ -2136,7 +2151,8 @@ export class Game implements AIContext {
       const amount = applyResist(Math.max(1, raw), this.resist(s, a.element));
       this.applyDamage(p, e, { amount, result: amount > 0 ? 'hit' : 'blocked' }, a.element, a.name);
       // venomous attacks (earth) can leave poison behind — cured by exana pox
-      if (a.element === 'earth' && amount > 0 && !p.dead && !p.god && Math.random() < 0.35) this.poison(s, Math.max(2, Math.round(a.max / 10)), 10);
+      if ((a.element === 'earth' || a.poison) && amount > 0 && !p.dead && !p.god && Math.random() < (a.poison ?? 0.35)) this.poison(s, Math.max(2, Math.round(a.max / 10)), 10);
+      if (a.web && amount > 0 && !p.dead && !p.god) this.web(s, a.web);
     };
     if (a.kind === 'ranged') {
       this.events.emit({ type: 'projectile', fromId: e.id, toId: target.id, effect: a.effect as Effect });
@@ -2357,6 +2373,13 @@ export class Game implements AIContext {
     }
     const looters = [...e.damageBy.keys()];
     const damage = new Map(e.damageBy);
+    if (e.def.herald) {
+      // rare monsters: the world hears who brought it down (the biggest share of damage)
+      let top = -1, best = -1;
+      for (const [pid, d] of damage) if (d > best && this.sessions.has(pid)) { top = pid; best = d; }
+      const slayer = this.sessions.get(top)?.player.name;
+      this.announce(e.def.name, slayer ? `${e.def.herald.kill} by ${slayer}.` : `${e.def.herald.kill}.`, 'boss', false);
+    }
     e.damageBy.clear();
     // world bosses share their loot by contribution instead of dropping it
     if (this.worldEvents.onKilled(e, damage)) return;
@@ -2477,6 +2500,17 @@ export class Game implements AIContext {
   /** /boss: a boss (any monster) right next to a game master; leaves after 30 minutes. */
   spawnBossNear(p: Player, kind: EnemyKind): Enemy | null {
     return this.spawnEnemy(kind, p.x, p.y, p.z, { tag: 'gm', radius: 4, lifetime: GM_BOSS_LIFETIME });
+  }
+
+  /** Sticky webs (dread weavers): the player walks slower for a few seconds; a fresh web only lengthens it. */
+  web(s: Session, seconds: number): void {
+    const p = s.player;
+    const was = p.webbed > 0;
+    p.webbed = Math.max(p.webbed, seconds);
+    if (was) return;
+    this.refreshStats(s);
+    this.msg(s.id, 'You are caught in a web!', 'warn');
+    this.events.emit({ type: 'area', x: p.x, y: p.y, z: p.z, radius: 0, effect: 'stone' });
   }
 
   /** Server-wide announcement (big banner and a log line on every client). */
@@ -2840,6 +2874,7 @@ export class Game implements AIContext {
     p.attackTimer = 0;
     p.buffs = emptyBuffs();
     p.poisonDamage = 0;
+    p.webbed = 0;
     if (p.illusion) {
       p.illusion = null;
       this.events.emit({ type: 'lookChanged', id: p.id });
@@ -5114,6 +5149,7 @@ function resetPlayerState(p: Player): void {
   p.groupCooldowns = { attack: 0, heal: 0, support: 0, potion: 0 };
   p.buffs = emptyBuffs();
   p.poisonDamage = 0;
+  p.webbed = 0;
   p.illusion = null;
   p.attackTimer = 0;
   p.sinceCombat = 99;

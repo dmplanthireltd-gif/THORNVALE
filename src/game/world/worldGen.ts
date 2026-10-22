@@ -4,6 +4,8 @@ import { Gen, SOFT } from './genKit';
 import { buildAllTowns } from './townSites';
 import { Biome, computeGeography, fbm } from './terrain';
 import { placeOreRocks } from './mines';
+import { buildSpiderSteppe } from './spiderSteppe';
+import { deepenUnderground } from './underground';
 import { buildTutorialIsle } from './tutorialIsle';
 import { buildSunkenReach } from './sea';
 import { FLOOR_MAX, FLOOR_MIN, Ground, Obj, SOLID_OBJ, UNWALKABLE_GROUND, WorldMap, type House } from './WorldMap';
@@ -58,8 +60,14 @@ function generate(seed: number): WorldMap {
   placeMarketBoards(m);
   placeSmithies(m);
   placeFoundersStone(m);
+  // later additions use their own random numbers, so everything built before them stays the same
+  buildSpiderSteppe(g, seed);
+  T('steppe');
   settleSpawns(m);
   ensureConnected(m);
+  // the hunting grounds below grow into the rock once every passage is joined up (world/underground.ts)
+  deepenUnderground(g, seed);
+  T('underground');
   // ore rocks last, once every area is joined up (deep mines are only reachable after
   // ensureConnected); a rock never cuts a path, and spawns standing on one move off it
   const reach = floodFill3D(m);
