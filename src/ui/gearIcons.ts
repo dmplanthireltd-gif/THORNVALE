@@ -2,6 +2,7 @@ import type { ItemDef } from '../game/inventory/items';
 import { css, gearLook, MAT, rampOf, type Emblem, type GearLook, type Ramp } from '../render/models/gearLooks';
 import { BOOTS, HELMETS, LEGS } from '../render/models/humanoid';
 import { ARMOR_LOOK, LOOKS, SHIELDS, weaponStyle } from '../render/models/weapons';
+import { drawCape } from './capeIcons';
 
 /**
  * Detailed equipment icons: metal gradients with specular highlights, dark
@@ -1382,6 +1383,7 @@ export function drawGear(x: Ctx, d: ItemDef): boolean {
     case 'amulet':
     case 'ring': drawJewel(x, d); return true;
     case 'backpack': drawBackpack(x, d); return true;
+    case 'cape': drawCape(x, d); return true;
     default: return false;
   }
 }

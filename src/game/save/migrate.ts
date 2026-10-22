@@ -17,7 +17,7 @@ import { PALETTE } from '../player/outfits';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -69,6 +69,13 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   11: (d) => {
     const pl = (d.player ?? {}) as Record<string, unknown>;
     return { ...d, player: { ...pl, appearance: appearanceFromOutfit(pl.outfit, PALETTE) }, version: 12 };
+  },
+  // v12 → v13: the cape slot (empty for everyone) and the boss deeds for deed capes (none yet); everything else is kept
+  12: (d) => {
+    const inv = (d.inventory ?? {}) as Record<string, unknown>;
+    const equipment = { ...((inv.equipment ?? {}) as Record<string, unknown>) };
+    if (!('cape' in equipment)) equipment.cape = null;
+    return { ...d, inventory: { ...inv, equipment }, feats: { bosses: [] }, version: 13 };
   },
 };
 

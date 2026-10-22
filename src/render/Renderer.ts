@@ -176,7 +176,11 @@ export class Renderer {
     const show = s.player.showGear;
     const id = (k: keyof typeof eq) => (show ? eq[k]?.id ?? null : null);
     // the founder cloak is a look, not gear: it shows even with "show gear" off
-    applyGear(rig, { weapon: id('weapon'), shield: id('shield'), armor: id('armor'), head: id('head'), legs: id('legs'), feet: id('feet'), cloak: s.player.cloak || null });
+    // the cloak switch (cosmetics) also hides a worn cape
+    applyGear(rig, {
+      weapon: id('weapon'), shield: id('shield'), armor: id('armor'), head: id('head'), legs: id('legs'), feet: id('feet'), cloak: s.player.cloak || null,
+      cape: s.cosmetics.hideCloak ? null : id('cape'),
+    });
   }
 
   private ensureView(c: Creature): CreatureView {

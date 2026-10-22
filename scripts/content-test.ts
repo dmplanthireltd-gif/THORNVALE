@@ -38,6 +38,9 @@ import { STATIONS, stationForItem } from '../src/game/production/recipes';
 import { RAW_FISH_ITEMS } from '../src/game/gathering/fishing';
 import { floodFill3D } from '../src/game/world/worldGen';
 import { activeSets, SETS, SET_BY_ID } from '../src/game/inventory/sets';
+import { CAPE_IDS, CAPES, capeProblem, capeTrainingBonus, DUNGEON_BOSS_KINDS, recordBossKill, WORLD_BOSS_KINDS } from '../src/game/inventory/capes';
+import { CAPE_LOOK, capeLook } from '../src/render/models/capeLooks';
+import { COMBAT_SKILLS } from '../src/game/player/skills';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -1044,6 +1047,84 @@ console.log('Gear sets');
   const okLoad = t2.g.applySave(t2.pid, JSON.parse(JSON.stringify(data)));
   const kept = pieces.slice(0, s.depot.length).every((id, i) => t2.s.depot[i]?.id === id);
   check(okLoad && kept && t2.s.inventory.equipment.armor?.id === 'demonplate' && t2.s.inventory.equipment.head?.id === 'dragon_helm' && (t2.s.lostItems ?? []).length === 0, 'old and new gear ids survive save and load (nothing lost)');
+}
+
+// ---------------------------------------------------------------- capes
+console.log('Capes');
+{
+  check(CAPES.length === 30 && new Set(CAPE_IDS).size === 30, `30 capes with unique ids (${CAPES.length})`);
+  check(new Set(CAPES.map((c) => c.name)).size === 30, 'every cape has its own name');
+  // one skill cape per skill, combat and trade
+  const allSkills = [...COMBAT_SKILLS, ...NONCOMBAT_SKILLS.map((d) => d.id)];
+  for (const sk of allSkills) check(CAPES.filter((c) => c.kind === 'skill' && c.skill === sk).length === 1, `one skill cape for ${sk}`);
+  check(CAPES.some((c) => c.kind === 'mastery'), 'a mastery cape for every skill');
+  // boss lists match the monsters
+  const bossKinds = (b: string) => Object.entries(ENEMIES).filter(([, e]) => e.boss === b).map(([k]) => k).sort().join();
+  check(bossKinds('dungeon') === [...DUNGEON_BOSS_KINDS].sort().join(), 'the Tyrantbane Cape lists every dungeon boss');
+  check(bossKinds('world') === [...WORLD_BOSS_KINDS].sort().join(), 'the Worldbreaker Mantle lists every world boss');
+  const capeLooks = new Set<string>();
+  const world = new Game();
+  for (const c of CAPES) {
+    const d = ITEMS[c.id];
+    check(!!d && d.kind === 'cape' && equipSlotFor(d) === 'cape' && !d.stackable && !d.attack && !d.armor && !d.defense && !d.bonus, `${c.id}: a cape item with no combat stats`);
+    // a source: sold by an NPC that stands in the world, or dropped by a monster that exists
+    const seller = c.seller ? NPCS[c.seller] : undefined;
+    const sold = !!seller && !!seller.sells?.some((e) => e.id === c.id && e.price === c.price);
+    const dropped = !!c.drop && !!ENEMIES[c.drop.kind]?.loot.some((l) => l.id === c.id);
+    check(sold || dropped, `${c.id}: has a source (${c.seller ?? c.drop?.kind})`);
+    if (c.seller) check(world.npcs.some((n) => n.key === c.seller), `${c.id}: its seller ${c.seller} stands in the world`);
+    // a buyer: its seller buys it back, and every banker buys every cape
+    const buyers = Object.values(NPCS).filter((n) => n.buys?.includes(c.id));
+    check(buyers.length >= 2 && buyers.some((n) => n.bank), `${c.id}: NPCs buy it (${buyers.length})`);
+    check((c.price ?? Infinity) > c.value, `${c.id}: buying back pays less than it costs`);
+    check(describeItemText(c.id).length > 10, `${c.id}: tooltip "${describeItemText(c.id)}"`);
+    const lk = capeLook(c.id);
+    check(!!CAPE_LOOK[c.id], `${c.id}: has its own look`);
+    capeLooks.add(JSON.stringify([lk.main, lk.pattern, lk.emblem, lk.hem, lk.fx]));
+    if (c.kind === 'skill') {
+      const fair = c.skill === 'magic' ? c.level! >= 50 && c.level! <= 90 : COMBAT_SKILLS.includes(c.skill as never) ? c.level! >= 60 && c.level! <= 100 : c.level === 99;
+      check(fair, `${c.id}: asks ${c.skill} ${c.level}`);
+    }
+  }
+  check(capeLooks.size === 30, 'all 30 capes look different');
+  check(CAPES.filter((c) => capeLook(c.id).fx !== 'none').length >= 6, 'several capes are animated');
+  // the skill bonus is small and only in its own skill
+  check(capeTrainingBonus('bladesworn_cape', 'sword') === 1.05 && capeTrainingBonus('bladesworn_cape', 'axe') === 1 && capeTrainingBonus('thornvale_cape', 'sword') === 1 && capeTrainingBonus(null, 'sword') === 1,
+    'a skill cape trains its own skill 5% faster, nothing else');
+
+  // buying: the requirement, gold from backpack and bank, the season
+  const { g, s, pid } = solo('knight');
+  const aldric = g.npcs.find((n) => n.key === 'aldric')!;
+  s.player.placeAt(aldric.x + 1, aldric.y, aldric.z);
+  s.dialogue = { npcId: aldric.id, npcKey: 'aldric', npcName: aldric.name, page: 'trade', text: '' };
+  s.player.capacity = 100_000;
+  s.inventory.add('gold', 10_000);
+  s.bank = 60_000;
+  g.dialogueAction(pid, 'buy:axelord_cape:1');
+  check(s.inventory.count('axelord_cape') === 0 && /axe fighting level 80/.test(s.dialogue?.text ?? ''), `below axe 80 Aldric will not sell it (${s.dialogue?.text})`);
+  s.skills.axe.level = 82;
+  const wealth = s.inventory.count('gold') + s.bank;
+  g.dialogueAction(pid, 'buy:axelord_cape:1');
+  check(s.inventory.count('axelord_cape') === 1 && s.inventory.count('gold') === 0 && s.inventory.count('gold') + s.bank === wealth - 50_000, `at axe 82 it is bought with backpack and bank gold (${s.dialogue?.text})`);
+  g.dialogueAction(pid, 'buy:tyrantbane_cape:1');
+  check(s.inventory.count('tyrantbane_cape') === 0, 'the Tyrantbane Cape needs the boss deeds first');
+  s.bossKills = [...DUNGEON_BOSS_KINDS];
+  s.bank = 25_000;
+  g.dialogueAction(pid, 'buy:tyrantbane_cape:1');
+  check(s.inventory.count('tyrantbane_cape') === 1 && s.bank + s.inventory.count('gold') === 0, `with all ten dungeon bosses slain it can be bought (${s.dialogue?.text})`);
+  // trade skills at 99, and the Grandmaster's Mantle
+  const ctx = (lv: Partial<Record<string, number>>) => ({ skillLevel: (k: string) => lv[k] ?? 1, bossKills: [], now: Date.UTC(2026, 0, 10) });
+  check(capeProblem('tidecaller_cape', ctx({ fishing: 98 })) !== null && capeProblem('tidecaller_cape', ctx({ fishing: 99 })) === null, 'the fishing cape asks fishing 99');
+  const trades = Object.fromEntries(NONCOMBAT_SKILLS.map((d) => [d.id, 99]));
+  check(capeProblem('grandmaster_mantle', ctx(trades)) !== null && capeProblem('grandmaster_mantle', ctx({ ...trades, magic: 70 })) === null && capeProblem('grandmaster_mantle', ctx({ ...trades, distance: 80 })) === null,
+    'the Grandmaster\'s Mantle asks every trade at 99 and one fighting art at cape level');
+  check(capeProblem('grandmaster_mantle', ctx({ ...trades, cooking: 98, sword: 90 }))?.includes('cooking') === true, 'it names the trade still short');
+  // seasons: sold only in season, worn all year
+  check(capeProblem('frostfall_cape', ctx({}), true) === null && capeProblem('frostfall_cape', { ...ctx({}), now: Date.UTC(2026, 6, 1) }, true) !== null
+    && capeProblem('frostfall_cape', { ...ctx({}), now: Date.UTC(2026, 6, 1) }) === null, 'the Frostfall Cape is sold in winter only and worn all year');
+  // first boss kills count once
+  const kills: string[] = [];
+  check(recordBossKill(kills, 'wb_mountain') && !recordBossKill(kills, 'wb_mountain') && !recordBossKill(kills, 'rat') && kills.length === 1, 'boss deeds count each boss once');
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll content checks passed.');

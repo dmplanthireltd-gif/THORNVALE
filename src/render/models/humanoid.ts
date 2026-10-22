@@ -7,6 +7,7 @@ import { CLOAK_LOOK, type CloakId } from '../../game/premium/premium';
 import { box, collectMaterials, cone, cyl, group, mat, matCache, sphere, type Mat } from './parts';
 import type { BipedRig } from './rigs';
 import { ARMOR_LOOK, makeShield, makeWeapon } from './weapons';
+import { buildCape } from './capes3d';
 
 /**
  * Chunky humanoid builder shared by NPC outfits and humanoid monsters (players: playerModel.ts).
@@ -655,6 +656,8 @@ export interface GearLook {
   feet: string | null;
   /** Founder cloak (CloakId); shown over any armour, even with gear hidden. */
   cloak?: string | null;
+  /** Worn cape item (slot `cape`, capes3d.ts): replaces the founder cloak, an armour set's cape and the outfit cape. */
+  cape?: string | null;
 }
 
 /** Helmets that cover the nape (long hair, ponytails and braids hide under them). */
@@ -687,7 +690,9 @@ export function applyGear(rig: BipedRig, eq: GearLook): void {
   const armor = eq.armor ? ITEMS[eq.armor] : undefined;
   g.pads.visible = false;
   if (armor) {
-    const parts = buildArmour(gearLook(armor, ARMOR_LOOK[armor.id]?.color), M);
+    const lk = gearLook(armor, ARMOR_LOOK[armor.id]?.color);
+    // a worn cape item takes the place of the set's own cape
+    const parts = buildArmour(eq.cape ? { ...lk, cape: undefined } : lk, M);
     for (const o of parts.torso) attach(rig.torso, o);
     for (const o of parts.armL) attach(rig.armL, o);
     for (const o of parts.armR) attach(rig.armR, o);
@@ -735,10 +740,17 @@ export function applyGear(rig: BipedRig, eq: GearLook): void {
 
   // founder cloak: replaces the outfit cape while worn and takes over its sway (CreatureView animates rig.cape)
   const own = rig.torso.userData.ownCape as THREE.Object3D | null | undefined;
-  const cl = eq.cloak && eq.cloak in CLOAK_LOOK ? CLOAK_LOOK[eq.cloak as CloakId] : undefined;
+  const cl = !eq.cape && eq.cloak && eq.cloak in CLOAK_LOOK ? CLOAK_LOOK[eq.cloak as CloakId] : undefined;
   if (own !== undefined) {
-    if (own) own.visible = !cl;
+    if (own) own.visible = !cl && !eq.cape;
     rig.cape = own;
+  }
+  // worn cape item: sized to the torso as dressed above, swings like any cape (rig.cape)
+  const worn = eq.cape ? buildCape(rig, eq.cape, M, own ?? null) : null;
+  if (worn) {
+    attach(rig.torso, worn.mantle);
+    attach(rig.torso, worn.pivot);
+    rig.cape = worn.pivot;
   }
   if (cl) {
     // any worn body armour now has plates, so the cloak always sits clear of it

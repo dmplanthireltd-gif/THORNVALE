@@ -7,6 +7,7 @@ import { BufferedIntent, type Game, type Session } from '../src/game/Game';
 import { setLevel } from '../src/game/admin';
 import { chebyshev } from '../src/game/core/types';
 import { equipSlotFor, ITEMS, type ItemDef } from '../src/game/inventory/items';
+import { TOWN_CAPES } from '../src/game/inventory/capes';
 import { executeCommand } from '../src/game/net/protocol';
 import type { Vocation } from '../src/game/player/vocations';
 import { randomAppearance } from '../src/game/player/appearance';
@@ -32,7 +33,8 @@ function bestGear(voc: Vocation, lvl: number): ItemDef[] {
   const score = (d: ItemDef) => (d.attack ?? 0) * 2 + (d.armor ?? 0) * 3 + (d.defense ?? 0) + (d.magicDamage ? d.magicDamage[1] : 0);
   for (const d of Object.values(ITEMS)) {
     const slot = equipSlotFor(d);
-    if (!slot || slot === 'backpack' || slot === 'ammo') continue;
+    // capes ask for skills or deeds; bots wear a town cape instead (see below)
+    if (!slot || slot === 'backpack' || slot === 'ammo' || slot === 'cape') continue;
     if (d.level && d.level > lvl) continue;
     if (d.vocations && !d.vocations.includes(voc)) continue;
     if (slot === 'weapon') {
@@ -64,6 +66,8 @@ export class Bots {
         const slot = equipSlotFor(d);
         if (slot) s.inventory.equipment[slot] = { id: d.id, qty: 1 };
       }
+      // a town cape, so the test realm shows some capes
+      s.inventory.equipment.cape = { id: TOWN_CAPES[i % TOWN_CAPES.length], qty: 1 };
       if (voc === 'paladin') {
         const spear = Object.values(ITEMS).filter((d) => d.weaponType === 'throwing' && (!d.level || d.level <= level)).sort((a, b) => (b.attack ?? 0) - (a.attack ?? 0))[0];
         if (spear) s.inventory.equipment.weapon = { id: spear.id, qty: 50 };
