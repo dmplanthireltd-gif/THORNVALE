@@ -14,6 +14,7 @@ import {
 } from '../src/game/world/weather';
 import { FLOWER_POISON_SECONDS, placeTraps, TRAP_REARM_SECONDS, VINE_ROOT_SECONDS } from '../src/game/world/traps';
 import { Ground } from '../src/game/world/WorldMap';
+import { isUnderwater } from '../src/game/world/sea';
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -161,6 +162,16 @@ if (snowTile) {
   check(wp.stepTime === base, 'the weather never changes the walking speed stat itself');
   const wz = g.weather.at(snowTile.x, snowTile.y);
   check(snowStepFactor(w, wz, snowTile.x + 1, snowTile.y, -1) === 1, 'no snow slowdown underground');
+}
+// the sea floor (Sunken Reach) is below ground: no weather reaches it, and snow never slows you there
+let seaTile: { x: number; y: number; z: number } | null = null;
+for (let y = 0; y < w.height && !seaTile; y += 2) for (let x = 0; x < w.width; x += 2) if (isUnderwater(w, x, y, -1)) { seaTile = { x, y, z: -1 }; break; }
+let surfaceSea = false;
+for (let y = 0; y < w.height && !surfaceSea; y += 3) for (let x = 0; x < w.width; x += 3) if (isUnderwater(w, x, y, 0)) surfaceSea = true;
+check(!!seaTile && !surfaceSea, 'the sea floor lies below ground level (the client draws no weather there)');
+if (seaTile) {
+  g.weather.force(WeatherKind.Blizzard, 1);
+  check(snowStepFactor(w, g.weather.at(seaTile.x, seaTile.y), seaTile.x, seaTile.y, -1) === 1, 'no weather slowdown under the sea');
 }
 g.weather.force(WeatherKind.Sandstorm, 1);
 const sv = sandVisibility(g.weather.at(100, 100));

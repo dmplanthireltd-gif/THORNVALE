@@ -18,7 +18,7 @@ export const LAYER_SAND = 3;
 export const LAYER_MIST = 4;
 export const LAYER_LEAF = 5;
 /** Buffer size of each layer (the "High" setting draws all of them at full strength). */
-export const LAYER_CAP = [3000, 700, 2600, 1500, 90, 180];
+export const LAYER_CAP = [3000, 700, 3400, 1800, 90, 180];
 
 const vert = /* glsl */ `
 attribute vec4 aSeed;
@@ -98,7 +98,7 @@ void main() {
     base.x += sin(uTime * (0.9 + aSeed.w) + aSeed.x * 40.0) * 0.4;
     base.z += cos(uTime * (0.7 + aSeed.w) + aSeed.y * 30.0) * 0.3;
     vec3 ctr = vec3(wrapC(base.x, W, uCenter.x), uCenter.y + base.y, wrapC(base.z, D, uCenter.z));
-    float s = 0.075 + 0.06 * aSeed.w;
+    float s = 0.09 + 0.07 * aSeed.w;
     P = ctr + uCamRight * (c.x * s) + uCamUp * (c.y * s);
     vAlpha = act;
   } else if (layer == 3) {
@@ -172,8 +172,8 @@ void main() {
     col = mix(vec3(0.58, 0.64, 0.74), uSnowColor, 1.0 - smoothstep(0.3, 0.75, d));
     a = 1.0 - smoothstep(0.7, 1.0, d);
   } else if (k == 3) {
-    col = uSandColor * (0.85 + 0.3 * vTone);
-    a = (1.0 - abs(q.x)) * (1.0 - abs(q.y)) * 0.5;
+    col = uSandColor * (0.8 + 0.35 * vTone);
+    a = (1.0 - smoothstep(0.4, 1.0, abs(q.x))) * (1.0 - abs(q.y)) * 0.75;
   } else if (k == 4) {
     float d = length(q);
     col = uMistColor;
@@ -229,7 +229,7 @@ export class WeatherParticles {
       uTime: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uBox: { value: new THREE.Vector3(40, 12, 40) },
       uCount: { value: [0, 0, 0, 0, 0, 0] }, uAlpha: { value: [0, 0, 0, 0, 0, 0] }, uWind: { value: new THREE.Vector2(1, 0) }, uGale: { value: 0 },
       uCamDir: { value: new THREE.Vector3(0, -1, 0) }, uCamRight: { value: new THREE.Vector3(1, 0, 0) }, uCamUp: { value: new THREE.Vector3(0, 0, -1) },
-      uRainColor: { value: new THREE.Color(0xd2e0f0) }, uSnowColor: { value: new THREE.Color(0xf6f9ff) }, uSandColor: { value: new THREE.Color(0xd2ad6e) },
+      uRainColor: { value: new THREE.Color(0xd2e0f0) }, uSnowColor: { value: new THREE.Color(0xf6f9ff) }, uSandColor: { value: new THREE.Color(0xf2dca6) },
       uMistColor: { value: new THREE.Color(0xd8e2d8) }, uLight: { value: 1 },
     };
     const m = new THREE.ShaderMaterial({

@@ -3,6 +3,7 @@ import type { Game } from '../../game/Game';
 import type { Player } from '../../game/player/Player';
 import { Climate, kindAmount, sandVisibility, WeatherKind, type WeatherState } from '../../game/world/weather';
 import { Ground, Obj } from '../../game/world/WorldMap';
+import { isUnderwater } from '../../game/world/sea';
 import { CAMERA_TILT_DEG } from '../CameraController';
 import { WeatherHaze } from './haze';
 import { LAYER_CAP, LAYER_LEAF, LAYER_MIST, LAYER_RAIN, LAYER_SAND, LAYER_SNOW, LAYER_SPLASH, WeatherParticles } from './particles';
@@ -35,7 +36,7 @@ const TILT = THREE.MathUtils.degToRad(CAMERA_TILT_DEG);
 /** How dark each kind makes the day at full strength. */
 const COVER: Record<WeatherKind, number> = {
   [WeatherKind.Clear]: 0, [WeatherKind.Cloudy]: 0.22, [WeatherKind.Rain]: 0.42, [WeatherKind.Storm]: 0.66,
-  [WeatherKind.Snow]: 0.24, [WeatherKind.Blizzard]: 0.45, [WeatherKind.Dust]: 0.08, [WeatherKind.Sandstorm]: 0.32,
+  [WeatherKind.Snow]: 0.24, [WeatherKind.Blizzard]: 0.45, [WeatherKind.Dust]: 0.08, [WeatherKind.Sandstorm]: 0.42,
   [WeatherKind.Mist]: 0.16, [WeatherKind.Downpour]: 0.52,
 };
 
@@ -105,7 +106,8 @@ export class WeatherView {
     this.settleNext = false;
     this.t += dt;
     const w = game.weatherView(me.id);
-    const under = me.z < 0;
+    // underground and under the sea (the Sunken Reach) there is no weather at all
+    const under = me.z < 0 || isUnderwater(game.world, me.x, me.y, me.z);
     const roof = !under && !!game.world.houseAt(me.x, me.y, me.z);
     const on = this.quality !== 'off';
     const scale = this.quality === 'low' ? 0.5 : 1;
@@ -195,17 +197,19 @@ export class WeatherView {
     const blizVeil = on ? this.blizzard * open * 0.5 : 0;
     const mistVeil = on ? Math.min(1, k(WeatherKind.Mist)) * open * 0.28 : 0;
     const rainVeil = on ? this.storm * open * 0.1 : 0;
+    const snowVeil = on ? Math.min(1, this.snow) * open * 0.1 : 0;
     const h = this.haze.u;
-    const sandW = this.hazeMax, other = blizVeil + mistVeil + rainVeil;
+    const sandW = this.hazeMax, other = blizVeil + mistVeil + rainVeil + snowVeil;
     const total = sandW + other;
     if (total > 0.004) {
-      this.hazeCol.setHex(0xc39a5a).multiplyScalar(sandW);
+      this.hazeCol.setHex(0x8a6234).multiplyScalar(sandW);
       this.hazeCol.add(this.tmpCol.setHex(0xe4ecf4).multiplyScalar(blizVeil));
       this.hazeCol.add(this.tmpCol.setHex(0xb9c9bd).multiplyScalar(mistVeil));
       this.hazeCol.add(this.tmpCol.setHex(0x6a7480).multiplyScalar(rainVeil));
+      this.hazeCol.add(this.tmpCol.setHex(0xc8d4e2).multiplyScalar(snowVeil));
       h.uColor.value.copy(this.hazeCol).multiplyScalar(1 / total).multiplyScalar(1 - this.cover * 0.45 + flash * 0.4);
-      h.uBase.value = sandW * 0.18 + blizVeil * 0.35 + mistVeil * 0.4 + rainVeil;
-      h.uMax.value = Math.max(h.uBase.value, sandW + blizVeil * 0.9 + mistVeil * 0.8 + rainVeil);
+      h.uBase.value = sandW * 0.3 + blizVeil * 0.35 + mistVeil * 0.4 + rainVeil + snowVeil;
+      h.uMax.value = Math.max(h.uBase.value, sandW + blizVeil * 0.9 + mistVeil * 0.8 + rainVeil + snowVeil);
       const r0 = sandW > 0.02 ? this.hazeR : 9;
       h.uR0.value = r0;
       h.uR1.value = r0 + 4;
@@ -213,7 +217,7 @@ export class WeatherView {
       h.uHalf.value.set((cam.right - cam.left) / (2 * zoom), (cam.top - cam.bottom) / (2 * zoom) / Math.cos(TILT));
       h.uWind.value.set(this.dirX, this.dirZ);
       h.uTime.value = this.t % 1000;
-      h.uStreak.value = on ? Math.min(0.7, sandW * 0.9 + blizVeil * 0.8) : 0;
+      h.uStreak.value = on ? Math.min(1.1, sandW * 1.3 + blizVeil * 0.9) : 0;
       this.haze.mesh.visible = true;
     } else {
       this.haze.mesh.visible = false;
