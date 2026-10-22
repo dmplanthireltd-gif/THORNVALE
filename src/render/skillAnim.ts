@@ -63,12 +63,19 @@ function toolsOn(rig: BipedRig): RigTools {
   let r = rigTools.get(rig);
   if (r) return r;
   const g = rig.gear!;
-  const holdR = group(g.weaponMount.position.x, g.weaponMount.position.y, g.weaponMount.position.z);
-  const holdL = group(-g.weaponMount.position.x, g.weaponMount.position.y, g.weaponMount.position.z);
-  holdR.rotation.order = 'ZXY';
-  holdL.rotation.order = 'ZXY';
-  rig.armR.add(holdR);
-  rig.armL.add(holdL);
+  // the arms may be stretched (slim player models): an outer holder undoes the arm's scale,
+  // the inner one carries the grip rotation, so tools keep their shape
+  const mount = (arm: THREE.Object3D, x: number): THREE.Group => {
+    const outer = group(x, g.weaponMount.position.y, g.weaponMount.position.z);
+    outer.scale.set(1 / (arm.scale.x || 1), 1 / (arm.scale.y || 1), 1 / (arm.scale.z || 1));
+    const inner = group();
+    inner.rotation.order = 'ZXY';
+    outer.add(inner);
+    arm.add(outer);
+    return inner;
+  };
+  const holdR = mount(rig.armR, g.weaponMount.position.x);
+  const holdL = mount(rig.armL, -g.weaponMount.position.x);
   // yaw outermost so a chop sweeps round the shoulder (identical to the default order while yaw is 0)
   rig.armR.rotation.order = 'YXZ';
   rig.armL.rotation.order = 'YXZ';
