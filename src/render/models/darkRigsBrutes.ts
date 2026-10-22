@@ -169,6 +169,7 @@ function darkCyclops(): BipedRig {
   const K = new Kit('cyclops', 0xffc040, 1.6);
   return man(K, {
     bulk: 1.45, legScale: 1.15,
+    headOff: [0, 0.1, 0.16],
     restArm: -0.4,
     leg: (m, side, L) => {
       leg(m, side, L, { thigh: CY_SKIN, shin: CY_SKIN, w: 0.26, claws: 0x2a2018, wraps: C.LEATHER });
@@ -179,7 +180,7 @@ function darkCyclops(): BipedRig {
       m.push([0, 0.06, -0.02], [0.24, 0, 0]);
       m.sph(0.5, CY_SKIN, [0, 0.22, 0.04], { s: [0.86, 0.56, 0.56], grit: 0.15 }); // pot belly
       m.sph(0.5, CY_SKIN, [0, 0.5, -0.02], { s: [0.96, 0.4, 0.54], grit: 0.15 }); // chest
-      m.sph(0.5, CY_SKIN_D, [0, 0.64, -0.08], { s: [0.96, 0.22, 0.44], grit: 0.2 }); // hunched shoulders
+      m.sph(0.5, CY_SKIN_D, [0, 0.6, -0.12], { s: [0.9, 0.2, 0.4], grit: 0.2 }); // hunched shoulders
       // a hide slung over one shoulder, scars and a crude bone necklace
       m.box(0.12, 0.42, 0.34, 0x5a4430, [0.26, 0.48, 0], { r: [0, 0, -0.6], grit: 0.4 });
       for (let i = 0; i < 4; i++) m.box(0.016, 0.3, 0.01, C.SCAR, [-0.25 + i * 0.05, 0.36, 0.3], { r: [0, 0, -0.4], flat: true });
