@@ -3,6 +3,7 @@ import { hash2 } from '../game/core/rng';
 import { Ground, Obj, WorldMap, type House } from '../game/world/WorldMap';
 import { oreAt } from '../game/gathering/mining';
 import { buildFoundersStone } from './models/foundersStone';
+import { buildPlazaView, type PlazaView } from './models/spawnPlaza';
 import { mat, toonGradient, type Mat } from './models/parts';
 import { groundTex, objTex } from './textures';
 
@@ -160,6 +161,8 @@ export class WorldView {
   private time = 0;
   private waterTex: THREE.Texture[] = [];
   private flameMats: Mat[] = [];
+  /** The Thornvale spawn plaza (fountain, paving, decorations), animated while its floor shows. */
+  private plaza: PlazaView | null = null;
   currentZ = 0;
   /** Fields laid by runes: they are drawn by the animated field sprites, not as static flames. */
   isRuneField: (x: number, y: number, z: number) => boolean = () => false;
@@ -178,6 +181,12 @@ export class WorldView {
       this.buildObjects(fv);
       for (const h of world.houses) if (h.z === z && !h.noRoof) this.buildRoof(fv, h);
       fv.group.visible = false;
+    }
+    const f0 = this.floors.get(0);
+    if (world.plaza && f0) {
+      this.plaza = buildPlazaView(world, world.plaza, (c, o) => f0.m(c, o));
+      f0.group.add(this.plaza.group);
+      this.flameMats.push(...this.plaza.flameMats);
     }
     // the meadow beyond the map edge
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), mat(0x2a4f6e));
@@ -1108,6 +1117,7 @@ export class WorldView {
       t.offset.x = Math.sin(this.time * 0.25) * 0.03;
       t.offset.y = this.time * 0.02;
     }
+    if (this.plaza && pz >= 0) this.plaza.update(dt);
     const flick = 0.75 + Math.sin(this.time * 9) * 0.12 + Math.sin(this.time * 23) * 0.08;
     for (const m of this.flameMats) m.emissiveIntensity = flick;
 

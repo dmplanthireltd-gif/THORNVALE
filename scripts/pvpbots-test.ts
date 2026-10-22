@@ -1,5 +1,5 @@
 /**
- * Arena bots (server/pvpBots.ts): runs the 4 vs 4 on the West Green for a few
+ * Arena bots (server/pvpBots.ts): runs the 4 vs 4 on the North Green for a few
  * simulated minutes and checks that both teams score, focus fire happens, the
  * bots never enter a protection zone or leave the arena, never touch real
  * players or monsters, drop nothing when they die and keep the tick cheap.

@@ -1,12 +1,13 @@
 import { Rng } from '../core/rng';
 import { DIRS8 } from '../core/types';
+import { buildSpawnPlaza } from './spawnPlaza';
 import { Ground, Obj, WorldMap, type EnemyKind } from './WorldMap';
 
 /**
  * Builds the original village of Thornvale procedurally (deterministic seed).
  *
  *   North : Greywood forest (wolves)
- *   Centre: stone plaza with the well, temple respawn and Captain Aldric
+ *   Centre: the spawn plaza (fountain, temple respawn, Captain Aldric; world/spawnPlaza.ts)
  *   East  : Miller's farm and barn (rats)
  *   South-west: the old graveyard (skeletons)
  *   West  : Mirror pond
@@ -89,61 +90,79 @@ export function buildVillage(seed = 1337): WorldMap {
   // --- plaza -----------------------------------------------------------------
   fillRect(22, 18, 33, 27, Ground.Stone);
   clearObj(21, 17, 34, 28);
-  m.setObj(25, 20, Obj.Well);
-  m.temple = { x: 28, y: 25, z: 0 };
-  m.playerSpawn = { x: 28, y: 25, z: 0 };
-  m.npcs.push({ key: 'aldric', x: 30, y: 20, z: 0 });
+  // the temple stands north of the plaza; new players appear inside its south door
+  m.temple = { x: 28, y: 16, z: 0 };
+  m.playerSpawn = { x: 28, y: 16, z: 0 };
 
   // --- houses ------------------------------------------------------------------
   let houseId = 0;
   const house = (
     x: number, y: number, w: number, h: number,
-    door: { x: number; y: number }[], roofColor: number, wallColor: number, name: string,
+    door: { x: number; y: number }[], roofColor: number, wallColor: number, name: string, opt: { stone?: boolean; floor?: Ground } = {},
   ) => {
     clearObj(x - 1, y - 1, x + w, y + h);
     for (let yy = y; yy < y + h; yy++) {
       for (let xx = x; xx < x + w; xx++) {
         const border = xx === x || yy === y || xx === x + w - 1 || yy === y + h - 1;
-        m.setGround(xx, yy, Ground.Wood);
+        m.setGround(xx, yy, opt.floor ?? Ground.Wood);
         m.setObj(xx, yy, border ? Obj.Wall : Obj.None);
       }
     }
     for (const d of door) m.setObj(d.x, d.y, Obj.Door);
-    m.houses.push({ id: houseId++, x, y, w, h, z: 0, roofColor, wallColor, name });
+    m.houses.push({ id: houseId++, x, y, w, h, z: 0, roofColor, wallColor, name, ...(opt.stone ? { stone: true } : {}) });
   };
 
-  house(33, 12, 8, 6, [{ x: 36, y: 17 }], 0x8e3b2e, 0xd8cbb0, 'Hall of Learning');
-  house(15, 13, 7, 6, [{ x: 18, y: 18 }], 0x5a6e8c, 0xcfc2a4, "Brunhild's Smithy");
-  house(19, 29, 7, 6, [{ x: 22, y: 29 }], 0x7d5a3a, 0xd4c7aa, "Mirella's Curiosities");
-  house(33, 28, 7, 6, [{ x: 36, y: 28 }], 0x3f6b4a, 0xd2c4a8, "Garrick's Outfitters");
-  house(42, 13, 9, 7, [{ x: 46, y: 19 }], 0x9a4a2c, 0xcbb994, 'Thornvale Depot & Bank');
+  // The spawn city around the fountain (world/spawnPlaza.ts draws the themed outsides):
+  //   N temple · W depot hall (the west road runs through it) · E bank · NE magic tower
+  //   NW outfitter · SE smithy · SW general store · S market board · SW wall: trainers' hall
+  house(23, 11, 10, 7, [{ x: 27, y: 11 }, { x: 28, y: 11 }, { x: 27, y: 17 }, { x: 28, y: 17 }], 0x3c5a8c, 0xe6dfcc, 'Temple of Thornvale', { stone: true, floor: Ground.Marble });
+  house(10, 18, 11, 10, [{ x: 10, y: 22 }, { x: 10, y: 23 }, { x: 20, y: 22 }, { x: 20, y: 23 }], 0x9a4a2c, 0xcbb994, 'Thornvale Depot', { stone: true, floor: Ground.Stone });
+  house(35, 24, 7, 6, [{ x: 35, y: 26 }], 0x6a5a2a, 0xe0d6bc, 'Thornvale Bank', { stone: true, floor: Ground.Marble });
+  house(35, 12, 7, 6, [{ x: 38, y: 17 }], 0x5a3a7a, 0xd6cbe0, "Mirella's Curiosities");
+  house(13, 12, 8, 6, [{ x: 20, y: 15 }], 0x3f6b4a, 0xd2c4a8, "Garrick's Outfitters");
+  house(31, 30, 8, 6, [{ x: 34, y: 30 }], 0x5a6e8c, 0xb8aa94, "Brunhild's Smithy", { stone: true });
+  house(18, 29, 7, 6, [{ x: 22, y: 29 }], 0x8e3b2e, 0xd8cbb0, 'General Store');
+  house(18, 37, 8, 5, [{ x: 22, y: 37 }], 0x7d5a3a, 0xd4c7aa, "Trainers' Hall");
   house(44, 34, 8, 6, [{ x: 47, y: 34 }, { x: 48, y: 34 }], 0x6b3a26, 0xa77a52, 'Miller Barn');
 
   // furniture (blocking props inside)
   const props: Array<[number, number, Obj]> = [
-    [34, 13, Obj.Table], [39, 13, Obj.Barrel], [39, 16, Obj.Crate], [34, 16, Obj.Barrel],
-    [16, 14, Obj.Table], [20, 14, Obj.Crate],
-    [20, 33, Obj.Barrel], [24, 33, Obj.Crate], [24, 30, Obj.Table],
-    [34, 32, Obj.Table], [38, 29, Obj.Barrel], [38, 32, Obj.Barrel],
-    [43, 14, Obj.Locker], [45, 14, Obj.Locker], [47, 14, Obj.Locker], [49, 14, Obj.Locker], [43, 17, Obj.Counter], [44, 17, Obj.Counter],
+    // depot hall: two long rows of lockers with gaps, either side of the road
+    // (the hall's own market board in the middle of the north row; a second one stands under the pavilion outside)
+    [11, 19, Obj.Locker], [13, 19, Obj.Locker], [15, 19, Obj.MarketBoard], [17, 19, Obj.Locker], [19, 19, Obj.Locker],
+    [11, 26, Obj.Locker], [13, 26, Obj.Locker], [15, 26, Obj.Locker], [17, 26, Obj.Locker], [19, 26, Obj.Locker],
+    // bank: counter between the banker and the hall
+    [38, 25, Obj.Counter], [38, 26, Obj.Counter], [38, 28, Obj.Counter],
+    // temple altar
+    [30, 13, Obj.Altar],
+    // magic shop, outfitter, general store
+    [36, 13, Obj.Table],
+    [14, 13, Obj.Table], [14, 16, Obj.Crate],
+    [19, 30, Obj.Counter], [20, 30, Obj.Counter], [23, 33, Obj.Barrel], [19, 33, Obj.Crate],
     [45, 38, Obj.Hay], [46, 38, Obj.Hay], [50, 38, Obj.Hay], [50, 35, Obj.Crate],
   ];
   for (const [x, y, o] of props) m.setObj(x, y, o);
-  m.npcs.push({ key: 'elias', x: 37, y: 15, z: 0 }, { key: 'brunhild', x: 18, y: 15, z: 0 }, { key: 'mirella', x: 22, y: 31, z: 0 }, { key: 'garrick', x: 36, y: 31, z: 0 }, { key: 'orwin', x: 44, y: 16, z: 0 });
-  for (const [x, y] of [[22, 19], [32, 19], [23, 27], [32, 26]]) m.setObj(x, y, Obj.Lamp);
+  m.npcs.push(
+    { key: 'aldric', x: 30, y: 19, z: 0 },
+    { key: 'elias', x: 21, y: 39, z: 0 }, { key: 'brunhild', x: 33, y: 33, z: 0 }, { key: 'mirella', x: 38, y: 14, z: 0 },
+    { key: 'garrick', x: 16, y: 14, z: 0 }, { key: 'orwin', x: 39, y: 26, z: 0 },
+  );
 
-  // door paths to the roads
-  pathLine(36, 18, 36, 21);
-  pathLine(18, 19, 18, 21);
-  pathLine(22, 28, 22, 24);
-  pathLine(36, 27, 36, 24);
-  pathLine(46, 20, 46, 21);
+  // door paths to the roads and the plaza
+  pathLine(27, 2, 27, 10);
+  pathLine(28, 2, 28, 10);
+  pathLine(21, 15, 21, 17);
+  pathLine(38, 18, 38, 21);
+  pathLine(22, 28, 22, 28);
+  pathLine(34, 29, 34, 28);
+  pathLine(22, 36, 22, 36);
+  pathLine(9, 22, 9, 23);
 
   // --- pond --------------------------------------------------------------------
-  const pcx = 8, pcy = 15;
+  const pcx = 6, pcy = 15;
   for (let y = pcy - 5; y <= pcy + 5; y++) {
     for (let x = pcx - 6; x <= pcx + 6; x++) {
-      const d = ((x - pcx) / 4.3) ** 2 + ((y - pcy) / 3.1) ** 2;
+      const d = ((x - pcx) / 3.2) ** 2 + ((y - pcy) / 2.8) ** 2;
       if (d <= 1) {
         m.setGround(x, y, Ground.Water);
         m.setObj(x, y, Obj.None);
@@ -178,7 +197,7 @@ export function buildVillage(seed = 1337): WorldMap {
   m.setObj(11, 34, Obj.DeadTree);
 
   // --- farm --------------------------------------------------------------------
-  const fx0 = 40, fy0 = 25, fx1 = 53, fy1 = 31;
+  const fx0 = 43, fy0 = 25, fx1 = 53, fy1 = 31;
   clearObj(fx0, fy0, fx1, fy1);
   for (let y = fy0; y <= fy1; y++) {
     for (let x = fx0; x <= fx1; x++) {
@@ -218,6 +237,9 @@ export function buildVillage(seed = 1337): WorldMap {
       else if (r < 0.13) m.setObj(x, y, Obj.Flowers);
     }
   }
+
+  // --- the spawn plaza: fountain and decorations (replaces the plain square above) --
+  buildSpawnPlaza(m);
 
   // --- border wall of pines ---------------------------------------------------
   for (let y = 0; y < MAP_H; y++) {

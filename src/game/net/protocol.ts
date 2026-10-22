@@ -25,7 +25,7 @@ import type { ExpStages } from '../progression/stages';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 21;
+export const PROTOCOL_VERSION = 22;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 

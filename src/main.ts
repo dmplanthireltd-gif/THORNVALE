@@ -9,10 +9,14 @@ import { Sfx } from './audio/Sfx';
 import { Music } from './audio/Music';
 import { StartScreen } from './ui/StartScreen';
 import { SEASON_STAGES } from './game/progression/stages';
+import { previewPlazaStyle } from './game/world/spawnPlaza';
 
 async function boot(): Promise<void> {
   const container = document.getElementById('app');
   if (!container) throw new Error('#app missing');
+  // `?plaza=N` previews another spawn plaza design (offline comparison only; the server builds the default)
+  const plazaQ = new URLSearchParams(location.search).get('plaza');
+  if (plazaQ !== null) previewPlazaStyle(Number(plazaQ));
   const saves = new SaveSystem();
   const music = new Music();
   const start = new StartScreen(container, saves);

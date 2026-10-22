@@ -1,3 +1,4 @@
+import { offsetPlaza } from './spawnPlaza';
 import { buildVillage, MAP_H as VH, MAP_W as VW } from './villageMap';
 import { Gen, type Dir } from './genKit';
 import { FERRIES, townByKey } from './townList';
@@ -154,15 +155,14 @@ function buildThornvale(g: Gen, late: Region[]): { gates: Record<Dir, { x: numbe
   for (const n of v.npcs) m.npcs.push({ ...n, x: n.x + OX, y: n.y + OY });
   m.playerSpawn = { x: v.playerSpawn.x + OX, y: v.playerSpawn.y + OY, z: 0 };
   m.temple = { ...m.playerSpawn };
+  m.plaza = v.plaza ? offsetPlaza(v.plaza, OX, OY) : null;
   const houses = m.houses.filter((h) => h.x >= OX && h.y >= OY && h.x < OX + VW && h.y < OY + VH);
   // the depot has a second floor with more lockers
-  const depot = houses.find((h) => h.name === 'Thornvale Depot & Bank')!;
+  const depot = houses.find((h) => h.name === 'Thornvale Depot')!;
   depot.noRoof = true;
   b.building(depot.x, depot.y, depot.w, depot.h, { z: 1, name: 'Depot Loft', roof: 0x9a4a2c, wallColor: 0xcbb994 });
   b.stairs({ x: depot.x + depot.w - 2, y: depot.y + depot.h - 3, z: 0 }, { x: depot.x + depot.w - 2, y: depot.y + depot.h - 3, z: 1 }, [-1, 0], [-1, 0]);
   for (let i = 1; i < depot.w - 3; i += 2) b.o(depot.x + i, depot.y + 1, Obj.Locker, 1);
-  // a small temple shrine on the plaza
-  m.setObj(OX + 31, OY + 25, Obj.Altar);
   // gates through the pine ring
   const nx = OX + 27;
   const gates: Record<Dir, { x: number; y: number }> = {
@@ -173,9 +173,9 @@ function buildThornvale(g: Gen, late: Region[]): { gates: Record<Dir, { x: numbe
   b.road(OX - 1, OY + 22, OX + 3, OY + 22);
   b.road(OX + VW - 4, OY + 22, OX + VW, OY + 22);
   // the sewers beneath the village (rats for beginners)
-  g.stairsDown(OX + 12, OY + 24, 0, Ground.Stone);
+  g.stairsDown(OX + 7, OY + 25, 0, Ground.Stone);
   const sewerRooms = b.dungeon(OX + 4, OY + 12, OX + 50, OY + 42, -1, 8, Ground.Stone);
-  b.tunnel(OX + 13, OY + 24, sewerRooms[0].x, sewerRooms[0].y, -1, Ground.Stone);
+  b.tunnel(OX + 8, OY + 25, sewerRooms[0].x, sewerRooms[0].y, -1, Ground.Stone);
   b.rect(OX + 4, OY + 14, OX + 50, OY + 42, (x, y) => {
     if (m.getGround(x, y, -1) === Ground.Stone && g.rng.chance(0.05)) m.setGround(x, y, Ground.Swamp, -1);
   });
@@ -190,7 +190,7 @@ function buildThornvale(g: Gen, late: Region[]): { gates: Record<Dir, { x: numbe
   b.npc('hask', p.npc.x, p.npc.y);
   m.destinations.thornvale = p.dest;
   g.protect(p.region[0], p.region[1], p.region[2], p.region[3]);
-  g.protect(OX + 18, OY + 12, OX + 37, OY + 30);
+  g.protect(OX + 9, OY + 11, OX + 42, OY + 41);
   late.push({ name: 'Thornvale Harbour', x0: p.region[0], y0: p.region[1], x1: p.region[2], y1: p.region[3], z0: 0, z1: 0, level: '—', safe: true });
 
   return {
@@ -201,7 +201,7 @@ function buildThornvale(g: Gen, late: Region[]): { gates: Record<Dir, { x: numbe
       b.region({ name: "Miller's Farm", x0: OX + 40, y0: OY + 25, x1: OX + 53, y1: OY + 39, level: '1+' });
       b.region({ name: 'Old Graveyard', x0: OX + 3, y0: OY + 31, x1: OX + 17, y1: OY + 40, level: '5+' });
       b.region({ name: 'Thornvale Sewers', x0: OX + 4, y0: OY + 14, x1: OX + 50, y1: OY + 42, level: '1+', z0: -1, z1: -1 });
-      b.region({ name: 'Temple Plaza', x0: OX + 21, y0: OY + 17, x1: OX + 34, y1: OY + 28, level: '—', safe: true, temple: m.temple });
+      b.region({ name: 'Temple Plaza', x0: OX + 21, y0: OY + 18, x1: OX + 34, y1: OY + 28, level: '—', safe: true, temple: m.temple });
       for (const h of houses) {
         if (h.name !== 'Miller Barn') b.region({ name: h.name, x0: h.x, y0: h.y, x1: h.x + h.w - 1, y1: h.y + h.h - 1, level: '—', safe: true, z0: 0, z1: 1 });
       }

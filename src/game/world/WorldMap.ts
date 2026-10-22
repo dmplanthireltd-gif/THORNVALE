@@ -1,4 +1,5 @@
 import type { TilePos } from '../core/types';
+import type { SpawnPlaza } from './spawnPlaza';
 
 /** Ground layer — what the tile floor is made of. */
 export enum Ground {
@@ -100,6 +101,10 @@ export enum Obj {
   TanningRack = 59,
   /** Stone on the Thornvale temple plaza carrying the names of the Legend founders (premium/premium.ts). */
   FoundersStone = 60,
+  /** A tile of the fountain basin in the middle of the Thornvale spawn plaza (world/spawnPlaza.ts); drawn by the plaza model. */
+  Fountain = 61,
+  /** A solid plaza decoration (bench, statue, planter, stall, brazier…; world/spawnPlaza.ts); drawn by the plaza model. */
+  PlazaDecor = 62,
 }
 
 const SOLID = new Set<number>([
@@ -108,7 +113,7 @@ const SOLID = new Set<number>([
   Obj.Cliff, Obj.Palisade, Obj.Campfire, Obj.Chest, Obj.Locker, Obj.Palm, Obj.Pillar,
   Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall, Obj.MagicWall, Obj.MarketBoard, Obj.Stump,
   Obj.CopperRock, Obj.TinRock, Obj.IronRock, Obj.CoalRock, Obj.SilverRock, Obj.GoldRock, Obj.StarsteelRock, Obj.DarkstoneRock, Obj.DepletedRock,
-  Obj.Furnace, Obj.Anvil, Obj.Stove, Obj.TanningRack, Obj.FoundersStone,
+  Obj.Furnace, Obj.Anvil, Obj.Stove, Obj.TanningRack, Obj.FoundersStone, Obj.Fountain, Obj.PlazaDecor,
 ]);
 
 /** Objects that stop arrows and spells. Trees and fences do not. */
@@ -233,6 +238,8 @@ export class WorldMap {
   playerSpawn: TilePos & { z: number } = { x: 0, y: 0, z: 0 };
   /** Default temple tile where players respawn. */
   temple: TilePos & { z: number } = { x: 0, y: 0, z: 0 };
+  /** Layout of the Thornvale spawn plaza (fountain and decorations) for the renderer; null = plain plaza. */
+  plaza: SpawnPlaza | null = null;
 
   constructor(readonly width: number, readonly height: number) {
     this.floors.set(0, new Floor(0, width, height, Ground.Grass));
@@ -391,6 +398,7 @@ export class WorldMap {
     for (const [k, d] of Object.entries(this.destinations)) m.destinations[k] = { ...d };
     m.playerSpawn = { ...this.playerSpawn };
     m.temple = { ...this.temple };
+    m.plaza = this.plaza ? { ...this.plaza, props: this.plaza.props.map((p) => ({ ...p })) } : null;
     return m;
   }
 

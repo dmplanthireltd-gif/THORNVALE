@@ -1,7 +1,7 @@
 /**
  * Arena bots (test servers): two teams of computer players, Red and Blue, fight
- * each other 4 vs 4 on the West Green beside the Thornvale temple plaza, so
- * anyone on the plaza (a protection zone) can watch.
+ * each other 4 vs 4 on the North Green behind the Thornvale temple (its north
+ * doors open onto it), so anyone at the temple door (a protection zone) can watch.
  *
  * - Levels 50–80, one knight, paladin, sorcerer and druid per team, in a party
  *   with their team, wearing the best full gear set for their vocation and level,
@@ -33,8 +33,8 @@ import { PALETTE } from '../src/game/player/outfits';
 import { expForLevel, type Player } from '../src/game/player/Player';
 import type { Vocation } from '../src/game/player/vocations';
 
-/** The battle area: open green west of the Thornvale temple plaza (protection-zone tiles inside are left out). */
-export const PVP_ARENA = { name: 'West Green', x0: 179, y0: 308, x1: 195, y1: 319, z: 0 } as const;
+/** The battle area: the open lawn north of the Thornvale temple (spawnPlaza.ts NORTH_GREEN; protection-zone tiles inside are left out). */
+export const PVP_ARENA = { name: 'North Green', x0: 186, y0: 292, x1: 213, y1: 300, z: 0 } as const;
 export const PVP_TEAM_MAX = 4;
 export const PVP_LEVEL_MIN = 50;
 export const PVP_LEVEL_MAX = 80;

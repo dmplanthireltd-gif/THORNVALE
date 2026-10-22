@@ -223,16 +223,25 @@ function carveRivers(g: Gen): void {
 function placeMarketBoards(m: WorldMap): void {
   for (const h of m.houses) {
     if (h.z !== 0 || !/depot/i.test(h.name)) continue;
-    placeAgainstWall(m, h, Obj.MarketBoard);
+    let has = false;
+    for (let y = h.y; y < h.y + h.h && !has; y++) for (let x = h.x; x < h.x + h.w; x++) if (m.getObj(x, y, 0) === Obj.MarketBoard) { has = true; break; }
+    if (!has) placeAgainstWall(m, h, Obj.MarketBoard);
   }
 }
 
 /**
  * The Founders' Stone (names of the Legend founders, premium/premium.ts) stands on
  * the Thornvale temple plaza, two tiles behind the altar, on an open tile that is
- * not the respawn point and keeps the plaza walkable around it.
+ * not the respawn point and keeps the plaza walkable around it — unless the spawn
+ * plaza design names a spot for it.
  */
 function placeFoundersStone(m: WorldMap): void {
+  // the spawn plaza design gives the stone its own spot (world/spawnPlaza.ts)
+  const f = m.plaza?.founders;
+  if (f && m.getObj(f.x, f.y, 0) === Obj.None && m.isWalkable(f.x, f.y, 0)) {
+    m.setObj(f.x, f.y, Obj.FoundersStone, 0);
+    return;
+  }
   const t = m.temple;
   let altar: { x: number; y: number } | null = null;
   for (let dy = -8; dy <= 8 && !altar; dy++) for (let dx = -8; dx <= 8; dx++) {
