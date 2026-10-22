@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Creature } from '../game/entities/Creature';
 import type { BipedRig, QuadRig, Rig } from './models/rigs';
+import { BlockAnim } from './anim/blockAnim';
 
 const TAU = Math.PI * 2;
 const baseEmissive = new WeakMap<THREE.Material, THREE.Color>();
@@ -39,6 +40,9 @@ export class CreatureView {
   /** Height of the floor this creature is drawn on. */
   yOffset = 0;
 
+  /** Shield block / weapon parry on top of the pose (anim/blockAnim.ts). */
+  readonly block = new BlockAnim();
+
   constructor(public creature: Creature, rig: Rig, private readonly parent: THREE.Object3D) {
     this.rig = rig;
     this.yaw = creature.facing;
@@ -54,6 +58,11 @@ export class CreatureView {
 
   onAttack(): void {
     this.attackT = 0;
+  }
+
+  /** A blow was blocked: raise the shield (or parry) toward world yaw `fromYaw`. */
+  onBlock(fromYaw: number | null): void {
+    this.block.start(fromYaw);
   }
 
   onHurt(): void {
@@ -136,6 +145,7 @@ export class CreatureView {
       if (this.attackT >= 1) this.attackT = -1;
     }
 
+    this.block.tick(dt);
     if (rig.type === 'biped') this.animateBiped(rig, atk, flash);
     else this.animateQuad(rig, atk, flash);
   }
@@ -173,6 +183,7 @@ export class CreatureView {
     rig.armR.rotation.z = atk >= 0 ? -0.15 : 0;
     rig.body.position.z = lunge;
     rig.body.rotation.x = -hurt * 0.22;
+    this.block.apply(rig, this.yaw, (this.creature as { enemyKind?: string }).enemyKind ?? null, atk >= 0);
   }
 
   private animateQuad(rig: QuadRig, atk: number, hurt: number): void {

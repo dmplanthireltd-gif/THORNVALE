@@ -12,6 +12,7 @@ import { NPCS } from '../game/npc/npcs';
 import { Npc } from '../game/npc/Npc';
 import { Player, spellLight } from '../game/player/Player';
 import { CreatureView } from './CreatureView';
+import { blockReaction, defensiveGuard } from './anim/blockFx';
 import { Effects, type FieldKind } from './Effects';
 import { applyGear } from './models/humanoid';
 import { buildPlayerRig } from './models/playerModel';
@@ -450,7 +451,9 @@ export class Renderer {
       if (e.amount > 0) this.float(e.targetId, String(e.amount), cls);
       if (e.manaShield) this.float(e.targetId, String(e.manaShield), 'mana', 1.1, 0.25);
     } else if (e.result === 'blocked') {
-      this.effects.block(pos);
+      // weapon blows (melee/distance) are caught on the shield or parried; magic just fizzles
+      if (e.element === 'physical') blockReaction(v, this.views.get(e.sourceId)?.creature.visualPos() ?? null, this.effects);
+      else this.effects.block(pos);
       this.float(e.targetId, 'blocked', 'miss', 0.8);
     } else {
       this.effects.poff(pos);
@@ -882,6 +885,7 @@ export class Renderer {
       view.ghost = c instanceof Player && c.buffs.invisible > 0 ? (c === p ? 0.45 : 0.2) : 1;
       const corpse = c instanceof Enemy ? c.corpseTimer > 0 : true;
       if (!c.dead) view.rig.root.visible = true;
+      if (c === p) view.block.guard = defensiveGuard(p);
       view.update(dt, corpse);
       this.skillAnim.apply(view, dt);
       if (c.dead || c.z !== pz) {

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ITEMS, type ItemDef } from '../../game/inventory/items';
 import { gearLook, MAT, rampOf } from './gearLooks';
 import { group, matCache, sbox, scone, scyl, ssphere, storus, type MatFn } from './parts';
+import { buildShieldModel, wornShield } from './shields3d';
 
 /**
  * Hand-held weapon and shield models, built from each item's weapon type and a
@@ -348,84 +349,13 @@ export const SHIELDS: Record<string, { face: number; rim: number; shape: 'round'
   darkstone_shield: { face: 0x3a2048, rim: 0x8a6aa0, shape: 'tower', boss: 0x6a3a7a, glow: 0x200a30 },
 };
 
+/** A worn shield (big, readable shapes and the posable hold): see shields3d.ts. */
 export function makeShield(id: string | null, M: MatFn = matCache()): THREE.Group | null {
   const d = id ? ITEMS[id] : undefined;
   const s = id ? SHIELDS[id] : undefined;
   if (!d || !s) return null;
   const lk = gearLook(d, s.face, s.rim);
-  const wooden = id === 'wooden_shield';
-  const face = M(wooden ? MAT.wood[1] : lk.m[1], s.glow ?? lk.glow);
-  const rim = M(lk.t[1]);
-  const hi = M(lk.m[0], s.glow ?? lk.glow);
-  const gemM = lk.gem !== undefined ? M(lk.gem, lk.gem) : null;
-  const rivet = (y: number, z: number) => ssphere(0.022, rim, 0.04, y, z);
-  const emblem = (y: number): THREE.Object3D[] => {
-    if (lk.emblem === 'cross') return [sbox(0.02, 0.24, 0.05, rim, 0.04, y, 0), sbox(0.02, 0.05, 0.18, rim, 0.04, y + 0.04, 0)];
-    if (lk.emblem === 'none' || lk.emblem === 'bar') return [sbox(0.02, 0.3, 0.05, rim, 0.04, y, 0), sbox(0.02, 0.05, 0.26, rim, 0.04, y, 0)];
-    return [rot(sbox(0.02, 0.1, 0.1, rim, 0.042, y, 0), Math.PI / 4, 0, 0)];
-  };
-  let g: THREE.Group;
-  switch (lk.shield) {
-    case 'round':
-      g = group(0, 0, 0,
-        rot(scyl(0.29, 0.29, 0.06, face, 0, 0, 0, 12), 0, 0, Math.PI / 2),
-        rot(storus(0.29, 0.025, rim, Math.PI * 2, 4, 16), 0, Math.PI / 2, 0),
-        ssphere(0.08, M(wooden ? MAT.iron[1] : lk.t[1]), 0.05, 0, 0),
-      );
-      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.add(rivet(Math.sin(a) * 0.24, Math.cos(a) * 0.24)); }
-      if (gemM) g.add(ssphere(0.03, gemM, 0.12, 0, 0));
-      break;
-    case 'book':
-      g = group(0, 0.05, 0,
-        sbox(0.08, 0.32, 0.26, face, 0, 0, 0),
-        sbox(0.06, 0.3, 0.24, M(0xf0e8d0), 0.012, 0, 0),
-        sbox(0.085, 0.32, 0.04, rim, 0, 0, -0.12),
-        sbox(0.09, 0.05, 0.05, rim, 0, 0.13, 0.11), sbox(0.09, 0.05, 0.05, rim, 0, -0.13, 0.11),
-        rot(sbox(0.02, 0.09, 0.09, rim, 0.045, 0, 0), Math.PI / 4, 0, 0),
-      );
-      if (gemM) g.add(ssphere(0.03, gemM, 0.055, 0, 0));
-      break;
-    case 'tower':
-      g = group(0, 0, 0,
-        sbox(0.07, 0.86, 0.5, rim, 0, 0, 0),
-        sbox(0.075, 0.78, 0.42, face, 0.002, 0, 0),
-        sbox(0.08, 0.04, 0.42, rim, 0.004, 0, 0), sbox(0.08, 0.78, 0.04, rim, 0.004, 0, 0),
-        ssphere(0.07, M(lk.t[1]), 0.05, 0.05, 0),
-        rivet(0.32, 0.16), rivet(0.32, -0.16), rivet(-0.32, 0.16), rivet(-0.32, -0.16),
-      );
-      if (lk.spikes) for (const z of [-0.2, 0.2]) g.add(scone(0.035, 0.14, rim, 0, 0.48, z, 4));
-      if (gemM) g.add(ssphere(0.035, gemM, 0.09, 0.05, 0));
-      break;
-    case 'skull':
-      g = group(0, 0, 0,
-        sbox(0.06, 0.5, 0.44, rim, 0, 0.06, 0),
-        X2(scone(0.22, 0.26, rim, 0, -0.32, 0, 4)),
-        ssphere(0.13, face, 0.04, 0.06, 0, 0.5, 1, 1),
-        sbox(0.02, 0.04, 0.05, M(0x140e0a), 0.1, 0.08, 0.05), sbox(0.02, 0.04, 0.05, M(0x140e0a), 0.1, 0.08, -0.05),
-      );
-      for (let i = -2; i <= 2; i++) g.add(scone(0.025, 0.1, face, 0, 0.35, i * 0.08, 4));
-      break;
-    default: {
-      // kite, heater, spiked
-      g = group(0, 0, 0,
-        sbox(0.06, 0.48, 0.44, rim, 0, 0.06, 0),
-        sbox(0.065, 0.42, 0.36, face, 0.002, 0.06, 0),
-        sbox(0.068, 0.04, 0.34, hi, 0.003, 0.25, 0),
-        X2(scone(0.22, lk.shield === 'kite' ? 0.28 : 0.18, rim, 0, -0.27, 0, 4)),
-        ...emblem(0.06),
-        rivet(0.26, 0.18), rivet(0.26, -0.18),
-      );
-      if (lk.shield === 'spiked') for (const [y, z] of [[0.3, 0.22], [0.3, -0.22], [-0.05, 0.24], [-0.05, -0.24]]) g.add(rot(scone(0.035, 0.14, rim, 0, y, z, 4), z > 0 ? Math.PI / 2 - 0.4 : -Math.PI / 2 + 0.4, 0, 0));
-      if (gemM) g.add(ssphere(0.035, gemM, 0.05, lk.emblem === 'cross' ? 0.1 : 0.06, 0));
-    }
-  }
-  g.rotation.y = -0.45;
-  return g;
-}
-
-function X2(o: THREE.Mesh): THREE.Mesh {
-  o.rotation.z = Math.PI;
-  return o;
+  return wornShield(buildShieldModel(d, lk, s, M), lk.shield === 'book', id === 'wooden_shield' || lk.m === MAT.wood);
 }
 
 /** Shoulder plates show which body armour is worn. */
@@ -458,6 +388,6 @@ function rot<T extends THREE.Object3D>(o: T, x: number, y: number, z: number): T
 // every weapon, shield and body armour has a colour entry (older code and tests read these tables)
 for (const d of Object.values(ITEMS)) {
   if (d.weaponType && !LOOKS[d.id]) { const lk = gearLook(d); LOOKS[d.id] = { c: lk.m[1], t: lk.t[1], g: lk.glow }; }
-  if (d.kind === 'shield' && !SHIELDS[d.id]) { const lk = gearLook(d); SHIELDS[d.id] = { face: lk.m[1], rim: lk.t[1], shape: lk.shield === 'book' ? 'book' : lk.shield === 'round' ? 'round' : lk.shield === 'tower' ? 'tower' : 'kite', glow: lk.glow }; }
+  if (d.kind === 'shield' && !SHIELDS[d.id]) { const lk = gearLook(d); SHIELDS[d.id] = { face: lk.m[1], rim: lk.t[1], shape: lk.shield === 'book' ? 'book' : lk.shield === 'round' || lk.shield === 'buckler' ? 'round' : lk.shield === 'tower' ? 'tower' : 'kite', glow: lk.glow }; }
   if (d.kind === 'armor' && !ARMOR_LOOK[d.id]) { const lk = gearLook(d); ARMOR_LOOK[d.id] = { color: lk.m[1], size: 0.14 + lk.tier * 0.01, plate: lk.body === 'plate' || lk.body === 'scale' }; }
 }

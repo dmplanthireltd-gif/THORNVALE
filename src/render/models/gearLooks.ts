@@ -54,7 +54,7 @@ export type HelmStyle = 'cap' | 'coif' | 'med' | 'full' | 'great' | 'horned' | '
 export type BodyStyle = 'leather' | 'chain' | 'plate' | 'scale' | 'robe' | 'fur' | 'bone' | 'vest';
 export type LegStyle = 'leather' | 'chain' | 'plate' | 'scale' | 'skirt' | 'fur' | 'bone';
 export type BootStyle = 'leather' | 'plate' | 'fur' | 'shoe' | 'bone' | 'wing';
-export type ShieldStyle = 'round' | 'kite' | 'heater' | 'tower' | 'book' | 'skull' | 'spiked';
+export type ShieldStyle = 'round' | 'buckler' | 'kite' | 'heater' | 'tower' | 'book' | 'skull' | 'spiked';
 export type Emblem = 'none' | 'cross' | 'crown' | 'star' | 'moon' | 'sun' | 'flake' | 'flame' | 'skull' | 'dragon' | 'leaf' | 'eye' | 'bar' | 'beard';
 
 export interface GearLook {
@@ -163,7 +163,8 @@ export const ITEM_LOOK: Record<string, Partial<LookSpec>> = {
   frostscale_shield: { shield: 'kite' },
   dragon_shield: { shield: 'kite' },
   demon_shield: { shield: 'spiked' },
-  bronze_shield: { shield: 'round' },
+  bronze_shield: { shield: 'buckler' },
+  mountainheart_shield: { shield: 'tower' },
   iron_shield: { shield: 'kite' },
   steel_shield: { shield: 'heater' },
   tower_shield: { shield: 'tower' },

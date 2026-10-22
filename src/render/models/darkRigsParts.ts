@@ -274,8 +274,12 @@ export function wCrossbow(m: Mesher, o: { wood?: number; metal?: number } = {}):
 
 /** Opens the shield's frame on the left forearm; the shield face is the local +Y side. */
 function shieldFrame(m: Mesher, tilt = 1.0): void {
-  m.push([0.11, -0.34, 0.08], [0, -0.6, tilt]);
+  // shields are drawn ~1.5x so they read as shields from the top-down camera (owner request)
+  m.push([0.14, -0.34, 0.1], [0, -0.6, tilt], [DARK_SHIELD_SCALE, DARK_SHIELD_SCALE, DARK_SHIELD_SCALE]);
 }
+
+/** Size multiplier for every shield on the dark monster models. */
+export const DARK_SHIELD_SCALE = 1.5;
 
 export function shRound(m: Mesher, o: { r?: number; wood?: number; rim?: number; boss?: number; cracked?: boolean; paint?: number; spike?: boolean } = {}): void {
   const r = o.r ?? 0.25;

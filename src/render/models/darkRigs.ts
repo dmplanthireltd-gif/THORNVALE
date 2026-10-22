@@ -12,6 +12,7 @@ import { DARK_BRUTES } from './darkRigsBrutes';
 import { DARK_CRAWLERS } from './darkRigsCrawlers';
 import { DARK_GIANTS } from './darkRigsGiants';
 import { DARK_DRAGONS } from './darkRigsDragons';
+import { DARK_SHIELD_SCALE } from './darkRigsParts';
 
 export { DARK_MONSTERS } from './darkRigsCore';
 
@@ -134,7 +135,7 @@ function darkSkeleton(): BipedRig {
       m.pop();
     } else {
       // cracked round shield, split by a blow, a broken arrow still in it
-      m.push([0.1, -0.36, 0.08], [0, -0.6, 1.0]);
+      m.push([0.13, -0.36, 0.1], [0, -0.6, 1.0], [DARK_SHIELD_SCALE, DARK_SHIELD_SCALE, DARK_SHIELD_SCALE]);
       m.add(new THREE.CylinderGeometry(0.25, 0.25, 0.045, 9, 1, false, 0.25, 2.9), 0x4a3a2a, [0, 0, 0], { grit: 0.3 });
       m.add(new THREE.CylinderGeometry(0.25, 0.25, 0.045, 9, 1, false, 3.3, 2.75), 0x3e3024, [0.015, 0, 0.01], { grit: 0.3 });
       m.ring(0.25, 0.025, RUST, [0, 0, 0], { grit: 0.4 }, Math.PI * 1.7, 12);

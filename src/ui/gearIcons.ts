@@ -933,6 +933,20 @@ function drawShield(x: Ctx, d: ItemDef): void {
       else shine(x, [14, 14.2, 15.2, 13.3], 0.8, 0.9);
       return;
     }
+    case 'buckler': {
+      // small fist shield: thick rim, two rings and a big pointed boss
+      part(x, () => { x.beginPath(); x.arc(16, 16, 12.5, 0, Math.PI * 2); }, polish(x, t, 4, 4, 28, 28));
+      part(x, () => { x.beginPath(); x.arc(16, 16, 10, 0, Math.PI * 2); }, radial(x, m, 16, 16, 10), () => {
+        x.beginPath(); x.arc(16, 16, 7.6, 0, Math.PI * 2); x.lineWidth = 0.7; x.strokeStyle = css(m[2]); x.stroke();
+        volume(x, 0.2, 0.4);
+      }, 0.9);
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + 0.4; rivet(x, 16 + Math.cos(a) * 11.2, 16 + Math.sin(a) * 11.2, 0.75, t); }
+      part(x, () => { x.beginPath(); x.arc(16, 16, 5.6, 0, Math.PI * 2); }, radial(x, t, 15, 15, 5.6), undefined, 0.9);
+      part(x, () => pts(x, [14.6, 16, 16, 11.5, 17.4, 16, 16, 17.4]), grad(x, m, 14, 11, 18, 17), undefined, 0.6);
+      if (lk.gem) gem(x, 16, 16, 1.3, lk.gem);
+      else shine(x, [13.6, 13.8, 14.8, 12.9], 0.8, 0.9);
+      return;
+    }
     case 'book': {
       part(x, () => { x.beginPath(); x.rect(7.5, 3.5, 19, 26); }, '#efe6cf', () => { for (let yy = 5; yy < 29; yy += 1.4) line(x, 24, yy, 27, yy, 0.3, '#a89878'); }, 0.9);
       part(x, () => { x.beginPath(); x.rect(5, 2.5, 19.5, 27); }, grad(x, m, 5, 2, 25, 30), () => {
