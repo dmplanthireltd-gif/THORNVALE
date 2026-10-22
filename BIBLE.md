@@ -414,7 +414,8 @@ Then `npm run build` (on Render or a machine with npm registry access).
 ## 12. Open work (keep current)
 
 - [x] Giant spiders on a plains area (2026-10-22): Gravewind Steppe with Dread Weavers and the rare Gravesilk Colossus.
-- [ ] Underground overhaul (owner request 2026-10-22): solid rock instead of black void, effects, bigger hunting grounds on floors −1…−4 — rolled out floor by floor (`CAVE_ROCK_FLOORS`, `DEEPENED_FLOORS`). Done: −1, −2, −3.
+- [x] Underground overhaul (owner request 2026-10-22): solid rock instead of black void, effects, bigger hunting grounds on floors −1…−4 — rolled out floor by floor (`CAVE_ROCK_FLOORS`, `DEEPENED_FLOORS`), all four floors live.
+- [ ] Underground later: owner to walk the caves and say where to tune (rock brightness, monster density in the new chambers); generating the world now takes a few hundred ms longer (`deepenUnderground`).
 
 - [ ] Render: `SUPABASE_SERVICE_KEY` set in dashboard; verify both startup log lines.
 - [ ] Supabase Auth: "Confirm email" off (or custom SMTP). Done 2026-10-21: Site URL `https://thornvaleonline.com`; redirect URLs `https://thornvaleonline.com/**`, `https://www.thornvaleonline.com/**`, `https://thornvale.onrender.com/**`.
@@ -577,3 +578,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-22 | — | Underground, floor −1 (owner request "no empty black blocks, bigger hunting grounds"): solid rock instead of black void (rock-top shader with boulders and cracks, jagged walls, stalactites, rubble, wall torches, crystals and amethyst seams; earth, ice, sandstone, volcanic, crypt and swamp styles), glow pools, 4 real lights on the nearest torches and braziers, dust motes, dripping puddles, a brighter cave ambient; all 22 hunting grounds on floor −1 grew by about 30,500 tiles (+73%: new chambers, side rooms, great halls, loop tunnels) with about 390 new spawns of their own monsters, dressed with rails, braziers, crystals, mushrooms, cobwebs and egg sacs | — | — |
 | 2026-10-22 | — | Underground, floor −2: solid rock look and bigger hunting grounds for all 8 areas (Deep Delvings, Crystal Depths, Aurelion Catacombs, Infernal Rift, Burning Catacombs, Hydra Nest, Behemoth Depths, Kesh Catacombs): about 10,600 new tiles (+85%) and 144 new spawns of their own monsters, same rules as floor −1 | — | — |
 | 2026-10-22 | — | Underground, floor −3: solid rock look and bigger hunting grounds for Molten Deep, Abyssal Halls and Pharaoh's Vault: about 2,950 new tiles (+103%) and 41 new spawns of their own monsters, same rules as floors −1 and −2 | — | — |
+| 2026-10-22 | — | Underground, floor −4: the Demon Pit in solid rock with glowing seams and lava, and about 650 new tiles (+98%: side chambers, a great hall, loop corridors) with 7 new spawns of the monsters living there; all four underground floors are now rolled out | — | — |
