@@ -5,6 +5,7 @@ import { SPELLS } from '../magic/spells';
 import { FERRIES, fare, TOWNS, type StaffRole } from '../world/townList';
 import { EXTRA_BUYS, EXTRA_SELLS, EXTRA_SPELLS, PRODUCTION_TOOLS } from './stock';
 import { FISH_ITEMS, FISHING_ROD, RAW_FISH_ITEMS } from '../gathering/fishing';
+import { applyCapeStock } from '../inventory/capes';
 
 export interface ShopEntry {
   id: string;
@@ -289,6 +290,9 @@ for (const n of Object.values(NPCS)) {
   if (harbour && !(n.sells ?? []).some((e) => e.id === FISHING_ROD)) n.sells = [...(n.sells ?? []), s(FISHING_ROD, 55)];
   if (harbour || n.buys?.includes('logs')) n.buys = [...new Set([...(n.buys ?? []), ...FISH_ITEMS, ...RAW_FISH_ITEMS])];
 }
+
+// capes (inventory/capes.ts): skill masters, town quest givers and seasonal sellers; every banker buys them
+applyCapeStock(NPCS);
 
 export function buyPrice(id: string): number {
   return ITEMS[id]?.value ?? 0;

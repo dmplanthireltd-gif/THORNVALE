@@ -11,7 +11,7 @@ export const DEPOT_MAX_SLOTS = 120;
 export type Equipment = Record<EquipSlot, ItemStack | null>;
 
 export function emptyEquipment(): Equipment {
-  return { head: null, amulet: null, backpack: null, armor: null, weapon: null, shield: null, legs: null, ring: null, ammo: null, feet: null };
+  return { head: null, amulet: null, backpack: null, armor: null, weapon: null, shield: null, legs: null, ring: null, ammo: null, feet: null, cape: null };
 }
 
 /** Backpack + equipment. Pure data with no rendering knowledge. */

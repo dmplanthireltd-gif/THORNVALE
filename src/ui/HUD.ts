@@ -50,7 +50,7 @@ const EQUIP_LAYOUT: Array<{ slot: EquipSlot; ph: string; name: string }> = [
   { slot: 'amulet', ph: 'amulet_of_warding', name: 'Amulet' }, { slot: 'head', ph: 'iron_helmet', name: 'Helmet' }, { slot: 'backpack', ph: 'backpack', name: 'Backpack' },
   { slot: 'weapon', ph: 'iron_sword', name: 'Weapon' }, { slot: 'armor', ph: 'chain_armor', name: 'Armour' }, { slot: 'shield', ph: 'wooden_shield', name: 'Shield / off-hand' },
   { slot: 'ring', ph: 'ring_of_vigor', name: 'Ring' }, { slot: 'legs', ph: 'chain_legs', name: 'Legs' }, { slot: 'ammo', ph: 'arrow', name: 'Ammunition' },
-  { slot: null as unknown as EquipSlot, ph: '', name: '' }, { slot: 'feet', ph: 'leather_boots', name: 'Boots' }, { slot: null as unknown as EquipSlot, ph: '', name: '' },
+  { slot: 'cape', ph: 'thornvale_cape', name: 'Cape' }, { slot: 'feet', ph: 'leather_boots', name: 'Boots' }, { slot: null as unknown as EquipSlot, ph: '', name: '' },
 ];
 
 interface Bar {
@@ -1856,7 +1856,7 @@ export class HUD {
     const gearNow = () => {
       const eq = this.s.inventory.equipment;
       const id = (k: keyof typeof eq) => eq[k]?.id ?? null;
-      return { weapon: id('weapon'), shield: id('shield'), armor: id('armor'), head: id('head'), legs: id('legs'), feet: id('feet'), cloak: this.s.player.cloak || null };
+      return { weapon: id('weapon'), shield: id('shield'), armor: id('armor'), head: id('head'), legs: id('legs'), feet: id('feet'), cloak: this.s.player.cloak || null, cape: this.s.cosmetics.hideCloak ? null : id('cape') };
     };
     d.setGear(this.designerGear ? gearNow() : null);
     const opts = el('div', 'dev-row', b);
@@ -1869,22 +1869,27 @@ export class HUD {
     }, `btn small${this.designerGear ? ' on' : ''}`);
     // founder looks: cloak and title can be switched off per character
     const tier = this.ctl.game.premiumView(this.ctl.pid)?.tier ?? null;
-    if (tier) {
+    // a worn cape can be hidden with the same switch as the founder cloak
+    const capeOn = !!this.s.inventory.equipment.cape;
+    if (tier || capeOn) {
       const fr = el('div', 'dev-row', b);
-      el('span', 'dev-label', fr, 'Founder');
+      el('span', 'dev-label', fr, tier ? 'Founder' : 'Cape');
       const cos = this.s.cosmetics;
-      const cb = button(fr, cos.hideCloak ? 'Cloak: hidden' : 'Cloak: shown', () => {
+      const what = tier ? (capeOn ? 'Cloak & cape' : 'Cloak') : 'Cape';
+      const cb = button(fr, cos.hideCloak ? `${what}: hidden` : `${what}: shown`, () => {
         this.ctl.send({ c: 'cosmetics', cloak: cos.hideCloak });
         cos.hideCloak = !cos.hideCloak;
-        cb.textContent = cos.hideCloak ? 'Cloak: hidden' : 'Cloak: shown';
+        cb.textContent = cos.hideCloak ? `${what}: hidden` : `${what}: shown`;
         cb.classList.toggle('on', !cos.hideCloak);
       }, `btn small${cos.hideCloak ? '' : ' on'}`);
-      const tb = button(fr, cos.hideTitle ? 'Title: hidden' : 'Title: shown', () => {
-        this.ctl.send({ c: 'cosmetics', title: cos.hideTitle });
-        cos.hideTitle = !cos.hideTitle;
-        tb.textContent = cos.hideTitle ? 'Title: hidden' : 'Title: shown';
-        tb.classList.toggle('on', !cos.hideTitle);
-      }, `btn small${cos.hideTitle ? '' : ' on'}`);
+      if (tier) {
+        const tb = button(fr, cos.hideTitle ? 'Title: hidden' : 'Title: shown', () => {
+          this.ctl.send({ c: 'cosmetics', title: cos.hideTitle });
+          cos.hideTitle = !cos.hideTitle;
+          tb.textContent = cos.hideTitle ? 'Title: hidden' : 'Title: shown';
+          tb.classList.toggle('on', !cos.hideTitle);
+        }, `btn small${cos.hideTitle ? '' : ' on'}`);
+      }
     }
     const row = el('div', 'trade-actions', b);
     button(row, 'Confirm', () => {

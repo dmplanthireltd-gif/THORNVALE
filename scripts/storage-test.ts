@@ -115,6 +115,9 @@ async function main(): Promise<void> {
   const s = g.addPlayer('Dawid', { vocation: 'druid' });
   s.player.level = 42;
   s.inventory.add('gold', 1234);
+  // the cape slot and boss deeds (save v13) are stored like any other equipment
+  s.inventory.equipment.cape = { id: 'starweave_cape', qty: 1 };
+  s.bossKills = ['wb_mountain'];
   await st.saveCharacter('dawid', 'Dawid', g.serialize(s.id));
   s.player.level = 43;
   await st.saveCharacter('dawid', 'Dawid', g.serialize(s.id));
@@ -124,6 +127,7 @@ async function main(): Promise<void> {
   const t = new Game();
   const s2 = t.addPlayer('Dawid', { vocation: 'knight' });
   check(t.applySave(s2.id, ch!.data) && s2.player.vocation === 'druid' && s2.inventory.count('gold') >= 1234, 'stored save loads into a game');
+  check(s2.inventory.equipment.cape?.id === 'starweave_cape' && s2.bossKills.includes('wb_mountain'), 'a worn cape and boss deeds survive Supabase save and load');
   await st.backupCharacter('dawid', ch!.data, 2, 'test');
   check(tables.character_backups.length === 1, 'backup row written');
   check((await st.allCharacters()).length === 1, 'all characters listed for export');

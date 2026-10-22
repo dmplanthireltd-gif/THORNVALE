@@ -26,7 +26,7 @@ import type { ExpStages } from '../progression/stages';
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 24;
+export const PROTOCOL_VERSION = 25;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -225,6 +225,8 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     const p = o.player;
     const eq: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(o.inventory.equipment)) eq[k] = v?.id ?? null;
+    // a hidden cape (the cloak switch) is hidden from everyone else too
+    if (o.cosmetics.hideCloak) eq.cape = null;
     const look = JSON.stringify([p.name, p.level, p.vocation, encodeAppearance(p.appearance), eq, p.showGear, p.illusion ?? '', p.cloak, p.title, p.premium]);
     const full = looks.get(p.id) !== look;
     if (full) looks.set(p.id, look);
@@ -396,6 +398,9 @@ export interface MirrorExtras {
   craft?: CraftView | null;
 }
 
+/** Cloak switch last applied from the server, per mirrored own session. */
+const cosApplied = new WeakMap<Session, boolean>();
+
 /** Applies a server snapshot to a mirror game. Emits the state-change events the server held back. */
 export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'snap' }>, extras?: MirrorExtras): void {
   const seenPlayers = new Set<number>();
@@ -539,7 +544,16 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     s.premiumNet = me.pm;
     ev.emit({ type: 'depotChanged', to: me.id });
   }
-  if (me.cos) s.cosmetics = { hideCloak: me.cos[0] === 0, hideTitle: me.cos[1] === 0 };
+  if (me.cos) {
+    const hideCloak = me.cos[0] === 0;
+    s.cosmetics = { hideCloak, hideTitle: me.cos[1] === 0 };
+    // the cloak switch also hides a worn cape: redraw our own character when it flips
+    // (compared with the last server value: the HUD flips its copy before the server answers)
+    if (cosApplied.get(s) !== hideCloak) {
+      cosApplied.set(s, hideCloak);
+      ev.emit({ type: 'equipmentChanged', id: me.id });
+    }
+  }
   if (snap.st) game.syncStumps(snap.st, p.x, p.y, p.z, VIEW_RADIUS + 4);
   if (me.tu) {
     const state = me.tu.s === 'active' || me.tu.s === 'skipped' ? me.tu.s : 'done';

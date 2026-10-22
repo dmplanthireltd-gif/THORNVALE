@@ -1,12 +1,14 @@
 import type { Vocation } from '../player/vocations';
 import { bonusParts, PIECE_SET, SET_BY_ID, SET_ITEM_SPECS, setSummary } from './sets';
+import { CAPE_BY_ID, CAPE_ITEM_SPECS, capeSummary } from './capes';
 
 export type ItemKind =
   | 'gold' | 'consumable' | 'rune' | 'tool' | 'material'
-  | 'weapon' | 'shield' | 'helmet' | 'armor' | 'legs' | 'boots' | 'amulet' | 'ring' | 'backpack' | 'ammo';
+  | 'weapon' | 'shield' | 'helmet' | 'armor' | 'legs' | 'boots' | 'amulet' | 'ring' | 'backpack' | 'ammo' | 'cape';
 
-export type EquipSlot = 'head' | 'amulet' | 'backpack' | 'armor' | 'weapon' | 'shield' | 'legs' | 'ring' | 'ammo' | 'feet';
-export const EQUIP_SLOTS: EquipSlot[] = ['head', 'amulet', 'backpack', 'armor', 'weapon', 'shield', 'legs', 'ring', 'ammo', 'feet'];
+/** `cape` (save v13+): skill, town, boss, deed and seasonal capes worn on the back (capes.ts). */
+export type EquipSlot = 'head' | 'amulet' | 'backpack' | 'armor' | 'weapon' | 'shield' | 'legs' | 'ring' | 'ammo' | 'feet' | 'cape';
+export const EQUIP_SLOTS: EquipSlot[] = ['head', 'amulet', 'backpack', 'armor', 'weapon', 'shield', 'legs', 'ring', 'ammo', 'feet', 'cape'];
 
 export type Element = 'physical' | 'fire' | 'energy' | 'ice' | 'earth' | 'death' | 'holy';
 export const ELEMENTS: Element[] = ['physical', 'fire', 'energy', 'ice', 'earth', 'death', 'holy'];
@@ -133,7 +135,7 @@ export type ItemSpec = Partial2;
 
 const ICONS: Record<string, string> = {
   gold: '●', consumable: '♥', rune: '◆', tool: '⚒', material: '◈', weapon: '†', shield: '◗', helmet: '∩',
-  armor: '▦', legs: '‖', boots: '⌐', amulet: '♁', ring: '○', backpack: '▤', ammo: '➶',
+  armor: '▦', legs: '‖', boots: '⌐', amulet: '♁', ring: '○', backpack: '▤', ammo: '➶', cape: '⌂',
 };
 const WEAPON_ICONS: Record<WeaponType, string> = {
   sword: '†', axe: '¶', club: '♣', bow: '⟆', crossbow: '⊢', throwing: '↗', wand: '⁄', rod: '∤',
@@ -502,6 +504,9 @@ const defs: ItemDef[] = [
 
   // --- gear sets: the pieces the sets were missing (sets.ts) ----------------------------------
   ...SET_ITEM_SPECS.map(def),
+
+  // --- capes (capes.ts): the cape slot --------------------------------------------------------
+  ...CAPE_ITEM_SPECS.map(def),
 ];
 
 /** Unique items only bosses drop (bosses/bosses.ts). */
@@ -540,6 +545,7 @@ export function equipSlotFor(d: ItemDef): EquipSlot | null {
     case 'ring': return 'ring';
     case 'backpack': return 'backpack';
     case 'ammo': return 'ammo';
+    case 'cape': return 'cape';
     default: return null;
   }
 }
@@ -575,6 +581,7 @@ export function describeItem(d: ItemDef): string {
   }
   if (d.kind === 'ammo') parts.push(`${d.ammoType}, Atk ${d.attack}${d.elementDamage ? ` +${d.elementDamage} ${d.element}` : ''}`);
   if (d.kind === 'shield') parts.push(`Def ${d.defense}`);
+  if (d.kind === 'cape' && CAPE_BY_ID[d.id]) parts.push(capeSummary(d.id));
   if (d.armor) parts.push(`Arm ${d.armor}`);
   if (d.slots) parts.push(`${d.slots} slots`);
   if (d.heal) parts.push(`heals ${d.heal}`);

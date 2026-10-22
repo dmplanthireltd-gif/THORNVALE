@@ -10,6 +10,7 @@ import type { Ability } from './enemies/enemyDefs';
 import type { Creature } from './entities/Creature';
 import { addToCapped, addToList, DEPOT_MAX_SLOTS, Inventory } from './inventory/Inventory';
 import { activeSets, type ActiveSet } from './inventory/sets';
+import { CAPE_BY_ID, capeProblem, capeTrainingBonus, parseBossKills, recordBossKill, DUNGEON_BOSS_KINDS, WORLD_BOSS_KINDS, type CapeContext } from './inventory/capes';
 import {
   FOUNDER_TIERS, founderTitle, FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, NO_PERKS, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS,
   PREMIUM_REGEN, PREMIUM_WARN_MS, PremiumZone, type AccountPerks, type FounderTier,
@@ -160,8 +161,10 @@ export interface Session {
   friends: string[];
   /** The account's premium time and founder pack (set by the server at login; offline: none). */
   perks: AccountPerks;
-  /** Per character: founder cloak / title switched off (save v9+). */
+  /** Per character: founder cloak / title switched off (save v9+). Hiding the cloak also hides a worn cape. */
   cosmetics: Cosmetics;
+  /** Boss kinds this character helped slay (deed capes; saved as `feats.bosses`, save v13+). */
+  bossKills: string[];
   /** Online mirror: premium state as last sent by the server. */
   premiumNet?: PremiumView;
   /** Premium was active at the last check (to notice it running out). */
@@ -236,6 +239,8 @@ export interface SaveData {
   cosmetics?: { hideCloak?: boolean; hideTitle?: boolean };
   /** Tutorial (save v11+): active on the island, done, or skipped. Older characters count as done. */
   tutorial?: { state: TutorialState['state']; step: number; flags?: number; count?: number };
+  /** Deeds for deed capes (save v13+): boss kinds helped slay. */
+  feats?: { bosses?: string[] };
 }
 
 export interface GameOptions {
@@ -411,7 +416,7 @@ export class Game implements AIContext {
     const session: Session = {
       id, player, inventory: new Inventory(), quests: new QuestLog(), dialogue: null,
       intent: opts.intent ?? new BufferedIntent(), depot: new Array(DEPOT_MAX_SLOTS).fill(null), depotOpen: null, friends: [],
-      perks: { ...NO_PERKS }, cosmetics: { hideCloak: false, hideTitle: false },
+      perks: { ...NO_PERKS }, cosmetics: { hideCloak: false, hideTitle: false }, bossKills: [],
       bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
       skills: startSkills(), gathering: emptySkillXp(), craftOpen: null, marketOpen: null, marketClaimed: [],
       // bots, mirror copies and old characters have nothing to do on the island; new ones are sent there by beginTutorial
@@ -551,8 +556,8 @@ export class Game implements AIContext {
   /** Adds tries to a skill and announces new levels. */
   trainSkill(s: Session, skill: CombatSkill, tries: number): void {
     if (!this.simulate || tries <= 0) return;
-    // exp stages: the skill's level picks the multiplier (fractions kept as a chance)
-    const staged = scaleAmount(tries, combatSkillRate(this.stages, skill, s.skills[skill].level));
+    // exp stages: the skill's level picks the multiplier (fractions kept as a chance); a skill cape adds a little
+    const staged = scaleAmount(tries * capeTrainingBonus(s.inventory.equipment.cape?.id, skill), combatSkillRate(this.stages, skill, s.skills[skill].level));
     const gained = addTries(s.skills, skill, staged, s.player.vocation);
     if (!gained) return;
     const lvl = s.skills[skill].level;
@@ -1306,8 +1311,8 @@ export class Game implements AIContext {
   /** Adds experience to a non-combat skill and announces new levels (the one path every trade skill uses). */
   gainSkill(s: Session, id: NonCombatSkill, xp: number, atId: number): void {
     const before = this.skillLevel(s, id);
-    // exp stages: the skill's level picks the multiplier
-    xp = Math.round(Math.max(0, xp) * gatheringRate(this.stages, before));
+    // exp stages: the skill's level picks the multiplier; a skill cape (or the Grandmaster's Mantle) adds a little
+    xp = Math.round(Math.max(0, xp) * gatheringRate(this.stages, before) * capeTrainingBonus(s.inventory.equipment.cape?.id, id));
     s.gathering[id] = Math.min(SKILL_XP_CAP, s.gathering[id] + xp);
     this.events.emit({ type: 'xp', amount: xp, atId, to: s.id, skill: id });
     const after = this.skillLevel(s, id);
@@ -2324,6 +2329,7 @@ export class Game implements AIContext {
         this.grantExp(s, exp, e.id, why);
       }
       if (e.enemyKind === 'rat') this.tutorialNote(pid, 'rat');
+      if (e.def.boss && recordBossKill(s.bossKills, e.enemyKind)) this.bossDeed(s, e.enemyKind);
       const changed = s.quests.onKill(e.enemyKind);
       for (const q of changed) {
         const qs = s.quests.get(q.id);
@@ -2346,6 +2352,18 @@ export class Game implements AIContext {
     const names = items.length ? items.map(describeStack).join(', ') : 'nothing';
     for (const pid of looters) this.msg(pid, `Loot of ${who}: ${names}.`, 'loot');
     if (items.length) this.dropBag(e.x, e.y, e.z, items);
+  }
+
+  /** A boss slain for the first time by this character: progress towards the deed capes. */
+  private bossDeed(s: Session, kind: EnemyKind): void {
+    s.wantsSave = true;
+    const list = DUNGEON_BOSS_KINDS.includes(kind) ? DUNGEON_BOSS_KINDS : WORLD_BOSS_KINDS.includes(kind) ? WORLD_BOSS_KINDS : null;
+    if (!list) return;
+    const done = list.filter((k) => s.bossKills.includes(k)).length;
+    const cape = list === DUNGEON_BOSS_KINDS ? CAPE_BY_ID.tyrantbane_cape : CAPE_BY_ID.worldbreaker_mantle;
+    const what = list === DUNGEON_BOSS_KINDS ? 'dungeon' : 'world';
+    this.msg(s.id, done >= list.length ? `You have slain all ${list.length} ${what} bosses! Captain Aldric of Thornvale has the ${cape.name} for you.`
+      : `First kill: ${done}/${list.length} ${what} bosses slain (the ${cape.name} awaits at ${list.length}).`, 'quest');
   }
 
   // ---------------------------------------------------------------- bosses, raids, summons
@@ -3484,12 +3502,25 @@ export class Game implements AIContext {
     const p = s.player;
     if (d.level && p.level < d.level) return `You need level ${d.level} to use this.`;
     if (d.vocations && !d.vocations.includes(p.vocation)) return `${VOCATIONS[p.vocation].name}s cannot use this.`;
+    if (d.kind === 'cape') {
+      const cp = capeProblem(d.id, this.capeContext(s));
+      if (cp) return cp;
+    }
     const slot = equipSlotFor(d);
     if (slot === 'shield') {
       const w = s.inventory.equipped('weapon');
       if (w && itemDef(w).twoHanded) return 'You are holding a two-handed weapon.';
     }
     return null;
+  }
+
+  /** What the cape rules need to know about a character (skill levels, bosses slain, the date). */
+  capeContext(s: Session): CapeContext {
+    return {
+      skillLevel: (sk) => (sk in s.skills ? s.skills[sk as CombatSkill].level : this.skillLevel(s, sk as NonCombatSkill)),
+      bossKills: s.bossKills,
+      now: this.now(),
+    };
   }
 
   useSlot(pid: number, slot: number): void {
@@ -3865,6 +3896,8 @@ export class Game implements AIContext {
     if (typeof show.title === 'boolean') s.cosmetics.hideTitle = !show.title;
     s.wantsSave = true;
     this.refreshPerks(s);
+    // the cloak switch also shows or hides a worn cape
+    if (typeof show.cloak === 'boolean') this.events.emit({ type: 'equipmentChanged', id: pid });
   }
 
   /**
@@ -4462,10 +4495,21 @@ export class Game implements AIContext {
         const d2 = itemDef(entry.id);
         const qty = Math.max(1, Math.min(100, Math.floor(Number(arg2 ?? 1)) || 1));
         const cost = entry.price * qty;
-        if (inv.count('gold') < cost) { d.text = "You'll need more coin than that."; break; }
+        const isCape = d2.kind === 'cape';
+        if (isCape) {
+          const cp = capeProblem(entry.id, this.capeContext(s), true);
+          if (cp) { d.text = cp; break; }
+        }
+        // capes cost a fortune: what the backpack lacks comes out of the bank
+        const fromBank = isCape ? Math.max(0, Math.min(s.bank, cost - inv.count('gold'))) : 0;
+        if (inv.count('gold') + fromBank < cost) { d.text = isCape ? `That is ${cost} gold, from your backpack and your bank together.` : "You'll need more coin than that."; break; }
         if (inv.weight() + d2.weight * qty > p.capacity) { d.text = "You couldn't carry that much."; break; }
         if (!inv.canFit(entry.id, qty)) { d.text = 'Your backpack is full.'; break; }
-        inv.removeById('gold', cost);
+        inv.removeById('gold', cost - fromBank);
+        if (fromBank) {
+          s.bank -= fromBank;
+          s.wantsSave = true;
+        }
         inv.add(entry.id, qty);
         d.text = `${qty > 1 ? `${qty} ${d2.name.toLowerCase()}s` : `One ${d2.name.toLowerCase()}`} for ${cost} gold. Anything else?`;
         this.events.emit({ type: 'inventoryChanged', to: pid });
@@ -4618,6 +4662,7 @@ export class Game implements AIContext {
       friends: [...s.friends],
       cosmetics: { hideCloak: s.cosmetics.hideCloak, hideTitle: s.cosmetics.hideTitle },
       tutorial: saveTutorial(s.tutorial),
+      feats: { bosses: [...s.bossKills] },
     };
   }
 
@@ -4676,6 +4721,7 @@ export class Game implements AIContext {
     s.lostItems = data.lostItems ?? [];
     s.friends = Array.isArray(data.friends) ? data.friends.filter((n): n is string => typeof n === 'string').slice(0, 100) : [];
     s.cosmetics = { hideCloak: data.cosmetics?.hideCloak === true, hideTitle: data.cosmetics?.hideTitle === true };
+    s.bossKills = parseBossKills(data.feats?.bosses);
     this.refreshPerks(s);
     s.tutorial = { ...parseTutorial(data.tutorial), canSkip: s.tutorial.canSkip };
     // a character finished with the island never stays on it
@@ -4719,6 +4765,7 @@ export class Game implements AIContext {
     s.chests = new Set();
     s.skills = startSkills();
     s.gathering = emptySkillXp();
+    s.bossKills = [];
     s.craftOpen = null;
     s.marketOpen = null;
     s.tutorial = { ...finishedTutorial(), canSkip: s.tutorial.canSkip };

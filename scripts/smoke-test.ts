@@ -37,7 +37,7 @@ import { PALETTE } from '../src/game/player/outfits';
 import {
   extendPremium, FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, FREE_TOWNS, LAUNCH_AT, NO_PERKS, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS, PRODUCTS,
 } from '../src/game/premium/premium';
-import { equipSlotFor, itemDef } from '../src/game/inventory/items';
+import { EQUIP_SLOTS, equipSlotFor, itemDef } from '../src/game/inventory/items';
 import { stepNo, TUTORIAL_LAST, TUTORIAL_STEPS } from '../src/game/tutorial/tutorial';
 import { ISLE, ISLE_CAPTAIN, ISLE_CELLAR_HOLE, ISLE_CHEST, ISLE_DEST, ISLE_GUIDE, ISLE_REST, ISLE_ROPE_SPOT, ISLE_START, ISLE_TRADER, onIsle } from '../src/game/world/tutorialIsle';
 
@@ -2446,6 +2446,82 @@ console.log('Appearance and the character designer (save v11 → v12)');
   check(mirror.getPlayer(pid)?.appearance.hair === 'mohawk' && looks.length >= 2, 'the mirror updates the look and tells the renderer');
   const snap3 = buildSnapshot(g, other) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>;
   check(snap3.c.find((c) => c.id === pid)?.ap === undefined, 'an unchanged look is not sent again');
+}
+
+console.log('Capes: the cape slot');
+{
+  const { g, s, pid } = solo('knight');
+  const eq = s.inventory.equipment;
+  check(EQUIP_SLOTS.includes('cape') && eq.cape === null, 'a new character has an empty cape slot');
+  // a town cape has no requirement: equip from the backpack, take it off again
+  s.inventory.add('thornvale_cape', 1);
+  executeCommand(g, pid, { c: 'useSlot', slot: s.inventory.slots.findIndex((x) => x?.id === 'thornvale_cape') });
+  check(eq.cape?.id === 'thornvale_cape' && s.inventory.count('thornvale_cape') === 0, 'using a cape puts it on the back');
+  executeCommand(g, pid, { c: 'unequip', slot: 'cape' });
+  check(eq.cape === null && s.inventory.count('thornvale_cape') === 1, 'unequip puts it back in the backpack');
+  // drag and drop onto the slot; a wrong item never goes in it
+  executeCommand(g, pid, { c: 'equipTo', from: s.inventory.slots.findIndex((x) => x?.id === 'thornvale_cape'), slot: 'cape' });
+  check(eq.cape?.id === 'thornvale_cape', 'dropping a cape on the cape slot wears it');
+  s.inventory.add('iron_sword', 1);
+  executeCommand(g, pid, { c: 'equipTo', from: s.inventory.slots.findIndex((x) => x?.id === 'iron_sword'), slot: 'cape' });
+  check(eq.cape?.id === 'thornvale_cape', 'a sword cannot go in the cape slot');
+  // a skill cape asks for its skill
+  s.inventory.add('bladesworn_cape', 1);
+  executeCommand(g, pid, { c: 'useSlot', slot: s.inventory.slots.findIndex((x) => x?.id === 'bladesworn_cape') });
+  check(eq.cape?.id === 'thornvale_cape' && s.inventory.count('bladesworn_cape') === 1, 'the Bladesworn Cape is refused below sword 80');
+  s.skills.sword.level = 80;
+  executeCommand(g, pid, { c: 'useSlot', slot: s.inventory.slots.findIndex((x) => x?.id === 'bladesworn_cape') });
+  check(eq.cape?.id === 'bladesworn_cape' && s.inventory.count('thornvale_cape') === 1, 'at sword 80 it swaps with the worn cape');
+
+  // save v13: migration from v12 (no cape slot), round trip
+  const v12 = JSON.parse(JSON.stringify({ ...g.serialize(pid), version: 12 })) as Record<string, unknown>;
+  delete ((v12.inventory as Record<string, unknown>).equipment as Record<string, unknown>).cape;
+  delete v12.feats;
+  const m = migrateSave(v12);
+  check(typeof m !== 'string' && m.from === 12 && m.data.version === SAVE_VERSION && SAVE_VERSION >= 13 && m.data.inventory.equipment.cape === null && m.lost.length === 0,
+    'a v12 save migrates with an empty cape slot and nothing lost');
+  const t = solo('druid');
+  check(t.g.applySave(t.pid, v12) && t.s.inventory.equipment.cape === null && t.s.inventory.equipment.armor?.id === eq.armor?.id && t.s.bossKills.length === 0, 'the migrated character loads with its gear');
+  s.bossKills = ['boss_ironjaw'];
+  const t2 = solo('druid');
+  check(t2.g.applySave(t2.pid, JSON.parse(JSON.stringify(g.serialize(pid)))) && t2.s.inventory.equipment.cape?.id === 'bladesworn_cape' && t2.s.bossKills[0] === 'boss_ironjaw', 'a worn cape and boss deeds round-trip save and load');
+
+  // others see it (look delta), and the cloak switch hides it from them too
+  const other = g.addPlayer('Watcher', { intent: new BufferedIntent() });
+  other.player.placeAt(s.player.x + 1, s.player.y, s.player.z);
+  const mirror = new Game({ simulate: false });
+  mirror.localId = other.id;
+  const snapOf = () => buildSnapshot(g, other) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>;
+  const ex = { depot: null, trade: null } as unknown as MirrorExtras;
+  applySnapshot(mirror, snapOf(), ex);
+  check(mirror.sessions.get(pid)?.inventory.equipment.cape?.id === 'bladesworn_cape', 'other players receive the worn cape');
+  check(snapOf().c.find((c) => c.id === pid)?.eq === undefined, 'an unchanged cape is not sent again');
+  executeCommand(g, pid, { c: 'unequip', slot: 'cape' });
+  const sn = snapOf();
+  check(sn.c.find((c) => c.id === pid)?.eq?.cape === null, 'taking it off goes out in the next snapshot');
+  applySnapshot(mirror, sn, ex);
+  check(mirror.sessions.get(pid)?.inventory.equipment.cape === null, 'the mirror takes the cape off');
+  s.inventory.removeById('bladesworn_cape', 1);
+  eq.cape = { id: 'bladesworn_cape', qty: 1 };
+  check(snapOf().c.find((c) => c.id === pid)?.eq?.cape === 'bladesworn_cape', 'putting it on again goes out too');
+  executeCommand(g, pid, { c: 'cosmetics', cloak: false });
+  check(s.cosmetics.hideCloak && eq.cape?.id === 'bladesworn_cape', 'the cloak switch hides the cape but it stays worn');
+  check(snapOf().c.find((c) => c.id === pid)?.eq?.cape === null, 'hiding the cloak hides the cape from others');
+  executeCommand(g, pid, { c: 'cosmetics', cloak: true });
+  check(snapOf().c.find((c) => c.id === pid)?.eq?.cape === 'bladesworn_cape', 'showing it again sends the cape');
+
+  // death: a worn cape drops like any worn item (about a quarter of the time)
+  const kill = () => (g as unknown as { killPlayer(p: unknown, k: null): void }).killPlayer(s.player, null);
+  let lost = 0;
+  for (let k = 0; k < 60; k++) {
+    eq.cape = { id: 'thornvale_cape', qty: 1 };
+    s.player.dead = false;
+    kill();
+    if (!eq.cape) lost++;
+  }
+  check(lost >= 5 && lost <= 30, `a worn cape drops on death about a quarter of the time (${lost}/60)`);
+  const body = g.bags.filter((b) => b.corpse === s.player.name).find((b) => b.items.some((i) => i.id === 'thornvale_cape'));
+  check(!!body, 'the dropped cape lies in the dead body');
 }
 
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);
