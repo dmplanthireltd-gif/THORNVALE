@@ -10,6 +10,7 @@ import { mat, toonGradient, type Mat } from './models/parts';
 import { buildCaveRock, CAVE_ROCK_FLOORS, CAVE_UNIFORMS, type LightSource } from './caveRock';
 import { DecorBuilder } from './caveDecor';
 import { groundTex, objTex } from './textures';
+import { applyWind, WIND_BUSH, WIND_CROP, WIND_GRASS, WIND_PALM, WIND_TREE } from './weather/wind';
 
 /** Vertical distance between floors in world units. */
 export const FLOOR_H = 3.4;
@@ -298,7 +299,9 @@ export class WorldView {
     // grass tufts on the surface
     if (z === 0 || z === 1) {
       const tuftGeo = geo(new THREE.ConeGeometry(0.05, 0.22, 3), 0.11);
-      const tufts = new Batch(tuftGeo, fv.m(0xffffff), false);
+      const tuftMat = fv.m(0xffffff);
+      applyWind(tuftMat, WIND_GRASS);
+      const tufts = new Batch(tuftGeo, tuftMat, false);
       for (let y = 0; y < w.height; y++) {
         for (let x = 0; x < w.width; x++) {
           const g = w.getGround(x, y, z);
@@ -347,6 +350,20 @@ export class WorldView {
     const trunkMat = M(0x7a5434, bark);
     const leafMat = M(0xffffff, leaves);
     const plainMat = M(0xffffff);
+    // wind (render/weather/wind.ts): canopies and trunks bend by height, bushes, ferns, flowers and crops on their own profiles
+    const bushMat = M(0xffffff, leaves);
+    const flowerMat = M(0xffffff);
+    const stemMat = M(0x3f7a2a);
+    const wheatMat = M(0xd8b64a);
+    const palmMat = M(0x9a7a4a, bark);
+    applyWind(leafMat, WIND_TREE);
+    applyWind(plainMat, WIND_BUSH);
+    applyWind(trunkMat, WIND_TREE);
+    applyWind(bushMat, WIND_BUSH);
+    applyWind(flowerMat, WIND_GRASS);
+    applyWind(stemMat, WIND_GRASS);
+    applyWind(wheatMat, WIND_CROP);
+    applyWind(palmMat, WIND_PALM);
     const trunkGeo = geo(new THREE.CylinderGeometry(0.11, 0.17, 1.3, 6), 0.65);
     const trunks = B(trunkGeo, trunkMat);
     // living trees get their own trunk batch, indexed by tile, so they can be felled
@@ -362,16 +379,16 @@ export class WorldView {
     const pine2 = B(new THREE.ConeGeometry(0.58, 1.05, 7), leafMat);
     const pine3 = B(new THREE.ConeGeometry(0.36, 0.85, 7), leafMat);
     const jungle1 = B(new THREE.IcosahedronGeometry(0.85, 0), leafMat);
-    const palmTrunk = B(geo(new THREE.CylinderGeometry(0.07, 0.12, 2.2, 5), 1.1), M(0x9a7a4a, bark));
+    const palmTrunk = B(geo(new THREE.CylinderGeometry(0.07, 0.12, 2.2, 5), 1.1), palmMat);
     const frond = B(geo(new THREE.BoxGeometry(0.22, 0.05, 1.0), 0), leafMat);
     const deadBranch = B(new THREE.CylinderGeometry(0.04, 0.07, 0.8, 5), M(0x5a5048));
     const rocks = B(new THREE.DodecahedronGeometry(0.42, 0), M(0xffffff, objTex.rock()));
-    const bushes = B(new THREE.IcosahedronGeometry(0.42, 0), leafMat);
-    const ferns = B(geo(new THREE.ConeGeometry(0.32, 0.4, 5), 0.2), leafMat, false);
+    const bushes = B(new THREE.IcosahedronGeometry(0.42, 0), bushMat);
+    const ferns = B(geo(new THREE.ConeGeometry(0.32, 0.4, 5), 0.2), bushMat, false);
     const berry = B(new THREE.IcosahedronGeometry(0.06, 0), plainMat);
-    const flowers = B(new THREE.IcosahedronGeometry(0.065, 0), plainMat, false);
-    const stems = B(geo(new THREE.CylinderGeometry(0.012, 0.012, 0.2, 3), 0.1), M(0x3f7a2a), false);
-    const wheat = B(geo(new THREE.ConeGeometry(0.06, 0.55, 4), 0.27), M(0xd8b64a), false);
+    const flowers = B(new THREE.IcosahedronGeometry(0.065, 0), flowerMat, false);
+    const stems = B(geo(new THREE.CylinderGeometry(0.012, 0.012, 0.2, 3), 0.1), stemMat, false);
+    const wheat = B(geo(new THREE.ConeGeometry(0.06, 0.55, 4), 0.27), wheatMat, false);
     const plaster = M(0xffffff, objTex.plaster());
     const brick = M(0xffffff, objTex.brick());
     const wallsWood = B(geo(new THREE.BoxGeometry(1, 1.7, 1), 0.85), plaster);
