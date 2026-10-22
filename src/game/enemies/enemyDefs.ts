@@ -3,6 +3,7 @@ import type { EnemyKind } from '../world/WorldMap';
 import { SET_DROPS } from '../inventory/sets';
 import { CAPE_DROPS } from '../inventory/capes';
 import { PET_DROPS } from '../pets/petDefs';
+import { SEA_ENEMIES } from './seaDefs';
 
 export interface LootEntry {
   id: string;
@@ -616,6 +617,8 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     abilities: [A('blast', 'sand swarm', 'earth', 80, 200, 6, 'earth', 5, 2), S('brood', 'scarab', 4, 8, 20), A('heal', 'royal jelly', 'holy', 500, 900, 15, 'heal')],
     loot: [L('gold', 1, 900, 1800), L('scarab_coin', 1, 4, 8), L('scarab_shield', 0.4), L('scarab_amulet', 0.4), L('small_emerald', 1, 1, 3)],
   }),
+  // the Sunken Reach (seaDefs.ts, world/sea.ts)
+  ...SEA_ENEMIES,
 };
 
 // gear-set pieces (inventory/sets.ts) join the loot tables of the monsters that wear them

@@ -302,6 +302,9 @@ export const MATERIAL_SHAPE: Record<string, [string, string]> = {
   raw_meat: ['rawmeat', '#c0605a'], raw_ham: ['rawmeat', '#d88a7a'], raw_fish: ['rawfish', '#9ab8cc'], raw_trout: ['rawfish', '#a8b47a'],
   raw_pike: ['rawfish', '#7a9a5a'], raw_salmon: ['rawfish', '#f09a80'], raw_ice_fish: ['rawfish', '#cfeef8'], raw_swordfish: ['rawfish', '#6a8ac0'],
   burnt_food: ['burnt', '#2a2018'],
+  // the Sunken Reach
+  pearl: ['pearl', '#f2ede2'], black_pearl: ['pearl', '#4a3a5a'], red_coral: ['coral', '#d8443a'], ironshell_claw: ['claw', '#7a5a44'],
+  glowing_jelly: ['jelly', '#8adcff'], deepfin_scale: ['scale', '#3a8a8a'], tide_shell: ['conch', '#e8c8a8'], gloom_eel_skin: ['pelt', '#2a3a4a'],
 };
 
 function drawMaterial(x: Ctx, d: ItemDef): void {
@@ -370,6 +373,72 @@ function drawMaterial(x: Ctx, d: ItemDef): void {
       x.strokeStyle = c;
       x.lineWidth = 1.4;
       x.stroke();
+      break;
+    case 'pearl': {
+      // a pearl resting in half an oyster shell
+      x.beginPath();
+      x.ellipse(16, 22, 13, 7, 0, 0, Math.PI);
+      paint(x, '#8a8478');
+      x.beginPath();
+      x.ellipse(16, 22, 11, 4, 0, 0, Math.PI * 2);
+      paint(x, '#e8dccc', 1);
+      const g = x.createRadialGradient(13, 14, 1, 16, 17, 8);
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.45, c);
+      g.addColorStop(1, shade(c, 0.55));
+      circle(x, 16, 17, 7, '#000');
+      x.beginPath();
+      x.arc(16, 17, 6.3, 0, Math.PI * 2);
+      x.fillStyle = g;
+      x.fill();
+      circle(x, 13.5, 14.5, 1.6, 'rgba(255,255,255,0.9)', 0);
+      break;
+    }
+    case 'coral':
+      bar(x, 16, 29, 16, 16, 3, c);
+      bar(x, 16, 20, 8, 10, 2.6, c);
+      bar(x, 16, 18, 25, 8, 2.6, c);
+      bar(x, 9, 12, 6, 4, 2, shade(c, 1.25));
+      bar(x, 10, 12, 13, 5, 2, shade(c, 1.25));
+      bar(x, 23, 10, 27, 4, 2, shade(c, 1.25));
+      bar(x, 16, 16, 17, 6, 2.2, shade(c, 1.15));
+      break;
+    case 'claw':
+      x.beginPath();
+      x.moveTo(5, 27);
+      x.quadraticCurveTo(6, 13, 17, 9);
+      x.quadraticCurveTo(26, 6, 29, 11);
+      x.quadraticCurveTo(22, 11, 19, 16);
+      x.quadraticCurveTo(25, 17, 27, 22);
+      x.quadraticCurveTo(18, 19, 13, 25);
+      x.closePath();
+      paint(x, c);
+      for (const [a, b] of [[12, 15], [16, 13], [9, 20]]) circle(x, a, b, 1.2, shade(c, 1.5), 0);
+      break;
+    case 'jelly':
+      glow(x, 16, 13, 14, 'rgba(120,220,255,0.55)');
+      for (let i = 0; i < 4; i++) bar(x, 10 + i * 4, 16, 9 + i * 4.5 + (i % 2), 28, 1.2, shade(c, 0.8));
+      x.beginPath();
+      x.moveTo(5, 17);
+      x.quadraticCurveTo(5, 4, 16, 4);
+      x.quadraticCurveTo(27, 4, 27, 17);
+      x.quadraticCurveTo(16, 14, 5, 17);
+      paint(x, c);
+      circle(x, 16, 11, 2.6, '#ffffff', 0);
+      break;
+    case 'conch':
+      x.beginPath();
+      x.moveTo(6, 25);
+      x.quadraticCurveTo(4, 10, 18, 5);
+      x.quadraticCurveTo(28, 4, 27, 14);
+      x.quadraticCurveTo(22, 26, 6, 25);
+      paint(x, c);
+      x.beginPath();
+      x.arc(18, 13, 5, 0, Math.PI * 1.6);
+      x.strokeStyle = shade(c, 0.6);
+      x.lineWidth = 1.4;
+      x.stroke();
+      poly(x, [6, 25, 3, 29, 10, 26], shade(c, 1.2), 1);
       break;
     case 'heart':
       glow(x, 16, 16, 15, 'rgba(255,140,40,0.6)');

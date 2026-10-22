@@ -23,6 +23,7 @@ import { buildEnemy, buildNpc, ENEMY_SCALE, type BipedRig, type Rig } from './mo
 import { Overlay } from './Overlay';
 import { PixelPass, TILE_PX } from './PixelPass';
 import { WorldView } from './WorldView';
+import { UnderwaterFx, type Breather } from './sea/underwater';
 import { Blood } from './Blood';
 import { playSkillFx } from './skillFx';
 import { SkillAnimator } from './skillAnim';
@@ -76,6 +77,8 @@ export class Renderer {
   private blood!: Blood;
   /** Tools in hand and work loops for mining, woodcutting, fishing and production (skillAnim.ts). */
   private skillAnim!: SkillAnimator;
+  /** The underwater look of the Sunken Reach (sea/underwater.ts). */
+  private underwater!: UnderwaterFx;
   private sky = new THREE.Color(0x2a4f6e);
   private dark = new THREE.Color(0x000000);
 
@@ -111,6 +114,9 @@ export class Renderer {
     this.effects = new Effects(this.scene);
     this.blood = new Blood(this.scene, (z) => this.worldView.floorOffset(z));
     this.skillAnim = new SkillAnimator(this.scene, this.effects, { game: () => this.ctl.game, near: (x, y) => chebyshev(x, y, this.me.x, this.me.y) <= VIEW_RANGE + 2 });
+    this.underwater = new UnderwaterFx(this.scene, ctl.game.world, { hemi: this.hemi, sun: this.sun, torch: this.torch, background: this.scene.background as THREE.Color }, () => {
+      this.lastPz = Number.NaN;
+    });
     this.overlay = new Overlay(container, this.cam.camera);
     for (const b of ctl.game.bags) this.addBag(b);
 
@@ -807,6 +813,7 @@ export class Renderer {
       if (tree) return `A ${tree.name}${tree.level > 1 ? ` (woodcutting ${tree.level})` : ''}${h.usable ? ' — click to chop' : ''}`;
       if (o === Obj.Stump) return 'A tree stump. It will grow back.';
       if (o === Obj.MarketBoard) return 'Market board — buy from and sell to other players';
+      if (o === Obj.Whirlpool) return this.me.z < 0 ? 'Rising bubbles — step in to swim up to Pearl Pier' : 'A whirlpool — step in to dive into the Sunken Reach';
       if (o === Obj.FoundersStone) return "The Founders' Stone — the names of Thornvale's Legends";
       const ore = oreAt(o);
       if (ore) return `A ${ore.name}${ore.level > 1 ? ` (mining ${ore.level})` : ''}${h.usable ? ' — click to mine' : ''}`;
@@ -888,6 +895,7 @@ export class Renderer {
       if (c === p) view.block.guard = defensiveGuard(p);
       view.update(dt, corpse);
       this.skillAnim.apply(view, dt);
+      if (this.underwater.active && c instanceof Player && !c.dead && c.z === pz) this.underwater.swim(view, c.id);
       if (c.dead || c.z !== pz) {
         this.overlay.setLabel(c.id, null, c.name, 0);
       } else {
@@ -974,6 +982,15 @@ export class Renderer {
     this.torch.intensity = light > 0 ? (pz < 0 ? 5 + light * 1.4 : 1.5) : 0;
     this.torch.distance = 3 + light * 1.8;
     this.torch.position.set(vp.x, 2.2, vp.y + 0.3);
+    // under the sea: blue light, fog, light shafts and bubbles (sea/underwater.ts)
+    const breathers: Breather[] = [];
+    if (this.underwater.active) {
+      for (const v of this.views.values()) {
+        const c = v.creature;
+        if (!c.dead && c.z === pz && v.rig.root.visible) breathers.push({ id: c.id, x: v.rig.root.position.x, z: v.rig.root.position.z, top: v.yOffset + v.rig.height * 0.85 });
+      }
+    }
+    this.underwater.update(dt, p, f, breathers);
 
     // shake the view in whole art pixels so the pixel grid never swims
     const sh = this.effects.shakeOffset();

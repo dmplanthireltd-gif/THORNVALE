@@ -75,7 +75,11 @@ export class Tracks {
     const safe = g.world.isSafe(x, y, p.z);
     if (now - this.lastSample > 1000) {
       this.lastSample = now;
-      this.sampled = p.z < 0 ? (this.surroundings(x, y, p.z) === 'volcano' ? 'volcano' : 'deep') : safe ? 'town' : this.surroundings(x, y, p.z);
+      if (p.z < 0) {
+        // underground: the deep, lava caves, or the sea floor of the Sunken Reach
+        const zone = this.surroundings(x, y, p.z);
+        this.sampled = zone === 'volcano' || zone === 'sea' ? zone : 'deep';
+      } else this.sampled = safe ? 'town' : this.surroundings(x, y, p.z);
     }
     const fighting = !safe && now - this.lastCombat < BATTLE_HOLD_MS;
     const next: Zone = fighting ? 'battle' : this.sampled;
@@ -110,7 +114,7 @@ export class Tracks {
         else if (gr === Ground.Jungle) wild++;
         else if (gr === Ground.Swamp) bog++;
         else if (gr === Ground.DarkGrass) wood++;
-        else if (gr === Ground.Water || gr === Ground.DeepWater) water++;
+        else if (gr === Ground.Water || gr === Ground.DeepWater || gr === Ground.Seabed) water++;
       }
     }
     if (!n) return 'fields';

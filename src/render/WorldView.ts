@@ -5,6 +5,7 @@ import { oreAt } from '../game/gathering/mining';
 import { buildFoundersStone } from './models/foundersStone';
 import { buildDepotHallsView, type DepotHallsView } from './models/depotHalls';
 import { buildPlazaView, type PlazaView } from './models/spawnPlaza';
+import { buildSeaView, type SeaView } from './sea/seaView';
 import { mat, toonGradient, type Mat } from './models/parts';
 import { groundTex, objTex } from './textures';
 
@@ -28,6 +29,7 @@ const GROUND_TEX: Partial<Record<Ground, (v: number) => THREE.Texture>> = {
   [Ground.Jungle]: groundTex.jungle,
   [Ground.Marble]: groundTex.marble,
   [Ground.DeepWater]: groundTex.deepWater,
+  [Ground.Seabed]: groundTex.seabed,
 };
 
 /** Collects instance transforms for one shared geometry/material pair. */
@@ -166,6 +168,8 @@ export class WorldView {
   private plaza: PlazaView | null = null;
   /** The big depot halls of the other towns (signs, lanterns, lit interiors). */
   private depotHalls: DepotHallsView | null = null;
+  /** The Sunken Reach (game/world/sea.ts): reef, wrecks, caustics, whirlpool. */
+  private sea: SeaView | null = null;
   currentZ = 0;
   /** Fields laid by runes: they are drawn by the animated field sprites, not as static flames. */
   isRuneField: (x: number, y: number, z: number) => boolean = () => false;
@@ -194,6 +198,11 @@ export class WorldView {
     if (world.depotHalls.length && f0) {
       this.depotHalls = buildDepotHallsView(world.depotHalls, (c, o) => f0.m(c, o));
       f0.group.add(this.depotHalls.group);
+    }
+    if (world.sea) {
+      this.sea = buildSeaView(world, world.sea);
+      this.floors.get(0)?.group.add(this.sea.surface);
+      this.floors.get(world.sea.z)?.group.add(this.sea.floor);
     }
     // the meadow beyond the map edge
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), mat(0x2a4f6e));
@@ -1117,6 +1126,7 @@ export class WorldView {
       t.offset.y = this.time * 0.02;
     }
     if (this.plaza && pz >= 0) this.plaza.update(dt);
+    this.sea?.update(dt, pz);
     const flick = 0.75 + Math.sin(this.time * 9) * 0.12 + Math.sin(this.time * 23) * 0.08;
     for (const m of this.flameMats) m.emissiveIntensity = flick;
 

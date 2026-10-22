@@ -7,6 +7,7 @@ import { EXTRA_BUYS, EXTRA_SELLS, EXTRA_SPELLS, PRODUCTION_TOOLS } from './stock
 import { PET_ITEMS, PET_KEEPER, PET_KEEPER_ROLE, PET_SELLS } from '../pets/petDefs';
 import { FISH_ITEMS, FISHING_ROD, RAW_FISH_ITEMS } from '../gathering/fishing';
 import { applyCapeStock } from '../inventory/capes';
+import { SEA_MATERIAL_IDS } from '../inventory/seaItems';
 
 export interface ShopEntry {
   id: string;
@@ -282,6 +283,21 @@ NPCS.isle_captain = {
   look: { type: 'citizen', head: 2, body: 27, legs: 108, feet: 98 },
   travel: [{ key: 'thornvale', name: 'Thornvale', price: 0 }],
 };
+
+// ---------------------------------------------------------------- the Sunken Reach (world/sea.ts)
+// Nerissa on Pearl Pier explains the dive, sells supplies and buys every sea good;
+// bankers buy pearls like the other gems.
+NPCS.pearl_diver = {
+  key: 'pearl_diver', name: 'Nerissa', role: 'Pearl diver — sea goods', prop: 'oar',
+  greeting: 'Mind the planks, {name}. Under this pier lies the Sunken Reach: kelp, coral, two old wrecks and the deepfins who claim them. '
+    + 'Step into the whirlpool at the end of the pier to dive. You will breathe down there; the old sea-blessing on that water still holds. '
+    + 'The bubble column in Pearl Grotto carries you back up. It is no place for anyone under level 40, and everything down there comes in swarms, '
+    + 'so bring area runes. I pay well for pearls, coral, claws and scales.',
+  look: { type: 'citizen', head: 17, body: 86, legs: 88, feet: 98 },
+  sells: [s('health_potion', 45), s('strong_health_potion', 100), s('mana_potion', 50), s('strong_mana_potion', 90), s('avalanche_rune', 45), s('stoneshower_rune', 45), s('fireball_rune', 40)],
+  buys: [...SEA_MATERIAL_IDS],
+};
+for (const n of Object.values(NPCS)) if (n.bank) n.buys = [...new Set([...(n.buys ?? []), 'pearl', 'black_pearl'])];
 
 // ---------------------------------------------------------------- fishing trade
 // Harbour captains and ferrymen sell rods and buy the catch (raw or cooked); every

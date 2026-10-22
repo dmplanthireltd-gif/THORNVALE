@@ -1,6 +1,7 @@
 import type { TilePos } from '../core/types';
 import type { DepotHall } from './depotHalls';
 import type { SpawnPlaza } from './spawnPlaza';
+import type { SeaKind, SeaLayout } from './sea';
 
 /** Ground layer — what the tile floor is made of. */
 export enum Ground {
@@ -25,6 +26,8 @@ export enum Ground {
   Snow = 17,
   /** Glacier and frozen lakes (walkable). */
   Ice = 18,
+  /** Sandy sea floor of the Sunken Reach (world/sea.ts; walkable, underwater). */
+  Seabed = 19,
 }
 
 /** Object layer — what stands on the tile. */
@@ -106,6 +109,13 @@ export enum Obj {
   Fountain = 61,
   /** A solid plaza decoration (bench, statue, planter, stall, brazier…; world/spawnPlaza.ts); drawn by the plaza model. */
   PlazaDecor = 62,
+  // the Sunken Reach (world/sea.ts); all three are drawn by render/sea/seaView.ts
+  /** A whirlpool at the end of Pearl Pier (dive down) / a rising bubble column on the sea floor (swim up). */
+  Whirlpool = 63,
+  /** A solid piece of reef: coral heads, tall kelp, sea rocks (kind in `WorldMap.sea.props`). */
+  Coral = 64,
+  /** The planked hull of a sunken ship (blocks sight like a wall). */
+  Hull = 65,
 }
 
 const SOLID = new Set<number>([
@@ -114,11 +124,11 @@ const SOLID = new Set<number>([
   Obj.Cliff, Obj.Palisade, Obj.Campfire, Obj.Chest, Obj.Locker, Obj.Palm, Obj.Pillar,
   Obj.Stalagmite, Obj.StoneWall, Obj.Counter, Obj.Altar, Obj.JungleTree, Obj.Railing, Obj.SandWall, Obj.MagicWall, Obj.MarketBoard, Obj.Stump,
   Obj.CopperRock, Obj.TinRock, Obj.IronRock, Obj.CoalRock, Obj.SilverRock, Obj.GoldRock, Obj.StarsteelRock, Obj.DarkstoneRock, Obj.DepletedRock,
-  Obj.Furnace, Obj.Anvil, Obj.Stove, Obj.TanningRack, Obj.FoundersStone, Obj.Fountain, Obj.PlazaDecor,
+  Obj.Furnace, Obj.Anvil, Obj.Stove, Obj.TanningRack, Obj.FoundersStone, Obj.Fountain, Obj.PlazaDecor, Obj.Coral, Obj.Hull,
 ]);
 
 /** Objects that stop arrows and spells. Trees and fences do not. */
-const BLOCKS_SIGHT = new Set<number>([Obj.Wall, Obj.Cliff, Obj.Palisade, Obj.Pillar, Obj.StoneWall, Obj.Stalagmite, Obj.SandWall, Obj.MagicWall]);
+const BLOCKS_SIGHT = new Set<number>([Obj.Wall, Obj.Cliff, Obj.Palisade, Obj.Pillar, Obj.StoneWall, Obj.Stalagmite, Obj.SandWall, Obj.MagicWall, Obj.Hull]);
 
 const UNWALKABLE_GROUND_SET = new Set<number>([Ground.Water, Ground.Lava, Ground.Void, Ground.DeepWater]);
 
@@ -127,7 +137,7 @@ export const SOLID_OBJ = new Uint8Array(256);
 for (const o of SOLID) SOLID_OBJ[o] = 1;
 /** Objects that are part of a building or barrier: no squeezing diagonally between two of these. */
 export const STRUCTURE_OBJ = new Uint8Array(256);
-for (const o of [Obj.Wall, Obj.Fence, Obj.Palisade, Obj.Cliff, Obj.Door]) STRUCTURE_OBJ[o] = 1;
+for (const o of [Obj.Wall, Obj.Fence, Obj.Palisade, Obj.Cliff, Obj.Door, Obj.Hull]) STRUCTURE_OBJ[o] = 1;
 export const UNWALKABLE_GROUND = new Uint8Array(256);
 for (const g of UNWALKABLE_GROUND_SET) UNWALKABLE_GROUND[g] = 1;
 
@@ -168,7 +178,9 @@ export type EnemyKind =
   | 'boss_rime_wyrm' | 'boss_sand_king' | 'boss_venom_oracle' | 'boss_delving_king' | 'boss_ironjaw'
   | 'boss_ashen_sovereign' | 'boss_ember_matriarch' | 'boss_mire_hydra' | 'boss_bonebound' | 'boss_labyrinth_lord'
   | 'wb_mountain' | 'wb_storm_serpent' | 'wb_blight_mother'
-  | 'raid_tusk_warlord' | 'raid_grave_warden' | 'raid_frost_jarl' | 'raid_swarm_queen';
+  | 'raid_tusk_warlord' | 'raid_grave_warden' | 'raid_frost_jarl' | 'raid_swarm_queen'
+  // the Sunken Reach under the sea south of Millbrook (world/sea.ts)
+  | SeaKind;
 
 export interface Region {
   name: string;
@@ -243,6 +255,8 @@ export class WorldMap {
   plaza: SpawnPlaza | null = null;
   /** The big depot halls of the other towns (signs, lights and themed details for the renderer; world/depotHalls.ts). */
   readonly depotHalls: DepotHall[] = [];
+  /** The Sunken Reach under the sea (props, wrecks, whirlpool) for the renderer; null = none. */
+  sea: SeaLayout | null = null;
 
   constructor(readonly width: number, readonly height: number) {
     this.floors.set(0, new Floor(0, width, height, Ground.Grass));
@@ -403,6 +417,7 @@ export class WorldMap {
     m.temple = { ...this.temple };
     m.plaza = this.plaza ? { ...this.plaza, props: this.plaza.props.map((p) => ({ ...p })) } : null;
     for (const d of this.depotHalls) m.depotHalls.push({ ...d, doors: d.doors.map((p) => ({ ...p })), lockers: d.lockers.map((p) => ({ ...p })), props: d.props.map((p) => ({ ...p })) });
+    m.sea = this.sea ? { ...this.sea, props: this.sea.props.map((p) => ({ ...p })), wrecks: this.sea.wrecks.map((w) => ({ ...w })), areas: this.sea.areas.map((a) => ({ ...a })) } : null;
     return m;
   }
 

@@ -39,6 +39,8 @@ export const MAT = {
   gunmetal: [0x9aa0aa, 0x585e6a, 0x30343c, 0x101216],
   dwarven: [0xf0d08a, 0xb48c4a, 0x6c5024, 0x2c1e08],
   cloth: [0xf4ecd8, 0xc8b898, 0x8a7a5a, 0x3a3020],
+  tide: [0xa8f4e4, 0x34908c, 0x165652, 0x062424],
+  pearl: [0xffffff, 0xeee6d8, 0xb8ac98, 0x4a4234],
 } as const satisfies Record<string, Ramp>;
 
 export type MatKey = keyof typeof MAT;
@@ -111,6 +113,7 @@ export const SET_LOOK: Record<string, LookSpec> = {
   wardbreaker: { m: MAT.gunmetal, t: MAT.gold, gem: 0xff9a2a, glow: 0x1a0a00, helm: 'great', horns: true, spikes: true, shield: 'tower', emblem: 'bar', cape: 0x6a1a10 },
   skyfeather: { m: MAT.sky, t: MAT.gold, gem: 0x6ad8ff, glow: 0x0a2030, helm: 'hood', body: 'vest', legs: 'leather', boots: 'wing', emblem: 'leaf', cape: 0xe8f4ff },
   voidweave: { m: MAT.void, t: MAT.silver, gem: 0xc070ff, glow: 0x1a0a30, helm: 'hood', body: 'robe', legs: 'skirt', boots: 'shoe', shield: 'book', emblem: 'eye' },
+  tidewrought: { m: MAT.tide, t: MAT.pearl, gem: 0x9af0ff, glow: 0x062a2a, helm: 'crested', plume: 0xd8443a, body: 'scale', legs: 'scale', boots: 'plate', shield: 'round', emblem: 'eye' },
 };
 
 /** Single-item looks (outside sets, or a different shape inside one). */
