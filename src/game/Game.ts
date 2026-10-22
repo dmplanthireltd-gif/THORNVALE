@@ -4728,7 +4728,12 @@ export class Game implements AIContext {
     p.mana = clampNum(data.player.mana, 0, p.maxMana);
     const z = typeof data.player.z === 'number' ? data.player.z : 0;
     let tgt = { x: data.player.x, y: data.player.y, z };
-    if (!this.world.inBounds(tgt.x, tgt.y) || !this.world.isWalkable(tgt.x, tgt.y, z) || data.version === 1) tgt = { ...this.world.temple };
+    if (!this.world.inBounds(tgt.x, tgt.y) || !this.world.isWalkable(tgt.x, tgt.y, z) || data.version === 1) {
+      // the spot was built over (a rebuilt depot hall, a removed loft): wake at that
+      // town's temple, never inside a wall; anywhere else, the Thornvale temple
+      const town = data.version === 1 ? null : this.world.regionAt(tgt.x, tgt.y, z);
+      tgt = town?.temple && town.safe ? { ...town.temple } : { ...this.world.temple };
+    }
     const f = this.freeTileNear(tgt.x, tgt.y, tgt.z);
     p.placeAt(f.x, f.y, f.z);
     p.facing = Number.isFinite(data.player.facing) ? data.player.facing : 0;

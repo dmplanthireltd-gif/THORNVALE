@@ -1,4 +1,5 @@
 import type { TilePos } from '../core/types';
+import type { DepotHall } from './depotHalls';
 import type { SpawnPlaza } from './spawnPlaza';
 
 /** Ground layer — what the tile floor is made of. */
@@ -240,6 +241,8 @@ export class WorldMap {
   temple: TilePos & { z: number } = { x: 0, y: 0, z: 0 };
   /** Layout of the Thornvale spawn plaza (fountain and decorations) for the renderer; null = plain plaza. */
   plaza: SpawnPlaza | null = null;
+  /** The big depot halls of the other towns (signs, lights and themed details for the renderer; world/depotHalls.ts). */
+  readonly depotHalls: DepotHall[] = [];
 
   constructor(readonly width: number, readonly height: number) {
     this.floors.set(0, new Floor(0, width, height, Ground.Grass));
@@ -399,6 +402,7 @@ export class WorldMap {
     m.playerSpawn = { ...this.playerSpawn };
     m.temple = { ...this.temple };
     m.plaza = this.plaza ? { ...this.plaza, props: this.plaza.props.map((p) => ({ ...p })) } : null;
+    for (const d of this.depotHalls) m.depotHalls.push({ ...d, doors: d.doors.map((p) => ({ ...p })), lockers: d.lockers.map((p) => ({ ...p })), props: d.props.map((p) => ({ ...p })) });
     return m;
   }
 

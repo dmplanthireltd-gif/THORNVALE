@@ -1,3 +1,4 @@
+import { rebuildDepots } from './depotHalls';
 import { offsetPlaza } from './spawnPlaza';
 import { buildVillage, MAP_H as VH, MAP_W as VW } from './villageMap';
 import { Gen, type Dir } from './genKit';
@@ -132,6 +133,9 @@ export function buildAllTowns(g: Gen): TownSet {
   const set: TownSet = {
     ctx, late, thornvale: { ...TV, plaza: { x: TV.x0 + 28, y: TV.y0 + 25 }, gates: tv.gates },
     finish() {
+      // the big depot halls replace the old small depots once the whole world stands
+      // (no random numbers, so nothing else in the world moves)
+      rebuildDepots(g, ctx);
       for (const t of Object.values(ctx)) townRegion(g, t);
       tv.regions();
       for (const r of late) g.m.regions.push(r);

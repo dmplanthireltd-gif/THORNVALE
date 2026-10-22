@@ -3,6 +3,7 @@ import { hash2 } from '../game/core/rng';
 import { Ground, Obj, WorldMap, type House } from '../game/world/WorldMap';
 import { oreAt } from '../game/gathering/mining';
 import { buildFoundersStone } from './models/foundersStone';
+import { buildDepotHallsView, type DepotHallsView } from './models/depotHalls';
 import { buildPlazaView, type PlazaView } from './models/spawnPlaza';
 import { mat, toonGradient, type Mat } from './models/parts';
 import { groundTex, objTex } from './textures';
@@ -163,6 +164,8 @@ export class WorldView {
   private flameMats: Mat[] = [];
   /** The Thornvale spawn plaza (fountain, paving, decorations), animated while its floor shows. */
   private plaza: PlazaView | null = null;
+  /** The big depot halls of the other towns (signs, lanterns, lit interiors). */
+  private depotHalls: DepotHallsView | null = null;
   currentZ = 0;
   /** Fields laid by runes: they are drawn by the animated field sprites, not as static flames. */
   isRuneField: (x: number, y: number, z: number) => boolean = () => false;
@@ -187,6 +190,10 @@ export class WorldView {
       this.plaza = buildPlazaView(world, world.plaza, (c, o) => f0.m(c, o));
       f0.group.add(this.plaza.group);
       this.flameMats.push(...this.plaza.flameMats);
+    }
+    if (world.depotHalls.length && f0) {
+      this.depotHalls = buildDepotHallsView(world.depotHalls, (c, o) => f0.m(c, o));
+      f0.group.add(this.depotHalls.group);
     }
     // the meadow beyond the map edge
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), mat(0x2a4f6e));
@@ -361,6 +368,10 @@ export class WorldView {
     const flames = B(geo(new THREE.ConeGeometry(0.16, 0.5, 5), 0.25), fireMat, false);
     const torchSticks = B(geo(new THREE.CylinderGeometry(0.03, 0.04, 0.5, 5), 1.2), M(0x5b3d24));
     const torchFlame = B(geo(new THREE.ConeGeometry(0.08, 0.22, 5), 1.55), fireMat, false);
+    // depot lockers: instanced (the big depot halls hold 15–19 each), same look as before
+    const lockerBox = B(geo(new THREE.BoxGeometry(0.8, 1.6, 0.6), 0.8), M(0x6a4428, objTex.logs()));
+    const lockerTop = B(geo(new THREE.BoxGeometry(0.9, 0.08, 0.7), 1.62), M(0x4a2f1b));
+    const lockerPlate = B(new THREE.BoxGeometry(0.3, 0.2, 0.04), M(0xe0b03c), false);
 
     const leafColors = [0x3f7d34, 0x4a8a38, 0x356f2e, 0x4f9340];
     const pineColors = [0x2f5e34, 0x2a5530, 0x356a3a, 0x284f2d];
@@ -580,7 +591,9 @@ export class WorldView {
             this.buildChest(fv, x, y);
             break;
           case Obj.Locker:
-            this.buildLocker(fv, x, y);
+            lockerBox.add(compose(x, 0, y));
+            lockerTop.add(compose(x, 0, y));
+            lockerPlate.add(compose(x, 1.2, y + 0.31));
             break;
           case Obj.MarketBoard:
             this.buildMarketBoard(fv, x, y);
@@ -626,7 +639,7 @@ export class WorldView {
 
     const all = [trunks, rocks, bushes, ferns, berry, flowers, stems, wheat, wallsWood, wallsStone, beams, doorPosts, lintels, fPosts, rails, railPosts,
       headstones, mounds, barrels, hoops, crates, tableTop, tableLeg, hay, lampPost, lampGlow, deadBranch, stakes, stakeTips,
-      stoneWalls, pillars, counters, altars, stalag, bones, skulls, flames, torchSticks, torchFlame];
+      stoneWalls, pillars, counters, altars, stalag, bones, skulls, flames, torchSticks, torchFlame, lockerBox, lockerTop, lockerPlate];
     for (const b of all) {
       const im = b.build();
       if (im) fv.group.add(im);
@@ -1020,20 +1033,6 @@ export class WorldView {
     this.add(fv, g);
   }
 
-  private buildLocker(fv: FloorView, x: number, y: number): void {
-    const g = new THREE.Group();
-    g.position.set(x, 0, y);
-    const wood = fv.m(0x6a4428, { map: objTex.logs() });
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.6, 0.6), wood);
-    box.position.y = 0.8;
-    const top = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.7), fv.m(0x4a2f1b));
-    top.position.y = 1.62;
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.04), fv.m(0xe0b03c));
-    plate.position.set(0, 1.2, 0.31);
-    g.add(box, top, plate);
-    this.add(fv, g);
-  }
-
   // ================================================================ roofs
 
   private buildRoof(fv: FloorView, h: House): void {
@@ -1122,6 +1121,7 @@ export class WorldView {
     for (const m of this.flameMats) m.emissiveIntensity = flick;
 
     const p0 = playerTiles[playerTiles.length - 1] ?? { x: 0, y: 0 };
+    this.depotHalls?.update(dt, Math.round(p0.x), Math.round(p0.y), pz);
     const covered = this.underCover(Math.round(p0.x), Math.round(p0.y), pz);
     for (const [z, fv] of this.floors) {
       let visible = false;
