@@ -2524,5 +2524,20 @@ console.log('Capes: the cape slot');
   check(!!body, 'the dropped cape lies in the dead body');
 }
 
+console.log('Test commands for capes, pets and skills');
+{
+  const { g, s, pid } = solo('knight');
+  s.admin = true;
+  s.inventory.equipment.backpack = { id: 'backpack', qty: 1 };
+  g.say(pid, '/maxskills');
+  check(s.skills.sword.level === 100 && s.skills.magic.level === 100 && s.gathering.mining >= 0 && Object.values(s.gathering).every((x) => x > 0), '/maxskills raises every skill');
+  g.say(pid, '/pets');
+  check(s.inventory.slots.filter((x) => x && /pet/.test(x.id) || false).length >= 1, '/pets gives pet items');
+  g.say(pid, '/petlevel 10');
+  check(Object.values(s.pets.xp).every((x) => (x ?? 0) > 0) && Object.keys(s.pets.xp).length === 8, '/petlevel sets every pet');
+  g.say(pid, '/capes');
+  check(s.bossKills.length >= 13, '/capes counts every boss as slain');
+}
+
 console.log(failures === 0 ? '\nAll logic checks passed.' : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

@@ -14,6 +14,8 @@ import type { EnemyKind } from './world/WorldMap';
 import { isFounderTier } from './premium/premium';
 import { TUTORIAL_LAST, tutorialStep } from './tutorial/tutorial';
 import { Climate, WEATHER_NAMES, weatherKindByName } from './world/weather';
+import { CAPE_IDS, DUNGEON_BOSS_KINDS, WORLD_BOSS_KINDS } from './inventory/capes';
+import { PET_DEFS, PET_MAX_LEVEL, petXpForLevel } from './pets/petDefs';
 
 /**
  * Test / game-master commands, typed in chat with a leading "/".
@@ -40,6 +42,8 @@ export const ADMIN_HELP = [
   '/weather — the weather where you stand; /weather rain|storm|snow|blizzard|dust|sandstorm|mist|downpour|cloudy|clear [0–100] sets it everywhere, /weather off goes back to the real weather (game masters; everyone in test mode)',
   '/tutorial — where you are in the tutorial; /tutorial step N, /tutorial done, /tutorial skip, /tutorial reset (back to the island; game masters)',
   '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing, fletching, crafting, cooking, firemaking); also /fishing N, /mining N, /smithing N, /fletching N, /crafting N, /cooking N, /firemaking N',
+  '/maxskills [N] — every fighting skill and magic to N (default 100) and every trade to 99, so all skill capes can be worn',
+  '/capes — get all 30 capes and count every boss as slain (deed capes); /pets — get all 8 pet items; /petlevel N — every pet to level N (1–10)',
   '/premium N — give yourself N days of premium for this session (0 = none; game masters only, never saved)',
   '/founder wayfarer|warden|legend|none [number] — try a founder pack\'s looks for this session (game masters only, never saved)',
 ];
@@ -337,6 +341,39 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       game.events.emit({ type: 'skillUp', skill: which, level: 0, to: pid });
       game.refreshStats(s);
       s.wantsSave = true;
+      return;
+    }
+    case 'maxskills': {
+      const lvl = Math.max(SKILL_START, Math.min(SKILL_MAX, num(rest[0], 100)));
+      for (const k of COMBAT_SKILLS) s.skills[k] = { level: Math.max(lvl, k === 'magic' ? MAGIC_START : SKILL_START), tries: 0 };
+      for (const id of NONCOMBAT_IDS) s.gathering[id] = gatherXpForLevel(WC_MAX_LEVEL);
+      for (const k of [...COMBAT_SKILLS, ...NONCOMBAT_IDS]) game.events.emit({ type: 'skillUp', skill: k, level: 0, to: pid });
+      game.refreshStats(s);
+      s.wantsSave = true;
+      say(`Every fighting skill and magic is now ${lvl}, every trade ${WC_MAX_LEVEL}.`);
+      return;
+    }
+    case 'capes': {
+      for (const k of [...DUNGEON_BOSS_KINDS, ...WORLD_BOSS_KINDS]) if (!s.bossKills.includes(k)) s.bossKills.push(k);
+      let missed = 0;
+      for (const id of CAPE_IDS) missed += s.inventory.add(id, 1);
+      invChanged();
+      say(`You get ${CAPE_IDS.length - missed} capes${missed ? ` (${missed} did not fit: make room and use /capes again)` : ''}. Every boss counts as slain, so the deed capes can be worn. Use /maxskills to wear the skill capes.`, 'loot');
+      return;
+    }
+    case 'pets': {
+      let missed = 0;
+      for (const d of PET_DEFS) missed += s.inventory.add(d.item, 1);
+      invChanged();
+      say(`You get ${PET_DEFS.length - missed} pet items${missed ? ` (${missed} did not fit)` : ''}. Use one to call the pet; /petlevel 10 makes them all level 10.`, 'loot');
+      return;
+    }
+    case 'petlevel': {
+      const lvl = Math.max(1, Math.min(PET_MAX_LEVEL, num(rest[0], PET_MAX_LEVEL)));
+      for (const d of PET_DEFS) s.pets.xp[d.id] = petXpForLevel(lvl);
+      game.events.emit({ type: 'inventoryChanged', to: pid });
+      s.wantsSave = true;
+      say(`Every pet is now level ${lvl}.`);
       return;
     }
     case 'tutorial': {
