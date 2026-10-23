@@ -30,6 +30,7 @@
     "scripts/saves.ts",
     "scripts/storage-test.ts",
     "scripts/store-test.ts",
+    "scripts/music-test.ts",
     "scripts/music",
     "scripts/site"
   ]
