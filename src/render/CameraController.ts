@@ -6,6 +6,8 @@ export const CAMERA_TILT_DEG = 32;
 const DISTANCE = 60;
 /** Screen pixels per art pixel, from far to close. */
 const PIXEL_LEVELS = [1.5, 2, 2.5, 3, 3.5, 4, 5];
+/** Tiles of height at the farthest (and starting) zoom; you can only zoom in from here. */
+export const VIEW_TILES_HIGH = 11;
 
 /**
  * Orthographic, near-top-down camera. North (−Z) is always screen-up; the view
@@ -22,8 +24,8 @@ export class CameraController {
   private offset: THREE.Vector3;
   private tiltCos: number;
   /** Smooth mode: half of the visible height in tiles. */
-  private zoom = 5.6;
-  private zoomTarget = 5.6;
+  private zoom = VIEW_TILES_HIGH / 2;
+  private zoomTarget = VIEW_TILES_HIGH / 2;
   private screenW = 1;
   private screenH = 1;
   pixelMode = true;
@@ -41,9 +43,17 @@ export class CameraController {
     this.apply();
   }
 
-  /** Picks the pixel scale that shows roughly 12 tiles of height. */
+  /**
+   * The farthest the camera may go (owner, 2026-10-23): a classic view of about 11 tiles of
+   * height, like the old 2D client. You can zoom in from there, never out past it.
+   */
+  private farthestPixelLevel(): number {
+    return this.defaultPixelLevel();
+  }
+
+  /** Picks the pixel scale that shows roughly VIEW_TILES_HIGH tiles of height. */
   private defaultPixelLevel(): number {
-    const ideal = this.screenH / (12 * TILE_PX);
+    const ideal = this.screenH / (VIEW_TILES_HIGH * TILE_PX);
     let best = 0;
     PIXEL_LEVELS.forEach((p, i) => {
       if (Math.abs(p - ideal) < Math.abs(PIXEL_LEVELS[best] - ideal)) best = i;
@@ -56,6 +66,7 @@ export class CameraController {
     this.screenW = Math.max(1, width);
     this.screenH = Math.max(1, height);
     if (first) this.pixelLevel = this.defaultPixelLevel();
+    else this.pixelLevel = Math.max(this.pixelLevel, this.farthestPixelLevel());
     this.applyProjection();
   }
 
@@ -72,22 +83,22 @@ export class CameraController {
   zoomBy(delta: number): void {
     if (this.pixelMode) {
       const step = delta > 0 ? -1 : 1;
-      this.pixelLevel = THREE.MathUtils.clamp(this.pixelLevel + step, this.zoomOutCut, PIXEL_LEVELS.length - 1);
+      this.pixelLevel = THREE.MathUtils.clamp(this.pixelLevel + step, Math.max(this.zoomOutCut, this.farthestPixelLevel()), PIXEL_LEVELS.length - 1);
       this.applyProjection();
       return;
     }
     const factor = Math.pow(1.12, Math.sign(delta));
-    this.zoomTarget = THREE.MathUtils.clamp(this.zoomTarget * factor, 3.5, this.maxZoom);
+    this.zoomTarget = THREE.MathUtils.clamp(this.zoomTarget * factor, 2.5, this.maxZoom);
   }
 
   private get maxZoom(): number {
-    return 12 * Math.pow(0.85, this.zoomOutCut);
+    return (VIEW_TILES_HIGH / 2) * Math.pow(0.85, this.zoomOutCut);
   }
 
   /** Leaves out the `n` farthest zoom-out steps (a shorter view distance on Low graphics). */
   setZoomOutCut(n: number): void {
     this.zoomOutCut = Math.max(0, Math.min(n, PIXEL_LEVELS.length - 1));
-    if (this.pixelLevel < this.zoomOutCut) this.pixelLevel = this.zoomOutCut;
+    this.pixelLevel = Math.max(this.pixelLevel, this.zoomOutCut, this.farthestPixelLevel());
     this.zoomTarget = Math.min(this.zoomTarget, this.maxZoom);
     this.applyProjection();
   }

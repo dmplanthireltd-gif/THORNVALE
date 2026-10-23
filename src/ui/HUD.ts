@@ -1932,7 +1932,7 @@ export class HUD {
     b.replaceChildren();
     const cmd = (text: string) => this.ctl.send({ c: 'say', text });
     el('p', 'hint', b, this.ctl.online
-      ? 'Test commands work online only when the server allows them (ALLOW_ADMIN=1 or ADMINS="Your Name"). Results appear in the chat log.'
+      ? 'Test commands work online for game masters (ouriolis, dawid and names in ADMINS). Results appear in the chat log.'
       : 'Give yourself levels, gold and items for testing. Results appear in the chat log. You can also type the commands in chat, e.g. /level 100.');
     const stop = (i: HTMLInputElement) => i.addEventListener('keydown', (e) => e.stopPropagation());
     const numRow = (label: string, def: number, quick: number[], run: (n: number) => void, fmt: (n: number) => string = String) => {
@@ -1956,6 +1956,14 @@ export class HUD {
       setTimeout(() => this.wins.dev.open && this.renderDev(), 150);
     }, 'btn small');
     button(tools, 'Kill target', () => cmd('/kill'), 'btn small');
+
+    const cp = el('div', 'dev-row', b);
+    el('span', 'dev-label', cp, 'Capes & pets');
+    button(cp, 'All 30 capes', () => cmd('/capes'), 'btn small');
+    button(cp, 'Max all skills', () => cmd('/maxskills'), 'btn small');
+    button(cp, 'All 8 pets', () => cmd('/pets'), 'btn small');
+    button(cp, 'Pets to level 10', () => cmd('/petlevel 10'), 'btn small');
+    el('span', 'hint', cp, 'Skill capes need the skill: press Max all skills to wear every cape. Use a pet item to call the pet.');
 
     const tp = el('div', 'dev-row', b);
     el('span', 'dev-label', tp, 'Teleport');
@@ -1991,7 +1999,7 @@ export class HUD {
     const kinds: Array<[string, string[]]> = [
       ['Weapons', ['weapon']], ['Ammo', ['ammo']], ['Shields & books', ['shield']], ['Helmets', ['helmet']], ['Armour', ['armor']],
       ['Legs', ['legs']], ['Boots', ['boots']], ['Amulets & rings', ['amulet', 'ring']], ['Backpacks & tools', ['backpack', 'tool']],
-      ['Potions & food', ['consumable']], ['Runes', ['rune']], ['Loot', ['material']],
+      ['Capes', ['cape']], ['Pets', ['pet']], ['Potions & food', ['consumable']], ['Runes', ['rune']], ['Loot', ['material']],
     ];
     for (const [title, ks] of kinds) {
       el('div', 'panel-title', grid, title);
