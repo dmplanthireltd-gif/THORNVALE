@@ -4,6 +4,7 @@ import { hash2 } from '../game/core/rng';
 import { Ground, Obj, SOLID_OBJ, type WorldMap } from '../game/world/WorldMap';
 import type { Mat } from './models/parts';
 import { objTex } from './textures';
+import { cryptMasonry, filletGeo, innerCorners, ROCK_CLASSES, RockLook, rockGeo, rockMat, rockShape, SIDE_E, SIDE_N, SIDE_S, SIDE_W } from './paint/terrain';
 
 /**
  * Solid rock for the floors below ground. Instead of black nothing between and
@@ -228,11 +229,77 @@ float vn(vec2 p) {
   f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y);
 }
+#ifdef PAINTED
+vec3 rgbL(vec3 c) { return pow(c, vec3(2.2)); }
+// smooth rock contour (owner 2026-10-23 "a corner must NOT look angular"): the rock share of the
+// 4 x 4 tiles round the point through a Catmull-Rom / B-spline mix, as a distance in tiles
+// (> 0 inside the rock) — the top only covers the rock a little inside its faces, along a rounded line
+vec4 rkW(float t) {
+  float t2 = t * t, t3 = t2 * t, u = 1.0 - t;
+  vec4 cr = vec4(-t3 + 2.0 * t2 - t, 3.0 * t3 - 5.0 * t2 + 2.0, -3.0 * t3 + 4.0 * t2 + t, t3 - t2) * 0.5;
+  vec4 bs = vec4(u * u * u, 3.0 * t3 - 6.0 * t2 + 4.0, -3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0, t3) / 6.0;
+  return mix(cr, bs, 0.5);
+}
+vec4 rkD(float t) {
+  float t2 = t * t, u = 1.0 - t;
+  vec4 cr = vec4(-3.0 * t2 + 4.0 * t - 1.0, 9.0 * t2 - 10.0 * t, -9.0 * t2 + 8.0 * t + 1.0, 3.0 * t2 - 2.0 * t) * 0.5;
+  vec4 bs = vec4(-u * u, 3.0 * t2 - 4.0 * t, -3.0 * t2 + 2.0 * t + 1.0, t2) * 0.5;
+  return mix(cr, bs, 0.5);
+}
+float rockDist(vec2 w) {
+  vec2 b = floor(w), t = w - b;
+  vec4 wx = rkW(t.x), wy = rkW(t.y), dx = rkD(t.x), dy = rkD(t.y);
+  float F = 0.0, gx = 0.0, gy = 0.0;
+  for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {
+    vec2 c = clamp(b + vec2(float(i - 1), float(j - 1)), vec2(0.0), uSize - 1.0);
+    float r = texture2D(uMask, (c + 0.5) / uSize).r > 0.75 ? 0.0 : 1.0;
+    F += wx[i] * wy[j] * r;
+    gx += dx[i] * wy[j] * r;
+    gy += wx[i] * dy[j] * r;
+  }
+  return (F - 0.5) / max(length(vec2(gx, gy)), 0.18);
+}
+// painted style: a field of rounded boulders (cells lit from the upper left, dark crevices),
+// with the region's overlay: moss, frost, sand bands, ash with glowing seams, slime
+vec3 paintedTop(vec3 base, vec2 q, int st, out float seam) {
+  vec2 g = q * 1.4 + (vec2(vn(q * 0.6), vn(q * 0.6 + 5.0)) - 0.5) * 2.2 + (vec2(vn(q * 1.7 + 2.0), vn(q * 1.7 + 9.0)) - 0.5) * 0.9;
+  vec2 ip = floor(g), fp = fract(g);
+  float d1 = 8.0, d2 = 8.0; vec2 rel = vec2(0.0); float hid = 0.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 o = vec2(float(i), float(j));
+    vec2 r = o + vec2(h21(ip + o), h21(ip + o + 13.1)) * 0.8 + 0.1 - fp;
+    float d = dot(r, r);
+    if (d < d1) { d2 = d1; d1 = d; rel = r; hid = h21(ip + o + 7.7); } else if (d < d2) d2 = d;
+  }
+  float gap = sqrt(d2) - sqrt(d1);
+  float crev = (1.0 - smoothstep(0.015, 0.1, gap)) * smoothstep(0.25, 0.55, vn(q * 2.3 + 1.0));
+  // dome: brighter toward the light side of each boulder
+  float dome = clamp(dot(-rel, normalize(vec2(-0.6, -0.55))) * 0.8 + 0.5, 0.0, 1.0);
+  float n = vn(q * 3.1) * 0.6 + vn(q * 8.7) * 0.4;
+  vec3 col = base * (0.66 + hid * 0.16) * (0.78 + dome * 0.38) * (0.7 + n * 0.6);
+  col *= 1.0 - crev * 0.55;
+  float up = (1.0 - crev) * smoothstep(0.35, 0.9, dome);
+  float nn = vn(q * 1.9 + 4.0);
+  seam = 0.0;
+  if (st == 0) col = mix(col, rgbL(vec3(0.2, 0.25, 0.1)) * (0.7 + n * 0.5), smoothstep(0.62, 0.78, nn) * (1.0 - crev) * 0.55);
+  else if (st == 1) col = mix(col, rgbL(vec3(0.8, 0.86, 0.92)), up * smoothstep(0.4, 0.6, nn + n * 0.2) * 0.85);
+  else if (st == 2) { col *= 1.0 + sin(q.y * 6.0 + nn * 4.0) * 0.08; col = mix(col, rgbL(vec3(0.7, 0.56, 0.36)), smoothstep(0.6, 0.75, nn) * 0.5); }
+  else if (st == 3) { col = mix(col, rgbL(vec3(0.28, 0.26, 0.25)), up * smoothstep(0.45, 0.6, nn) * 0.8); seam = crev; }
+  else if (st == 5) col = mix(col, rgbL(vec3(0.15, 0.2, 0.08)), smoothstep(0.45, 0.6, nn) * 0.75);
+  return col;
+}
+#endif
 void main() {
   vec2 tile = floor(vWorld.xz + 0.5);
   if (tile.x < 0.0 || tile.y < 0.0 || tile.x >= uSize.x || tile.y >= uSize.y) discard;
   vec4 m = texture2D(uMask, (tile + 0.5) / uSize);
+  #ifdef PAINTED
+  // over the wall blocks too, but only from a rounded line a little inside the rock faces
+  if (m.r > 0.75) discard;
+  if (m.r > 0.25 && rockDist(vWorld.xz) < 0.3 + (vn(vWorld.xz * 2.3) - 0.5) * 0.16) discard;
+  #else
   if (m.r > 0.25) discard; // open floor or a wall block stands here
+  #endif
   // the style is read a little off the tile (by noise), so regions blend along ragged seams, not tile edges
   vec2 jit = vec2(vn(vWorld.xz * 0.8 + 11.0), vn(vWorld.xz * 0.8 + 23.0)) - 0.5;
   vec4 ms = texture2D(uMask, (floor(vWorld.xz + 0.5 + jit * 1.6) + 0.5) / uSize);
@@ -240,6 +307,15 @@ void main() {
   vec3 base = uPal[0];
   if (st == 1) base = uPal[1]; else if (st == 2) base = uPal[2]; else if (st == 3) base = uPal[3]; else if (st == 4) base = uPal[4]; else if (st == 5) base = uPal[5];
   vec2 q = vWorld.xz;
+  #ifdef PAINTED
+  float pseam;
+  vec3 col = paintedTop(base, q, st, pseam);
+  if (st == 4) {
+    vec2 b = fract(vec2(q.x * 1.0 + floor(q.y * 2.0) * 0.5, q.y * 2.0));
+    float mortar = 1.0 - smoothstep(0.03, 0.09, min(min(b.x, 1.0 - b.x) * 1.0, min(b.y, 1.0 - b.y) * 0.5));
+    col = base * (0.5 + vn(q * 5.0) * 0.25) * (1.0 - mortar * 0.6) * 0.9;
+  }
+  #else
   // pixel-art friendly: quantise to the 32-px art grid (not in the painted style: smooth)
   #ifndef PAINTED
   q = floor(q * 16.0) / 16.0;
@@ -269,6 +345,7 @@ void main() {
     col *= (1.0 - clamp(mortar, 0.0, 1.0) * 0.35) * 0.62;
   }
   if (st == 1) col += vec3(0.10, 0.14, 0.18) * pow(vn(q * 6.0), 6.0) * 2.0; // ice glints
+  #endif
   // deep rock darkens away from the caves, but never to black
   float dist = m.b * 255.0;
   col *= mix(1.0, 0.52, smoothstep(1.0, 10.0, dist));
@@ -277,13 +354,15 @@ void main() {
   // rock tops catch more light than the cave floor (they stand nearer the roof), so they read as rock, not as void
   float lit = 0.8 + 1.0 * pow(clamp(1.0 - d / uLightR, 0.0, 1.0), 1.6);
   col *= lit;
+  #ifdef PAINTED
+  // painted style: the rock mass stays dark and recedes, so the lit cave floor reads first (glowing seams excepted)
+  col *= 0.45;
+  if (st == 3) col += rgbL(vec3(1.0, 0.45, 0.12)) * pseam * (0.5 + 0.5 * sin(uTime * 1.7 + q.x * 0.7 + q.y * 0.5)) * 0.22;
+  #else
   if (st == 3) {
     float seam = crack * (0.6 + 0.4 * sin(uTime * 1.7 + q.x * 0.7 + q.y * 0.5));
     col += vec3(1.0, 0.32, 0.06) * seam * 0.9;
   }
-  #ifdef PAINTED
-  // painted style: the rock mass stays dark and recedes, so the lit cave floor reads first
-  col *= 0.42;
   #endif
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
@@ -371,9 +450,16 @@ export function buildCaveRock(world: WorldMap, z: number, M: (color: number, opt
 
   // ---------------------------------------------------------------- wall blocks along every cave edge
   // rock is never fully black: a little of its own colour glows back (fake bounce light)
-  const wallMat = selfLit(M(0xffffff, { map: wallTex() }), 0.42);
-  const brickMat = selfLit(M(0xffffff, { map: objTex.brick() }), 0.36);
+  // painted style: rounded, layered painted rock with the region's overlay read from the mask (render/paint/terrain.ts)
+  const wallMat = PAINTED ? rockMat(M, { mask: { tex, size: new THREE.Vector2(W, H) }, selfLit: 0.42 }) : selfLit(M(0xffffff, { map: wallTex() }), 0.42);
+  const brickMat = PAINTED ? rockMat(M, { look: RockLook.Crypt, map: cryptMasonry(), selfLit: 0.3 }) : selfLit(M(0xffffff, { map: objTex.brick() }), 0.36);
   const jag = [0, 1, 2].map((v) => new Inst(jaggedBlock(v), wallMat, true));
+  const shapes = PAINTED ? ROCK_CLASSES.map((_m, ci) => new Inst(rockGeo('wall', ci), wallMat, true)) : [];
+  // painted style: no angular corners (owner 2026-10-23) — worn rounded masonry in crypts, fillets in inner corners
+  const brickShapes = PAINTED ? ROCK_CLASSES.map((_m, ci) => new Inst(rockGeo('crypt', ci), brickMat, true)) : [];
+  const fillets = PAINTED ? new Inst(filletGeo('wall'), wallMat, true) : null;
+  const brickFillets = PAINTED ? new Inst(filletGeo('crypt'), brickMat, true) : null;
+  const corners: Array<{ x: number; y: number; rot: number }> = [];
   const bricks = new Inst(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), brickMat, true);
   const capRocks = new Inst(new THREE.DodecahedronGeometry(0.34, 0), wallMat, false);
   const stalactite = new Inst(new THREE.ConeGeometry(0.09, 0.5, 5).rotateX(Math.PI).translate(0, -0.25, 0), wallMat, false);
@@ -399,12 +485,25 @@ export function buildCaveRock(world: WorldMap, z: number, M: (color: number, opt
     if (open(i) || dist[i] !== 1 || inSea(i)) continue;
     const st = style[i] as RockStyle;
     const h = hash2(x, y, 3);
-    const hgt = ROCK_TOP - 0.1 + h * 0.55;
-    col.setHex(ROCK_COLOR[st]).multiplyScalar(0.82 + hash2(x, y, 4) * 0.3);
-    if (st === RockStyle.Crypt && hash2(x >> 1, y >> 1, 9) < 0.75) {
+    // painted style: one level rock top (no per-tile steps) and one colour per region (the shader varies it in world space)
+    const hgt = PAINTED ? ROCK_TOP - 0.04 : ROCK_TOP - 0.1 + h * 0.55;
+    col.setHex(ROCK_COLOR[st]).multiplyScalar(PAINTED ? 0.97 : 0.82 + hash2(x, y, 4) * 0.3);
+    const masonry = st === RockStyle.Crypt && hash2(x >> 1, y >> 1, 9) < 0.75;
+    if (PAINTED) {
+      corners.length = 0;
+      innerCorners(x, y, (ax, ay) => !isOpen(ax, ay), corners);
+      for (const k of corners) (masonry ? brickFillets! : fillets!).add(compose(k.x, 0, k.y, k.rot, 1, ROCK_TOP - 0.06, 1), masonry ? col.clone().multiplyScalar(1.25) : col);
+    }
+    if (masonry && PAINTED) {
+      const sh = rockShape((isOpen(x, y - 1) ? SIDE_N : 0) | (isOpen(x + 1, y) ? SIDE_E : 0) | (isOpen(x, y + 1) ? SIDE_S : 0) | (isOpen(x - 1, y) ? SIDE_W : 0));
+      brickShapes[sh.cls].add(compose(x, 0, y, sh.rot * Math.PI / 2, 1, hgt, 1), col.clone().multiplyScalar(1.25));
+    } else if (masonry) {
       bricks.add(compose(x, 0, y, 0, 1, hgt, 1), col.clone().multiplyScalar(1.25));
     } else {
-      jag[Math.floor(hash2(x, y, 5) * 3)].add(compose(x, 0, y, Math.floor(hash2(x, y, 6) * 4) * Math.PI / 2, 1, hgt, 1), col);
+      if (PAINTED) {
+        const sh = rockShape((isOpen(x, y - 1) ? SIDE_N : 0) | (isOpen(x + 1, y) ? SIDE_E : 0) | (isOpen(x, y + 1) ? SIDE_S : 0) | (isOpen(x - 1, y) ? SIDE_W : 0));
+        shapes[sh.cls].add(compose(x, 0, y, sh.rot * Math.PI / 2, 1, hgt, 1), col);
+      } else jag[Math.floor(hash2(x, y, 5) * 3)].add(compose(x, 0, y, Math.floor(hash2(x, y, 6) * 4) * Math.PI / 2, 1, hgt, 1), col);
       if (h > 0.55) capRocks.add(compose(x + (hash2(x, y, 7) - 0.5) * 0.4, hgt - 0.05, y + (hash2(x, y, 8) - 0.5) * 0.4, h * 6, 1, 0.6, 1), col.clone().multiplyScalar(0.92));
     }
     // the open sides of this wall tile
@@ -467,7 +566,7 @@ export function buildCaveRock(world: WorldMap, z: number, M: (color: number, opt
     }
   }
 
-  for (const b of [...jag, bricks, capRocks, stalactite, rubble, stalagmite, torchStick, bracket, torchFlame, wallCrystal, wallAmethyst]) b.build(group);
+  for (const b of [...jag, ...shapes, ...brickShapes, ...(fillets ? [fillets, brickFillets!] : []), bricks, capRocks, stalactite, rubble, stalagmite, torchStick, bracket, torchFlame, wallCrystal, wallAmethyst]) b.build(group);
   for (const gm of glows.build(group, 3)) gm.name = 'caveGlow';
 
   // ---------------------------------------------------------------- dust motes drifting around the player

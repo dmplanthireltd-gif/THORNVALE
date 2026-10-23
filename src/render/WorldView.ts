@@ -14,7 +14,14 @@ import type { GraphicsLevel } from './graphics';
 import { StaticMerger } from './staticMerge';
 import { applyWind, WIND_BUSH, WIND_CROP, WIND_GRASS, WIND_PALM, WIND_TREE } from './weather/wind';
 import { PAINTED } from './style';
-import { groundIdTexture, paintsGround, usePaintedGround } from './paintGround';
+import { paintedGroundData, paintsGround, paintsLiquid, usePaintedGround } from './paintGround';
+import { buildEmbers, buildReeds, cliffLook, filletGeo, innerCorners, ROCK_CLASSES, ROCK_TINT, RockLook, rockGeo, rockMat, rockShape, SIDE_E, SIDE_N, SIDE_S, SIDE_W } from './paint/terrain';
+const _corners: Array<{ x: number; y: number; rot: number }> = [];
+
+/** Open sides of a tile (N = −z, E = +x, S = +z, W = −x) for the painted rock shapes. */
+function openSides(open: (x: number, y: number) => boolean, x: number, y: number): number {
+  return (open(x, y - 1) ? SIDE_N : 0) | (open(x + 1, y) ? SIDE_E : 0) | (open(x, y + 1) ? SIDE_S : 0) | (open(x - 1, y) ? SIDE_W : 0);
+}
 import { paintedProps } from './paintProps';
 import { PaintMesher } from './paint/paintMesh';
 import { PaintBuildings, paintedRoof } from './paint/buildings';
@@ -235,6 +242,8 @@ class FloorView {
   /** Torches, braziers, crystals and lava that light the floor around them (the nearest few get real lights). */
   lights: LightSource[] = [];
   dim = 1;
+  /** Painted style: the floor's one ground material (also paints the open sea plane on floor 0). */
+  paintMat: Mat | null = null;
   /** Bakes the floor's static props into merged chunk meshes (filled while building, emptied by build()). */
   merger: StaticMerger;
   constructor(readonly z: number, keep: (m: THREE.Material) => boolean) {
@@ -378,9 +387,11 @@ export class WorldView {
       this.floors.get(world.sea.z)?.group.add(this.sea.floor);
     }
     // the meadow beyond the map edge
-    const outer = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), mat(0x2a4f6e));
+    // painted style: the open sea is painted by floor 0's ground material (deep water, ripples), just under the land
+    const pm0 = PAINTED ? f0?.paintMat ?? null : null;
+    const outer = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), pm0 ?? mat(0x2a4f6e));
     outer.rotation.x = -Math.PI / 2;
-    outer.position.set(world.width / 2, -0.4, world.height / 2);
+    outer.position.set(world.width / 2, pm0 ? -0.01 : -0.4, world.height / 2);
     outer.receiveShadow = true;
     outer.name = 'outer';
     this.floors.get(0)?.group.add(outer);
@@ -398,10 +409,11 @@ export class WorldView {
     // painted style: every painted ground kind of the floor is one batch with one material (paintGround.ts)
     let painted: Batch | null = null;
     const getBatch = (g: Ground) => {
-      if (PAINTED && paintsGround(g)) {
+      if (PAINTED && (paintsGround(g) || paintsLiquid(g))) {
         if (!painted) {
           const pm = fv.m(0xffffff);
-          usePaintedGround(pm, groundIdTexture(w, z), w);
+          usePaintedGround(pm, paintedGroundData(w, z), w, z < 0 ? 0.5 : 0.45);
+          fv.paintMat = pm;
           painted = new Batch(tileGeo, pm, false);
           batches.set('painted', painted);
         }
@@ -428,6 +440,9 @@ export class WorldView {
     const rock = new Batch(geo(new THREE.BoxGeometry(1, 1.9, 1), 0.95), fv.m(0x7a7068, { map: objTex.cliff() }));
     const sea = w.sea;
     // reef walls of the Sunken Reach: paler weathered stone, some of it crusted with red coral
+    const reefMat = PAINTED ? rockMat((col, o) => fv.m(col, o), { look: RockLook.Reef }) : null;
+    const reefShapes = reefMat ? ROCK_CLASSES.map((_m, ci) => new Batch(rockGeo('reef', ci), reefMat)) : [];
+    const reefFillets = reefMat ? new Batch(filletGeo('reef'), reefMat) : null;
     const reefRock = new Batch(geo(new THREE.BoxGeometry(1, 1.9, 1), 0.95), fv.m(0xffffff, { map: objTex.rock() }));
     const c = new THREE.Color();
     // below ground every rock tile is drawn as rock: a shaded rock top, jagged walls, torches, glows (caveRock.ts)
@@ -445,7 +460,13 @@ export class WorldView {
           if (z < 0 && this.bordersOpen(x, y, z)) {
             // the Sunken Reach: reef walls, paler and blue-green instead of cave rock
             const reef = sea && z === sea.z && x >= sea.x0 && x <= sea.x1 && y >= sea.y0 && y <= sea.y1;
-            if (reef) reefRock.add(compose(x, 0, y, hash2(x, y, 5) * 0.3, 1.02, 0.55 + hash2(x, y, 3) * 0.45, 1.02), c.setHex(hash2(x, y, 6) < 0.15 ? 0x9a6a5a : 0x7a9898).multiplyScalar(0.8 + hash2(x, y, 4) * 0.35));
+            if (reef && PAINTED) {
+              const sh = rockShape(openSides((ax, ay) => w.getGround(ax, ay, z) !== Ground.Void, x, y));
+              reefShapes[sh.cls].add(compose(x, 0, y, sh.rot * Math.PI / 2, 1, 0.6 + hash2(x, y, 3) * 0.3, 1), c.setHex(0x7a9898).multiplyScalar(0.97));
+              _corners.length = 0;
+              innerCorners(x, y, (ax, ay) => w.getGround(ax, ay, z) === Ground.Void, _corners);
+              for (const k of _corners) reefFillets!.add(compose(k.x, 0, k.y, k.rot, 1, 0.6, 1), c);
+            } else if (reef) reefRock.add(compose(x, 0, y, hash2(x, y, 5) * 0.3, 1.02, 0.55 + hash2(x, y, 3) * 0.45, 1.02), c.setHex(hash2(x, y, 6) < 0.15 ? 0x9a6a5a : 0x7a9898).multiplyScalar(0.8 + hash2(x, y, 4) * 0.35));
             // floors not yet rolled out to the solid-rock look keep the old plain rock blocks
             else if (!caveRock) rock.add(compose(x, 0, y, 0, 1, 0.9 + hash2(x, y, 3) * 0.25, 1), c.setScalar(0.85 + hash2(x, y, 4) * 0.25));
           }
@@ -454,8 +475,9 @@ export class WorldView {
         if (z === 0 && g === Ground.DeepWater && !this.nearLand(x, y)) continue; // the open sea is the backdrop plane
         const v = Math.floor(hash2(x, y, 17) * 3);
         // painted style: no per-tile brightness (it would show the tile grid); the shader varies colour across the land
-        const shade = PAINTED && paintsGround(g) ? 1 : 0.92 + hash2(x, y) * 0.1;
-        const water = g === Ground.Water || g === Ground.DeepWater || g === Ground.Lava;
+        const shade = PAINTED && (paintsGround(g) || paintsLiquid(g)) ? 1 : 0.92 + hash2(x, y) * 0.1;
+        // painted style: liquids are painted level with the land (the shader draws banks and depth)
+        const water = !PAINTED && (g === Ground.Water || g === Ground.DeepWater || g === Ground.Lava);
         const raised = g === Ground.Stone || g === Ground.Wood || g === Ground.Marble ? 0.02 : 0;
         getBatch(g).add(compose(x, water ? -0.33 : -0.15 + raised, y), c.setScalar(shade), -1, v);
       }
@@ -463,6 +485,13 @@ export class WorldView {
     for (const b of batches.values()) b.build(fv.group);
     rock.build(fv.group);
     reefRock.build(fv.group);
+    for (const b of reefShapes) b.build(fv.group);
+    reefFillets?.build(fv.group);
+    if (PAINTED) {
+      // reeds along swamp water and some lake shores, embers rising off lava (render/paint/terrain.ts)
+      buildReeds(w, z, fv.group, (col) => fv.m(col));
+      buildEmbers(w, z, fv.group);
+    }
 
     // grass tufts on the surface
     if (z === 0 || z === 1) {
@@ -579,6 +608,10 @@ export class WorldView {
     const glowMat = M(0xffd27a, null, 0xffb84a);
     const lampGlow = B(new THREE.BoxGeometry(0.22, 0.26, 0.22), glowMat, false);
     const cliffs = B(geo(new THREE.BoxGeometry(1, 3.1, 1), 1.55), M(0xffffff, objTex.cliff()));
+    // painted style: rounded, layered rock masses, one batch per region look (moss, frost, sandstone, ash)
+    const cliffMats = PAINTED ? [0, 1, 2, 3].map((look) => rockMat((col, o) => fv.m(col, o), { look })) : [];
+    const paintCliffs = cliffMats.flatMap((m) => ROCK_CLASSES.map((_m, ci) => B(rockGeo('cliff', ci), m)));
+    const cliffFillets = cliffMats.map((m) => B(filletGeo('cliff'), m));
     const stakes = B(geo(new THREE.BoxGeometry(1, 2.0, 0.35), 1.0), M(0xffffff, objTex.stakes()));
     const stakeTips = B(geo(new THREE.ConeGeometry(0.12, 0.35, 4), 2.15), M(0x6a4a2c), true, 'small');
     const stoneWalls = B(geo(new THREE.BoxGeometry(1, 1.9, 1), 0.95), brick);
@@ -756,7 +789,14 @@ export class WorldView {
             break;
           }
           case Obj.Cliff:
-            cliffs.add(compose(x, 0, y, 0, 1, 0.97 + h * 0.06, 1), c.setScalar(0.85 + h * 0.25), ti);
+            if (PAINTED) {
+              const look = cliffLook(w, x, y, z);
+              const sh = rockShape(openSides((ax, ay) => w.getObj(ax, ay, z) !== Obj.Cliff, x, y));
+              paintCliffs[look * ROCK_CLASSES.length + sh.cls].add(compose(x, 0, y, sh.rot * Math.PI / 2, 1, 1, 1), c.setHex(ROCK_TINT[look]), ti);
+              _corners.length = 0;
+              innerCorners(x, y, (ax, ay) => w.getObj(ax, ay, z) === Obj.Cliff, _corners);
+              for (const k of _corners) cliffFillets[look].add(compose(k.x, 0, k.y, k.rot, 1, 0.97, 1), c, ti);
+            } else cliffs.add(compose(x, 0, y, 0, 1, 0.97 + h * 0.06, 1), c.setScalar(0.85 + h * 0.25), ti);
             break;
           case Obj.Grave:
             headstones.add(compose(x, 0, y - 0.28, (h - 0.5) * 0.3, 1, 0.8 + h * 0.4, 1, (h - 0.5) * 0.2), c.setScalar(0.7 + h * 0.2));
@@ -911,7 +951,7 @@ export class WorldView {
       b.build(fv.group, L);
       if (L.meshes.length) fv.trunkLayers.push(L);
     }
-    const fadeBatches: Array<[Batch, number]> = [[canopyLow, 0x4a8a38], [canopyHigh, 0x4a8a38], [pine1, 0x2f5e34], [pine2, 0x2f5e34], [pine3, 0x2f5e34], [jungle1, 0x2f6a26], [frond, 0x4a9a3a], [cliffs, 0x6a6058]];
+    const fadeBatches: Array<[Batch, number]> = [[canopyLow, 0x4a8a38], [canopyHigh, 0x4a8a38], [pine1, 0x2f5e34], [pine2, 0x2f5e34], [pine3, 0x2f5e34], [jungle1, 0x2f6a26], [frond, 0x4a9a3a], [cliffs, 0x6a6058], ...[...paintCliffs, ...cliffFillets].map((b) => [b, 0x6a6058] as [Batch, number])];
     for (const [b, proxyColor] of fadeBatches) {
       const proxyMat = new THREE.MeshToonMaterial({ color: proxyColor, gradientMap: toonGradient(), transparent: true, opacity: 0.25, depthWrite: false });
       const L: FadeLayer = { ...newLayer(), proxyMat };

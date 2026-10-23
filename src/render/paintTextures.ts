@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Rng } from '../game/core/rng';
 import { Ground } from '../game/world/WorldMap';
+import { EXTRA_PAINTERS } from './paint/groundCells';
 
 /**
  * Painted style (render/style.ts): high-resolution, hand-painted-looking ground
@@ -13,7 +14,23 @@ import { Ground } from '../game/world/WorldMap';
  */
 export const CELL = 256;
 export const SPAN = 2;
-export const ATLAS_COLS = 4;
+export const ATLAS_COLS = 8;
+export const ATLAS_ROWS = 4;
+
+/**
+ * Extra cells (render/paint, owner 2026-10-23 "work on the whole game"): grim
+ * underground floors and the shore bands the liquid shader lays along water and lava.
+ */
+export const CELL_FLAGS = 16, CELL_BASALT = 17, CELL_SANDSTONE = 18, CELL_CAVE_ICE = 19, CELL_TOMB = 20, CELL_PEBBLES = 21, CELL_MUD = 22, CELL_SCORCH = 23, CELL_CRYPT_BONES = 24;
+
+/**
+ * Floors below ground swap some kinds for their grimmer cave versions: crypt flagstones,
+ * volcanic basalt, sandstone, cave ice, stained tomb marble.
+ */
+export const UNDER_CELL: Partial<Record<Ground, number>> = {
+  [Ground.Stone]: CELL_FLAGS, [Ground.Ash]: CELL_BASALT, [Ground.Sand]: CELL_SANDSTONE, [Ground.Ice]: CELL_CAVE_ICE,
+  [Ground.Snow]: CELL_CAVE_ICE, [Ground.Marble]: CELL_TOMB,
+};
 
 /** Atlas cell of each painted ground kind (kinds not listed keep the classic look). */
 export const PAINT_CELL: Partial<Record<Ground, number>> = {
@@ -37,7 +54,7 @@ export const PAINT_BUILT = new Set<Ground>([Ground.Stone, Ground.Marble, Ground.
 
 // ------------------------------------------------------------------ tileable noise
 
-class Noise {
+export class Noise {
   private v = new Float32Array(256 * 256);
   constructor(seed: number) {
     const r = new Rng(seed);
@@ -69,20 +86,20 @@ class Noise {
   }
 }
 
-type RGB = [number, number, number];
-const hex = (c: number): RGB => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
-const mixC = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-const css = (c: RGB, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
-const sstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+export type RGB = [number, number, number];
+export const hex = (c: number): RGB => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+export const mixC = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+export const css = (c: RGB, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+export const sstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-interface Paint {
+export interface Paint {
   ctx: CanvasRenderingContext2D;
   rng: Rng;
   n: Noise;
 }
 
 /** Per-pixel base: colour from a function of the pixel (runs once per texel). */
-function base(p: Paint, fn: (x: number, y: number) => RGB): void {
+export function base(p: Paint, fn: (x: number, y: number) => RGB): void {
   const img = p.ctx.createImageData(CELL, CELL);
   const d = img.data;
   for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) {
@@ -94,7 +111,7 @@ function base(p: Paint, fn: (x: number, y: number) => RGB): void {
 }
 
 /** Draws a shape at its spot and wrapped across the edges, so the cell tiles. */
-function wrapped(_p: Paint, x: number, y: number, r: number, draw: (x: number, y: number) => void): void {
+export function wrapped(_p: Paint, x: number, y: number, r: number, draw: (x: number, y: number) => void): void {
   for (const ox of [-CELL, 0, CELL]) for (const oy of [-CELL, 0, CELL]) {
     const xx = x + ox, yy = y + oy;
     if (xx + r < 0 || yy + r < 0 || xx - r > CELL || yy - r > CELL) continue;
@@ -103,7 +120,7 @@ function wrapped(_p: Paint, x: number, y: number, r: number, draw: (x: number, y
 }
 
 /** Small rounded stones lit from the upper left, with a soft contact shadow. */
-function pebbles(p: Paint, count: number, cols: RGB[], rMin: number, rMax: number): void {
+export function pebbles(p: Paint, count: number, cols: RGB[], rMin: number, rMax: number): void {
   const { ctx, rng } = p;
   for (let i = 0; i < count; i++) {
     const x = rng.next() * CELL, y = rng.next() * CELL;
@@ -130,7 +147,7 @@ function pebbles(p: Paint, count: number, cols: RGB[], rMin: number, rMax: numbe
 }
 
 /** Thin dark cracks as wandering lines, with a light lip on one side. */
-function cracks(p: Paint, count: number, col: RGB, len: number, alpha = 0.55): void {
+export function cracks(p: Paint, count: number, col: RGB, len: number, alpha = 0.55): void {
   const { ctx, rng } = p;
   for (let i = 0; i < count; i++) {
     const pts: Array<[number, number]> = [];
@@ -162,7 +179,7 @@ function cracks(p: Paint, count: number, col: RGB, len: number, alpha = 0.55): v
 }
 
 /** Short curved grass blades seen from above. */
-function blades(p: Paint, count: number, light: RGB, dark: RGB, len: number): void {
+export function blades(p: Paint, count: number, light: RGB, dark: RGB, len: number): void {
   const { ctx, rng } = p;
   ctx.lineCap = 'round';
   for (let i = 0; i < count; i++) {
@@ -187,7 +204,7 @@ function blades(p: Paint, count: number, light: RGB, dark: RGB, len: number): vo
   }
 }
 
-function dots(p: Paint, count: number, cols: RGB[], rMin: number, rMax: number, alpha = 1): void {
+export function dots(p: Paint, count: number, cols: RGB[], rMin: number, rMax: number, alpha = 1): void {
   const { ctx, rng } = p;
   for (let i = 0; i < count; i++) {
     const x = rng.next() * CELL, y = rng.next() * CELL, r = rMin + rng.next() * (rMax - rMin);
@@ -200,7 +217,7 @@ function dots(p: Paint, count: number, cols: RGB[], rMin: number, rMax: number, 
 }
 
 /** Soft blotches (damp patches, moss, darker earth) blended with low alpha. */
-function blotches(p: Paint, count: number, col: RGB, rMin: number, rMax: number, alpha: number): void {
+export function blotches(p: Paint, count: number, col: RGB, rMin: number, rMax: number, alpha: number): void {
   const { ctx, rng } = p;
   for (let i = 0; i < count; i++) {
     const x = rng.next() * CELL, y = rng.next() * CELL, r = rMin + rng.next() * (rMax - rMin);
@@ -215,7 +232,7 @@ function blotches(p: Paint, count: number, col: RGB, rMin: number, rMax: number,
 }
 
 /** Two-tone earth/grass base with large soft patches and fine grain. */
-function earthy(p: Paint, a: number, b: number, c: number, grain = 10): void {
+export function earthy(p: Paint, a: number, b: number, c: number, grain = 10): void {
   const A = hex(a), B = hex(b), C = hex(c);
   base(p, (x, y) => {
     const n1 = p.n.fbm(x, y, 4, 5);
@@ -439,12 +456,16 @@ let atlas: THREE.CanvasTexture | null = null;
 export function paintedAtlas(): THREE.CanvasTexture {
   if (atlas) return atlas;
   const c = document.createElement('canvas');
-  c.width = c.height = CELL * ATLAS_COLS;
+  c.width = CELL * ATLAS_COLS;
+  c.height = CELL * ATLAS_ROWS;
   const out = c.getContext('2d')!;
   const cell = document.createElement('canvas');
   cell.width = cell.height = CELL;
   const ctx = cell.getContext('2d', { willReadFrequently: true })!;
-  PAINTERS.forEach((paint, i) => {
+  // painted extras (render/paint/groundCells.ts) replace or add cells
+  const all = PAINTERS.slice();
+  for (const [k, f] of Object.entries(EXTRA_PAINTERS)) all[+k] = f;
+  all.forEach((paint, i) => {
     ctx.clearRect(0, 0, CELL, CELL);
     paint({ ctx, rng: new Rng(1009 + i * 7919), n: new Noise(31 + i * 17) });
     out.drawImage(cell, (i % ATLAS_COLS) * CELL, Math.floor(i / ATLAS_COLS) * CELL);
