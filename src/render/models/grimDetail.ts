@@ -359,9 +359,14 @@ function cellGeometry(geo: THREE.BufferGeometry, cell: number): THREE.BufferGeom
   const u0 = (cell % COLS) / COLS, v0 = 1 - (Math.floor(cell / COLS) + 1) / COLS;
   const inset = 0.06 / COLS, span = 1 / COLS - 2 * inset;
   const out = new Float32Array(n * 2);
+  // geometry without UVs (custom gear shells): project the cell onto it from the front/side
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  if (!uv) g.computeBoundingBox();
+  const bb = g.boundingBox ?? new THREE.Box3();
+  const sx = Math.max(1e-4, bb.max.x - bb.min.x), sy = Math.max(1e-4, bb.max.y - bb.min.y), sz = Math.max(1e-4, bb.max.z - bb.min.z);
   for (let i = 0; i < n; i++) {
-    const u = uv ? Math.min(1, Math.max(0, uv.getX(i))) : 0.5;
-    const v = uv ? Math.min(1, Math.max(0, uv.getY(i))) : 0.5;
+    const u = uv ? Math.min(1, Math.max(0, uv.getX(i))) : 0.5 * ((pos.getX(i) - bb.min.x) / sx + (pos.getZ(i) - bb.min.z) / sz);
+    const v = uv ? Math.min(1, Math.max(0, uv.getY(i))) : (pos.getY(i) - bb.min.y) / sy;
     out[i * 2] = u0 + inset + u * span;
     out[i * 2 + 1] = v0 + inset + v * span;
   }
@@ -393,7 +398,9 @@ function guess(me: THREE.Mesh, m: Mat, skin: Mat | undefined): Detail {
 function grim(m: Mat, k: number): void {
   const c = m.color;
   const l = c.r * 0.3 + c.g * 0.55 + c.b * 0.15;
-  c.setRGB(c.r + (l - c.r) * k, c.g + (l - c.g) * k, c.b + (l - c.b) * k);
+  // very bright paint (polished steel, white cloth) is dulled: nothing gleams like new
+  const dim = l > 0.4 ? 1 - (l - 0.4) * 0.9 : 1;
+  c.setRGB((c.r + (l - c.r) * k) * dim, (c.g + (l - c.g) * k) * dim, (c.b + (l - c.b) * k) * dim);
 }
 
 /**
@@ -428,7 +435,7 @@ export function paintRig(rig: Rig): void {
     me.geometry = cellGeometry(me.geometry, CELLS.indexOf(d));
     if (m.map !== atlas) {
       m.map = atlas;
-      if (!m.vertexColors && !lit) grim(m, 0.18);
+      if (!m.vertexColors && !lit) grim(m, 0.38);
       m.needsUpdate = true;
     }
   }

@@ -115,15 +115,11 @@ function aldric(): BipedRig {
   // baldric strap across the chest
   torso.add(d(rot(box(0.07, 0.75, 0.04, leather, 0, 0.3, 0.262), 0, 0, 0.75), 'leather'));
   torso.add(d(rot(box(0.07, 0.75, 0.04, leather, 0, 0.3, -0.262), 0, 0, -0.75), 'leather'));
-  // gorget and riveted, dented pauldrons standing proud of the silhouette
+  // gorget; rivets and a spike on the plate's own pauldrons
   torso.add(d(cyl(0.17, 0.21, 0.08, iron, 0, 0.57, 0, 10), 'iron'));
   for (const s of [-1, 1]) {
-    const p = group(s * 0.33, 0.52, 0,
-      d(sphere(0.16, iron, 0, 0, 0, 1.2, 0.6, 1.15, 2), 'steel'),
-      d(sphere(0.14, iron, 0, -0.06, 0, 1.25, 0.5, 1.2, 1), 'iron'),
-    );
-    rivets(p, brass, [-0.1, 0, 0.1], 0.07, 0.1);
-    torso.add(p);
+    rivets(torso, brass, [s * 0.27, s * 0.33, s * 0.39], 0.6, 0.1, 0.014);
+    torso.add(d(cone(0.03, 0.11, iron, s * 0.34, 0.66, 0, 4), 'iron'));
   }
   // long torn cloak in dried-blood red
   rig.cape = tornCloak(torso, 0x4a1210, 0.6, 1.0, -0.29, 'clothBlood', 11);
@@ -159,7 +155,7 @@ function brunhild(): BipedRig {
   for (const a of [armL, armR]) {
     a.scale.x *= 1.18; a.scale.z *= 1.18;
     const kids = a.children.filter((c) => (c as THREE.Mesh).isMesh) as THREE.Mesh[];
-    kids[0].material = skin; kids[0].userData.detail = 'skin';
+    kids[0].material = skin; kids[0].userData.detail = 'skinSoot';
     kids[1].visible = false;
     for (const k of kids.slice(2)) if (k.material === skin) k.userData.detail = 'skinSoot';
     a.add(d(cyl(0.075, 0.075, 0.035, mat(0x6a4a2a), 0, -0.2, 0, 8), 'leather')); // arm ring
@@ -185,12 +181,12 @@ function brunhild(): BipedRig {
   head.add(d(cyl(0.215, 0.215, 0.04, leather, 0, 0.1, -0.01, 12), 'leather'));
   // the huge forge hammer
   const hammer = group(0, 0, 0,
-    d(box(0.05, 0.95, 0.05, mat(0x4a3424), 0, 0.3, 0.04), 'wood'),
-    d(box(0.06, 0.16, 0.06, leather, 0, -0.06, 0.04), 'leather'),
-    d(box(0.36, 0.2, 0.2, iron, 0, 0.82, 0.04), 'iron'),
-    d(box(0.06, 0.22, 0.22, mat(0x5a5856), 0.2, 0.82, 0.04), 'steel'),
-    d(box(0.06, 0.22, 0.22, mat(0x5a5856), -0.2, 0.82, 0.04), 'steel'),
-    sphere(0.03, mat(0x2a0a06), 0.23, 0.86, 0.1, 1, 1, 0.5, 0),
+    d(cyl(0.028, 0.034, 1.0, mat(0x7a5a3a), 0, 0.32, 0.04, 6), 'wood'),
+    d(box(0.065, 0.18, 0.065, leather, 0, -0.08, 0.04), 'leather'),
+    d(box(0.3, 0.17, 0.17, iron, 0, 0.86, 0.04), 'iron'),
+    d(box(0.05, 0.2, 0.2, mat(0x6a6866), 0.17, 0.86, 0.04), 'steel'),
+    d(box(0.05, 0.2, 0.2, mat(0x6a6866), -0.17, 0.86, 0.04), 'steel'),
+    d(box(0.1, 0.05, 0.2, iron, 0, 0.75, 0.04), 'iron'),
   );
   hammer.rotation.x = 0.15;
   holdProp(rig, hammer);
@@ -203,8 +199,8 @@ function brunhild(): BipedRig {
 function mirella(): BipedRig {
   const rig = buildPlayerRig(ap({ body: 'female', skin: 0, hair: 'long', hairColor: 0, build: 'slim', eyes: 4, top: 14, bottom: 3 }));
   const { torso, head, armL, armR, legL, legR } = rig;
-  const robe = mat(0x2e1e2c);
-  const robeDark = mat(0x1c1218);
+  const robe = mat(0x4a3448);
+  const robeDark = mat(0x2a1c28);
   const bone = mat(0xcfc2a2);
   const cord = mat(0x2a1a10);
   for (const c of head.children) if (c.userData.cover) c.visible = false; // hair under the hood
@@ -234,9 +230,11 @@ function mirella(): BipedRig {
     torso.add(box(0.012, 0.045, 0.006, glyph, x, -0.07, z + 0.011));
   }
   // deep peaked hood shadowing the face
-  head.add(d(sphere(0.25, robe, 0, 0.05, -0.04, 1, 1.05, 1.12, 2), 'cloth'));
-  head.add(d(rot(cone(0.16, 0.34, robe, 0, 0.22, -0.18, 8), -0.7, 0, 0), 'cloth'));
-  head.add(d(sphere(0.215, robeDark, 0, 0.02, -0.02, 1.02, 1.05, 1.0, 1), 'plain'));
+  head.add(d(sphere(0.25, robe, 0, 0.06, -0.1, 1, 1.05, 1.0, 2), 'cloth'));
+  head.add(d(rot(cone(0.16, 0.34, robe, 0, 0.24, -0.2, 8), -0.7, 0, 0), 'cloth'));
+  for (const s of [-1, 1]) head.add(d(rot(box(0.05, 0.36, 0.2, robe, s * 0.2, -0.02, 0.02), 0, 0, s * 0.12), 'cloth')); // hood sides framing the face
+  head.add(d(box(0.4, 0.06, 0.12, robe, 0, 0.2, 0.1), 'cloth')); // hood brim over the brow
+  head.add(d(sphere(0.2, mat(0x120a10), 0, 0.03, -0.09, 1.05, 1.05, 1.0, 1), 'plain'));
   // cut and scarred hands
   scar(head, 0.06, -0.06, 0.12, -0.4, 0x8a4a4a);
   for (const a of [armL, armR]) {
@@ -254,7 +252,7 @@ function mirella(): BipedRig {
     d(sphere(0.075, bone, 0.02, 1.2, 0.05, 1, 1.1, 0.95, 1), 'bone'),
     sphere(0.02, glow, 0.045, 1.21, 0.115, 1, 1, 1, 0),
     sphere(0.02, glow, -0.005, 1.21, 0.115, 1, 1, 1, 0),
-    sphere(0.045, glow, 0.02, 1.36, 0.05, 1, 1, 1, 1),
+    sphere(0.07, glow, 0.02, 1.38, 0.05, 1, 1, 1, 2),
     d(cyl(0.04, 0.04, 0.04, cord, 0.01, 1.08, 0.05, 6), 'leather'),
     d(rot(cone(0.012, 0.09, bone, 0.07, 1.0, 0.06, 4), Math.PI, 0, 0), 'bone'),
     d(rot(cone(0.012, 0.08, bone, -0.05, 0.98, 0.06, 4), Math.PI, 0, 0), 'bone'),
@@ -342,12 +340,13 @@ function elias(): BipedRig {
   torso.add(d(box(0.54, 0.08, 0.5, leather, 0, 0.03, 0), 'leather'));
   pouch(torso, leather, 0.17, -0.05, 0.23);
   // one great dented pauldron on the left (shield) shoulder, chipped at the rim
-  const pauld = group(0.32, 0.53, 0,
-    d(sphere(0.19, iron, 0, 0, 0, 1.15, 0.62, 1.2, 2), 'iron'),
-    d(sphere(0.17, iron, 0.02, -0.08, 0, 1.2, 0.5, 1.2, 1), 'steel'),
-    d(rot(box(0.04, 0.18, 0.3, leather, -0.12, -0.02, 0), 0, 0, 0.5), 'leather'),
+  const pauld = group(0.3, 0.54, 0,
+    d(sphere(0.145, iron, 0, 0, 0, 1.15, 0.55, 1.15, 2), 'iron'),
+    d(sphere(0.13, iron, 0.02, -0.06, 0, 1.2, 0.45, 1.2, 1), 'steel'),
+    d(sphere(0.115, iron, 0.03, -0.11, 0, 1.2, 0.4, 1.2, 1), 'iron'),
+    d(rot(box(0.04, 0.16, 0.26, leather, -0.1, -0.02, 0), 0, 0, 0.5), 'leather'),
   );
-  rivets(pauld, brass, [-0.08, 0.02, 0.1], 0.1, 0.12);
+  rivets(pauld, brass, [-0.06, 0.02, 0.08], 0.07, 0.1, 0.013);
   torso.add(pauld);
   armL.add(d(cyl(0.085, 0.075, 0.14, iron, 0, -0.3, 0, 8), 'iron')); // vambrace
   // battered round practice shield on his back

@@ -18,7 +18,7 @@ import { applyGear } from './models/humanoid';
 import { buildPlayerRig } from './models/playerModel';
 import { mat, toonGradient } from './models/parts';
 import { mergeRig } from './models/rigMerge';
-import { paintRig } from './models/grimDetail';
+import { detailAtlas, paintRig } from './models/grimDetail';
 import { GRIM_NPCS } from './models/grimNpcs';
 import { CAMERA_TILT_DEG, CameraController } from './CameraController';
 import { itemIcon } from '../ui/icons';
@@ -70,6 +70,8 @@ export class Renderer {
   private pixel = new PixelPass();
   /** Painted style (style.ts): full-resolution buffer + outline/vignette pass instead of the pixel pass. */
   private paint: PaintPass | null = PAINTED ? new PaintPass() : null;
+  /** Painted style: the character detail atlas is painted at load, not when the first character appears. */
+  readonly detailTex = PAINTED ? detailAtlas() : null;
   private views = new Map<number, CreatureView>();
   private bagMeshes = new Map<number, THREE.Group>();
   private sun: THREE.DirectionalLight;
