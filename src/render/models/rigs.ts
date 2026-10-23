@@ -7,6 +7,7 @@ import { box, collectMaterials, cone, cyl, group, mat, sphere, type Mat } from '
 import { makeShield, makeWeapon } from './weapons';
 import { buildDarkEnemy, DARK_MONSTERS } from './darkRigs';
 import { PAINTED } from '../style';
+import { grimBoss, grimCrown, grimOwnCrown, hasGrimBoss } from './grimBosses';
 import { GRIM_NPCS } from './grimNpcs';
 
 /**
@@ -884,7 +885,7 @@ export const BOSS_LOOK: Partial<Record<EnemyKind, BossLook>> = {
   boss_drowned_tyrant: { base: 'deepfin_raider', tint: 0x1a4a5a, amt: 0.35, crown: 0xd8443a, aura: 0x4ad8e8, glow: 0x061a20 },
 };
 
-function buildBoss(look: BossLook): Rig {
+function buildBoss(kind: EnemyKind, look: BossLook): Rig {
   const rig = buildEnemy(look.base);
   const tint = new THREE.Color(look.tint);
   for (const m of rig.materials) {
@@ -898,20 +899,32 @@ function buildBoss(look: BossLook): Rig {
   const box = new THREE.Box3().setFromObject(rig.head);
   const top = crestOn ? new THREE.Vector3() : rig.head.worldToLocal(new THREE.Vector3((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2));
   const w = crestOn ? 0.14 : Math.max(0.12, Math.min(0.24, (box.max.x - box.min.x) * 0.38));
-  const gold = mat(look.crown, { emissive: new THREE.Color(look.crown).multiplyScalar(0.35).getHex() });
-  const crown = group(top.x, top.y - 0.02, top.z, cyl(w, w * 0.92, 0.07, gold, 0, 0.035, 0, 10));
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2;
-    crown.add(cone(w * 0.22, 0.11, gold, Math.sin(a) * w * 0.9, 0.12, Math.cos(a) * w * 0.9, 4));
+  // painted style: a darker, worn metal crown that does not bloom into a blob in daylight
+  const crownCol = PAINTED ? new THREE.Color(look.crown).multiplyScalar(0.62).getHex() : look.crown;
+  const gold = mat(crownCol, { emissive: new THREE.Color(look.crown).multiplyScalar(PAINTED ? 0.08 : 0.35).getHex() });
+  let crown: THREE.Group;
+  if (PAINTED) {
+    // painted style: an open, spiked iron-gold circlet (the head shows through from above)
+    crown = grimCrown(w * 0.72, gold, mat(0xa01a14, { emissive: 0x300404 }));
+    crown.position.set(top.x, top.y - 0.04, top.z);
+  } else {
+    crown = group(top.x, top.y - 0.02, top.z, cyl(w, w * 0.92, 0.07, gold, 0, 0.035, 0, 10));
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      crown.add(cone(w * 0.22, 0.11, gold, Math.sin(a) * w * 0.9, 0.12, Math.cos(a) * w * 0.9, 4));
+    }
+    crown.add(sphere(w * 0.2, mat(0xd02a2a, { emissive: 0x500808 }), 0, 0.06, w * 0.95));
   }
-  crown.add(sphere(w * 0.2, mat(0xd02a2a, { emissive: 0x500808 }), 0, 0.06, w * 0.95));
-  (crestOn ?? rig.head).add(crown);
+  // painted style: some bosses wear their own headdress instead (models/grimBosses.ts)
+  if (!(PAINTED && grimOwnCrown(kind))) (crestOn ?? rig.head).add(crown);
   // a glowing ring at the feet marks a boss from afar
   const aura = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.6, 28), mat(look.aura, { emissive: look.aura }));
   aura.rotation.x = -Math.PI / 2;
   aura.position.y = 0.025;
   rig.root.add(aura);
   rig.materials.push(...collectMaterials(crown), aura.material as Mat);
+  // painted style: trophies, glowing runes, ground glow and particles for every boss
+  if (PAINTED) grimBoss(kind, rig);
   return rig;
 }
 
@@ -919,10 +932,14 @@ export function buildEnemy(kind: EnemyKind): Rig {
   // dark realistic models are the default; `?monsters=classic` shows these classic ones
   if (DARK_MONSTERS) {
     const dark = buildDarkEnemy(kind);
-    if (dark) return dark;
+    if (dark) {
+      // painted style: rare elites with a dark model of their own (the Gravesilk Colossus)
+      if (PAINTED && hasGrimBoss(kind)) grimBoss(kind, dark);
+      return dark;
+    }
   }
   const boss = BOSS_LOOK[kind];
-  if (boss) return buildBoss(boss);
+  if (boss) return buildBoss(kind, boss);
   switch (kind) {
     case 'rat': return buildRat();
     case 'wolf': return buildWolf();

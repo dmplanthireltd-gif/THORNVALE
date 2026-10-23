@@ -28,6 +28,7 @@ import { PixelPass, TILE_PX } from './PixelPass';
 import { WorldView } from './WorldView';
 import { UnderwaterFx, type Breather } from './sea/underwater';
 import { Blood } from './Blood';
+import { CreatureGore, goreStain } from './fx/creatureGore';
 import { playSkillFx } from './skillFx';
 import { SkillAnimator } from './skillAnim';
 import { oreAt } from '../game/gathering/mining';
@@ -90,6 +91,8 @@ export class Renderer {
   private time = 0;
   private lastPz = Number.NaN;
   private blood!: Blood;
+  /** Painted style: visceral monster hits and deaths (fx/creatureGore.ts). */
+  private gore: CreatureGore | null = null;
   /** Tools in hand and work loops for mining, woodcutting, fishing and production (skillAnim.ts). */
   private skillAnim!: SkillAnimator;
   /** The underwater look of the Sunken Reach (sea/underwater.ts). */
@@ -155,6 +158,7 @@ export class Renderer {
     this.worldView.isRuneField = (x, y, z) => this.ctl.game.fieldAt(x, y, z) !== null;
     this.effects = new Effects(this.scene);
     this.blood = new Blood(this.scene, (z) => this.worldView.floorOffset(z));
+    if (PAINTED) this.gore = new CreatureGore(this.scene, this.blood);
     this.skillAnim = new SkillAnimator(this.scene, this.effects, { game: () => this.ctl.game, near: (x, y) => chebyshev(x, y, this.me.x, this.me.y) <= VIEW_RANGE + 2 });
     this.underwater = new UnderwaterFx(this.scene, ctl.game.world, { hemi: this.hemi, sun: this.sun, torch: this.torch, background: this.scene.background as THREE.Color }, () => {
       this.lastPz = Number.NaN;
@@ -698,7 +702,22 @@ export class Renderer {
 
   private bloodFor(id: number): number {
     const e = this.ctl.game.getEnemy(id);
+    if (e && this.gore) return goreStain(e.enemyKind);
     return (e && BLOOD[e.enemyKind]) ?? 0xb3221b;
+  }
+
+  /** Painted style: a monster's hit spray / death burst (fx/creatureGore.ts); false = use the classic one. */
+  private goreFx(id: number, v: CreatureView, pos: THREE.Vector3, amount: number, sourceId: number | null): boolean {
+    const e = this.gore ? this.ctl.game.getEnemy(id) : undefined;
+    if (!e || !this.gore) return false;
+    const scale = (ENEMY_SCALE[e.enemyKind] ?? 1.3) / 1.3;
+    const under = this.underwater.active;
+    if (sourceId === null) this.gore.death(e.enemyKind, pos, v.yOffset, e.z, scale, under);
+    else {
+      const src = this.views.get(sourceId)?.rig.root.position;
+      this.gore.hit(e.enemyKind, pos, src ? src.x : NaN, src ? src.z : NaN, amount, v.yOffset, e.z, scale, under);
+    }
+    return true;
   }
 
   private float(id: number, text: string, cls: string, max = 1.1, rise = 0): void {
@@ -726,15 +745,19 @@ export class Renderer {
       if (el === 'physical') {
         const col = this.bloodFor(e.targetId);
         this.effects.impact(pos, 'physical', power);
-        this.effects.burst(pos, col, 6 + Math.min(10, Math.floor(e.amount / 10)), 2.4);
-        this.bleed(e.targetId, col, e.amount);
+        if (!this.goreFx(e.targetId, v, pos, e.amount, e.sourceId)) {
+          this.effects.burst(pos, col, 6 + Math.min(10, Math.floor(e.amount / 10)), 2.4);
+          this.bleed(e.targetId, col, e.amount);
+        }
       } else {
         this.effects.impact(pos, el as Effect, power);
         if (el === 'death' && e.amount > 0) {
           // death magic tears flesh: a bloody burst on top of the dark one
           const col = this.bloodFor(e.targetId);
-          this.effects.burst(pos, col, 4 + Math.min(10, Math.floor(e.amount / 15)), 2.4);
-          this.bleed(e.targetId, col, e.amount);
+          if (!this.goreFx(e.targetId, v, pos, e.amount * 0.7, e.sourceId)) {
+            this.effects.burst(pos, col, 4 + Math.min(10, Math.floor(e.amount / 15)), 2.4);
+            this.bleed(e.targetId, col, e.amount);
+          }
         } else if (e.amount > 0 && Math.random() < 0.5) this.bleed(e.targetId, this.bloodFor(e.targetId), e.amount * 0.6);
       }
       // a heavy blow on you jolts the view a little
@@ -867,6 +890,10 @@ export class Renderer {
         if (!v) break;
         v.onDeath();
         const pos = this.chest(e.id);
+        if (this.goreFx(e.id, v, pos, 0, null)) {
+          this.effects.burst(pos.setY(v.yOffset + 0.15), 0x8a7a62, 8, 1.2, 2, 0.1);
+          break;
+        }
         this.effects.burst(pos, this.bloodFor(e.id), 34, 3.2);
         {
           const c = this.ctl.game.getCreature(e.id);
@@ -1352,6 +1379,7 @@ export class Renderer {
     this.effects.focus = { x: vp.x, z: vp.y };
     this.effects.update(dt);
     this.blood.update(dt);
+    this.gore?.update(dt);
     this.overlay.update(dt);
     // the first frame (and the first after switching the pixel look) compiles every shader the world uses
     this.precompile();

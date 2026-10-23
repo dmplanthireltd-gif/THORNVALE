@@ -108,6 +108,17 @@ console.log('Boss definitions');
     }
     check(badRig.length === 0, `every boss has its own bigger, recoloured rig with a crown${badRig.length ? ` (${badRig.join('; ')})` : ''}`);
     check(WORLD_BOSSES.every((w) => ENEMY_SCALE[w.kind] >= 3), 'world bosses are colossal');
+    // painted style: every boss has its own grim treatment (models/grimBosses.ts)
+    const { grimBoss, hasGrimBoss } = await import('../src/render/models/grimBosses');
+    const noGrim = [...ALL_BOSSES, 'gravesilk_colossus' as EnemyKind].filter((k) => !hasGrimBoss(k));
+    check(noGrim.length === 0, `every boss has a grim painted look${noGrim.length ? ` (${noGrim.join(' ')})` : ''}`);
+    const badGrim: string[] = [];
+    for (const k of [...ALL_BOSSES, 'gravesilk_colossus' as EnemyKind]) {
+      const rig = buildEnemy(k);
+      const before = rig.root.children.length;
+      if (!grimBoss(k, rig) || rig.root.children.length <= before) badGrim.push(k);
+    }
+    check(badGrim.length === 0, `grim bosses add their aura and particles${badGrim.length ? ` (${badGrim.join(' ')})` : ''}`);
   } catch (err) {
     console.log(`  skip models: ${(err as Error).message}`);
   }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Creature } from '../game/entities/Creature';
 import type { BipedRig, QuadRig, Rig } from './models/rigs';
 import { BlockAnim } from './anim/blockAnim';
+import { PAINTED } from './style';
 
 const TAU = Math.PI * 2;
 const baseEmissive = new WeakMap<THREE.Material, THREE.Color>();
@@ -62,7 +63,7 @@ export class CreatureView {
     this.castOn = on;
     const hb = this.rig.hitbox;
     this.rig.root.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh && o !== hb) o.castShadow = on;
+      if ((o as THREE.Mesh).isMesh && o !== hb && !o.userData.noShadow) o.castShadow = on;
     });
   }
 
@@ -96,6 +97,7 @@ export class CreatureView {
     const b = this.rig.body;
     b.rotation.set(0, 0, 0);
     b.position.set(0, 0, 0);
+    this.rig.head.rotation.z = 0;
     this.fade = 0;
     this.fadingIn = true;
     this.rig.root.visible = true;
@@ -129,8 +131,14 @@ export class CreatureView {
     // death
     if (c.dead) {
       if (this.deathT < 0) this.deathT = 0;
-      this.deathT = Math.min(1, this.deathT + dt / 0.6);
-      this.applyDeath(easeOut(this.deathT));
+      if (PAINTED && c.kind === 'enemy') {
+        // painted style: a heavier collapse — knees buckle, then the body drops and settles
+        this.deathT = Math.min(1, this.deathT + dt / 0.95);
+        this.applyCollapse(this.deathT);
+      } else {
+        this.deathT = Math.min(1, this.deathT + dt / 0.6);
+        this.applyDeath(easeOut(this.deathT));
+      }
       if (!corpseVisible) this.fade = Math.max(0, this.fade - dt / 1.2);
       this.applyFade();
       rig.root.visible = this.fade > 0.01;
@@ -252,6 +260,39 @@ export class CreatureView {
       b.rotation.set(0, 0, t * Math.PI / 2);
       b.position.set(0, t * 0.18, 0);
       for (const l of rig.legs) l.rotation.x = 0.3 * t;
+    }
+  }
+
+  /**
+   * Painted style death (monsters): sag and buckle (0–0.3), fall under gravity (0.3–0.8),
+   * a small bounce as it hits the ground and settles (0.8–1). Ends in the same pose as
+   * applyDeath(1), so corpses look the same afterwards. No dismemberment.
+   */
+  private applyCollapse(t: number): void {
+    const rig = this.rig;
+    const b = rig.body;
+    const a = Math.min(1, t / 0.3);
+    const sag = a * a * (3 - 2 * a);
+    const f0 = Math.min(1, Math.max(0, (t - 0.3) / 0.5));
+    const fall = f0 * f0;
+    const settle = t > 0.8 ? Math.sin(((t - 0.8) / 0.2) * Math.PI) * (1 - (t - 0.8) / 0.2 * 0.5) : 0;
+    if (rig.type === 'biped') {
+      // a lurch forward as the legs give, then over onto the back
+      const rx = 0.22 * sag * (1 - fall) - fall * Math.PI / 2 + settle * 0.1;
+      b.rotation.set(rx, 0, 0.12 * sag * (1 - fall));
+      b.position.set(0, -0.16 * sag * (1 - fall) + 0.12 * fall + settle * 0.04, 0);
+      rig.legL.rotation.x = -0.7 * sag * (1 - fall);
+      rig.legR.rotation.x = -0.55 * sag * (1 - fall);
+      rig.armL.rotation.x = lerp(-0.15, -1.0, fall) + 0.5 * sag * (1 - fall);
+      rig.armR.rotation.x = lerp(rig.restArm, -1.25, fall) + 0.4 * sag * (1 - fall);
+      rig.head.rotation.x = 0.35 * sag * (1 - fall) - 0.25 * fall;
+      rig.head.rotation.z = 0.3 * fall;
+    } else {
+      // legs fold under it, it sinks, then rolls onto its side
+      b.rotation.set(0.12 * sag * (1 - fall), 0, fall * Math.PI / 2 - settle * 0.08);
+      b.position.set(0, -0.14 * sag * (1 - fall) + 0.18 * fall + settle * 0.03, 0);
+      for (const l of rig.legs) l.rotation.x = 0.6 * sag * (1 - fall) + 0.3 * fall;
+      rig.head.rotation.x = 0.3 * sag + 0.15 * fall;
     }
   }
 
