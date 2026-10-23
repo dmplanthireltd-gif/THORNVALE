@@ -1,6 +1,7 @@
 import type { EnemyKind } from '../../game/world/WorldMap';
 import type { BipedRig, Rig } from './rigs';
 import { C, Kit, type Mesher, type V3 } from './darkRigsCore';
+import { PAINTED } from '../style';
 import { arm, belt, face, leg, man, pauldron, strips, wStaff } from './darkRigsParts';
 
 /**
@@ -159,7 +160,11 @@ function fgTorso(o: { plate?: boolean; cloak?: number }) {
     m.sph(0.5, FG_SKIN, [0, 0.5, 0], { s: [0.92, 0.34, 0.5], grit: 0.15 });
     m.box(0.06, 0.3, 0.02, ICE_D, [0.14, 0.32, 0.215], { r: [0, 0, 0.4], flat: true }); // frost-scars
     m.box(0.06, 0.3, 0.02, ICE_D, [-0.14, 0.32, 0.215], { r: [0, 0, -0.4], flat: true });
-    if (o.plate) {
+    if (o.plate && PAINTED) {
+      // painted style: a rounded cuirass hooped with frost-rimed iron bands (no slab edges)
+      m.sph(0.5, 0x5a6a78, [0, 0.42, 0], { s: [0.8, 0.36, 0.5], grit: 0.3 }, 2);
+      for (let i = 0; i < 3; i++) m.ring(0.37 - Math.abs(i - 1) * 0.03, 0.016, ICE, [0, 0.34 + i * 0.08, 0], { s: [1, 1, 0.62], flat: true }, Math.PI * 2, 18);
+    } else if (o.plate) {
       m.box(0.76, 0.3, 0.46, 0x5a6a78, [0, 0.42, 0], { grit: 0.3 });
       for (let i = 0; i < 4; i++) m.box(0.78, 0.02, 0.47, ICE, [0, 0.3 + i * 0.08, 0], { flat: true });
     }

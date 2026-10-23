@@ -248,7 +248,7 @@ function scaleCoat(m: Mesher, c: V3, r: V3, rows: number, per: number, size: num
       const y = c[1] + Math.cos(v) * r[1] * k * 1.01;
       const z = c[2] + u * r[2];
       const sz = size * (0.75 + 0.25 * k) * (1 - Math.abs(v) * 0.18);
-      m.sph(sz, cols[(i + j) % cols.length], [x, y, z], { s: [1.1, 0.34, 1.25], r: [-0.35 - u * 0.4, 0, -v], grit: 0.25 }, 1);
+      m.sph(sz, cols[(i + j) % cols.length], [x, y, z], { s: [1.15, 0.24, 1.3], r: [-0.35 - u * 0.4, 0, -v], grit: 0.25 }, 1);
     }
   }
 }
@@ -262,12 +262,12 @@ function paintedNeck(m: Mesher): void {
     const b = P_NECK[i + 1];
     const tilt = Math.atan2(b[2] - a[2], b[1] - a[1]);
     const rr = (P_NECK_R[i] + P_NECK_R[i + 1]) / 2;
-    for (const t of [0.25, 0.75]) {
+    for (const t of [0.5]) {
       const y = a[1] + (b[1] - a[1]) * t;
       const z = a[2] + (b[2] - a[2]) * t;
-      m.sph(rr * 0.62, BELLY, [0, y - Math.sin(tilt) * rr * 0.55, z + Math.cos(tilt) * rr * 0.72], { s: [1.25, 0.5, 0.55], r: [tilt, 0, 0], grit: 0.16 }, 1);
-      m.sph(rr * 0.5, SCALE_L, [0, y + Math.sin(tilt) * rr * 0.6, z - Math.cos(tilt) * rr * 0.72], { s: [1.2, 0.55, 0.5], r: [tilt, 0, 0], grit: 0.25 }, 1);
-      for (const s of [-1, 1]) m.sph(rr * 0.42, SCALE_D, [s * rr * 0.8, y, z], { s: [0.35, 0.8, 1.1], r: [tilt, 0, 0], grit: 0.25 }, 1);
+      m.sph(rr * 0.62, BELLY, [0, y - Math.sin(tilt) * rr * 0.55, z + Math.cos(tilt) * rr * 0.72], { s: [1.25, 0.5, 1.1], r: [tilt, 0, 0], grit: 0.16 }, 0);
+      m.sph(rr * 0.5, SCALE_L, [0, y + Math.sin(tilt) * rr * 0.6, z - Math.cos(tilt) * rr * 0.72], { s: [1.2, 0.55, 1.0], r: [tilt, 0, 0], grit: 0.25 }, 0);
+      for (const s of [-1, 1]) m.sph(rr * 0.42, SCALE_D, [s * rr * 0.8, y, z], { s: [0.35, 1.6, 1.1], r: [tilt, 0, 0], grit: 0.25 }, 0);
     }
     m.spike([0, (a[1] + b[1]) / 2 + Math.sin(tilt) * rr * 0.85, (a[2] + b[2]) / 2 - Math.cos(tilt) * rr * 0.9], [0, 0.4, -1], 0.07, 0.022, i % 2 ? BRONZE : SCALE_L);
   }
@@ -316,7 +316,7 @@ function paintedHydra(): QuadRig {
     m.sph(0.5, SCALE, [0, 0.4, -0.22], { s: [0.78, 0.5, 0.66], grit: 0.18 }, 2); // belly / hips
     m.sph(0.5, BELLY, [0, 0.27, -0.05], { s: [0.66, 0.2, 0.92], grit: 0.14 }, 2); // underbelly
     // overlapping scales over the back, bigger bronze-edged plates down the spine
-    scaleCoat(m, [0, 0.42, -0.06], [0.4, 0.27, 0.52], 7, 7, 0.075, [SCALE, PLATE, SCALE_D]);
+    scaleCoat(m, [0, 0.42, -0.06], [0.4, 0.27, 0.52], 6, 5, 0.085, [SCALE, PLATE, SCALE_D]);
     for (let i = 0; i < 7; i++) {
       const t = i / 6;
       const z = 0.3 - t * 0.78;

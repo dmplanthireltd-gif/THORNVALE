@@ -35,7 +35,7 @@ function wing(m: Mesher, s: number, S: number, o: DragonLook): void {
   const P = (x: number, y: number): V3 => [s * x * S, y * S, 0];
   const outline: [number, number][] = [[0, 0.12], [0.36, 0.3], [0.9, 0.42], [1.25, 0.3], [1.0, 0.06], [1.18, -0.2], [0.88, -0.24], [0.84, -0.56], [0.6, -0.4], [0.44, -0.66], [0.3, -0.4], [0.12, -0.42], [0, -0.3]];
   // painted style: a curved, billowing membrane between the finger bones (classic: flat)
-  m.membrane(outline.map(([x, y]) => [s * x * S, y * S] as [number, number]), o.membrane, [0, 0, 0], { grit: 0.3, blood: 0.03 }, 0.1, 0.035, 4);
+  m.membrane(outline.map(([x, y]) => [s * x * S, y * S] as [number, number]), o.membrane, [0, 0, 0], { grit: 0.3, blood: 0.03, d: 'membrane' }, 0.1, 0.035, 4);
   // a torn hole in the membrane (classic), the arm and finger bones
   if (!PAINTED) m.poly([[s * 0.5 * S, -0.1 * S], [s * 0.6 * S, -0.04 * S], [s * 0.62 * S, -0.16 * S]], 0x0a0806, [0, 0, 0.004], { flat: true });
   m.seg(P(0, 0.05), P(0.36, 0.3), 0.07, 0.055, o.scale);
@@ -134,7 +134,7 @@ function dragon(K: Kit, o: DragonLook): QuadRig {
   });
 
   const wings = [-1, 1].map((s) => {
-    const w = K.limb(s < 0 ? 'wingR' : 'wingL', [s * 0.24 * z, 0.82 * z, 0.08 * z], (m) => wing(m, s, 0.78 * z, o));
+    const w = K.limb(s < 0 ? 'wingR' : 'wingL', [s * 0.24 * z, 0.82 * z, 0.08 * z], (m) => wing(m, s, 0.68 * z, o));
     return w;
   });
   return quadRig(K, { body, head, legs, tail, wings }, hitbox(1.3 * z, 1.4 * z, 1.8 * z), 1.4 * z);

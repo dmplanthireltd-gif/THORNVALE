@@ -974,18 +974,18 @@ export const ENEMY_SCALE: Record<EnemyKind, number> = {
   elf: 1.3, elf_scout: 1.3, elf_arcanist: 1.3, elf_warden: 1.38,
   crocodile: 1.3, tarantula: 1.35, jungle_troll: 1.3, hydra: 1.3,
   ghoul: 1.3, fire_elemental: 1.4, behemoth: 1.42, demon: 1.45,
-  dragon: 1.45, dragon_lord: 1.55,
-  frost_dragon: 1.55, ice_golem: 1.4, crystal_spider: 1.3, frost_giant: 1.45, frost_giantess: 1.42, ice_witch: 1.32,
+  dragon: 1.45, dragon_lord: 1.4,
+  frost_dragon: 1.4, ice_golem: 1.4, crystal_spider: 1.3, frost_giant: 1.45, frost_giantess: 1.42, ice_witch: 1.32,
   barbarian_raider: 1.34, barbarian_skullhunter: 1.38, barbarian_brutetamer: 1.32, barbarian_headsplitter: 1.34,
   frostkin: 1.15, frostkin_toolshaper: 1.18, frostkin_windcaller: 1.15, dire_penguin: 1.1, silver_rabbit: 1.0, winter_wolf: 1.28, polar_bear: 1.4,
   scorpion: 1.35, mummy: 1.32, scarab: 1.3, minotaur: 1.4, minotaur_archer: 1.38, minotaur_mage: 1.36, cyclops: 1.42,
   dwarf: 1.25, dwarf_soldier: 1.25, dwarf_guard: 1.3, bandit: 1.3, amazon: 1.3, valkyrie: 1.32, bear: 1.4, deer: 1.3, snake: 1.25,
   lizard_sentinel: 1.34, lizard_templar: 1.42,
-  dread_weaver: 1.35, gravesilk_colossus: 1.7,
+  dread_weaver: 1.35, gravesilk_colossus: 1.6,
   // bosses: clearly bigger than their kin, world bosses colossal (but readable: owner 2026-10-23
   // "much too big — you can't see your character"; anything covering the hero turns see-through)
   boss_ironjaw: 1.7, boss_bonebound: 1.65, boss_delving_king: 1.6, boss_labyrinth_lord: 1.7, boss_venom_oracle: 1.75,
-  boss_ember_matriarch: 1.85, boss_sand_king: 1.75, boss_mire_hydra: 1.75, boss_rime_wyrm: 1.9, boss_ashen_sovereign: 1.85,
+  boss_ember_matriarch: 1.7, boss_sand_king: 1.75, boss_mire_hydra: 1.55, boss_rime_wyrm: 1.7, boss_ashen_sovereign: 1.85,
   wb_mountain: 3.0, wb_storm_serpent: 3.0, wb_blight_mother: 3.0,
   raid_tusk_warlord: 1.7, raid_grave_warden: 1.65, raid_frost_jarl: 1.85, raid_swarm_queen: 1.9,
   // the Sunken Reach (darkRigsSea.ts)

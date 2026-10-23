@@ -82,20 +82,31 @@ function smoothRound(g: THREE.BufferGeometry): THREE.BufferGeometry {
  */
 export function softBox(w: number, h: number, d: number, round = 0.42): THREE.BufferGeometry {
   const big = Math.max(w, h, d);
-  const n = big > 0.14 ? 3 : 2;
+  const n = big > 0.32 ? 3 : 2;
   const g = new THREE.BoxGeometry(w, h, d, n, n, n);
   const r = Math.min(w, h, d) * round;
   if (r < 0.004) return g;
-  const ix = w / 2 - r, iy = h / 2 - r, iz = d / 2 - r;
+  const hw = w / 2, hh = h / 2, hd = d / 2;
+  const ix = hw - r, iy = hh - r, iz = hd - r;
+  // chunky blocks (torsos, fists, heads) also bulge toward an ellipsoid: no box silhouette from above
+  const t = Math.min(0.42, Math.max(0, (Math.min(w, h, d) - 0.1) * 2.2));
   const P = g.attributes.position;
   const N = g.attributes.normal;
+  const e = new THREE.Vector3();
   for (let i = 0; i < P.count; i++) {
     const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
     const cx = Math.max(-ix, Math.min(ix, x)), cy = Math.max(-iy, Math.min(iy, y)), cz = Math.max(-iz, Math.min(iz, z));
     _v.set(x - cx, y - cy, z - cz);
     if (_v.lengthSq() < 1e-12) _v.fromBufferAttribute(N, i);
     _v.normalize();
-    P.setXYZ(i, cx + _v.x * r, cy + _v.y * r, cz + _v.z * r);
+    let px = cx + _v.x * r, py = cy + _v.y * r, pz = cz + _v.z * r;
+    if (t > 0) {
+      e.set(x / hw, y / hh, z / hd).normalize();
+      px += (e.x * hw - px) * t; py += (e.y * hh - py) * t; pz += (e.z * hd - pz) * t;
+      e.set(e.x / hw, e.y / hh, e.z / hd).normalize();
+      _v.lerp(e, t).normalize();
+    }
+    P.setXYZ(i, px, py, pz);
     N.setXYZ(i, _v.x, _v.y, _v.z);
   }
   return g;
@@ -178,7 +189,8 @@ export class Mesher {
   sph(r: number, c: number, p?: V3, o?: PartOpt, detail = 1): this {
     if (!PAINTED) return this.add(new THREE.IcosahedronGeometry(r, detail), c, p, o);
     // painted style: no faceted gem spheres — bigger ones one step finer, every one smooth-shaded
-    const g = new THREE.IcosahedronGeometry(r, detail === 0 && r >= 0.045 ? 1 : detail);
+    // (tiny ones stay coarse: at the game camera they are a few pixels, smooth shading hides the facets)
+    const g = new THREE.IcosahedronGeometry(r, r < 0.035 ? 0 : detail === 0 && r >= 0.09 ? 1 : Math.min(detail, r < 0.09 ? 1 : 2));
     return this.add(smoothRound(g), c, p, o);
   }
   cyl(rt: number, rb: number, h: number, c: number, p?: V3, o?: PartOpt, seg = 6): this { return this.add(new THREE.CylinderGeometry(rt, rb, h, rs(seg)), c, p, o); }
