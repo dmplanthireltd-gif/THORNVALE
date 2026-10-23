@@ -67,6 +67,18 @@ export interface Song {
   reverb?: number; // 0..1 room amount
   /** dB nudges to the default part levels, e.g. { drums: 3 } for a louder kit. */
   mix?: Partial<Record<Part, number>>;
+  /** dB offset of the final loudness (0 = the shared outdoor level; indoor themes use about -6). */
+  loudness?: number;
+  /** Master low-pass in Hz (muffled underwater, softer indoors); none by default. */
+  tone?: number;
+  /**
+   * Peak ceiling (linear sample peak, e.g. 0.5 = -6 dBFS; the AAC encoder adds up to ~3 dB on sharp plucks). When set, a smooth look-ahead limiter
+   * replaces the soft clipper, so plucked attacks can't overshoot after AAC encoding.
+   */
+  ceiling?: number;
+  /** AAC bit rate for render.ts in kbit/s (default 112) and whether to fold to mono. */
+  kbps?: number;
+  mono?: boolean;
 }
 
 // ------------------------------------------------------------------ notes and chords
@@ -250,7 +262,8 @@ export function render(song: Song, only?: Part): { l: Float32Array; r: Float32Ar
         const c = pat[s % pat.length];
         if (c && c !== '.') hit(band.kit, c, stem('drums'), at(bi, s) + human(bi * 31 + s) * 0.5, dv * (s % 4 === 0 ? 1 : 0.8));
       }
-      if (bi === 0) hit(band.kit, 'x', stem('drums'), 0, dv * 0.6);
+      // the opening crash, unless the song has no percussion at all
+      if (bi === 0 && hasDrums(song)) hit(band.kit, 'x', stem('drums'), 0, dv * 0.6);
     }
   });
 
@@ -304,14 +317,58 @@ export function render(song: Song, only?: Part): { l: Float32Array; r: Float32Ar
       for (let i = 0; i < n; i++) src[i] += acc[i] * wet;
     }
   }
+  // master low-pass (two passes so the filter state wraps around the loop like the reverb)
+  if (song.tone) {
+    for (const x of [l, r]) {
+      const w = Math.exp((-2 * Math.PI * song.tone) / SR);
+      let a = 0, b = 0;
+      for (let rep = 0; rep < 2; rep++) for (let i = 0; i < n; i++) {
+        a = x[i] * (1 - w) + a * w;
+        b = a * (1 - w) + b * w;
+        if (rep === 1) x[i] = b;
+      }
+    }
+  }
   // remove DC, normalise to a shared loudness and soft-limit
   for (const x of [l, r]) { let m = 0; for (let i = 0; i < n; i++) m += x[i]; m /= n; for (let i = 0; i < n; i++) x[i] -= m; }
   let sum = 0;
   for (let i = 0; i < n; i++) sum += l[i] * l[i] + r[i] * r[i];
   const rms = Math.sqrt(sum / (2 * n)) || 1;
-  const g = 0.13 / rms;
-  for (let i = 0; i < n; i++) { l[i] = Math.tanh(l[i] * g) * 0.95; r[i] = Math.tanh(r[i] * g) * 0.95; }
+  const g = (0.13 * Math.pow(10, (song.loudness ?? 0) / 20)) / rms;
+  if (song.ceiling) {
+    const gain = limiter(l, r, g, song.ceiling);
+    for (let i = 0; i < n; i++) { l[i] *= g * gain[i]; r[i] *= g * gain[i]; }
+  } else {
+    for (let i = 0; i < n; i++) { l[i] = Math.tanh(l[i] * g) * 0.95; r[i] = Math.tanh(r[i] * g) * 0.95; }
+  }
   return { l, r, seconds: n / SR };
+}
+
+/**
+ * Gain curve that keeps |x * g * gain| under `ceiling`: it ducks smoothly ~6 ms ahead of each peak
+ * and recovers over ~150 ms. Every pass wraps around the buffer, so the loop stays seamless.
+ */
+function limiter(l: Float32Array, r: Float32Array, g: number, ceiling: number): Float32Array {
+  const n = l.length, out = new Float32Array(n).fill(1);
+  const look = Math.floor(0.006 * SR);
+  for (let i = 0; i < n; i++) {
+    const p = Math.max(Math.abs(l[i]), Math.abs(r[i])) * g;
+    if (p > ceiling) {
+      const need = ceiling / p;
+      for (let k = 0; k <= look; k++) { const j = (i - k + n) % n; if (out[j] > need) out[j] = need; }
+    }
+  }
+  // ramp down before peaks (backwards in time), then recover slowly after them
+  const att = Math.exp(-1 / (look / 3)), rel = Math.exp(-1 / (0.15 * SR));
+  for (let rep = 0; rep < 2; rep++) { let v = 1; for (let k = 2 * n - 1; k >= 0; k--) { const i = k % n; v = Math.min(out[i], v + (1 - v) * (1 - att)); if (k < n) out[i] = v; } }
+  for (let rep = 0; rep < 2; rep++) { let v = 1; for (let k = 0; k < 2 * n; k++) { const i = k % n; v = Math.min(out[i], v + (1 - v) * (1 - rel)); if (k >= n) out[i] = v; } }
+  return out;
+}
+
+/** True when any section of the song plays percussion. */
+function hasDrums(song: Song): boolean {
+  const pats = [song.drums, ...Object.values(song.sections).map((s) => s.drums ?? song.drums)];
+  return pats.some((p) => /[^.]/.test(p));
 }
 
 export function wav(l: Float32Array, r: Float32Array): Buffer {

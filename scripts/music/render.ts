@@ -35,9 +35,10 @@ for (const song of SONGS) {
   const wavFile = join(WAV, `${song.id}.wav`);
   writeFileSync(wavFile, wav(l, r));
   if (ffmpeg) {
-    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', wavFile, '-c:a', 'aac', '-b:a', '112k', '-movflags', '+faststart', join(OUT, `${song.id}.m4a`)]);
+    const kbps = song.kbps ?? 112;
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', wavFile, ...(song.mono ? ['-ac', '1'] : []), '-c:a', 'aac', '-b:a', `${kbps}k`, '-movflags', '+faststart', join(OUT, `${song.id}.m4a`)]);
   }
-  console.log(`${song.id.padEnd(8)} "${song.title}"  ${seconds.toFixed(1)} s  (${((Date.now() - t) / 1000).toFixed(1)} s to render)`);
+  console.log(`${song.id.padEnd(9)} "${song.title}"  ${seconds.toFixed(1)} s  (${((Date.now() - t) / 1000).toFixed(1)} s to render)`);
 }
 if (ffmpeg) rmSync(WAV, { recursive: true, force: true });
 else console.log(`ffmpeg not found: WAV files left in ${WAV}`);
