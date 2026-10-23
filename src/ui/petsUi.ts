@@ -1,5 +1,8 @@
 import type { Controller } from '../client/Controller';
-import { describeItem, itemDef } from '../game/inventory/items';
+import { itemDef } from '../game/inventory/items';
+import { getLang, onLangChange, t } from '../i18n/i18n';
+import { trName, trText } from '../i18n/gameText';
+import { describeItemL } from '../i18n/describe';
 import { PET_DEFS, PET_MAX_LEVEL, petLevelForXp, petProgress, petXpForLevel, POUCH_SLOTS } from '../game/pets/petDefs';
 import { activePet, petLevel } from '../game/pets/PetSystem';
 import { button, el, paintSlot } from './dom';
@@ -47,7 +50,7 @@ export class PetsUi {
     this.win = el('div', 'window pet-win', hudRoot);
     this.win.hidden = true;
     const head = el('div', 'win-head', this.win);
-    el('span', 'win-title', head, 'Pet');
+    el('span', 'win-title', head, t('Pet'));
     button(head, '✕', () => this.toggle(false), 'btn tiny');
     this.body = el('div', 'win-body', this.win);
     this.win.addEventListener('mousedown', () => { this.win.style.zIndex = '60'; });
@@ -83,12 +86,12 @@ export class PetsUi {
       const status = this.hudRoot.querySelector('.panel.status .status-foot') ?? this.hudRoot.querySelector('.panel.status');
       if (!status) return;
       this.strip = el('div', 'pet-strip', status as HTMLElement);
-      this.strip.title = 'Your pet. Click to open the pet window.';
+      this.strip.title = t('Your pet. Click to open the pet window.');
       this.strip.addEventListener('click', () => this.toggle());
     }
     this.strip.hidden = !d;
     if (!d) return;
-    const text = `${d.name} · pet level ${petLevel(s.pets, d.id)}`;
+    const text = `${trName(d.name)} · ${t('pet level {n}', { n: petLevel(s.pets, d.id) })}`;
     if (this.strip.dataset.text !== text) {
       this.strip.dataset.text = text;
       this.strip.replaceChildren();
@@ -103,59 +106,59 @@ export class PetsUi {
     if (!this.open) return;
     const s = this.ctl.game.session(this.ctl.pid);
     if (!s) return;
-    const key = JSON.stringify([s.pets.active, s.pets.xp, s.pets.pouch]);
+    const key = JSON.stringify([getLang(), s.pets.active, s.pets.xp, s.pets.pouch]);
     if (key === this.key) return;
     this.key = key;
     const b = this.body;
     b.replaceChildren();
     const d = activePet(s.pets);
     if (!d) {
-      el('p', 'hint', b, 'No pet is with you. Use a pet item from your backpack to call it.');
+      el('p', 'hint', b, t('No pet is with you. Use a pet item from your backpack to call it.'));
     } else {
       const lvl = petLevel(s.pets, d.id);
       const xp = s.pets.xp[d.id] ?? 0;
       const top = el('div', 'pet-head', b);
       const slot = el('div', 'slot pet-slot', top);
       paintSlot(slot, { id: d.item, qty: 1 });
-      slot.title = `${describeItem(itemDef(d.item))}\nClick: send it back to your backpack.`;
+      slot.title = `${describeItemL(itemDef(d.item))}\n${t('Click: send it back to your backpack.')}`;
       slot.addEventListener('click', () => this.ctl.send({ c: 'pet', a: 'dismiss' }));
       const info = el('div', 'pet-info', top);
-      el('div', 'pet-name', info, d.name);
-      el('div', 'pet-level', info, `Pet level ${lvl}${lvl >= PET_MAX_LEVEL ? ' (highest)' : ''}`);
+      el('div', 'pet-name', info, trName(d.name));
+      el('div', 'pet-level', info, `${t('Pet level {n}', { n: lvl })}${lvl >= PET_MAX_LEVEL ? ` ${t('(highest)')}` : ''}`);
       const bar = el('div', 'bar pet-bar', info);
       el('div', 'bar-fill', bar).style.width = `${Math.round(petProgress(xp) * 100)}%`;
-      bar.title = lvl >= PET_MAX_LEVEL ? `${fmt(xp)} pet experience` : `${fmt(xp)} / ${fmt(petXpForLevel(lvl + 1))} pet experience to level ${lvl + 1}`;
-      el('p', 'hint pet-perk', b, d.perk);
+      bar.title = lvl >= PET_MAX_LEVEL ? t('{xp} pet experience', { xp: fmt(xp) }) : t('{xp} / {need} pet experience to level {n}', { xp: fmt(xp), need: fmt(petXpForLevel(lvl + 1)), n: lvl + 1 });
+      el('p', 'hint pet-perk', b, trText(d.perk));
       const row = el('div', 'pet-buttons', b);
-      button(row, 'Send away', () => this.ctl.send({ c: 'pet', a: 'dismiss' }), 'btn');
+      button(row, t('Send away'), () => this.ctl.send({ c: 'pet', a: 'dismiss' }), 'btn');
       if (d.id === 'tortoise') {
-        el('div', 'panel-title', b, `Pouch (${s.pets.pouch.filter(Boolean).length}/${POUCH_SLOTS})`);
+        el('div', 'panel-title', b, t('Pouch ({n}/{max})', { n: s.pets.pouch.filter(Boolean).length, max: POUCH_SLOTS }));
         const grid = el('div', 'bag-grid pet-pouch', b);
         s.pets.pouch.forEach((it, i) => {
           const c = el('div', 'slot', grid);
           paintSlot(c, it);
           if (it) {
-            c.title = `${describeItem(itemDef(it.id))}\nClick: take it.`;
+            c.title = `${trName(itemDef(it.id).name)}\n${describeItemL(itemDef(it.id))}\n${t('Click: take it.')}`;
             c.addEventListener('mousedown', (ev) => {
               ev.preventDefault();
               this.ctl.send({ c: 'pet', a: 'take', i });
             });
           }
         });
-        el('p', 'hint', b, 'Drag items from your backpack onto this window to let the tortoise carry them. If you die, the pouch is left in your body like your backpack.');
+        el('p', 'hint', b, t('Drag items from your backpack onto this window to let the tortoise carry them. If you die, the pouch is left in your body like your backpack.'));
       }
     }
     // every pet you have raised
     const raised = PET_DEFS.filter((p) => (s.pets.xp[p.id] ?? 0) > 0);
     if (raised.length) {
-      el('div', 'panel-title', b, 'Your pets');
+      el('div', 'panel-title', b, t('Your pets'));
       for (const p of raised) {
         const r = el('div', 'pet-row', b);
         const img = el('img', 'pet-row-icon', r);
         img.src = itemIcon(p.item);
         img.alt = '';
-        el('span', 'pet-row-name', r, p.name);
-        el('span', 'pet-row-level', r, `level ${petLevelForXp(s.pets.xp[p.id] ?? 0)}`);
+        el('span', 'pet-row-name', r, trName(p.name));
+        el('span', 'pet-row-level', r, t('level {n}', { n: petLevelForXp(s.pets.xp[p.id] ?? 0) }));
       }
     }
   }
@@ -165,13 +168,14 @@ export class PetsUi {
     const body = this.hudRoot.querySelector('.settings-win .win-body');
     if (!body) return;
     this.settingsDone = true;
-    el('div', 'panel-title', body as HTMLElement, 'Pets');
+    el('div', 'panel-title', body as HTMLElement, t('Pets'));
     const row = el('div', 'set-row', body as HTMLElement);
-    const label = () => `Other players' pets: ${showOtherPets() ? 'shown' : 'hidden'}`;
+    const label = () => t(showOtherPets() ? "Other players' pets: shown" : "Other players' pets: hidden");
     const b = button(row, label(), () => {
       setShowOtherPets(!showOtherPets());
       b.textContent = label();
     }, 'btn');
-    b.title = 'Show or hide the pets that follow other players (yours always shows)';
+    b.title = t('Show or hide the pets that follow other players (yours always shows)');
+    onLangChange(() => { b.textContent = label(); this.key = ''; this.render(); });
   }
 }

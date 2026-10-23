@@ -244,7 +244,7 @@ html, body {
 .shop-col { min-width: 0; display: flex; flex-direction: column; gap: 3px; max-height: 360px; overflow-y: auto; }
 .shop-row, .spell-row { display: flex; align-items: center; gap: 6px; padding: 3px; background: rgba(0, 0, 0, 0.2); }
 .shop-info, .spell-info { flex: 1; min-width: 0; }
-.shop-name, .spell-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop-name, .spell-name { font-weight: 700; overflow-wrap: anywhere; hyphens: auto; }
 .shop-desc, .spell-desc { color: var(--muted); font-size: 12px; }
 .spell-icon { width: 40px; height: 40px; flex: none; }
 .shop-btns { display: flex; gap: 2px; flex-wrap: wrap; justify-content: flex-end; }

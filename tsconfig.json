@@ -34,6 +34,8 @@
     "scripts/music-audit.ts",
     "scripts/music",
     "scripts/site",
-    "scripts/sfx"
+    "scripts/sfx",
+    "scripts/i18n",
+    "scripts/i18n-test.ts"
   ]
 }

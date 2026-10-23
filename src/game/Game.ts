@@ -39,6 +39,7 @@ import { findPath } from './movement/pathfinding';
 import { buildDialogue, type DialogueState, type DialogueView } from './npc/dialogue';
 import { Npc } from './npc/Npc';
 import { buyPrice, NPCS } from './npc/npcs';
+import { npcKeyword, type NpcKeyword } from './npc/keywords';
 import { runAdminCommand } from './admin';
 import { GM_BOSS_LIFETIME, SUMMON_LIFETIME, type WorldMark } from './bosses/bosses';
 import { WorldEvents } from './bosses/WorldEvents';
@@ -3594,6 +3595,48 @@ export class Game implements AIContext {
       return;
     }
     this.events.emit({ type: 'chat', id: pid, name: s.player.name, text: clean });
+    // the classic way to talk to NPCs: "hi", "trade", "yes"… in English, Polish or Portuguese (npc/keywords.ts)
+    const kw = npcKeyword(clean);
+    if (kw) this.npcKeywordSaid(s, kw);
+  }
+
+  /** A keyword said in chat: "hi" opens a conversation with the nearest NPC, the rest work like the dialogue options. */
+  private npcKeywordSaid(s: Session, kw: NpcKeyword): void {
+    const p = s.player;
+    if (p.dead) return;
+    if (!s.dialogue) {
+      if (kw !== 'hi' && kw !== 'trade' && kw !== 'bank' && kw !== 'spells' && kw !== 'work') return;
+      let best: Npc | null = null;
+      let bestD = 4;
+      for (const n of this.npcs) {
+        if (n.z !== p.z) continue;
+        const d = chebyshev(p.x, p.y, n.x, n.y);
+        if (d < bestD) { best = n; bestD = d; }
+      }
+      // only "hi" starts a talk from afar-ish (3 tiles); the others need someone right beside you
+      if (!best || (kw !== 'hi' && bestD > 2)) return;
+      p.faceTowards(best.x, best.y);
+      this.openDialogue(s, best);
+      if (kw === 'hi') return;
+    }
+    const view = this.dialogueView(s);
+    if (!view) return;
+    const has = (action: string) => view.options.find((o) => o.action === action && !o.disabled);
+    const starts = (prefix: string) => view.options.find((o) => o.action.startsWith(prefix) && !o.disabled);
+    let action: string | undefined;
+    switch (kw) {
+      case 'hi': action = view.page === 'root' ? undefined : 'page:root'; break;
+      case 'bye': action = 'bye'; break;
+      case 'trade': action = has('page:trade')?.action; break;
+      case 'bank': case 'balance': action = has('page:bank')?.action; break;
+      case 'spells': action = has('page:spells')?.action; break;
+      case 'work': action = (starts('turnin:') ?? starts('page:offer:') ?? starts('progress:'))?.action; break;
+      case 'yes': action = (starts('accept:') ?? starts('turnin:'))?.action; break;
+      case 'no': case 'back': action = view.page === 'root' ? undefined : 'page:root'; break;
+      case 'deposit': action = view.page === 'bank' ? has('deposit:all')?.action : has('page:bank')?.action; break;
+      case 'help': action = has('tutorial:hint')?.action; break;
+    }
+    if (action) this.dialogueAction(s.id, action);
   }
 
   // ---------------------------------------------------------------- items & equipment

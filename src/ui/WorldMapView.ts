@@ -3,6 +3,8 @@ import { NPCS } from '../game/npc/npcs';
 import { FLOOR_MAX, FLOOR_MIN } from '../game/world/WorldMap';
 import { button, el } from './dom';
 import type { Minimap } from './Minimap';
+import { t } from '../i18n/i18n';
+import { trName, trText } from '../i18n/gameText';
 
 const MAX_ZOOM = 20;
 
@@ -31,13 +33,13 @@ export class WorldMapView {
     this.root = el('div', 'worldmap', parent);
     this.root.hidden = true;
     const head = el('div', 'win-head', this.root);
-    el('span', 'win-title', head, 'World map');
+    el('span', 'win-title', head, t('World map'));
     const tools = el('div', 'wm-tools', head);
     button(tools, '▲', () => this.setFloor(this.z + 1), 'btn small');
     this.floorLabel = el('span', 'wm-floor', tools);
     button(tools, '▼', () => this.setFloor(this.z - 1), 'btn small');
-    button(tools, 'My position', () => this.centerOnMe(true), 'btn small');
-    button(tools, 'Whole world', () => this.fit(), 'btn small');
+    button(tools, t('My position'), () => this.centerOnMe(true), 'btn small');
+    button(tools, t('Whole world'), () => this.fit(), 'btn small');
     button(tools, '✕', () => this.close(), 'btn tiny');
     const body = el('div', 'wm-body', this.root);
     this.canvas = el('canvas', 'wm-canvas', body);
@@ -148,7 +150,7 @@ export class WorldMapView {
 
   private setFloor(z: number): void {
     this.z = Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, z));
-    this.floorLabel.textContent = this.z === 0 ? 'Ground' : this.z > 0 ? `Floor +${this.z}` : `Floor ${this.z}`;
+    this.floorLabel.textContent = this.z === 0 ? t('Ground') : this.z > 0 ? t('Floor +{z}', { z: String(this.z) }) : t('Floor {z}', { z: String(this.z) });
     this.draw();
     this.updateInfo();
   }
@@ -166,7 +168,7 @@ export class WorldMapView {
     const p = g.getPlayer(this.ctl.pid);
     if (!p || !g.world.inBounds(x, y)) return;
     if (this.z !== p.z) {
-      this.info.textContent = 'You can only walk to places on the floor you are standing on.';
+      this.info.textContent = t('You can only walk to places on the floor you are standing on.');
       return;
     }
     this.ctl.send({ c: 'moveTo', x, y });
@@ -176,11 +178,11 @@ export class WorldMapView {
     const g = this.ctl.game;
     const h = this.hover;
     if (!h || !g.world.inBounds(h.x, h.y)) {
-      this.info.textContent = 'Wheel: zoom · drag: move · click: walk there · ▲▼: change floor · M or Esc: close';
+      this.info.textContent = t('Wheel: zoom · drag: move · click: walk there · ▲▼: change floor · M or Esc: close');
       return;
     }
     const r = g.world.regionAt(h.x, h.y, this.z);
-    this.info.textContent = `${h.x}, ${h.y}, floor ${this.z}${r ? ` — ${r.name}${r.level && r.level !== '—' ? ` (level ${r.level})` : ''}${r.safe ? ' · protection zone' : ''}` : ''}`;
+    this.info.textContent = `${h.x}, ${h.y}, ${t('floor {z}', { z: String(this.z) })}${r ? ` — ${trName(r.name)}${r.level && r.level !== '—' ? ` (${t('level {n}', { n: r.level })})` : ''}${r.safe ? ` · ${t('protection zone')}` : ''}` : ''}`;
   }
 
   update(dt: number): void {
@@ -223,8 +225,9 @@ export class WorldMapView {
       ctx.lineWidth = 3;
       ctx.strokeStyle = 'rgba(0,0,0,0.85)';
       ctx.fillStyle = r.safe ? '#9fe8ff' : big ? '#ffe9a8' : '#f0f0f0';
-      ctx.strokeText(r.name, c.x, c.y);
-      ctx.fillText(r.name, c.x, c.y);
+      const rn = trName(r.name);
+      ctx.strokeText(rn, c.x, c.y);
+      ctx.fillText(rn, c.x, c.y);
       if (r.temple && r.temple.z === this.z) {
         const t = this.screenOf(r.temple.x + 0.5, r.temple.y + 0.5);
         ctx.font = '700 14px Verdana, sans-serif';
@@ -251,7 +254,7 @@ export class WorldMapView {
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 3;
         ctx.fillStyle = '#9fd3ff';
-        const label = `${n.name}${NPCS[n.key] ? ` · ${NPCS[n.key].role}` : ''}`;
+        const label = `${trName(n.name)}${NPCS[n.key] ? ` · ${trName(NPCS[n.key].role)}` : ''}`;
         ctx.strokeText(label, c.x, c.y - 10);
         ctx.fillText(label, c.x, c.y - 10);
       }
@@ -275,7 +278,7 @@ export class WorldMapView {
       ctx.fillStyle = col;
       ctx.fillText(icon, c.x, c.y);
       ctx.font = '700 12px Verdana, sans-serif';
-      const label = `${m.name}${m.z !== this.z ? ` (floor ${m.z})` : ''}`;
+      const label = `${trText(m.name)}${m.z !== this.z ? ` (${t('floor {z}', { z: String(m.z) })})` : ''}`;
       ctx.strokeText(label, c.x, c.y - 20);
       ctx.fillText(label, c.x, c.y - 20);
     }
@@ -300,7 +303,7 @@ export class WorldMapView {
       ctx.textAlign = 'left';
       ctx.font = '600 11px Verdana, sans-serif';
       ctx.fillStyle = '#ffb0a8';
-      ctx.fillText(`You are on floor ${me.z}`, 10, 14);
+      ctx.fillText(t('You are on floor {z}', { z: String(me.z) }), 10, 14);
     }
   }
 }

@@ -19,7 +19,9 @@
     "src/game",
     "scripts/music",
     "scripts/site",
-    "scripts/sfx"
+    "scripts/sfx",
+    "scripts/i18n",
+    "scripts/i18n-test.ts"
   ],
   "exclude": [
     "scripts/sfx/before-reel.ts"

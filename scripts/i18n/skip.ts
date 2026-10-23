@@ -1,0 +1,50 @@
+/**
+ * Game strings the message check (scripts/i18n-test.ts) leaves out on purpose: fragments that are
+ * glued into longer messages (the full messages have their own entries in src/i18n/tables/messages.ts),
+ * log lines for the host, and test-command replies.
+ */
+export const SKIP_MESSAGES = new Set<string>([
+  // fragments glued into longer messages (the full messages have their own templates)
+  "{why} (shared)",
+  "You were slain{name}. The isle spares beginners: you lost no experience and kept your belongings.",
+  "You were slain{name}. You lost {loss} experience.",
+  "You dropped your backpack{worn}. Your belongings lie where you fell.",
+  "{n} {turns} on you.",
+  "Your premium time ends in {400_000} day{s}.",
+  "You can have at most {offerCap} offers at once{PREMIUM_MARKET_OFFERS}.",
+  "{name} {why}. Trade cancelled.",
+  "{guide} ({hint})",
+  "Your share of the spoils of {name} ({share}%)",
+  "{enemyKind} has been slain{others}!",
+  "{why}: {nothing}.",
+  "{enemyKind} has been slain{who}!",
+  "{name} ({raid})",
+  "Take me to {name} ({free}).",
+  "The {name} is only for those who have slain all {need} {world} bosses ({left}/{need2} so far).",
+  "{kill} by {slayer}.",
+  "{label} {rate} ({b})",
+  // /events (test command) status lines
+  "World boss: {kind} near {name} ({x}, {y}), {maxHp}% health, leaves in {left}.",
+  "Next world boss in {nextWorldBoss}: {kind}.",
+  "Next raid in {nextRaid}: {name} on {town}.",
+  "{kind} ({region}): {alive}.",
+  // website, store and sign-up API answers (the website is English for now) and server log lines
+  "Enter a valid email address.",
+  "Tick the box to say we may email you about the opening.",
+  "Sign-up is not open yet. Please try again later.",
+  "You will not get any more launch emails from us.",
+  "That link has already been used, or it is not valid any more.",
+  "Use POST.",
+  "Only founders can choose a founder name.",
+  "Bad request.",
+  "Pick one of your own characters.",
+  "The store could not load your account right now.",
+  "Payments are not set up.",
+  "Too large.",
+  "Bad signature.",
+  "Store tables missing.",
+  "Try again later.",
+  "Thornvale server is running, but the client is not built yet. Run \"npm run build\" first.",
+  "Market: open ({offers} offers, {deliveries} deliveries waiting)",
+  "Market: closed (no market tables in storage yet)",
+]);

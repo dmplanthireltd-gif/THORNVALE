@@ -1,5 +1,8 @@
-import { describeItem, itemDef, type ItemStack } from '../game/inventory/items';
+import { itemDef, type ItemStack } from '../game/inventory/items';
 import { itemIcon } from './icons';
+import { fmtNum, t } from '../i18n/i18n';
+import { trName, trText } from '../i18n/gameText';
+import { describeItemL } from '../i18n/describe';
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', parent?: HTMLElement | null, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -40,13 +43,14 @@ export function paintSlot(slot: HTMLElement, stack: ItemStack | null, placeholde
   const d = itemDef(stack.id);
   const img = el('img', 'slot-img', slot);
   img.src = itemIcon(stack.id);
-  img.alt = d.name;
+  const name = trName(d.name);
+  img.alt = name;
   img.draggable = false;
   if (stack.qty > 1 || d.stackable) el('span', 'slot-qty', slot, stack.qty >= 1000 ? `${Math.floor(stack.qty / 100) / 10}k` : String(stack.qty));
   slot.style.borderColor = RARITY_EDGE[d.rarity];
-  slot.title = `${d.name}${stack.qty > 1 ? ` ×${stack.qty}` : ''}\n${describeItem(d)}${d.note ? `\n${d.note}` : ''}\nWeight ${(d.weight * stack.qty).toFixed(1)} oz`;
+  slot.title = `${name}${stack.qty > 1 ? ` ×${fmtNum(stack.qty)}` : ''}\n${describeItemL(d)}${d.note ? `\n${trText(d.note)}` : ''}\n${t('Weight {w} oz', { w: Math.round(d.weight * stack.qty * 10) / 10 })}`;
 }
 
 export function fmtGold(n: number): string {
-  return n.toLocaleString('en-US');
+  return fmtNum(n, 0);
 }

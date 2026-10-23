@@ -5,6 +5,7 @@ import { buildPlayerRig } from '../render/models/playerModel';
 import type { BipedRig } from '../render/models/rigs';
 import { paintRig } from '../render/models/grimDetail';
 import { PAINTED } from '../render/style';
+import { t } from '../i18n/i18n';
 
 /**
  * A turning 3D preview of a player character (the character designer), drawn at low
@@ -27,7 +28,7 @@ export class CharacterPreview {
     this.canvas.className = 'char-preview';
     this.canvas.width = w;
     this.canvas.height = h;
-    this.canvas.title = 'Drag to turn';
+    this.canvas.title = t('Drag to turn');
     parent.appendChild(this.canvas);
     try {
       this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: false, alpha: true, preserveDrawingBuffer: true });

@@ -3,6 +3,8 @@ import { VOCATIONS, type Vocation } from '../game/player/vocations';
 import { button, el } from './dom';
 import { VOCATION_SVG } from './emblems';
 import type { CreateOptions } from './StartScreen';
+import { k, onLangChange, t } from '../i18n/i18n';
+import { trName, trText } from '../i18n/gameText';
 
 /**
  * The account steps of the title screen (the Gatehouse panel).
@@ -79,11 +81,15 @@ export class OnlineLogin {
   private remember = true;
   private tab: 'login' | 'signup' = 'login';
   private selected = '';
+  /** Redraws the step on screen (language change). */
+  private view: (() => void) | null = null;
 
   constructor(parent: HTMLElement, private readonly h: Hooks) {
     this.root = el('div', 'gate-view', parent);
-    el('p', 'gate-hint', this.root, 'Opening the gates…');
+    el('p', 'gate-hint', this.root, t('Opening the gates…'));
     void this.init();
+    // a new language: redraw the step on screen (typed email kept; passwords are typed again)
+    onLangChange(() => { if (this.view) this.view(); });
   }
 
   /** Back to the first step (log in, or your heroes when already logged in). */
@@ -122,12 +128,21 @@ export class OnlineLogin {
     });
   }
 
+  private static async rawError(res: Response): Promise<string> {
+    try {
+      const j = (await res.clone().json()) as { msg?: string; message?: string; error_description?: string; error?: string };
+      return j.msg ?? j.message ?? j.error_description ?? j.error ?? '';
+    } catch {
+      return '';
+    }
+  }
+
   private static async error(res: Response): Promise<string> {
     try {
       const j = (await res.json()) as { msg?: string; message?: string; error_description?: string; error?: string };
-      return j.msg ?? j.message ?? j.error_description ?? j.error ?? `Error ${res.status}`;
+      return trText(j.msg ?? j.message ?? j.error_description ?? j.error ?? `Error ${res.status}`);
     } catch {
-      return `Error ${res.status}`;
+      return t('Error {status}', { status: String(res.status) });
     }
   }
 
@@ -181,7 +196,7 @@ export class OnlineLogin {
     if (!hash.includes('access_token=')) {
       if (hash.includes('error_description=')) {
         const p = new URLSearchParams(hash.slice(1));
-        this.h.message(p.get('error_description') ?? 'That link is not valid any more.');
+        this.h.message(trText(p.get('error_description') ?? 'That link is not valid any more.'));
         history.replaceState(null, '', location.pathname + location.search);
       }
       return null;
@@ -200,7 +215,7 @@ export class OnlineLogin {
   private field(parent: HTMLElement, label: string, type: string, auto: string, extra?: (row: HTMLElement) => void): HTMLInputElement {
     const f = el('div', 'gate-field', parent);
     const row = el('div', 'gate-label-row', f);
-    const l = el('label', 'gate-label', row, label);
+    const l = el('label', 'gate-label', row, t(label));
     if (extra) extra(row);
     const i = el('input', 'gate-input', f);
     i.type = type;
@@ -225,18 +240,19 @@ export class OnlineLogin {
   // ------------------------------------------------------------------ email accounts
 
   private renderSignIn(note = ''): void {
+    this.view = () => this.renderSignIn(note);
     const b = this.fresh();
     const tabs = el('div', 'gate-tabs', b);
     tabs.setAttribute('role', 'tablist');
-    tabs.setAttribute('aria-label', 'Account');
-    for (const [id, label] of [['login', 'Log in'], ['signup', 'Create account']] as const) {
-      const t = button(tabs, label, () => {
+    tabs.setAttribute('aria-label', t('Account'));
+    for (const [id, label] of [['login', k('Log in')], ['signup', k('Create account')]] as const) {
+      const tb = button(tabs, t(label), () => {
         this.tab = id;
         this.h.message('');
         this.renderSignIn();
       }, `gate-tab${this.tab === id ? ' on' : ''}`);
-      t.setAttribute('role', 'tab');
-      t.setAttribute('aria-selected', String(this.tab === id));
+      tb.setAttribute('role', 'tab');
+      tb.setAttribute('aria-selected', String(this.tab === id));
     }
     const signup = this.tab === 'signup';
     if (note) el('p', 'gate-hint', b, note);
@@ -244,9 +260,9 @@ export class OnlineLogin {
     email.value = this.email;
     let forgot: HTMLButtonElement | null = null;
     const pass = this.field(b, 'Password', 'password', signup ? 'new-password' : 'current-password', (row) => {
-      if (!signup) forgot = button(row, 'Forgot password?', () => void doForgot(), 'gate-link');
+      if (!signup) forgot = button(row, t('Forgot password?'), () => void doForgot(), 'gate-link');
     });
-    pass.placeholder = 'At least 6 characters';
+    pass.placeholder = t('At least 6 characters');
     let pass2: HTMLInputElement | null = null;
     if (signup) pass2 = this.field(b, 'Repeat password', 'password', 'new-password');
     const keep = el('label', 'gate-check', b);
@@ -254,26 +270,26 @@ export class OnlineLogin {
     box.type = 'checkbox';
     box.checked = this.remember;
     box.addEventListener('change', () => (this.remember = box.checked));
-    keep.append('Keep me signed in on this computer');
-    const go = button(b, signup ? 'Create free account' : 'Enter the realm', () => void (signup ? doSignup() : doLogin()), 'gate-gold');
-    el('div', 'gate-or', b, 'or');
-    const off = button(b, 'Play offline', () => this.h.offline(), 'gate-iron');
-    el('p', 'gate-hint', b, 'Free · up to 5 heroes per account · saved on the server');
+    keep.append(t('Keep me signed in on this computer'));
+    const go = button(b, t(signup ? 'Create free account' : 'Enter the realm'), () => void (signup ? doSignup() : doLogin()), 'gate-gold');
+    el('div', 'gate-or', b, t('or'));
+    const off = button(b, t('Play offline'), () => this.h.offline(), 'gate-iron');
+    el('p', 'gate-hint', b, t('Free · up to 5 heroes per account · saved on the server'));
     const all = [go, off, ...(forgot ? [forgot as HTMLButtonElement] : [])];
 
     const read = (needPass: boolean): { e: string; p: string } | null => {
       const e = email.value.trim();
       this.email = e;
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
-        this.h.message('Enter a valid email address.');
+        this.h.message(t('Enter a valid email address.'));
         return null;
       }
       if (needPass && pass.value.length < 6) {
-        this.h.message('Passwords need at least 6 characters.');
+        this.h.message(t('Passwords need at least 6 characters.'));
         return null;
       }
       if (needPass && pass2 && pass2.value !== pass.value) {
-        this.h.message('The two passwords are different.');
+        this.h.message(t('The two passwords are different.'));
         return null;
       }
       return { e, p: pass.value };
@@ -284,8 +300,8 @@ export class OnlineLogin {
       this.busy(all, true);
       const res = await this.auth('token?grant_type=password', { method: 'POST', body: JSON.stringify({ email: v.e, password: v.p }) }).catch(() => null);
       this.busy(all, false);
-      if (!res) return this.h.message('Could not reach the login service.');
-      if (!res.ok) return this.h.message(/confirm/i.test(await OnlineLogin.error(res)) ? 'Please confirm your email first — check your inbox for the link.' : 'Wrong email or password.');
+      if (!res) return this.h.message(t('Could not reach the login service.'));
+      if (!res.ok) return this.h.message(/confirm/i.test(await OnlineLogin.rawError(res)) ? t('Please confirm your email first — check your inbox for the link.') : t('Wrong email or password.'));
       this.keep(await res.json());
       this.h.message('');
       void this.renderCharacters();
@@ -297,17 +313,17 @@ export class OnlineLogin {
       const back = encodeURIComponent(location.origin + location.pathname);
       const res = await this.auth(`signup?redirect_to=${back}`, { method: 'POST', body: JSON.stringify({ email: v.e, password: v.p }) }).catch(() => null);
       this.busy(all, false);
-      if (!res) return this.h.message('Could not reach the login service.');
+      if (!res) return this.h.message(t('Could not reach the login service.'));
       if (!res.ok) return this.h.message(await OnlineLogin.error(res));
       const j = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
       if (j.access_token && j.refresh_token) {
         this.keep({ access_token: j.access_token, refresh_token: j.refresh_token, expires_in: j.expires_in });
         void this.renderCharacters();
-        this.h.message('Account created.', true);
+        this.h.message(t('Account created.'), true);
         return;
       }
       this.tab = 'login';
-      this.renderSignIn(`Account created. We sent a confirmation link to ${v.e} — open it, then log in here.`);
+      this.renderSignIn(t('Account created. We sent a confirmation link to {email} — open it, then log in here.', { email: v.e }));
     };
     const doForgot = async () => {
       const v = read(false);
@@ -316,9 +332,9 @@ export class OnlineLogin {
       const back = encodeURIComponent(location.origin + location.pathname);
       const res = await this.auth(`recover?redirect_to=${back}`, { method: 'POST', body: JSON.stringify({ email: v.e }) }).catch(() => null);
       this.busy(all, false);
-      if (!res) return this.h.message('Could not reach the login service.');
+      if (!res) return this.h.message(t('Could not reach the login service.'));
       if (!res.ok) return this.h.message(await OnlineLogin.error(res));
-      this.renderSignIn(`If ${v.e} has an account, a password reset link is on its way. Open it on this device to choose a new password.`);
+      this.renderSignIn(t('If {email} has an account, a password reset link is on its way. Open it on this device to choose a new password.', { email: v.e }));
     };
     for (const i of [pass, pass2]) {
       i?.addEventListener('keydown', (e) => {
@@ -330,22 +346,23 @@ export class OnlineLogin {
   }
 
   private renderNewPassword(): void {
+    this.view = null;
     const b = this.fresh();
-    el('div', 'gate-kicker', b, 'Password reset');
-    el('h2', 'gate-h2', b, 'Choose a new password');
+    el('div', 'gate-kicker', b, t('Password reset'));
+    el('h2', 'gate-h2', b, t('Choose a new password'));
     const pass = this.field(b, 'New password', 'password', 'new-password');
-    pass.placeholder = 'At least 6 characters';
+    pass.placeholder = t('At least 6 characters');
     const pass2 = this.field(b, 'Repeat the new password', 'password', 'new-password');
-    const save = button(b, 'Save password', () => void doSave(), 'gate-gold');
+    const save = button(b, t('Save password'), () => void doSave(), 'gate-gold');
     const doSave = async () => {
-      if (pass.value.length < 6) return this.h.message('Passwords need at least 6 characters.');
-      if (pass.value !== pass2.value) return this.h.message('The two passwords are different.');
+      if (pass.value.length < 6) return this.h.message(t('Passwords need at least 6 characters.'));
+      if (pass.value !== pass2.value) return this.h.message(t('The two passwords are different.'));
       save.disabled = true;
       const res = await this.auth('user', { method: 'PUT', headers: { Authorization: `Bearer ${this.session?.access_token}` }, body: JSON.stringify({ password: pass.value }) }).catch(() => null);
       save.disabled = false;
-      if (!res || !res.ok) return this.h.message(res ? await OnlineLogin.error(res) : 'Could not reach the login service.');
+      if (!res || !res.ok) return this.h.message(res ? await OnlineLogin.error(res) : t('Could not reach the login service.'));
       await this.renderCharacters();
-      this.h.message('Password changed. You are logged in.', true);
+      this.h.message(t('Password changed. You are logged in.'), true);
     };
     pass2.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') void doSave();
@@ -353,21 +370,22 @@ export class OnlineLogin {
   }
 
   private async renderCharacters(): Promise<void> {
+    this.view = () => void this.renderCharacters();
     let b = this.fresh(true);
-    el('p', 'gate-hint', b, 'Gathering your heroes…');
-    if (!(await this.ensureFresh())) return this.renderSignIn('Your login expired. Please log in again.');
+    el('p', 'gate-hint', b, t('Gathering your heroes…'));
+    if (!(await this.ensureFresh())) return this.renderSignIn(t('Your login expired. Please log in again.'));
     let data: { email: string; characters: Hero[]; maxCharacters?: number; tutorialDone?: boolean };
     try {
       const res = await fetch(`${httpBase(this.h.serverUrl)}/api/characters`, { headers: { Authorization: `Bearer ${this.session!.access_token}` } });
       if (res.status === 401) {
         this.forget();
-        return this.renderSignIn('Your login expired. Please log in again.');
+        return this.renderSignIn(t('Your login expired. Please log in again.'));
       }
       data = await res.json();
     } catch {
       b = this.fresh();
-      el('p', 'gate-hint', b, 'Could not load your heroes. Is the server awake?');
-      button(b, 'Try again', () => void this.renderCharacters(), 'gate-iron');
+      el('p', 'gate-hint', b, t('Could not load your heroes. Is the server awake?'));
+      button(b, t('Try again'), () => void this.renderCharacters(), 'gate-iron');
       return;
     }
     // founder packs add character slots to an account, so the server's per-account number wins
@@ -376,10 +394,10 @@ export class OnlineLogin {
     if (!heroes.some((c) => c.name === this.selected)) this.selected = heroes[0]?.name ?? '';
     b = this.fresh(true);
 
-    el('div', 'gate-kicker', b, `Your heroes · ${heroes.length} of ${max}`);
-    el('h2', 'gate-h2', b, heroes.length ? 'Who rides out today?' : 'Raise your first hero');
-    const who = el('p', 'gate-hint', b, `Signed in as ${data.email} · `);
-    button(who, 'Log out', () => {
+    el('div', 'gate-kicker', b, t('Your heroes · {count} of {max}', { count: heroes.length, max }));
+    el('h2', 'gate-h2', b, t(heroes.length ? 'Who rides out today?' : 'Raise your first hero'));
+    const who = el('p', 'gate-hint', b, t('Signed in as {email}', { email: data.email }) + ' · ');
+    button(who, t('Log out'), () => {
       void this.auth('logout', { method: 'POST', headers: { Authorization: `Bearer ${this.session?.access_token}` } }).catch(() => null);
       this.forget();
       this.selected = '';
@@ -389,12 +407,12 @@ export class OnlineLogin {
     const play = (name: string, skipTutorial = false) => {
       const look = this.h.look();
       void this.ensureFresh().then((ok) => {
-        if (!ok) return this.renderSignIn('Your login expired. Please log in again.');
+        if (!ok) return this.renderSignIn(t('Your login expired. Please log in again.'));
         this.h.play({ url: this.h.serverUrl, name, token: this.session!.access_token, ...look, skipTutorial });
       });
     };
     const create = () => this.h.create({
-      primary: 'Create & enter',
+      primary: t('Create & enter'),
       skippable: data.tutorialDone === true,
       done: (name, skip) => play(name, skip),
       back: () => void this.renderCharacters(),
@@ -402,7 +420,7 @@ export class OnlineLogin {
 
     const list = el('div', 'gate-heroes', b);
     for (const c of heroes) {
-      const voc = VOCATIONS[c.vocation as Vocation]?.name ?? c.vocation;
+      const voc = trName(VOCATIONS[c.vocation as Vocation]?.name ?? c.vocation);
       const on = c.name === this.selected;
       const row = button(list, '', () => {
         if (this.selected === c.name) return play(c.name);
@@ -410,58 +428,59 @@ export class OnlineLogin {
         void this.renderCharacters();
       }, `gate-hero${on ? ' on' : ''}`);
       row.setAttribute('aria-pressed', String(on));
-      row.title = on ? `Enter as ${c.name}` : `Choose ${c.name}`;
+      row.title = on ? t('Enter as {name}', { name: c.name }) : t('Choose {name}', { name: c.name });
       el('span', 'gate-badge', row).innerHTML = VOCATION_SVG(c.vocation, 26);
-      const t = el('span', 'gate-hero-text', row);
-      el('span', 'gate-hero-name', t, c.name);
-      el('span', 'gate-hero-sub', t, `Level ${c.level} ${voc}`);
+      const tx = el('span', 'gate-hero-text', row);
+      el('span', 'gate-hero-name', tx, c.name);
+      el('span', 'gate-hero-sub', tx, t('Level {level} {vocation}', { level: c.level, vocation: voc }));
     }
     for (let i = heroes.length; i < max; i++) {
       const e = button(list, '', create, 'gate-empty');
       el('span', '', e, '+');
-      e.append('Empty slot · create a new hero');
+      e.append(t('Empty slot · create a new hero'));
     }
 
     const chosen = heroes.find((c) => c.name === this.selected);
     const actions = el('div', 'gate-row', b);
-    if (chosen) button(actions, `Enter as ${chosen.name}`, () => play(chosen.name), 'gate-gold');
-    if (heroes.length < max) button(actions, 'New hero', create, chosen ? 'gate-iron' : 'gate-gold');
+    if (chosen) button(actions, t('Enter as {name}', { name: chosen.name }), () => play(chosen.name), 'gate-gold');
+    if (heroes.length < max) button(actions, t('New hero'), create, chosen ? 'gate-iron' : 'gate-gold');
     if (chosen) {
       const confirmBox = el('div', 'gate-confirm', b);
       confirmBox.hidden = true;
-      button(actions, `Delete ${chosen.name}…`, () => {
+      button(actions, t('Delete {name}…', { name: chosen.name }), () => {
         confirmBox.hidden = false;
         confirmBox.replaceChildren();
-        el('p', '', confirmBox, `Delete ${chosen.name} for good? Their level, items and gold cannot be brought back. Type the name to confirm.`);
+        el('p', '', confirmBox, t('Delete {name} for good? Their level, items and gold cannot be brought back. Type the name to confirm.', { name: chosen.name }));
         const inp = this.field(confirmBox, 'Hero name', 'text', 'off');
         const row = el('div', 'gate-row', confirmBox);
-        button(row, 'Delete forever', async () => {
-          if (inp.value.trim().toLowerCase() !== chosen.name.toLowerCase()) return this.h.message('The name does not match.');
-          if (!(await this.ensureFresh())) return this.renderSignIn('Your login expired. Please log in again.');
+        button(row, t('Delete forever'), async () => {
+          if (inp.value.trim().toLowerCase() !== chosen.name.toLowerCase()) return this.h.message(t('The name does not match.'));
+          if (!(await this.ensureFresh())) return this.renderSignIn(t('Your login expired. Please log in again.'));
           const r = await fetch(`${httpBase(this.h.serverUrl)}/api/characters/delete`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${this.session!.access_token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: chosen.name }),
           }).catch(() => null);
           const j = r ? await r.json().catch(() => ({})) : {};
-          if (!r || !r.ok) return this.h.message((j as { error?: string }).error ?? 'Could not delete the character.');
+          if (!r || !r.ok) return this.h.message(trText((j as { error?: string }).error ?? 'Could not delete the character.'));
           this.selected = '';
           await this.renderCharacters();
-          this.h.message(`${chosen.name} was deleted.`, true);
+          this.h.message(t('{name} was deleted.', { name: chosen.name }), true);
         }, 'gate-iron gate-danger');
-        button(row, 'Cancel', () => (confirmBox.hidden = true), 'gate-iron');
+        button(row, t('Cancel'), () => (confirmBox.hidden = true), 'gate-iron');
         inp.focus({ preventScroll: true });
       }, 'gate-link quiet');
     }
-    el('p', 'gate-hint', b, 'Each hero keeps their own level, items, bank and quests.');
+    el('p', 'gate-hint', b, t('Each hero keeps their own level, items, bank and quests.'));
   }
 
   // ------------------------------------------------------------------ servers without email login
 
   private renderLocal(): void {
+    this.view = () => this.renderLocal();
     const b = this.fresh();
-    el('div', 'gate-kicker', b, 'Log in or claim a name');
-    el('p', 'gate-hint', b, "Log in with your hero's name and password. A name nobody has yet becomes your new hero, protected by that password.");
+    el('div', 'gate-kicker', b, t('Log in or claim a name'));
+    el('p', 'gate-hint', b, t("Log in with your hero's name and password. A name nobody has yet becomes your new hero, protected by that password."));
     const name = this.field(b, 'Hero name', 'text', 'username');
     try {
       name.value = store()?.getItem('thornvale.lastLogin') ?? '';
@@ -469,13 +488,13 @@ export class OnlineLogin {
       /* ignore */
     }
     const pass = this.field(b, 'Password', 'password', 'current-password');
-    pass.placeholder = 'At least 4 characters';
+    pass.placeholder = t('At least 4 characters');
     const url = this.field(b, 'Server address', 'text', 'off');
     url.value = this.h.serverUrl;
     const go = () => {
       const n = this.h.validName(name.value);
       if (!n) return;
-      if (pass.value.length < 4) return this.h.message('Choose a password of at least 4 characters.');
+      if (pass.value.length < 4) return this.h.message(t('Choose a password of at least 4 characters.'));
       try {
         store()?.setItem('thornvale.lastLogin', n);
       } catch {
@@ -483,9 +502,9 @@ export class OnlineLogin {
       }
       this.h.play({ url: url.value.trim(), name: n, password: pass.value, ...this.h.look() });
     };
-    button(b, 'Enter the realm', go, 'gate-gold');
-    el('div', 'gate-or', b, 'or');
-    button(b, 'Play offline', () => this.h.offline(), 'gate-iron');
+    button(b, t('Enter the realm'), go, 'gate-gold');
+    el('div', 'gate-or', b, t('or'));
+    button(b, t('Play offline'), () => this.h.offline(), 'gate-iron');
     pass.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') go();
     });

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { trName, trText } from '../i18n/gameText';
 
 interface FloatText {
   el: HTMLDivElement;
@@ -93,9 +94,11 @@ export class Overlay {
     l.el.classList.toggle('other-player', !!opts.other);
     // titled heroes (Pioneers, founders) wear a soft gold name
     l.el.classList.toggle('titled', !!opts.title && !opts.boss && !opts.npc);
-    if (l.name.textContent !== name) l.name.textContent = name;
+    // monster and NPC names in the player's language (heroes keep their own names)
+    const shown = opts.player || opts.other ? name : trName(name);
+    if (l.name.textContent !== shown) l.name.textContent = shown;
     // title sits between the name and the bar; DOM is only touched when it changes
-    const title = opts.boss ?? opts.title ?? '';
+    const title = trText(opts.boss ?? opts.title ?? '');
     if (title && !l.title) {
       l.title = document.createElement('div');
       l.title.className = 'np-title';

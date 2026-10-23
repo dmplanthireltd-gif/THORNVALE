@@ -7,6 +7,9 @@ import './gate.css';
 import { OnlineLogin, type OnlinePick } from './OnlineLogin';
 import { offlineTutorialDone } from '../client/Controller';
 import { CharacterDesigner } from './CharacterDesigner';
+import { onLangChange, t } from '../i18n/i18n';
+import { trName, trText } from '../i18n/gameText';
+import { langPicker } from './lang';
 
 export type StartChoice =
   | { mode: 'continue' }
@@ -79,24 +82,31 @@ export class StartScreen {
     el('span', '', top).innerHTML = CREST_SVG(20);
     el('span', 'gate-name', top, 'THORNVALE');
     el('span', 'gate-sep opt', top);
-    el('span', 'gate-dim opt', top, servedByServer() ? 'Test realm' : 'Offline preview');
+    el('span', 'gate-dim opt', top, t(servedByServer() ? 'Test realm' : 'Offline preview'));
     el('span', 'gate-grow', top);
     const status = el('span', 'gate-status', top);
     el('i', '', status);
-    const statusText = el('span', '', status, 'Realm…');
+    const statusText = el('span', '', status, t('Realm…'));
     const days = Math.ceil((OPENING - Date.now()) / 86_400_000);
     if (days > 0) {
       el('span', 'gate-sep', top);
-      const open = el('span', 'gate-dim', top, 'Grand opening in ');
-      el('b', '', open, `${days} ${days === 1 ? 'day' : 'days'}`);
+      const open = el('span', 'gate-dim', top);
+      const countdown = () => {
+        open.replaceChildren(t('Grand opening in') + ' ');
+        el('b', '', open, t('{n} day|{n} days', { n: days }));
+      };
+      countdown();
+      onLangChange(countdown);
     }
+    el('span', 'gate-sep', top);
+    langPicker(top, 'lang-pick gate-lang');
     void this.realm(status, statusText);
 
     // crest and wordmark
     const head = el('div', 'gate-head', this.root);
     el('span', '', head).innerHTML = CREST_SVG(74, 1.2);
     el('h1', 'gate-title', head, 'THORNVALE');
-    el('p', 'gate-tag', head, 'A realm of thorn, stone and gold');
+    el('p', 'gate-tag', head, t('A realm of thorn, stone and gold'));
 
     // the panel every step lives in
     this.panel = el('div', 'gate-panel', this.root);
@@ -108,13 +118,13 @@ export class StartScreen {
 
     // herald strip
     const herald = el('footer', 'gate-herald', this.root);
-    el('span', 'gate-label', herald, 'Herald');
-    el('span', 'gate-news', herald, HERALD);
+    el('span', 'gate-label', herald, t('Herald'));
+    el('span', 'gate-news', herald, t(HERALD));
     el('span', 'gate-grow', herald);
     if (servedByServer()) {
-      const site = el('a', '', herald, 'Website');
+      const site = el('a', '', herald, t('Website'));
       site.href = '/';
-      const guide = el('a', '', herald, 'Guide');
+      const guide = el('a', '', herald, t('Guide'));
       guide.href = '/guide/';
     }
 
@@ -144,28 +154,28 @@ export class StartScreen {
   private showOffline(): void {
     const saved = this.saves.peek();
     if (!saved) {
-      this.showCreate({ primary: 'Play offline', skippable: offlineTutorialDone(), done: (n, skip) => this.pick({ mode: 'new', name: n, vocation: this.vocation, appearance: { ...this.appearance }, skipTutorial: skip }), back: () => this.online.showStart() });
+      this.showCreate({ primary: t('Play offline'), skippable: offlineTutorialDone(), done: (n, skip) => this.pick({ mode: 'new', name: n, vocation: this.vocation, appearance: { ...this.appearance }, skipTutorial: skip }), back: () => this.online.showStart() });
       return;
     }
     if (!this.offlineView) this.offlineView = el('div', 'gate-view', this.views);
     const v = this.offlineView;
     v.replaceChildren();
-    el('div', 'gate-kicker', v, 'Offline · saved in this browser');
-    el('h2', 'gate-h2', v, 'Your offline hero');
+    el('div', 'gate-kicker', v, t('Offline · saved in this browser'));
+    el('h2', 'gate-h2', v, t('Your offline hero'));
     const voc = VOCATIONS[saved.vocation as Vocation];
     const card = button(v, '', () => this.pick({ mode: 'continue' }), 'gate-hero on');
     el('span', 'gate-badge', card).innerHTML = VOCATION_SVG(saved.vocation, 26);
-    const t = el('span', 'gate-hero-text', card);
-    el('span', 'gate-hero-name', t, saved.name);
-    el('span', 'gate-hero-sub', t, `Level ${saved.level} ${voc?.name ?? ''}`);
-    button(v, `Continue as ${saved.name}`, () => this.pick({ mode: 'continue' }), 'gate-gold');
-    button(v, 'New offline hero', () => this.showCreate({
-      primary: 'Start (replaces the offline save)',
+    const tx = el('span', 'gate-hero-text', card);
+    el('span', 'gate-hero-name', tx, saved.name);
+    el('span', 'gate-hero-sub', tx, t('Level {level} {vocation}', { level: saved.level, vocation: voc ? trName(voc.name) : '' }));
+    button(v, t('Continue as {name}', { name: saved.name }), () => this.pick({ mode: 'continue' }), 'gate-gold');
+    button(v, t('New offline hero'), () => this.showCreate({
+      primary: t('Start (replaces the offline save)'),
       skippable: offlineTutorialDone(),
       done: (n, skip) => this.pick({ mode: 'new', name: n, vocation: this.vocation, appearance: { ...this.appearance }, skipTutorial: skip }),
       back: () => this.showOffline(),
     }), 'gate-iron');
-    button(v, 'Back to log in', () => this.online.showStart(), 'gate-link quiet');
+    button(v, t('Back to log in'), () => this.online.showStart(), 'gate-link quiet');
     this.show(v);
   }
 
@@ -185,13 +195,13 @@ export class StartScreen {
   private buildCreate(): void {
     const v = el('div', 'gate-view', this.views);
     this.createView = v;
-    el('div', 'gate-kicker', v, 'A new hero');
-    el('h2', 'gate-h2', v, 'Who will you be?');
+    el('div', 'gate-kicker', v, t('A new hero'));
+    el('h2', 'gate-h2', v, t('Who will you be?'));
     const row = el('div', 'gate-create', v);
     const left = el('div', 'gate-create-left', row);
 
     const nf = el('div', 'gate-field', left);
-    const nl = el('label', 'gate-label', nf, 'Name');
+    const nl = el('label', 'gate-label', nf, t('Name'));
     const name = el('input', 'gate-input', nf);
     name.id = 'gate-new-hero-name';
     nl.htmlFor = name.id;
@@ -204,7 +214,7 @@ export class StartScreen {
     });
     this.createName = name;
 
-    el('span', 'gate-label', left, 'Vocation');
+    el('span', 'gate-label', left, t('Vocation'));
     const vocs = el('div', 'gate-vocs', left);
     const vocBtns: HTMLButtonElement[] = [];
     for (const id of VOCATION_IDS) {
@@ -217,36 +227,37 @@ export class StartScreen {
       }, `gate-voc${id === this.vocation ? ' on' : ''}`);
       b.setAttribute('aria-pressed', String(id === this.vocation));
       el('span', '', b).innerHTML = VOCATION_SVG(id, 30);
-      const t = el('span', '', b);
-      el('b', '', t, VOCATIONS[id].name);
-      el('small', '', t, VOCATIONS[id].blurb);
+      const tx = el('span', '', b);
+      const vb = el('b', '', tx, trName(VOCATIONS[id].name));
+      const vs = el('small', '', tx, trText(VOCATIONS[id].blurb));
+      onLangChange(() => { vb.textContent = trName(VOCATIONS[id].name); vs.textContent = trText(VOCATIONS[id].blurb); });
       vocBtns.push(b);
     }
 
-    el('span', 'gate-label', v, 'Appearance');
+    el('span', 'gate-label', v, t('Appearance'));
     this.designer = new CharacterDesigner(v, this.appearance, (a) => (this.appearance = a));
 
     const skipLabel = el('label', 'gate-check', v);
     const skipBox = el('input', '', skipLabel);
     skipBox.type = 'checkbox';
-    skipLabel.append("Skip the tutorial and start in Thornvale (same starting gear)");
-    skipLabel.title = "You have finished Wayfarer's Isle before, so new heroes may skip it.";
+    skipLabel.append(t('Skip the tutorial and start in Thornvale (same starting gear)'));
+    skipLabel.title = t("You have finished Wayfarer's Isle before, so new heroes may skip it.");
     this.createSkip = { label: skipLabel, box: skipBox };
-    this.createTutNote = el('p', 'gate-hint', v, "New heroes begin on Wayfarer's Isle, a short tutorial island. Once one of your heroes has finished it, the next ones may skip it.");
+    this.createTutNote = el('p', 'gate-hint', v, t("New heroes begin on Wayfarer's Isle, a short tutorial island. Once one of your heroes has finished it, the next ones may skip it."));
     const actions = el('div', 'gate-row', v);
     const submit = () => {
       const n = this.validName(name.value);
       if (n) this.createOpts?.done(n, !!this.createOpts?.skippable && skipBox.checked);
     };
     this.createPrimary = button(actions, '', submit, 'gate-gold');
-    button(actions, 'Back', () => this.createOpts?.back(), 'gate-iron');
-    el('p', 'gate-hint', v, 'Names are 3–20 letters; spaces, hyphens and apostrophes are allowed inside. Your name is yours from then on.');
+    button(actions, t('Back'), () => this.createOpts?.back(), 'gate-iron');
+    el('p', 'gate-hint', v, t('Names are 3–20 letters; spaces, hyphens and apostrophes are allowed inside. Your name is yours from then on.'));
   }
 
   /** Live player count from the server's /status. */
   private async realm(box: HTMLElement, text: HTMLElement): Promise<void> {
     if (!servedByServer()) {
-      text.textContent = 'Offline preview';
+      text.textContent = t('Offline preview');
       return;
     }
     try {
@@ -254,9 +265,11 @@ export class StartScreen {
       const d = (await res.json()) as { online?: number };
       const n = Number(d.online) || 0;
       box.classList.add('up');
-      text.textContent = `Realm online · ${n} ${n === 1 ? 'wanderer' : 'wanderers'}`;
+      const show = () => { text.textContent = t('Realm online · {n} wanderer|Realm online · {n} wanderers', { n }); };
+      show();
+      onLangChange(show);
     } catch {
-      text.textContent = 'Realm waking…';
+      text.textContent = t('Realm waking…');
     }
   }
 
@@ -265,7 +278,7 @@ export class StartScreen {
   private validName(raw: string): string | null {
     const n = raw.trim().replace(/\s+/g, ' ');
     if (!NAME_RE.test(n)) {
-      this.setError('Names are 3–20 letters; spaces, hyphens and apostrophes are allowed inside.');
+      this.setError(t('Names are 3–20 letters; spaces, hyphens and apostrophes are allowed inside.'));
       return null;
     }
     return n;
@@ -285,7 +298,8 @@ export class StartScreen {
   }
 
   setError(text: string, ok = false): void {
-    this.msg.textContent = text;
+    // errors from the server arrive in English: translate them like any game text
+    this.msg.textContent = trText(text);
     this.msg.classList.toggle('ok', ok);
   }
 

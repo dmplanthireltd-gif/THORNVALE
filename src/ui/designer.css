@@ -12,7 +12,7 @@
 .char-preview:active { cursor: grabbing; }
 .cd-turn { display: flex; gap: 4px; align-self: stretch; }
 .cd-form { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
-.cd-row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; align-items: center; }
+.cd-row { display: grid; grid-template-columns: minmax(92px, max-content) 1fr; gap: 8px; align-items: center; }
 .cd-label {
   font: 700 10px var(--pixel); letter-spacing: 0.14em; text-transform: uppercase; color: #d4ad55; white-space: nowrap;
 }

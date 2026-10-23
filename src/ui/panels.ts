@@ -1,3 +1,4 @@
+import { t } from '../i18n/i18n';
 /**
  * Movable, resizable side panels (like the classic client's side bar):
  *  - drag a panel by the grip bar at its top to another place, in either column;
@@ -62,11 +63,11 @@ export function makePanelsMovable(sidebar: HTMLElement, cols: HTMLElement[], onR
     p.classList.add('movable');
     const grip = document.createElement('div');
     grip.className = 'panel-grip';
-    grip.title = 'Drag to move this panel';
+    grip.title = t('Drag to move this panel');
     p.prepend(grip);
     const rs = document.createElement('div');
     rs.className = 'panel-resize';
-    rs.title = 'Drag to resize · double-click: automatic height';
+    rs.title = t('Drag to resize · double-click: automatic height');
     p.appendChild(rs);
 
     grip.addEventListener('mousedown', (e) => {
@@ -148,7 +149,7 @@ export function makePanelsMovable(sidebar: HTMLElement, cols: HTMLElement[], onR
   // side bar width
   const edge = document.createElement('div');
   edge.className = 'sidebar-edge';
-  edge.title = 'Drag to make the side bar wider or narrower · double-click: default';
+  edge.title = t('Drag to make the side bar wider or narrower · double-click: default');
   sidebar.appendChild(edge);
   const setSide = (px: number | undefined) => {
     if (px) document.documentElement.style.setProperty('--side', `${px}px`);
@@ -219,7 +220,7 @@ export function makeBottomResizable(root: HTMLElement, bottom: HTMLElement, hotb
   };
   const edge = document.createElement('div');
   edge.className = 'bottom-edge';
-  edge.title = 'Drag to make the chat area taller or shorter · double-click: default';
+  edge.title = t('Drag to make the chat area taller or shorter · double-click: default');
   root.appendChild(edge);
   edge.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
@@ -248,7 +249,7 @@ export function makeBottomResizable(root: HTMLElement, bottom: HTMLElement, hotb
   const btn = document.createElement('button');
   btn.className = 'btn tiny hotbar-move';
   btn.textContent = '⇅';
-  btn.title = 'Move the action bar to the top of the game view / back down';
+  btn.title = t('Move the action bar to the top of the game view / back down');
   btn.addEventListener('click', () => { l.hotbarTop = !l.hotbarTop; place(); keep(); });
   hotbar.appendChild(btn);
   if (l.bottom) setBottom(l.bottom);

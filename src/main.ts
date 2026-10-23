@@ -12,10 +12,14 @@ import { SEASON_STAGES } from './game/progression/stages';
 import { previewPlazaStyle } from './game/world/spawnPlaza';
 import { PetsView } from './render/PetsView';
 import { PetsUi } from './ui/petsUi';
+import { initLang } from './ui/lang';
+import { t } from './i18n/i18n';
 
 async function boot(): Promise<void> {
   const container = document.getElementById('app');
   if (!container) throw new Error('#app missing');
+  // language: remembered choice, else the browser's (EN / PL / PT-BR)
+  initLang();
   // `?plaza=N` previews another spawn plaza design (offline comparison only; the server builds the default)
   const plazaQ = new URLSearchParams(location.search).get('plaza');
   if (plazaQ !== null) previewPlazaStyle(Number(plazaQ));
@@ -28,7 +32,7 @@ async function boot(): Promise<void> {
     const choice = await start.choose();
     try {
       if (choice.mode === 'online') {
-        start.setStatus(`Connecting to ${choice.url}…`);
+        start.setStatus(t('Connecting to {url}…', { url: choice.url }));
         ctl = await NetController.connect({ url: choice.url, name: choice.name, password: choice.password, token: choice.token, vocation: choice.vocation, appearance: choice.appearance, skipTutorial: choice.skipTutorial });
       } else if (choice.mode === 'continue') {
         const peek = saves.peek();

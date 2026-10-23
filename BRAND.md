@@ -184,7 +184,7 @@ All of these exist in code (`src/style.css`, `site/styles.css`); reuse, don't re
 - **Errors and help:** say what happened and what to do: "Wrong email or password." "That name is taken, try another."
 - **Numbers:** written as digits with thousands separators (1,240 gold).
 - **Never:** Tibia's proper names, "MMO" jargon walls, all-caps sentences, exclamation-mark spam, emoji.
-- **Languages:** the owner reads Polish and English. **Every artifact or preview page made for the owner has a Polish / English switch (Polish by default, remembered in the browser).** Game and website copy is English unless the owner asks otherwise.
+- **Languages:** the owner reads Polish and English. **Every artifact or preview page made for the owner has a Polish / English switch (Polish by default, remembered in the browser).** Game copy is written in English and shown in English, Polish or Brazilian Portuguese (the player's choice, owner request 2026-10-23; same plain voice in each language). Website copy is English unless the owner asks otherwise.
 
 ---
 
