@@ -894,6 +894,18 @@ export class HUD {
     const c = g.getCreature(id);
     if (!c) return;
     const items: MenuItem[] = [];
+    // your own character: change how you look (the same designer as at character creation)
+    if (id === this.ctl.pid) {
+      items.push({ label: 'Change appearance…', run: () => this.toggleWin('appearance', true) });
+      items.push({ label: 'Inspect yourself', run: () => this.inspect(id) });
+      const own = g.partyView(this.ctl.pid);
+      if (own) {
+        if (own.leader === this.ctl.pid) items.push({ label: own.shared ? 'Disable shared experience' : 'Enable shared experience', run: () => this.ctl.send({ c: 'partyShare', on: !own.shared }) });
+        items.push({ label: 'Leave party', run: () => this.ctl.send({ c: 'partyLeave' }) });
+      }
+      this.showMenu(items, x, y);
+      return;
+    }
     if (kind === 'enemy') items.push({ label: `Attack ${c.name}`, run: () => this.ctl.send({ c: 'attack', id }) });
     items.push({ label: `Follow ${c.name}`, run: () => this.ctl.send({ c: 'follow', id }) });
     items.push({ label: kind === 'player' ? `Inspect ${c.name}` : `Look at ${c.name}`, run: () => this.inspect(id) });
@@ -931,7 +943,7 @@ export class HUD {
   clickPlayer(id: number, x: number, y: number): void {
     const g = this.ctl.game;
     const t = g.getPlayer(id);
-    if (!g.pvp || !t) return this.creatureMenu('player', id, x, y);
+    if (!g.pvp || !t || id === this.ctl.pid) return this.creatureMenu('player', id, x, y);
     if (this.s.player.secure && g.skullOf(t) === 0) {
       this.log('Secure mode is on: you cannot attack unmarked players. Use the "PvP: secure" button to turn it off.', 'warn');
       return this.creatureMenu('player', id, x, y);
