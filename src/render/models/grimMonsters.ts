@@ -82,7 +82,7 @@ const DRIED = 0x3a1608;
 const beast = (blood: number, extra: Partial<Grim> = {}): Grim => ({ skin: 'hide', fur: true, blood, spec: 0.04, ...extra });
 const warrior = (extra: Partial<Grim> = {}): Grim => ({ skin: 'scarSkin', blood: 0.22, cloth: 'clothBlood', spec: 0.05, ...extra });
 const undead = (skin: MonDetail, extra: Partial<Grim> = {}): Grim => ({ skin, rot: 0.4, cloth: 'rotCloth', blood: 0.2, bloodColor: DRIED, spec: 0.03, ...extra });
-const bug = (extra: Partial<Grim> = {}): Grim => ({ skin: 'chitin', blood: 0.18, bloodColor: ICHOR, spec: 0.32, rim: 0.22, rimColor: 0x9aa890, ...extra });
+const bug = (extra: Partial<Grim> = {}): Grim => ({ skin: 'chitin', blood: 0.18, bloodColor: ICHOR, spec: 0.22, rim: 0.22, rimColor: 0x9aa890, ...extra });
 const sea = (skin: MonDetail, extra: Partial<Grim> = {}): Grim => ({ skin, spec: 0.5, rim: 0.32, rimColor: 0x5ab8c8, blood: 0.12, ...extra });
 const ice = (extra: Partial<Grim> = {}): Grim => ({ skin: 'hide', frost: 0.45, rim: 0.25, rimColor: 0x9ad8ff, spec: 0.12, glowColor: 0x7ad0ff, ...extra });
 
@@ -123,11 +123,11 @@ export const GRIM: Record<string, Grim> = {
   // fire: basalt and scorched hide with ember cracks, soot low down
   fire_elemental: { skin: 'ember', stone: true, soot: 0.5, glow: 1.4, spec: 0.05, rim: 0.3, rimColor: 0xff7a2a },
   demon: { skin: 'ember', wings: true, soot: 0.35, blood: 0.45, glow: 0.8, spec: 0.08, rim: 0.18, rimColor: 0xff5a1a, cloth: 'clothBlood' },
-  dragon: { skin: 'scale', wings: true, soot: 0.25, blood: 0.3, spec: 0.14, glow: 0.3 },
-  dragon_lord: { skin: 'scale', wings: true, soot: 0.35, blood: 0.35, spec: 0.16, glow: 0.6, rim: 0.12, rimColor: 0xff6a20 },
+  dragon: { skin: 'scale', wings: true, soot: 0.25, blood: 0.3, spec: 0.06, glow: 0.3 },
+  dragon_lord: { skin: 'scale', wings: true, soot: 0.35, blood: 0.35, spec: 0.07, glow: 0.6, rim: 0.12, rimColor: 0xff6a20 },
   // spiders and insects: glossy chitin, bristles, ichor
-  tarantula: bug({ fur: true }), dread_weaver: bug({ fur: true, blood: 0.25 }), gravesilk_colossus: bug({ fur: true, blood: 0.3 }),
-  scorpion: bug(), scarab: bug({ spec: 0.4 }),
+  tarantula: bug({ fur: true }), dread_weaver: bug({ fur: true, blood: 0.25 }), gravesilk_colossus: bug({ fur: true, blood: 0.3, spec: 0.1 }),
+  scorpion: bug(), scarab: bug({ spec: 0.3 }),
   // the Sunken Reach: wet, glistening skin
   lantern_jelly: sea('wet', { glow: 0.5, glowColor: 0x7ad8ff, blood: 0 }), blight_jelly: sea('wet', { glow: 0.5, glowColor: 0xa8ff4a, blood: 0 }),
   ironshell_crab: sea('chitin', { blood: 0.1 }),
@@ -688,8 +688,8 @@ export function grimBody(m: Mat, g: Grim): void {
   vec3 gN = normalize( normal );
   float gF = pow( 1.0 - clamp( dot( gN, gV ), 0.0, 1.0 ), 3.0 );
   vec3 gH = normalize( gV + vec3( -0.3, 0.72, 0.62 ) );
-  float gS = pow( max( dot( gN, gH ), 0.0 ), 34.0 );
-  totalEmissiveRadiance += gRim * gF * vColor.rgb * 2.0 + vec3( gS * gSpec ) * ( 0.35 + 0.65 * gTex.g );
+  float gS = pow( max( dot( gN, gH ), 0.0 ), 70.0 );
+  totalEmissiveRadiance += gRim * gF * vColor.rgb * 2.0 + vec3( gS * gSpec ) * ( 0.15 + 0.85 * gTex.g * gTex.g );
   totalEmissiveRadiance += gTex.rgb * ( 1.0 - gTex.a ) * gGlow * 1.6;
 }`);
   };
