@@ -59,6 +59,73 @@ const _v = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 
+/** Painted style: rounder rods and cones (more sides), classic keeps its count. */
+function rs(seg: number): number {
+  return PAINTED ? Math.min(12, Math.max(seg, Math.round(seg * 1.5))) : seg;
+}
+
+/** Smooth normals for a primitive centred on the origin (spheres): the direction from the centre. */
+function smoothRound(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const P = g.attributes.position;
+  const N = g.attributes.normal;
+  for (let i = 0; i < P.count; i++) {
+    _v.fromBufferAttribute(P, i).normalize();
+    N.setXYZ(i, _v.x, _v.y, _v.z);
+  }
+  return g;
+}
+
+/**
+ * Painted style: a rounded block. A subdivided box whose vertices are pulled onto a box with
+ * rounded edges of radius r (a share of its thinnest side), with smooth normals — plates turn into
+ * pillowy scales, heads and pads lose their hard 90° edges, thin blades and slabs stay crisp.
+ */
+export function softBox(w: number, h: number, d: number, round = 0.42): THREE.BufferGeometry {
+  const big = Math.max(w, h, d);
+  const n = big > 0.14 ? 3 : 2;
+  const g = new THREE.BoxGeometry(w, h, d, n, n, n);
+  const r = Math.min(w, h, d) * round;
+  if (r < 0.004) return g;
+  const ix = w / 2 - r, iy = h / 2 - r, iz = d / 2 - r;
+  const P = g.attributes.position;
+  const N = g.attributes.normal;
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+    const cx = Math.max(-ix, Math.min(ix, x)), cy = Math.max(-iy, Math.min(iy, y)), cz = Math.max(-iz, Math.min(iz, z));
+    _v.set(x - cx, y - cy, z - cz);
+    if (_v.lengthSq() < 1e-12) _v.fromBufferAttribute(N, i);
+    _v.normalize();
+    P.setXYZ(i, cx + _v.x * r, cy + _v.y * r, cz + _v.z * r);
+    N.setXYZ(i, _v.x, _v.y, _v.z);
+  }
+  return g;
+}
+
+/** Splits every triangle of a non-indexed geometry into four (positions + normals + uvs). */
+function splitTris(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const names = ['position', 'normal', 'uv'].filter((k) => g.attributes[k]);
+  const out = new THREE.BufferGeometry();
+  for (const k of names) {
+    const A = g.attributes[k] as THREE.BufferAttribute;
+    const s = A.itemSize;
+    const src = A.array as ArrayLike<number>;
+    const dst = new Float32Array(src.length * 4);
+    let o = 0;
+    const put = (i: number, j: number) => { for (let c = 0; c < s; c++) dst[o++] = (src[i * s + c] + src[j * s + c]) / 2; };
+    for (let t = 0; t < A.count; t += 3) {
+      const a = t, b = t + 1, c = t + 2;
+      // corners as midpoints of a vertex with itself
+      put(a, a); put(a, b); put(c, a);
+      put(a, b); put(b, b); put(b, c);
+      put(c, a); put(b, c); put(c, c);
+      put(a, b); put(b, c); put(c, a);
+    }
+    out.setAttribute(k, new THREE.BufferAttribute(dst, s));
+  }
+  g.dispose();
+  return out;
+}
+
 function hash(x: number, y: number, z: number, k: number): number {
   const h = Math.sin(x * 127.1 + y * 311.7 + z * 74.7 + k * 19.19) * 43758.5453;
   return h - Math.floor(h);
@@ -106,10 +173,16 @@ export class Mesher {
     return this;
   }
 
-  box(w: number, h: number, d: number, c: number, p?: V3, o?: PartOpt): this { return this.add(new THREE.BoxGeometry(w, h, d), c, p, o); }
-  sph(r: number, c: number, p?: V3, o?: PartOpt, detail = 1): this { return this.add(new THREE.IcosahedronGeometry(r, detail), c, p, o); }
-  cyl(rt: number, rb: number, h: number, c: number, p?: V3, o?: PartOpt, seg = 6): this { return this.add(new THREE.CylinderGeometry(rt, rb, h, seg), c, p, o); }
-  cone(r: number, h: number, c: number, p?: V3, o?: PartOpt, seg = 5): this { return this.add(new THREE.ConeGeometry(r, h, seg), c, p, o); }
+  /** A block; in the painted style a soft rounded one (pillow plates, rounded heads; thin slabs stay crisp). */
+  box(w: number, h: number, d: number, c: number, p?: V3, o?: PartOpt): this { return this.add(PAINTED ? softBox(w, h, d) : new THREE.BoxGeometry(w, h, d), c, p, o); }
+  sph(r: number, c: number, p?: V3, o?: PartOpt, detail = 1): this {
+    if (!PAINTED) return this.add(new THREE.IcosahedronGeometry(r, detail), c, p, o);
+    // painted style: no faceted gem spheres — bigger ones one step finer, every one smooth-shaded
+    const g = new THREE.IcosahedronGeometry(r, detail === 0 && r >= 0.045 ? 1 : detail);
+    return this.add(smoothRound(g), c, p, o);
+  }
+  cyl(rt: number, rb: number, h: number, c: number, p?: V3, o?: PartOpt, seg = 6): this { return this.add(new THREE.CylinderGeometry(rt, rb, h, rs(seg)), c, p, o); }
+  cone(r: number, h: number, c: number, p?: V3, o?: PartOpt, seg = 5): this { return this.add(new THREE.ConeGeometry(r, h, rs(seg)), c, p, o); }
   /** A partial ring lying flat (XZ plane): collars, rims, ribs. */
   ring(R: number, t: number, c: number, p?: V3, o?: PartOpt, arc = Math.PI * 2, seg = 10): this {
     const g = new THREE.TorusGeometry(R, t, 3, seg, arc);
@@ -136,7 +209,7 @@ export class Mesher {
     const B = new THREE.Vector3(...b);
     const d = B.clone().sub(A);
     const len = d.length();
-    const g = new THREE.CylinderGeometry(rb, ra, len, seg);
+    const g = new THREE.CylinderGeometry(rb, ra, len, rs(seg));
     g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(_up, d.normalize()));
     const mid = A.add(B).multiplyScalar(0.5);
     return this.add(g, c, [mid.x, mid.y, mid.z], { ...o, r: undefined, s: undefined });
@@ -145,7 +218,7 @@ export class Mesher {
   /** A cone from base point `at` pointing along `dir` (spikes, claws, teeth). */
   spike(at: V3, dir: V3, len: number, r: number, c: number, o: PartOpt = {}, seg = 4): this {
     const D = new THREE.Vector3(...dir).normalize();
-    const g = new THREE.ConeGeometry(r, len, seg);
+    const g = new THREE.ConeGeometry(r, len, rs(seg));
     g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(_up, D));
     return this.add(g, c, [at[0] + D.x * len / 2, at[1] + D.y * len / 2, at[2] + D.z * len / 2], { ...o, r: undefined, s: undefined });
   }
@@ -170,11 +243,82 @@ export class Mesher {
 
   /** A thick rounded tube through the points (necks, tails, bodies of snakes). */
   tube(pts: V3[], radii: number[], c: number, o: PartOpt = {}, seg = 7): this {
+    if (PAINTED) return this.curve(pts, radii, c, o, Math.max(10, seg + 3));
     for (let i = 0; i < pts.length - 1; i++) {
       this.seg(pts[i], pts[i + 1], radii[i], radii[i + 1], c, o, seg);
       this.sph(radii[i + 1] * 1.03, c, pts[i + 1], o, 1);
     }
     return this;
+  }
+
+  /**
+   * One smooth tapered tube along a curve through the points (painted style: necks, tails and
+   * snake bodies bend in one sweep instead of a chain of rods and balls), capped with round ends.
+   */
+  curve(pts: V3[], radii: number[], c: number, o: PartOpt = {}, radial = 10, perSeg = 5): this {
+    const cv = new THREE.CatmullRomCurve3(pts.map((q) => new THREE.Vector3(...q)), false, 'centripetal');
+    const n = pts.length - 1;
+    const T = Math.max(4, n * perSeg);
+    const g = new THREE.TubeGeometry(cv, T, 1, radial, false);
+    const P = g.attributes.position;
+    const rad = (t: number) => {
+      const f = t * n;
+      const i = Math.min(n - 1, Math.floor(f));
+      const k = f - i;
+      const s = k * k * (3 - 2 * k);
+      return radii[i] + (radii[i + 1] - radii[i]) * s;
+    };
+    const ctr = new THREE.Vector3();
+    for (let i = 0; i <= T; i++) {
+      const t = i / T;
+      cv.getPoint(t, ctr);
+      const r = rad(t);
+      for (let j = 0; j <= radial; j++) {
+        const k = i * (radial + 1) + j;
+        _v.fromBufferAttribute(P, k).sub(ctr).multiplyScalar(r).add(ctr);
+        P.setXYZ(k, _v.x, _v.y, _v.z);
+      }
+    }
+    this.add(g, c, [0, 0, 0], { ...o, r: undefined, s: undefined });
+    this.sph(radii[0], c, pts[0], o, 1);
+    this.sph(radii[n] * 1.02, c, pts[n], o, 1);
+    return this;
+  }
+
+  /**
+   * A curved membrane (wings, fins, frills): the outline in the XY plane, finely split and bowed
+   * along z — a billow between the arm and the trailing edge plus a ripple between the finger bones,
+   * smooth-shaded, both faces drawn. In the classic style a flat polygon as before.
+   */
+  membrane(pts: [number, number][], c: number, p?: V3, o?: PartOpt, sag = 0.12, ripple = 0.04, fingers = 4): this {
+    if (!PAINTED) return this.poly(pts, c, p, o);
+    const sh = new THREE.Shape();
+    sh.moveTo(pts[0][0], pts[0][1]);
+    for (const [x, y] of pts.slice(1)) sh.lineTo(x, y);
+    let g = new THREE.ShapeGeometry(sh).toNonIndexed();
+    for (let l = 0; l < 2; l++) g = splitTris(g);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const W = Math.max(1e-4, x1 - x0), H = Math.max(1e-4, y1 - y0), S = Math.max(W, H);
+    // the root sits at whichever x end is nearer 0 (left and right wings are mirrored)
+    const rootX = Math.abs(x0) < Math.abs(x1) ? x0 : x1;
+    const f = (x: number, y: number) => {
+      const u = Math.abs(x - rootX) / W;
+      const v = (y - y0) / H;
+      const a = Math.atan2(y - y1 * 0.6, Math.abs(x - rootX) + 1e-4);
+      return -sag * S * Math.sin(Math.PI * Math.min(1, u)) * (0.35 + 0.65 * (1 - v)) - ripple * S * u * Math.max(0, Math.sin(a * fingers * 1.6));
+    };
+    const P = g.attributes.position;
+    const N = g.attributes.normal;
+    const e = S * 0.01;
+    for (let i = 0; i < P.count; i++) {
+      const x = P.getX(i), y = P.getY(i);
+      const z = f(x, y);
+      P.setZ(i, z);
+      _v.set(-(f(x + e, y) - z) / e, -(f(x, y + e) - z) / e, 1).normalize();
+      N.setXYZ(i, _v.x, _v.y, _v.z);
+    }
+    return this.add(g, c, p, { two: true, ...o });
   }
 
   /** Two glowing eyes (left and right of x = 0), slanted into a scowl. */

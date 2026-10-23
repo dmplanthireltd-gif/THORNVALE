@@ -963,28 +963,33 @@ export function buildEnemy(kind: EnemyKind): Rig {
   }
 }
 
-/** On-screen size multiplier per monster. */
+/**
+ * On-screen size multiplier per monster. Readable sizes (owner 2026-10-23): regular monsters about
+ * a tile, large ones (dragons, behemoths, hydras, giants) at most ~2 tiles, bosses ~2.5, world
+ * bosses bigger (they turn see-through over the hero, seeThrough.ts).
+ */
 export const ENEMY_SCALE: Record<EnemyKind, number> = {
   rat: 1.25, wolf: 1.25, skeleton: 1.3,
-  orc: 1.32, orc_spearman: 1.32, orc_shaman: 1.3, orc_warrior: 1.36, orc_berserker: 1.4, orc_leader: 1.42, orc_warlord: 1.55,
+  orc: 1.32, orc_spearman: 1.32, orc_shaman: 1.3, orc_warrior: 1.36, orc_berserker: 1.4, orc_leader: 1.38, orc_warlord: 1.42,
   elf: 1.3, elf_scout: 1.3, elf_arcanist: 1.3, elf_warden: 1.38,
-  crocodile: 1.3, tarantula: 1.35, jungle_troll: 1.3, hydra: 1.7,
-  ghoul: 1.3, fire_elemental: 1.4, behemoth: 1.6, demon: 1.75,
-  dragon: 1.75, dragon_lord: 2.0,
-  frost_dragon: 2.0, ice_golem: 1.55, crystal_spider: 1.5, frost_giant: 1.75, frost_giantess: 1.65, ice_witch: 1.32,
+  crocodile: 1.3, tarantula: 1.35, jungle_troll: 1.3, hydra: 1.3,
+  ghoul: 1.3, fire_elemental: 1.4, behemoth: 1.42, demon: 1.45,
+  dragon: 1.45, dragon_lord: 1.55,
+  frost_dragon: 1.55, ice_golem: 1.4, crystal_spider: 1.3, frost_giant: 1.45, frost_giantess: 1.42, ice_witch: 1.32,
   barbarian_raider: 1.34, barbarian_skullhunter: 1.38, barbarian_brutetamer: 1.32, barbarian_headsplitter: 1.34,
-  frostkin: 1.15, frostkin_toolshaper: 1.18, frostkin_windcaller: 1.15, dire_penguin: 1.1, silver_rabbit: 1.0, winter_wolf: 1.28, polar_bear: 1.5,
-  scorpion: 1.35, mummy: 1.32, scarab: 1.3, minotaur: 1.4, minotaur_archer: 1.38, minotaur_mage: 1.36, cyclops: 1.6,
+  frostkin: 1.15, frostkin_toolshaper: 1.18, frostkin_windcaller: 1.15, dire_penguin: 1.1, silver_rabbit: 1.0, winter_wolf: 1.28, polar_bear: 1.4,
+  scorpion: 1.35, mummy: 1.32, scarab: 1.3, minotaur: 1.4, minotaur_archer: 1.38, minotaur_mage: 1.36, cyclops: 1.42,
   dwarf: 1.25, dwarf_soldier: 1.25, dwarf_guard: 1.3, bandit: 1.3, amazon: 1.3, valkyrie: 1.32, bear: 1.4, deer: 1.3, snake: 1.25,
   lizard_sentinel: 1.34, lizard_templar: 1.42,
-  dread_weaver: 1.7, gravesilk_colossus: 2.15,
-  // bosses: clearly bigger than their kin, world bosses colossal
-  boss_ironjaw: 2.0, boss_bonebound: 1.9, boss_delving_king: 1.9, boss_labyrinth_lord: 2.1, boss_venom_oracle: 2.1,
-  boss_ember_matriarch: 2.7, boss_sand_king: 2.1, boss_mire_hydra: 2.5, boss_rime_wyrm: 2.8, boss_ashen_sovereign: 2.6,
-  wb_mountain: 3.6, wb_storm_serpent: 3.4, wb_blight_mother: 3.6,
-  raid_tusk_warlord: 2.0, raid_grave_warden: 1.9, raid_frost_jarl: 2.4, raid_swarm_queen: 2.3,
+  dread_weaver: 1.35, gravesilk_colossus: 1.7,
+  // bosses: clearly bigger than their kin, world bosses colossal (but readable: owner 2026-10-23
+  // "much too big — you can't see your character"; anything covering the hero turns see-through)
+  boss_ironjaw: 1.7, boss_bonebound: 1.65, boss_delving_king: 1.6, boss_labyrinth_lord: 1.7, boss_venom_oracle: 1.75,
+  boss_ember_matriarch: 1.85, boss_sand_king: 1.75, boss_mire_hydra: 1.75, boss_rime_wyrm: 1.9, boss_ashen_sovereign: 1.85,
+  wb_mountain: 3.0, wb_storm_serpent: 3.0, wb_blight_mother: 3.0,
+  raid_tusk_warlord: 1.7, raid_grave_warden: 1.65, raid_frost_jarl: 1.85, raid_swarm_queen: 1.9,
   // the Sunken Reach (darkRigsSea.ts)
-  lantern_jelly: 1.15, blight_jelly: 1.15, ironshell_crab: 1.5, deepfin_raider: 1.36, deepfin_harpooner: 1.34, deepfin_tidecaller: 1.32, gloom_eel: 1.45,
-  boss_drowned_tyrant: 2.2,
+  lantern_jelly: 1.15, blight_jelly: 1.15, ironshell_crab: 1.35, deepfin_raider: 1.36, deepfin_harpooner: 1.34, deepfin_tidecaller: 1.32, gloom_eel: 1.45,
+  boss_drowned_tyrant: 1.75,
 };
 

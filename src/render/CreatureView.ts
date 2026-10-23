@@ -38,6 +38,13 @@ export class CreatureView {
   /** 1 = solid; lower = see-through (invisible players). */
   ghost = 1;
 
+  /**
+   * See-through target while this creature's model covers the local player on screen
+   * (Renderer.seeThrough): 1 = solid. Eased in `see` so it never pops.
+   */
+  cover = 1;
+  private see = 1;
+
   /** Height of the floor this creature is drawn on. */
   yOffset = 0;
 
@@ -118,6 +125,8 @@ export class CreatureView {
     const rig = this.rig;
     this.time += dt;
     this.syncPosition();
+    this.see += (this.cover - this.see) * (1 - Math.exp(-dt * 9));
+    if (Math.abs(this.cover - this.see) < 0.01) this.see = this.cover;
 
     // facing: smooth shortest-arc turn
     this.yaw = angleLerp(this.yaw, c.facing, 1 - Math.exp(-dt * 16));
@@ -308,7 +317,7 @@ export class CreatureView {
   }
 
   private applyFade(): void {
-    const a = this.fade * this.ghost;
+    const a = this.fade * this.ghost * this.see;
     const needTransparent = a < 0.999;
     if (needTransparent !== this.transparentOn) {
       this.transparentOn = needTransparent;

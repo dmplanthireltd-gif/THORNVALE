@@ -113,7 +113,7 @@ function weaver(K: Kit, o: WeaverLook, size: number): QuadRig {
   for (let p = 0; p < 4; p++) for (const s of [1, -1]) {
     const g = K.limb('leg' + p, [s * 0.16 * size, 0.4 * size, legAt[p] * size], (m) => {
       m.push([0, 0, 0], [0, 0, 0], [size, size, size]);
-      const reach = 0.66 - Math.abs(p - 1.5) * 0.05;
+      const reach = 0.56 - Math.abs(p - 1.5) * 0.05; // (was 0.66: legs over three tiles)
       const knee: V3 = [reach * 0.42, 0.3, 0];
       const ankle: V3 = [reach * 0.86, -0.12, 0];
       const foot: V3 = [reach, -0.4, 0];
