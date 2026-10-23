@@ -1574,7 +1574,7 @@ export class HUD {
       row(trName(SKILL_NAMES[k]), p.level, skillProgress(k, p, voc), `${trName(SKILL_NAMES[k])} ${p.level} — ${t('{pct}% to the next level', { pct })} (${how})`);
     }
     // gathering and production skills come from the registry (gathering/skills.ts)
-    for (const [kind, head] of [['gathering', 'Gathering'], ['production', 'Production']] as const) {
+    for (const [kind, head] of [['gathering', k('Gathering')], ['production', k('Production')]] as const) {
       el('div', 'skill-head', box, t(head));
       for (const d of NONCOMBAT_SKILLS) {
         if (d.kind !== kind) continue;

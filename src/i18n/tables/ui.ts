@@ -644,4 +644,5 @@ export const UI: Table = {
   "something": ["coś", "algo"],
   "Change appearance…": ["Zmień wygląd…", "Mudar aparência…"],
   "Inspect yourself": ["Zbadaj siebie", "Inspecionar a si mesmo"],
+  "Gathering": ["Zbieractwo", "Coleta"],
 };

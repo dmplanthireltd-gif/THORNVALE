@@ -3,7 +3,7 @@ import { VOCATIONS, type Vocation } from '../game/player/vocations';
 import { button, el } from './dom';
 import { VOCATION_SVG } from './emblems';
 import type { CreateOptions } from './StartScreen';
-import { onLangChange, t } from '../i18n/i18n';
+import { k, onLangChange, t } from '../i18n/i18n';
 import { trName, trText } from '../i18n/gameText';
 
 /**
@@ -245,7 +245,7 @@ export class OnlineLogin {
     const tabs = el('div', 'gate-tabs', b);
     tabs.setAttribute('role', 'tablist');
     tabs.setAttribute('aria-label', t('Account'));
-    for (const [id, label] of [['login', 'Log in'], ['signup', 'Create account']] as const) {
+    for (const [id, label] of [['login', k('Log in')], ['signup', k('Create account')]] as const) {
       const tb = button(tabs, t(label), () => {
         this.tab = id;
         this.h.message('');
