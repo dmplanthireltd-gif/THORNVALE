@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Rng } from '../game/core/rng';
+import { PAINTED } from './style';
 
 /**
  * Procedural 32×32 pixel-art textures, drawn once at startup with a small
@@ -16,14 +17,17 @@ function make(key: string, paint: Painter, seed = 1): THREE.CanvasTexture {
   const hit = cache.get(k);
   if (hit) return hit;
   const c = document.createElement('canvas');
-  c.width = SIZE;
-  c.height = SIZE;
+  // painted style (style.ts): a few object textures get a hand-painted high-resolution version
+  const hi = PAINTED ? PAINTED_OBJ[key] : undefined;
+  c.width = hi ? HI : SIZE;
+  c.height = hi ? HI : SIZE;
   const ctx = c.getContext('2d')!;
-  paint(ctx, new Rng(seed * 7919 + key.length * 104729));
+  (hi ?? paint)(ctx, new Rng(seed * 7919 + key.length * 104729));
   const t = new THREE.CanvasTexture(c);
-  t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;
-  t.generateMipmaps = false;
+  // painted style: smooth filtering everywhere (no hard texel squares)
+  t.magFilter = PAINTED ? THREE.LinearFilter : THREE.NearestFilter;
+  t.minFilter = PAINTED ? THREE.LinearMipmapLinearFilter : THREE.NearestFilter;
+  t.generateMipmaps = PAINTED;
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   cache.set(k, t);
@@ -59,6 +63,157 @@ function blobs(ctx: CanvasRenderingContext2D, rng: Rng, color: string, count: nu
     }
   }
 }
+
+// ------------------------------------------------------------------ painted style object textures
+
+const HI = 128;
+
+function softBlob(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, rot: number, light: number, dark: number): void {
+  for (const ox of [-HI, 0, HI]) for (const oy of [-HI, 0, HI]) {
+    const xx = x + ox, yy = y + oy;
+    if (xx + rx < 0 || yy + rx < 0 || xx - rx > HI || yy - rx > HI) continue;
+    ctx.save();
+    ctx.translate(xx, yy);
+    ctx.rotate(rot);
+    const g = ctx.createRadialGradient(-rx * 0.3, -ry * 0.35, 0, 0, 0, rx);
+    g.addColorStop(0, `rgb(${light},${light},${light})`);
+    g.addColorStop(1, `rgb(${dark},${dark},${dark})`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** High-resolution, softly shaded greyscale object textures (tinted by the instance colour). */
+const PAINTED_OBJ: Record<string, Painter> = {
+  leaves: (ctx, rng) => {
+    ctx.fillStyle = '#6a6a6a';
+    ctx.fillRect(0, 0, HI, HI);
+    // overlapping leaves, each lit from the upper left: darker underneath, bright tips on top
+    for (let layer = 0; layer < 3; layer++) {
+      for (let i = 0; i < 260; i++) {
+        const l = 4 + rng.next() * 5;
+        softBlob(ctx, rng.next() * HI, rng.next() * HI, l, l * 0.5, rng.next() * Math.PI, 150 + layer * 40 + rng.int(0, 30), 60 + layer * 30);
+      }
+    }
+    for (let i = 0; i < 40; i++) softBlob(ctx, rng.next() * HI, rng.next() * HI, 2, 1.2, rng.next() * 3, 255, 200);
+  },
+  rock: (ctx, rng) => {
+    ctx.fillStyle = '#8f8a82';
+    ctx.fillRect(0, 0, HI, HI);
+    for (let i = 0; i < 70; i++) softBlob(ctx, rng.next() * HI, rng.next() * HI, 6 + rng.next() * 14, 5 + rng.next() * 10, rng.next() * 3, 175 + rng.int(0, 25), 110 + rng.int(0, 20));
+    ctx.strokeStyle = 'rgba(60,56,52,0.55)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 9; i++) {
+      let x = rng.next() * HI, y = rng.next() * HI;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let k = 0; k < 6; k++) { x += (rng.next() - 0.5) * 14; y += 4 + rng.next() * 8; ctx.lineTo(x, y); }
+      ctx.stroke();
+    }
+  },
+  // roof tiles: 4 × 4 overlapping rounded tiles (same layout as the classic 32 px texture)
+  shingles: (ctx, rng) => {
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(0, 0, HI, HI);
+    const T = HI / 4;
+    for (let row = -1; row < 4; row++) {
+      const off = row % 2 ? T / 2 : 0;
+      for (let k = -1; k < 5; k++) {
+        const x = k * T + off, y = row * T;
+        const v = 200 + rng.int(-25, 25);
+        const g = ctx.createLinearGradient(0, y, 0, y + T * 1.05);
+        g.addColorStop(0, `rgb(${v - 70},${v - 70},${v - 70})`);
+        g.addColorStop(0.25, `rgb(${v},${v},${v})`);
+        g.addColorStop(0.85, `rgb(${v - 35},${v - 35},${v - 35})`);
+        g.addColorStop(1, `rgb(${v - 90},${v - 90},${v - 90})`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(x + 1.5, y);
+        ctx.lineTo(x + T - 1.5, y);
+        ctx.lineTo(x + T - 1.5, y + T * 0.7);
+        ctx.quadraticCurveTo(x + T - 1.5, y + T + 1, x + T / 2, y + T + 1);
+        ctx.quadraticCurveTo(x + 1.5, y + T + 1, x + 1.5, y + T * 0.7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(x + 3, y + 2, 2, T * 0.6);
+      }
+    }
+  },
+  brick: (ctx, rng) => {
+    ctx.fillStyle = '#7a756e';
+    ctx.fillRect(0, 0, HI, HI);
+    const bh = HI / 4, bw = HI / 2;
+    for (let row = 0; row < 4; row++) {
+      const off = row % 2 ? bw / 2 : 0;
+      for (let b = -1; b < 3; b++) {
+        const x = b * bw + off + 2, y = row * bh + 2, w = bw - 4, h = bh - 4;
+        const v = 165 + rng.int(-22, 22);
+        const g = ctx.createLinearGradient(x, y, x + w * 0.3, y + h);
+        g.addColorStop(0, `rgb(${v + 30},${v + 28},${v + 24})`);
+        g.addColorStop(0.5, `rgb(${v},${v - 3},${v - 8})`);
+        g.addColorStop(1, `rgb(${v - 45},${v - 47},${v - 50})`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, 4);
+        ctx.fill();
+        for (let k = 0; k < 6; k++) {
+          const c = v - 30 + rng.int(-10, 10);
+          ctx.fillStyle = `rgba(${c},${c},${c},0.5)`;
+          ctx.beginPath(); ctx.arc(x + rng.next() * w, y + rng.next() * h, 0.8 + rng.next() * 1.5, 0, 7); ctx.fill();
+        }
+      }
+    }
+  },
+  plaster: (ctx, rng) => {
+    ctx.fillStyle = '#ece7dd';
+    ctx.fillRect(0, 0, HI, HI);
+    for (let i = 0; i < 60; i++) softBlob(ctx, rng.next() * HI, rng.next() * HI, 6 + rng.next() * 12, 5 + rng.next() * 9, rng.next() * 3, 245, 222);
+    // timber frame: border beams and the diagonal brace (same layout as the classic texture)
+    const beam = (x: number, y: number, w: number, h: number) => {
+      const g = ctx.createLinearGradient(x, y, x + (w < h ? w : 0), y + (w < h ? 0 : h));
+      g.addColorStop(0, '#8a6440'); g.addColorStop(0.5, '#6b4a2c'); g.addColorStop(1, '#4a3019');
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+    };
+    beam(0, 0, HI, 11); beam(0, HI - 11, HI, 11); beam(0, 0, 11, HI); beam(HI - 11, 0, 11, HI);
+    ctx.save();
+    ctx.translate(HI / 2, HI / 2);
+    ctx.rotate(Math.PI / 4);
+    beam(-HI * 0.72, -5, HI * 1.44, 10);
+    ctx.restore();
+  },
+  logs: (ctx, rng) => {
+    const T = HI / 4;
+    for (let row = 0; row < 4; row++) {
+      const y = row * T;
+      const g = ctx.createLinearGradient(0, y, 0, y + T);
+      g.addColorStop(0, '#5e4429'); g.addColorStop(0.2, '#b08a5c'); g.addColorStop(0.55, '#8a6a46'); g.addColorStop(1, '#4a3420');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, y, HI, T);
+      ctx.strokeStyle = 'rgba(60,40,22,0.35)';
+      ctx.lineWidth = 1;
+      for (let k = 0; k < 5; k++) {
+        const yy = y + 6 + rng.next() * (T - 12);
+        ctx.beginPath(); ctx.moveTo(0, yy); ctx.bezierCurveTo(HI * 0.3, yy + 2, HI * 0.6, yy - 2, HI, yy); ctx.stroke();
+      }
+    }
+  },
+  bark: (ctx, rng) => {
+    ctx.fillStyle = '#9a9a9a';
+    ctx.fillRect(0, 0, HI, HI);
+    for (let i = 0; i < 46; i++) {
+      const x = rng.next() * HI, w = 2 + rng.next() * 4, c = 120 + rng.int(0, 90);
+      ctx.fillStyle = `rgba(${c},${c},${c},0.7)`;
+      ctx.fillRect(x, 0, w, HI);
+    }
+    ctx.fillStyle = 'rgba(50,50,50,0.5)';
+    for (let i = 0; i < 18; i++) ctx.fillRect(rng.next() * HI, 0, 1.2, HI);
+  },
+};
 
 // ------------------------------------------------------------------ ground
 

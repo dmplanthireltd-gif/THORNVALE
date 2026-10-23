@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TILE_PX } from './PixelPass';
+import { PAINTED } from './style';
 
 /** Degrees the view is tilted away from straight down, looking north from the south. */
 export const CAMERA_TILT_DEG = 32;
@@ -130,7 +131,8 @@ export class CameraController {
 
   private apply(): void {
     const t = this.snapped.copy(this.target);
-    if (this.pixelMode) {
+    // painted style draws at full resolution: no art-pixel grid to snap to (smooth scrolling)
+    if (this.pixelMode && !PAINTED) {
       const px = 1 / TILE_PX;
       t.x = Math.round(t.x / px) * px;
       const pz = px / this.tiltCos;

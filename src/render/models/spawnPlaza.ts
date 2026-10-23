@@ -5,6 +5,7 @@ import type { PlazaProp, SpawnPlaza } from '../../game/world/spawnPlaza';
 import { Mesher, type V3 } from './darkRigsCore';
 import type { Mat } from './parts';
 import { applyWind, WIND, WIND_CLOTH } from '../weather/wind';
+import { PAINTED } from '../style';
 
 /** Makes a cel material; WorldView passes its floor-tracked factory so the plaza dims with its floor. */
 export type MatFn = (color: number, opts?: { emissive?: number; map?: THREE.Texture | null }) => Mat;
@@ -25,7 +26,8 @@ export interface PlazaView {
   update(dt: number): void;
 }
 
-const TILE = 32;
+/** Texels per tile of the painted paving (painted style, style.ts: twice as fine and smoothly filtered). */
+const TILE = PAINTED ? 64 : 32;
 
 // ------------------------------------------------------------------ helpers
 
@@ -332,9 +334,9 @@ function paintFloor(world: WorldMap, pz: SpawnPlaza): { map: THREE.CanvasTexture
   if (gctx && gimg) gctx.putImageData(gimg, 0, 0);
   const wrap = (cv: HTMLCanvasElement) => {
     const t = new THREE.CanvasTexture(cv);
-    t.magFilter = THREE.NearestFilter;
-    t.minFilter = THREE.NearestFilter;
-    t.generateMipmaps = false;
+    t.magFilter = PAINTED ? THREE.LinearFilter : THREE.NearestFilter;
+    t.minFilter = PAINTED ? THREE.LinearMipmapLinearFilter : THREE.NearestFilter;
+    t.generateMipmaps = PAINTED;
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
   };
