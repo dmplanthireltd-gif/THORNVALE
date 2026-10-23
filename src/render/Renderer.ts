@@ -999,12 +999,9 @@ export class Renderer {
       }
       case 'equipmentChanged': {
         const v = this.views.get(e.id);
-        if (v && v.rig.type === 'biped' && !(v.creature instanceof Player && v.creature.illusion)) {
-          this.gearUp(v.rig, e.id);
-          mergeRig(v.rig);
-          if (PAINTED) markOutlineTree(v.rig.root);
-          v.setCastShadow(true, true);
-        }
+        // the gear is baked into merged meshes (mergeRig), so taking a piece off cannot just
+        // detach it: rebuild the character from scratch with what it wears now
+        if (v && v.rig.type === 'biped' && !(v.creature instanceof Player && v.creature.illusion)) this.rebuildView(e.id);
         break;
       }
       case 'lookChanged':
