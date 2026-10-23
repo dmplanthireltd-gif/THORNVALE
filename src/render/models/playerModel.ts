@@ -4,6 +4,18 @@ import {
 } from '../../game/player/appearance';
 import { group, mat, sbox, scone, sshell, ssphere, type Mat } from './parts';
 import type { BipedRig } from './rigs';
+import { PAINTED } from '../style';
+import { detail, type Detail } from './grimDetail';
+
+/**
+ * Painted style (owner 2026-10-23, "more detail, more brutal"): rounder heads and hands,
+ * a grim face (brow ridge, frowning brows, eye sockets, nose shadow, cheekbones), real
+ * hands with fingers and thumb, soled and strapped boots, leather bracers, a belt pouch
+ * and knife, and surface tags for the detail atlas (grimDetail.ts). Classic look unchanged.
+ */
+const D = PAINTED ? 2 : 1;
+/** Detail tag in the painted style only (in the classic style a tag would stop rigMerge from merging the part). */
+const dt = <T extends THREE.Object3D>(o: T, d: Detail): T => (PAINTED ? detail(o, d) : o);
 
 /**
  * Player characters: a male or female body in one of three builds, with skin, hair,
@@ -102,14 +114,25 @@ export function buildPlayerRig(a: Appearance): BipedRig {
   // ---- legs (standard rig leg space: thigh to y −0.37, foot centred at y −0.52, z 0.04)
   const mkLeg = (x: number) => {
     const g = group(x * sh.hip, hipY, 0,
-      sshell(0.19, 0.16, 0.22, 0.2, botM, 0, -0.1, 0), // thigh
-      ssphere(0.075, botM, 0, -0.22, 0.02, 1, 0.8, 0.9), // knee
-      sshell(0.155, 0.125, 0.18, 0.17, botM, 0, -0.3, 0), // shin
-      sshell(0.15, 0.17, 0.16, 0.19, bootM, 0, -0.48, 0), // boot shaft
-      sshell(0.16, 0.17, 0.09, 0.3, bootM, 0, -0.575, 0.04), // foot
-      ssphere(0.08, bootM, 0, -0.575, 0.15, 1, 0.55, 1.1), // round toe
-      sshell(0.155, 0.155, 0.035, 0.18, bootHi, 0, -0.4, 0), // cuff
+      dt(sshell(0.19, 0.16, 0.22, 0.2, botM, 0, -0.1, 0), 'cloth'), // thigh
+      dt(ssphere(0.075, botM, 0, -0.22, 0.02, 1, 0.8, 0.9, D), 'cloth'), // knee
+      dt(sshell(0.155, 0.125, 0.18, 0.17, botM, 0, -0.3, 0), 'cloth'), // shin
+      dt(sshell(0.15, 0.17, 0.16, 0.19, bootM, 0, -0.48, 0), 'leather'), // boot shaft
+      dt(sshell(0.16, 0.17, 0.09, 0.3, bootM, 0, -0.575, 0.04), 'leather'), // foot
+      dt(ssphere(0.08, bootM, 0, -0.575, 0.15, 1, 0.55, 1.1, D), 'leather'), // round toe
+      dt(sshell(0.155, 0.155, 0.035, 0.18, bootHi, 0, -0.4, 0), 'leather'), // cuff
     );
+    if (PAINTED) {
+      const sole = mat(0x1c140e);
+      const iron = mat(0x5a5650);
+      g.add(
+        detail(sshell(0.175, 0.18, 0.03, 0.33, sole, 0, -0.615, 0.045), 'leather'), // thick sole
+        detail(ssphere(0.07, bootHi, 0, -0.555, 0.17, 1.05, 0.5, 0.8, D), 'leather'), // scuffed toe cap
+        detail(sshell(0.158, 0.165, 0.03, 0.2, beltM, 0, -0.5, 0), 'leather'), // ankle strap
+        sbox(0.035, 0.035, 0.02, iron, 0.06, -0.5, 0.095), // strap buckle
+        detail(ssphere(0.07, mat(shade(botHex, 0.7)), 0, -0.22, 0.05, 1, 0.9, 0.55, D), 'leather'), // worn knee patch
+      );
+    }
     g.scale.set(sh.leg, LEG_STRETCH, sh.leg);
     return g;
   };
@@ -120,24 +143,36 @@ export function buildPlayerRig(a: Appearance): BipedRig {
   const torso = group(0, hipY, 0);
   if (female) {
     torso.add(
-      sshell(0.5, 0.42, 0.28, 0.31, topM, 0, 0.39, 0), // chest to waist
-      sshell(0.42, 0.5, 0.22, 0.3, topM, 0, 0.14, 0), // waist flaring to the hips
+      dt(sshell(0.5, 0.42, 0.28, 0.31, topM, 0, 0.39, 0), 'cloth'), // chest to waist
+      dt(sshell(0.42, 0.5, 0.22, 0.3, topM, 0, 0.14, 0), 'cloth'), // waist flaring to the hips
       ssphere(0.1, topM, 0, 0.39, 0.11, 1.7, 0.6, 0.45), // soft chest line, kept subtle
     );
   } else {
     torso.add(
-      sshell(0.54, 0.46, 0.3, 0.32, topM, 0, 0.38, 0), // chest, shoulders wider than the hips
-      sshell(0.46, 0.44, 0.2, 0.3, topM, 0, 0.13, 0),
+      dt(sshell(0.54, 0.46, 0.3, 0.32, topM, 0, 0.38, 0), 'cloth'), // chest, shoulders wider than the hips
+      dt(sshell(0.46, 0.44, 0.2, 0.3, topM, 0, 0.13, 0), 'cloth'),
     );
   }
-  for (const s of [-1, 1]) torso.add(ssphere(0.085, topM, s * (female ? 0.22 : 0.245), 0.49, 0, 1, 0.75, 1.05)); // rounded shoulders
+  for (const s of [-1, 1]) torso.add(dt(ssphere(0.085, topM, s * (female ? 0.22 : 0.245), 0.49, 0, 1, 0.75, 1.05, D), 'cloth')); // rounded shoulders
   torso.add(
-    sshell(female ? 0.5 : 0.45, female ? 0.48 : 0.44, 0.08, 0.31, botM, 0, -0.01, 0), // trouser seat
-    sshell(0.24, 0.26, 0.05, 0.26, topDark, 0, 0.52, 0), // collar
+    dt(sshell(female ? 0.5 : 0.45, female ? 0.48 : 0.44, 0.08, 0.31, botM, 0, -0.01, 0), 'cloth'), // trouser seat
+    dt(sshell(0.24, 0.26, 0.05, 0.26, topDark, 0, 0.52, 0), 'cloth'), // collar
     sshell(0.12, 0.14, 0.12, 0.13, skin, 0, 0.58, 0), // neck
-    sshell(female ? 0.43 : 0.47, female ? 0.45 : 0.46, 0.065, 0.32, beltM, 0, 0.04, 0),
+    dt(sshell(female ? 0.43 : 0.47, female ? 0.45 : 0.46, 0.065, 0.32, beltM, 0, 0.04, 0), 'leather'),
     sbox(0.07, 0.05, 0.02, buckle, 0, 0.04, 0.16),
   );
+  if (PAINTED) {
+    const lace = mat(0x1e140c);
+    const blade = mat(0x8a8a86);
+    torso.add(
+      detail(sbox(0.09, 0.1, 0.06, beltM, 0.15, -0.03, 0.15), 'leather'), // belt pouch
+      detail(sbox(0.095, 0.03, 0.065, bootHi, 0.15, 0.025, 0.152), 'leather'), // its flap
+      detail(sbox(0.04, 0.16, 0.035, bootM, -0.17, -0.04, 0.12), 'leather'), // knife sheath
+      sbox(0.03, 0.05, 0.03, blade, -0.17, 0.06, 0.12), // knife grip
+      sbox(0.012, 0.11, 0.012, lace, 0.025, 0.47, 0.155).rotateZ(0.35), // collar laces
+      sbox(0.012, 0.11, 0.012, lace, -0.025, 0.47, 0.155).rotateZ(-0.35),
+    );
+  }
   torso.scale.set(sh.tx, 1, sh.tz);
 
   // shoulder plates (show the worn body armour; hidden until gear asks for them)
@@ -156,18 +191,21 @@ export function buildPlayerRig(a: Appearance): BipedRig {
   // ---- head: smaller than the old chunky head, on a short neck; face radius 0.2 in head space
   const head = group(0, hipY + 0.53 + 0.06 + 0.2 * sh.head, 0);
   head.add(
-    tag(ssphere(0.2, skin, 0, 0, 0, female ? 0.94 : 1, 1.06, 1), 'face'),
-    tag(ssphere(0.12, skin, 0, -0.1, 0.06, female ? 0.85 : 1, 0.75, 1), 'face'), // jaw
+    tag(ssphere(0.2, skin, 0, 0, 0, female ? 0.94 : 1, 1.06, 1, D), 'face'),
+    tag(ssphere(0.12, skin, 0, -0.1, 0.06, female ? 0.85 : 1, 0.75, 1, D), 'face'), // jaw
     tag(sbox(0.045, 0.045, 0.03, eyeM, 0.07, 0.02, 0.18), 'face'),
     tag(sbox(0.045, 0.045, 0.03, eyeM, -0.07, 0.02, 0.18), 'face'),
     tag(sbox(0.036, 0.07, 0.04, noseM, 0, -0.035, 0.195), 'face'),
     tag(sbox(female ? 0.065 : 0.075, 0.02, 0.03, lipM, 0, -0.11, 0.17), 'face'),
   );
   for (const s of [-1, 1]) {
-    head.add(tag(sbox(female ? 0.06 : 0.07, female ? 0.016 : 0.024, 0.03, browM, s * 0.073, 0.075, 0.18), 'face'));
+    const brow = tag(sbox(female ? 0.06 : 0.07, female ? 0.016 : 0.024, 0.03, browM, s * 0.073, 0.075, 0.18), 'face');
+    if (PAINTED) brow.rotation.z = s * (female ? 0.14 : 0.3); // a frown: inner ends low
+    head.add(brow);
     if (female) head.add(tag(sbox(0.052, 0.014, 0.03, lash, s * 0.073, 0.046, 0.188), 'face')); // lash line
     head.add(tag(ssphere(0.042, skin, s * (female ? 0.19 : 0.2), 0.0, -0.01, 0.55, 1, 1), 'top')); // ears
   }
+  if (PAINTED) grimFace(head, skinHex, female);
   head.scale.setScalar(sh.head);
   addHair(head, a.hair, hairM, blend(hairHex, skinHex, 0.45));
   if (!female) addBeard(head, a.beard, hairM, blend(hairHex, skinHex, 0.5));
@@ -177,11 +215,14 @@ export function buildPlayerRig(a: Appearance): BipedRig {
   const shoulderY = hipY + 0.48;
   const mkArm = (x: number) => {
     const g = group(x * armX, shoulderY, 0,
-      sshell(0.15, 0.13, 0.26, 0.15, topM, 0, -0.12, 0),
-      sshell(0.135, 0.135, 0.035, 0.14, topDark, 0, -0.255, 0), // cuff
+      dt(sshell(0.15, 0.13, 0.26, 0.15, topM, 0, -0.12, 0), 'cloth'),
+      dt(sshell(0.135, 0.135, 0.035, 0.14, topDark, 0, -0.255, 0), 'cloth'), // cuff
       sshell(0.12, 0.1, 0.1, 0.12, skin, 0, -0.31, 0), // forearm
-      ssphere(0.07, skin, 0, -0.385, 0.005, 0.95, 1.15, 1), // hand
     );
+    if (PAINTED) {
+      g.add(...grimHand(skin, x));
+      g.add(detail(sshell(0.128, 0.112, 0.07, 0.13, bootM, 0, -0.32, 0), 'leather')); // leather bracer
+    } else g.add(ssphere(0.07, skin, 0, -0.385, 0.005, 0.95, 1.15, 1)); // hand
     g.scale.set(sh.arm, ARM_STRETCH, sh.arm);
     return g;
   };
@@ -321,4 +362,41 @@ function addBeard(head: THREE.Group, style: string, m: Mat, stubble: number): vo
       return;
     default:
   }
+}
+
+// ------------------------------------------------------------------ painted style details
+
+/**
+ * A hand: palm, four fingers curled forward, a thumb on the inner side (side: +1 left arm,
+ * −1 right). Ends at the same height as the old round hand, so held items still sit in it.
+ */
+export function grimHand(skin: Mat, side: number): THREE.Mesh[] {
+  return [
+    ssphere(0.06, skin, 0, -0.37, 0, 0.95, 1.05, 0.8, 2), // palm
+    sbox(0.095, 0.075, 0.07, skin, 0, -0.42, 0.025), // fingers, curled
+    ssphere(0.035, skin, 0, -0.455, 0.035, 1.3, 0.7, 1, 1), // knuckles
+    ssphere(0.03, skin, -side * 0.045, -0.39, 0.045, 0.9, 1.4, 0.9, 1), // thumb
+  ];
+}
+
+/**
+ * The grim face: a brow ridge throwing a shadow, dark eye sockets, a heavier nose with a
+ * shadow under it, cheekbones and hollow cheeks. Tagged `face` (never hidden by helmets).
+ * Coordinates are in the head's own space (face radius 0.2).
+ */
+export function grimFace(head: THREE.Group, skinHex: number, female: boolean): void {
+  const sk = mat(skinHex);
+  const shadow = mat(shade(skinHex, 0.55));
+  const deep = mat(shade(skinHex, 0.38));
+  const f = (o: THREE.Mesh) => head.add(tag(o, 'face'));
+  for (const s of [-1, 1]) {
+    f(sbox(0.075, 0.06, 0.02, deep, s * 0.072, 0.025, 0.168)); // eye socket
+    f(ssphere(0.045, sk, s * 0.11, -0.035, 0.145, 1.2, 0.7, 0.8, 1)); // cheekbone
+    f(sbox(0.03, 0.06, 0.02, shadow, s * 0.125, -0.09, 0.15)); // hollow cheek
+  }
+  if (!female) f(sbox(0.27, 0.04, 0.05, sk, 0, 0.06, 0.168)); // brow ridge
+  f(sbox(0.03, 0.06, 0.035, sk, 0, 0.0, 0.2)); // nose bridge
+  f(sbox(female ? 0.04 : 0.05, 0.035, 0.04, sk, 0, -0.06, 0.207)); // nose tip
+  f(sbox(female ? 0.05 : 0.06, 0.015, 0.02, deep, 0, -0.082, 0.199)); // shadow under the nose
+  f(sbox(female ? 0.07 : 0.085, 0.012, 0.02, deep, 0, -0.118, 0.181)); // hard mouth line
 }

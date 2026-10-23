@@ -6,6 +6,8 @@ import { buildHumanoid, buildOutfitRig, holdProp } from './humanoid';
 import { box, collectMaterials, cone, cyl, group, mat, sphere, type Mat } from './parts';
 import { makeShield, makeWeapon } from './weapons';
 import { buildDarkEnemy, DARK_MONSTERS } from './darkRigs';
+import { PAINTED } from '../style';
+import { GRIM_NPCS } from './grimNpcs';
 
 /**
  * Animatable rigs. Every model faces +Z (local forward) and stands on y = 0.
@@ -126,6 +128,9 @@ const PROPS: Record<NonNullable<NpcDef['prop']>, () => THREE.Group> = {
 };
 
 export function buildNpc(def: NpcDef | undefined): BipedRig {
+  // painted style sample: bespoke gritty models for the temple court's key NPCs (grimNpcs.ts)
+  const grim = PAINTED && def ? GRIM_NPCS[def.key] : undefined;
+  if (grim) return grim();
   const rig = buildOutfitRig(def?.look ?? {
     type: 'citizen', head: paletteIndex(2, 7), body: paletteIndex(4, 8), legs: paletteIndex(5, 13), feet: paletteIndex(5, 2),
   });

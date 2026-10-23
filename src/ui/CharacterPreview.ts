@@ -3,6 +3,8 @@ import type { Appearance } from '../game/player/appearance';
 import { applyGear, type GearLook } from '../render/models/humanoid';
 import { buildPlayerRig } from '../render/models/playerModel';
 import type { BipedRig } from '../render/models/rigs';
+import { paintRig } from '../render/models/grimDetail';
+import { PAINTED } from '../render/style';
 
 /**
  * A turning 3D preview of a player character (the character designer), drawn at low
@@ -75,6 +77,7 @@ export class CharacterPreview {
   setGear(g: GearLook | null): void {
     this.gear = g;
     if (this.rig) applyGear(this.rig, g ?? { weapon: null, shield: null, armor: null, head: null, legs: null, feet: null });
+    if (this.rig && PAINTED) paintRig(this.rig); // painted style: the same worn detail as in game
   }
 
   set(a: Appearance): void {
@@ -82,6 +85,7 @@ export class CharacterPreview {
     this.rig = buildPlayerRig(a);
     this.rig.root.position.y = -0.12;
     if (this.gear) applyGear(this.rig, this.gear);
+    if (PAINTED) paintRig(this.rig);
     this.scene.add(this.rig.root);
   }
 

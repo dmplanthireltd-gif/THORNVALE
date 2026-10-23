@@ -18,6 +18,8 @@ import { applyGear } from './models/humanoid';
 import { buildPlayerRig } from './models/playerModel';
 import { mat, toonGradient } from './models/parts';
 import { mergeRig } from './models/rigMerge';
+import { paintRig } from './models/grimDetail';
+import { GRIM_NPCS } from './models/grimNpcs';
 import { CAMERA_TILT_DEG, CameraController } from './CameraController';
 import { itemIcon } from '../ui/icons';
 import { buildEnemy, buildNpc, ENEMY_SCALE, type BipedRig, type Rig } from './models/rigs';
@@ -441,8 +443,11 @@ export class Renderer {
     } else if (c instanceof Player) {
       rig = buildPlayerRig(c.appearance);
       this.gearUp(rig as BipedRig, c.id);
+      if (PAINTED) paintRig(rig);
     } else if (c instanceof Npc) {
       rig = buildNpc(NPCS[c.key]);
+      // painted style: worn, dirty surface detail on the bespoke court NPCs (grimDetail.ts)
+      if (PAINTED && GRIM_NPCS[c.key]) paintRig(rig);
     } else {
       rig = buildEnemy((c as Enemy).enemyKind);
     }
@@ -464,6 +469,8 @@ export class Renderer {
       weapon: id('weapon'), shield: id('shield'), armor: id('armor'), head: id('head'), legs: id('legs'), feet: id('feet'), cloak: s.player.cloak || null,
       cape: s.cosmetics.hideCloak ? null : id('cape'),
     });
+    // painted style: players get the same worn surface detail as the grim NPCs (body and gear)
+    if (PAINTED) paintRig(rig);
   }
 
   private ensureView(c: Creature): CreatureView {
