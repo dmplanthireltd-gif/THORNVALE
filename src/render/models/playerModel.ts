@@ -388,15 +388,28 @@ export function grimFace(head: THREE.Group, skinHex: number, female: boolean): v
   const sk = mat(skinHex);
   const shadow = mat(shade(skinHex, 0.55));
   const deep = mat(shade(skinHex, 0.38));
+  const lit = mat(new THREE.Color(skinHex).multiplyScalar(1.13).getHex()); // a lighter tone of the same skin (no pale patches on dark skin)
   const f = (o: THREE.Mesh) => head.add(tag(o, 'face'));
+  // readable at the normal game camera (owner 2026-10-23): bigger features with stronger
+  // light and shadow — pale eye whites around the coloured iris in a dark socket, a lit
+  // nose bridge, a shadow under the brow, a darker, wider mouth
+  const iris = (head.children.find((c) => c.userData.face && c.position.y === 0.02 && Math.abs(c.position.x - 0.07) < 1e-6) as THREE.Mesh | undefined)?.material as Mat | undefined;
+  const white = mat(blend(0xd8cfc0, skinHex, 0.2));
+  const pupil = mat(0x0c0806);
   for (const s of [-1, 1]) {
-    f(sbox(0.075, 0.06, 0.02, deep, s * 0.072, 0.025, 0.168)); // eye socket
-    f(ssphere(0.045, sk, s * 0.11, -0.035, 0.145, 1.2, 0.7, 0.8, 1)); // cheekbone
-    f(sbox(0.03, 0.06, 0.02, shadow, s * 0.125, -0.09, 0.15)); // hollow cheek
+    f(sbox(0.088, 0.07, 0.02, deep, s * 0.072, 0.023, 0.172)); // eye socket
+    f(sbox(0.062, 0.034, 0.02, white, s * 0.072, 0.02, 0.188)); // eye white
+    if (iris) f(sbox(0.032, 0.036, 0.014, iris, s * 0.07, 0.02, 0.198)); // iris
+    f(sbox(0.014, 0.018, 0.01, pupil, s * 0.07, 0.02, 0.206)); // pupil
+    f(sbox(0.07, 0.016, 0.014, deep, s * 0.072, 0.044, 0.196)); // upper lid shadow
+    f(ssphere(0.05, lit, s * 0.112, -0.035, 0.146, 1.2, 0.7, 0.8, 1)); // cheekbone, catching the light
+    f(sbox(0.034, 0.07, 0.02, shadow, s * 0.128, -0.095, 0.15)); // hollow cheek
   }
-  if (!female) f(sbox(0.27, 0.04, 0.05, sk, 0, 0.06, 0.168)); // brow ridge
-  f(sbox(0.03, 0.06, 0.035, sk, 0, 0.0, 0.2)); // nose bridge
-  f(sbox(female ? 0.04 : 0.05, 0.035, 0.04, sk, 0, -0.06, 0.207)); // nose tip
-  f(sbox(female ? 0.05 : 0.06, 0.015, 0.02, deep, 0, -0.082, 0.199)); // shadow under the nose
-  f(sbox(female ? 0.07 : 0.085, 0.012, 0.02, deep, 0, -0.118, 0.181)); // hard mouth line
+  if (!female) f(sbox(0.28, 0.045, 0.05, sk, 0, 0.065, 0.17)); // brow ridge
+  f(sbox(0.26, 0.016, 0.012, shadow, 0, 0.047, 0.194)); // shadow under the brow
+  f(sbox(0.034, 0.075, 0.035, lit, 0, -0.005, 0.203)); // nose bridge (lit)
+  f(sbox(female ? 0.046 : 0.058, 0.04, 0.042, sk, 0, -0.062, 0.21)); // nose tip
+  f(sbox(female ? 0.056 : 0.068, 0.017, 0.02, deep, 0, -0.087, 0.202)); // shadow under the nose
+  f(sbox(female ? 0.08 : 0.095, 0.016, 0.02, deep, 0, -0.12, 0.184)); // hard mouth line
+  f(sbox(female ? 0.06 : 0.07, 0.014, 0.016, shadow, 0, -0.142, 0.178)); // lower lip shadow
 }

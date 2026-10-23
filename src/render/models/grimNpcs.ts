@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import { Rng } from '../../game/core/rng';
-import type { Appearance } from '../../game/player/appearance';
+import { NPCS } from '../../game/npc/npcs';
 import { applyGear, holdProp } from './humanoid';
-import { box, collectMaterials, cone, cyl, group, mat, sphere, type Mat } from './parts';
+import { box, cone, cyl, group, mat, sphere } from './parts';
 import { buildPlayerRig } from './playerModel';
 import type { BipedRig } from './rigs';
-import { detail, type Detail } from './grimDetail';
+import { ap, d, finish, grimKitNpc, pouch, rivets, rot, scar, tagAll, tornCloak } from './grimKit';
 
 /**
  * Painted style sample (owner 2026-10-23: "all models more detailed, more brutal, for older
@@ -20,70 +19,6 @@ import { detail, type Detail } from './grimDetail';
  * staff; Orwin = wide coat skirts + coin chest at his feet; Elias = one great pauldron +
  * round shield on his back + wooden practice blade.
  */
-
-const d = <T extends THREE.Object3D>(o: T, k: Detail): T => detail(o, k);
-const rot = <T extends THREE.Object3D>(o: T, x: number, y: number, z: number): T => { o.rotation.set(x, y, z); return o; };
-
-/** A ragged cloak hanging from the shoulders: strips of uneven length; returns the swinging pivot. */
-function tornCloak(torso: THREE.Group, color: number, width: number, len: number, z: number, k: Detail, seed: number): THREE.Group {
-  const r = new Rng(seed);
-  const m = mat(color);
-  const pivot = group(0, 0.53, z);
-  const n = 7;
-  for (let i = 0; i < n; i++) {
-    const l = len * (0.72 + r.next() * 0.28) * (i === 0 || i === n - 1 ? 0.85 : 1);
-    const x = -width / 2 + (i + 0.5) * (width / n);
-    const strip = d(box(width / n * 1.12, l, 0.03, m, x, -l / 2, -Math.abs(x) * 0.12), k);
-    strip.rotation.z = (r.next() - 0.5) * 0.06;
-    pivot.add(strip);
-  }
-  pivot.rotation.x = 0.12;
-  torso.add(pivot);
-  // heavy folds over the shoulders (what the camera mostly sees)
-  torso.add(d(sphere(0.2, m, 0, 0.5, z + 0.08, 1.5, 0.45, 0.8, 2), k));
-  return pivot;
-}
-
-/** A row of rivets along x at height y on the given face (z). */
-function rivets(parent: THREE.Object3D, m: Mat, xs: number[], y: number, z: number, r = 0.016): void {
-  for (const x of xs) parent.add(sphere(r, m, x, y, z, 1, 1, 0.6, 0));
-}
-
-/** Thin scar on the face (head space). */
-function scar(head: THREE.Group, x: number, y: number, len: number, angle: number, color = 0xb8706a): void {
-  const s = box(0.012, len, 0.012, mat(color), x, y, 0.2);
-  s.rotation.z = angle;
-  s.userData.face = true;
-  head.add(s);
-}
-
-function pouch(parent: THREE.Object3D, leather: Mat, x: number, y: number, z: number, w = 0.09): void {
-  parent.add(d(box(w, w * 1.1, 0.07, leather, x, y, z), 'leather'));
-  parent.add(d(box(w * 1.05, w * 0.35, 0.075, leather, x, y + w * 0.4, z + 0.003), 'leather'));
-}
-
-function finish(rig: BipedRig, height: number): BipedRig {
-  rig.prop = true;
-  rig.height = height;
-  rig.root.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh && o !== rig.hitbox) {
-      o.castShadow = true;
-      o.receiveShadow = true;
-    }
-  });
-  rig.materials.length = 0;
-  rig.materials.push(...collectMaterials(rig.body));
-  return rig;
-}
-
-const ap = (a: Partial<Appearance>): Appearance => ({
-  body: 'male', skin: 2, hair: 'short', hairColor: 1, beard: 'none', build: 'average', eyes: 0, top: 3, bottom: 3, ...a,
-} as Appearance);
-
-/** Tags every remaining plain part of a group (sleeves, trousers) with one surface. */
-function tagAll(g: THREE.Object3D, k: Detail, skip?: Mat): void {
-  for (const c of g.children) if ((c as THREE.Mesh).isMesh && (c as THREE.Mesh).material !== skip) c.userData.detail = k;
-}
 
 // ------------------------------------------------------------------ Captain Aldric
 
@@ -197,10 +132,30 @@ function brunhild(): BipedRig {
 // ------------------------------------------------------------------ Mirella the hedge-witch
 
 function mirella(): BipedRig {
-  const rig = buildPlayerRig(ap({ body: 'female', skin: 0, hair: 'long', hairColor: 0, build: 'slim', eyes: 4, top: 14, bottom: 3 }));
+  const rig = buildPlayerRig(ap({ body: 'female', skin: 1, hair: 'long', hairColor: 0, build: 'slim', eyes: 4, top: 14, bottom: 3 }));
   const { torso, head, armL, armR, legL, legR } = rig;
+  // owner 2026-10-23: keep her creepy but not a bare skull — softer sockets, living eyes
+  // with a faint witch-light, a little colour on the lips, dark hair framing the face
+  const skinC = rig.gear!.skin.color;
+  for (const c of head.children) {
+    const m = (c as THREE.Mesh).material as THREE.MeshToonMaterial | undefined;
+    if (!c.userData.face || !m?.color || m === rig.gear!.skin) continue;
+    const l = m.color.r + m.color.g + m.color.b, ls = skinC.r + skinC.g + skinC.b;
+    if (l < ls * 0.7 && l > 0.15) m.color.lerp(skinC, 0.4); // shadows of the face, not the pupils
+  }
+  for (const s of [-1, 1]) {
+    const e = sphere(0.012, mat(0x9affe0, { emissive: 0x2a8a6a }), s * 0.07, 0.02, 0.212, 1, 1, 0.5, 0);
+    e.userData.face = true;
+    head.add(e);
+    const lock = d(box(0.05, 0.3, 0.04, mat(0x1b1612), s * 0.16, -0.06, 0.12), 'hair');
+    lock.userData.face = true;
+    head.add(lock);
+  }
+  const lips = box(0.06, 0.016, 0.01, mat(0x6a2a2e), 0, -0.118, 0.195);
+  lips.userData.face = true;
+  head.add(lips);
   const robe = mat(0x4a3448);
-  const robeDark = mat(0x2a1c28);
+  const robeDark = mat(0x3e2c3c); // lighter than the first sample: read as a mantle, not a black beard
   const bone = mat(0xcfc2a2);
   const cord = mat(0x2a1a10);
   for (const c of head.children) if (c.userData.cover) c.visible = false; // hair under the hood
@@ -377,5 +332,12 @@ function elias(): BipedRig {
   return finish(rig, 1.8);
 }
 
-/** Bespoke painted-style models by NPC key (the Thornvale temple court sample). */
-export const GRIM_NPCS: Record<string, () => BipedRig> = { aldric, brunhild, mirella, orwin, elias };
+/** The five temple court NPCs of the first sample, fully bespoke. */
+const COURT: Record<string, () => BipedRig> = { aldric, brunhild, mirella, orwin, elias };
+
+/**
+ * Painted-style models by NPC key: the court NPCs above, every other NPC from the role and
+ * culture kit (grimKit.ts). Every key of NPCS has an entry.
+ */
+export const GRIM_NPCS: Record<string, () => BipedRig> = {};
+for (const key of Object.keys(NPCS)) GRIM_NPCS[key] = COURT[key] ?? (() => grimKitNpc(NPCS[key]));
