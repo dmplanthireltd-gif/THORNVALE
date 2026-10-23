@@ -123,18 +123,21 @@ export class Music {
   get running(): boolean { return this.timer !== null || this.tracks !== null; }
   volume = 0.5;
   muted = false;
+  /** False = "Music: outdoors only" (the quiet themes inside buildings are silent). */
+  indoorMusic = true;
 
   private ctl: Controller | null = null;
   /** The pre-rendered soundtrack, once it has loaded; null while loading or when unavailable. */
   private tracks: Tracks | null = null;
 
-  /** Plays the town theme on the title screen; follow the player once `attach` is called. */
+  /** Plays the title theme on the login and hero-creator screens; follows the player once `attach` is called. */
   constructor() {
     const st = storage();
     try {
       const v = st?.getItem('thornvale.musicVolume');
       if (v !== null && v !== undefined) this.volume = Math.max(0, Math.min(1, Number(v)));
       this.muted = st?.getItem('thornvale.musicMuted') === '1';
+      this.indoorMusic = st?.getItem('thornvale.musicIndoor') !== '0';
     } catch {
       /* defaults */
     }
@@ -164,7 +167,8 @@ export class Music {
     this.setup(this.ctx);
     // prefer the pre-rendered soundtrack; fall back to the live pieces if it can't load
     const tracks = new Tracks(this.ctx, this.out!);
-    void tracks.init('town').then((ok) => {
+    tracks.indoorMusic = this.indoorMusic;
+    void tracks.init('title').then((ok) => {
       if (ok) {
         this.tracks = tracks;
         if (this.ctl) tracks.attach(this.ctl);
@@ -238,6 +242,29 @@ export class Music {
     if (this.out && this.ctx) this.out.gain.setTargetAtTime(this.muted ? 0 : this.volume * 0.55, this.ctx.currentTime, 0.2);
     try { storage()?.setItem('thornvale.musicMuted', this.muted ? '1' : '0'); } catch { /* ignore */ }
     return this.muted;
+  }
+
+  /** Settings: "all" music, "outdoor" only (silent inside buildings) or "off". */
+  get mode(): 'all' | 'outdoor' | 'off' {
+    return this.muted ? 'off' : this.indoorMusic ? 'all' : 'outdoor';
+  }
+
+  /** Steps the setting All → Outdoors only → Off → All and returns the new one. */
+  cycleMode(): 'all' | 'outdoor' | 'off' {
+    const m = this.mode;
+    if (m === 'all') this.setIndoorMusic(false);
+    else if (m === 'outdoor') this.toggleMute();
+    else {
+      this.setIndoorMusic(true);
+      this.toggleMute();
+    }
+    return this.mode;
+  }
+
+  private setIndoorMusic(on: boolean): void {
+    this.indoorMusic = on;
+    if (this.tracks) this.tracks.indoorMusic = on;
+    try { storage()?.setItem('thornvale.musicIndoor', on ? '1' : '0'); } catch { /* ignore */ }
   }
 
   attach(ctl: Controller): void {

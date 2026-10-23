@@ -493,9 +493,11 @@ export class HUD {
     if (this.music) {
       const mu = this.music;
       const mus = sec('Music');
-      const mb = button(mus, mu.muted ? 'Music: off' : 'Music: on', () => {
-        mb.textContent = mu.toggleMute() ? 'Music: off' : 'Music: on';
+      const label = { all: 'Music: all', outdoor: 'Music: outdoors only', off: 'Music: off' } as const;
+      const mb = button(mus, label[mu.mode], () => {
+        mb.textContent = label[mu.cycleMode()];
       }, 'btn');
+      mb.title = 'All music / outdoors only (quiet inside shops, depots and temples) / off';
       slider(mus, mu.volume, 'Music volume', (v) => mu.setVolume(v));
     }
     const game = sec('Game');
