@@ -1,7 +1,12 @@
 import type { ItemDef } from '../game/inventory/items';
 import { css, gearLook, MAT, rampOf, type Emblem, type GearLook, type Ramp } from '../render/models/gearLooks';
 import { BOOTS, HELMETS, LEGS } from '../render/models/humanoid';
-import { ARMOR_LOOK, LOOKS, SHIELDS, weaponStyle } from '../render/models/weapons';
+import { ARMOR_LOOK, LOOKS, SHIELDS, swordGem, swordRunes, weaponStyle } from '../render/models/weapons';
+import {
+  axeBackSpike, axeBlade, axeDims, axeEdge, axeSocket, axeTopSpike, BOW, bowLimb, bowNockX, bowWing, CLUB, CROSSBOW, crossbowBoltHead, crossbowProd, crossbowStock,
+  flange, FLANGE_XS, HAMMER, hammerSpike, hasBowWings, isRecurve, maceCollar, maceTopSpike, MAUL, MORNING_BALL, morningSpike, rectPath, ROD, rodCurl, rodShaft, SPEAR, spearHead,
+  STAR_HUB, starPath, swordBlade, swordDims, swordGuard, thunderBolt, TUSK_STRAP_Y, tuskPath, WAND, wandProng, wandShaft, type AxeStyle, type Path, type SwordStyle,
+} from '../render/models/weaponShapes';
 import { drawCape } from './capeIcons';
 
 /**
@@ -1049,18 +1054,25 @@ function grip(x: Ctx, y0: number, y1: number, w: number, r: Ramp = MAT.leather):
   }, 0.8);
 }
 
+/** Builds a shared weapon outline (models/weaponShapes.ts) as the current canvas path. */
+function trace(x: Ctx, p: Path, close = true): void {
+  x.beginPath();
+  for (const c of p) {
+    if (c[0] === 'M') x.moveTo(c[1], c[2]);
+    else if (c[0] === 'L') x.lineTo(c[1], c[2]);
+    else if (c[0] === 'Q') x.quadraticCurveTo(c[1], c[2], c[3], c[4]);
+    else if (close) x.closePath();
+  }
+}
+
 function sword(x: Ctx, d: ItemDef): void {
   const { m, t, glow, gemc } = weaponRamps(d);
-  const style = weaponStyle(d);
-  const len = style === 'dagger' ? 15 : style === 'short' ? 21 : style === 'great' ? 29 : style === 'broad' ? 26 : 25;
-  const w = style === 'broad' ? 4.4 : style === 'dagger' ? 2.8 : style === 'great' ? 3.8 : 3.3;
-  const guardY = style === 'dagger' ? 3 : 6.5;
-  const tip = guardY - len;
+  const style = weaponStyle(d) as SwordStyle;
+  const D = swordDims(style);
+  const { len, w, guardY, tip } = D;
   const gl = glow ?? (gemc && (d.rarity === 'rare' || d.rarity === 'legendary') ? gemc : undefined);
   tilted(x, () => {
-    const blade = style === 'curved'
-      ? () => { x.beginPath(); x.moveTo(-w / 2, guardY); x.quadraticCurveTo(-w * 0.9, tip + len * 0.4, w * 0.9, tip); x.quadraticCurveTo(w * 0.9, tip + len * 0.45, w / 2, guardY); x.closePath(); }
-      : () => pts(x, [-w / 2, guardY, -w / 2, tip + w * 1.6, 0, tip, w / 2, tip + w * 1.6, w / 2, guardY]);
+    const blade = () => trace(x, swordBlade(D, style));
     if (gl) { x.save(); x.shadowColor = rgba(gl, 0.95); x.shadowBlur = 7; blade(); x.fillStyle = css(m[1]); x.fill(); x.restore(); }
     part(x, blade, grad(x, m, -w / 2, 0, w / 2, 0), () => {
       // fuller and edge light
@@ -1069,55 +1081,53 @@ function sword(x: Ctx, d: ItemDef): void {
         line(x, 0.45, guardY - 1, 0.45, tip + len * 0.35, 0.5, css(m[0]));
       }
       line(x, -w / 2 + 0.4, guardY, -w / 2 + 0.4, tip + w * 1.6, 0.5, 'rgba(255,255,255,0.85)');
-      if (d.tint && d.rarity === 'legendary') for (let i = 0; i < 4; i++) { x.fillStyle = css(t[0]); x.fillRect(-0.5, guardY - 4 - i * 3, 1, 1.4); }
+      if (swordRunes(d)) for (let i = 0; i < 4; i++) { x.fillStyle = css(t[0]); x.fillRect(-0.5, guardY - 4 - i * 3, 1, 1.4); }
     }, 0.9);
     // guard
-    const gw = style === 'dagger' ? 3.4 : style === 'broad' || style === 'great' ? 6.6 : 5.6;
-    part(x, () => { x.beginPath(); x.moveTo(-gw, guardY + 0.2); x.quadraticCurveTo(-gw - 0.8, guardY - 1.8, -gw + 0.4, guardY - 1.6); x.lineTo(gw - 0.4, guardY - 1.6); x.quadraticCurveTo(gw + 0.8, guardY - 1.8, gw, guardY + 0.2); x.quadraticCurveTo(0, guardY + 1.6, -gw, guardY + 0.2); x.closePath(); }, polish(x, t, -gw, 0, gw, 0), undefined, 0.8);
-    if (gemc && (d.rarity !== 'common' || d.setId)) gem(x, 0, guardY - 0.4, 1.1, gemc, 'diamond');
-    const gripLen = style === 'great' ? 9 : style === 'dagger' ? 5 : 6.5;
-    grip(x, guardY + 1, guardY + 1 + gripLen, 1.9, d.rarity === 'legendary' ? MAT.darkleather : MAT.leather);
-    part(x, () => { x.beginPath(); x.arc(0, guardY + 2.6 + gripLen, 1.9, 0, Math.PI * 2); }, radial(x, t, 0, guardY + 2.6 + gripLen, 1.9), undefined, 0.8);
+    const gw = D.gw;
+    part(x, () => trace(x, swordGuard(D)), polish(x, t, -gw, 0, gw, 0), undefined, 0.8);
+    if (gemc && swordGem(d)) gem(x, 0, guardY - 0.4, 1.1, gemc, 'diamond');
+    grip(x, D.gripY0, D.gripY1, D.gripW, d.rarity === 'legendary' ? MAT.darkleather : MAT.leather);
+    part(x, () => { x.beginPath(); x.arc(0, D.pommelY, D.pommelR, 0, Math.PI * 2); }, radial(x, t, 0, D.pommelY, D.pommelR), undefined, 0.8);
   });
 }
 
 function axe(x: Ctx, d: ItemDef): void {
   const { m, t, glow, gemc } = weaponRamps(d);
-  const style = weaponStyle(d);
-  const small = style === 'hatchet';
+  const style = weaponStyle(d) as AxeStyle;
+  const D = axeDims(style);
+  const { small, top, hy, s } = D;
   tilted(x, () => {
     // haft with grain and a leather grip
-    const top = small ? -12 : -18;
-    part(x, () => { x.beginPath(); x.rect(-1.2, top, 2.4, 20 - top + (small ? -1 : 1)); }, grad(x, d.id === 'demon_reaver' ? MAT.hell : MAT.wood, -1.2, 0, 1.2, 0), () => {
+    part(x, () => { x.beginPath(); x.rect(-1.2, top, 2.4, D.bottom - top); }, grad(x, d.id === 'demon_reaver' ? MAT.hell : MAT.wood, -1.2, 0, 1.2, 0), () => {
       for (let y = top; y < 20; y += 3.2) line(x, -0.5, y, 0.2, y + 2, 0.35, css(MAT.wood[3]));
     }, 0.8);
-    grip(x, 11, 17.5, 2.6);
-    const hy = small ? -8 : -12;
-    const s = small ? 0.7 : 0.85;
+    grip(x, D.gripY0, D.gripY1, 2.6);
     const blade = (side: number) => {
       if (style === 'cleaver') {
-        part(x, () => pts(x, [side * 1.2, hy - 7, side * 8.5, hy - 9, side * 9.2, hy + 6, side * 1.2, hy + 3]), grad(x, m, 0, hy - 8, side * 11, hy + 6), () => {
+        part(x, () => trace(x, axeBlade(D, style, side)), grad(x, m, 0, hy - 8, side * 11, hy + 6), () => {
           line(x, side * 8.6, hy - 8.6, side * 9.2, hy + 5.6, 0.7, 'rgba(255,255,255,0.85)');
           line(x, side * 3, hy - 4, side * 8, hy - 5, 0.5, css(m[3]));
         }, 0.9);
         return;
       }
-      const build = () => { x.beginPath(); x.moveTo(side * 1.2, hy - 3 * s); x.quadraticCurveTo(side * 5 * s, hy - 3.5 * s, side * 7.5 * s, hy - 8 * s); x.quadraticCurveTo(side * 11.5 * s, hy, side * 7.5 * s, hy + 7 * s); x.quadraticCurveTo(side * 5 * s, hy + 2.8 * s, side * 1.2, hy + 2.5 * s); x.closePath(); };
+      const build = () => trace(x, axeBlade(D, style, side));
       if (glow) { x.save(); x.shadowColor = rgba(glow, 0.9); x.shadowBlur = 6; build(); x.fillStyle = css(m[1]); x.fill(); x.restore(); }
       part(x, build, grad(x, m, side * 1, hy - 6, side * 10, hy + 6), () => {
-        x.beginPath(); x.moveTo(side * 7.5 * s, hy - 8 * s); x.quadraticCurveTo(side * 11.5 * s, hy, side * 7.5 * s, hy + 7 * s);
+        trace(x, axeEdge(D, side), false);
         x.lineWidth = 1.3; x.strokeStyle = 'rgba(255,255,255,0.75)'; x.stroke();
         if (!small) line(x, side * 3, hy - 1.8, side * 6.5, hy - 2.5, 0.5, css(m[3]));
       }, 0.9);
     };
     blade(1);
     if (style === 'double') blade(-1);
-    else if (style === 'battle') part(x, () => pts(x, [-1.2, hy - 1.6, -6, hy - 0.4, -1.2, hy + 1.4]), grad(x, m, -6, hy - 2, -1, hy + 2), undefined, 0.8);
+    else if (style === 'battle') part(x, () => trace(x, axeBackSpike(D)), grad(x, m, -6, hy - 2, -1, hy + 2), undefined, 0.8);
     // socket, bands and a top spike
-    part(x, () => { x.beginPath(); x.rect(-2, hy - 3.6 * s, 4, 6.6 * s); }, polish(x, t, -2, 0, 2, 0), undefined, 0.8);
+    part(x, () => trace(x, axeSocket(D)), polish(x, t, -2, 0, 2, 0), undefined, 0.8);
     rivet(x, 0, hy - 0.4, 0.8, t);
-    if (!small) part(x, () => pts(x, [-1.1, hy - 3.6, 0, hy - 8, 1.1, hy - 3.6]), grad(x, m, -1, hy - 8, 1, hy - 3), undefined, 0.7);
+    if (!small) part(x, () => trace(x, axeTopSpike(D)), grad(x, m, -1, hy - 8, 1, hy - 3), undefined, 0.7);
     if (gemc && d.rarity !== 'common') gem(x, 0, hy + 4, 1, gemc);
+    void s;
   });
 }
 
@@ -1126,56 +1136,55 @@ function club(x: Ctx, d: ItemDef): void {
   const style = weaponStyle(d);
   tilted(x, () => {
     const metalHaft = style === 'flanged' && d.rarity !== 'common';
-    part(x, () => { x.beginPath(); x.rect(-1.2, -10, 2.4, 29); }, grad(x, metalHaft ? t : MAT.wood, -1.2, 0, 1.2, 0), undefined, 0.8);
-    grip(x, 10, 17.5, 2.6);
-    part(x, () => { x.beginPath(); x.arc(0, 18.6, 1.6, 0, Math.PI * 2); }, radial(x, t, 0, 18.6, 1.6), undefined, 0.7);
+    part(x, () => { x.beginPath(); x.rect(-1.2, CLUB.haftTop, 2.4, CLUB.haftBottom - CLUB.haftTop); }, grad(x, metalHaft ? t : MAT.wood, -1.2, 0, 1.2, 0), undefined, 0.8);
+    grip(x, CLUB.gripY0, CLUB.gripY1, 2.6);
+    part(x, () => { x.beginPath(); x.arc(0, CLUB.pommelY, CLUB.pommelR, 0, Math.PI * 2); }, radial(x, t, 0, CLUB.pommelY, CLUB.pommelR), undefined, 0.7);
     if (glow) glowAt(x, 0, -12, 11, glow, 0.6);
     switch (style) {
       case 'morning': {
-        for (let i = 0; i < 10; i++) {
-          const a = (i / 10) * Math.PI * 2;
-          part(x, () => pts(x, [Math.cos(a - 0.3) * 4.6, -12 + Math.sin(a - 0.3) * 4.6, Math.cos(a) * 8.5, -12 + Math.sin(a) * 8.5, Math.cos(a + 0.3) * 4.6, -12 + Math.sin(a + 0.3) * 4.6]), grad(x, t, -8, -20, 8, -4), undefined, 0.6);
-        }
-        part(x, () => { x.beginPath(); x.arc(0, -12, 5.2, 0, Math.PI * 2); }, radial(x, m, 0, -12, 5.2), undefined, 0.9);
+        for (let i = 0; i < 10; i++) part(x, () => trace(x, morningSpike(i)), grad(x, t, -8, -20, 8, -4), undefined, 0.6);
+        part(x, () => { x.beginPath(); x.arc(0, MORNING_BALL.y, MORNING_BALL.r, 0, Math.PI * 2); }, radial(x, m, 0, MORNING_BALL.y, MORNING_BALL.r), undefined, 0.9);
         break;
       }
       case 'hammer': {
-        part(x, () => pts(x, [-1.5, -13, -6.5, -10.5, -1.5, -10]), grad(x, t, -7, -13, -1, -10), undefined, 0.7);
-        part(x, () => { x.beginPath(); x.rect(-1.8, -17.5, 10.5, 8.5); }, polish(x, m, -2, -18, 9, -9), () => {
-          line(x, 6.5, -17.5, 6.5, -9, 0.7, css(m[3]));
-          line(x, -1.8, -16.6, 8.7, -16.6, 0.5, 'rgba(255,255,255,0.7)');
+        const H = HAMMER;
+        part(x, () => trace(x, hammerSpike), grad(x, t, -7, -13, -1, -10), undefined, 0.7);
+        part(x, () => trace(x, rectPath(H.x0, H.y0, H.x1, H.y1)), polish(x, m, -2, -18, 9, -9), () => {
+          line(x, H.faceX0, H.y0, H.faceX0, H.y1, 0.7, css(m[3]));
+          line(x, H.x0, H.y0 + 0.9, H.x1, H.y0 + 0.9, 0.5, 'rgba(255,255,255,0.7)');
         }, 0.9);
-        part(x, () => { x.beginPath(); x.rect(6.5, -18.2, 3, 9.9); }, grad(x, t, 6, 0, 10, 0), undefined, 0.8);
-        if (d.id === 'thunder_maul') { x.save(); x.shadowColor = '#fff27a'; x.shadowBlur = 5; pts(x, [3, -17, 0, -13, 2.6, -13, 1, -9.5, 5, -14, 2.4, -14]); x.fillStyle = '#fff27a'; x.fill(); x.restore(); }
+        part(x, () => trace(x, rectPath(H.faceX0, H.faceY0, H.faceX1, H.faceY1)), grad(x, t, 6, 0, 10, 0), undefined, 0.8);
+        if (d.id === 'thunder_maul') { x.save(); x.shadowColor = '#fff27a'; x.shadowBlur = 5; trace(x, thunderBolt); x.fillStyle = '#fff27a'; x.fill(); x.restore(); }
         break;
       }
       case 'maul': {
-        part(x, () => { x.beginPath(); x.rect(-7.5, -20, 15, 11); }, d.id === 'stone_maul' ? radial(x, MAT.iron, -2, -16, 12) : polish(x, m, -8, 0, 8, 0), () => {
+        const U = MAUL;
+        part(x, () => trace(x, rectPath(U.x0, U.y0, U.x1, U.y1)), d.id === 'stone_maul' ? radial(x, MAT.iron, -2, -16, 12) : polish(x, m, -8, 0, 8, 0), () => {
           if (d.id === 'stone_maul') for (const [cx, cy] of [[-4, -17], [3, -12], [4, -18]]) { x.fillStyle = 'rgba(0,0,0,0.3)'; x.beginPath(); x.arc(cx, cy, 1.4, 0, Math.PI * 2); x.fill(); }
-          else for (const yy of [-17, -12]) { line(x, -8, yy, 8, yy, 1.4, css(t[1])); line(x, -8, yy - 0.6, 8, yy - 0.6, 0.4, css(t[0])); }
+          else for (const yy of U.bands) { line(x, -8, yy, 8, yy, 1.4, css(t[1])); line(x, -8, yy - 0.6, 8, yy - 0.6, 0.4, css(t[0])); }
           volume(x, 0.2, 0.4);
         }, 0.9);
-        if (d.id !== 'stone_maul') { for (const cx of [-5.5, 5.5]) for (const cy of [-17, -12]) rivet(x, cx, cy, 0.8, t); }
+        if (d.id !== 'stone_maul') for (const [cx, cy] of U.rivets) rivet(x, cx, cy, 0.8, t);
         if (d.setId === 'wardbreaker') { emblem(x, 'bar', 0, -14.5, 3, t); gem(x, 0, -14.5, 1.3, gemc ?? 0xff9a2a); }
         break;
       }
       case 'tusk': {
-        part(x, () => { x.beginPath(); x.moveTo(-1.5, -6); x.quadraticCurveTo(-5, -14, -2, -21); x.quadraticCurveTo(4, -19, 4.5, -13); x.quadraticCurveTo(4, -8, 1.5, -6); x.closePath(); }, grad(x, MAT.bone, -5, -21, 5, -6), () => {
+        part(x, () => trace(x, tuskPath), grad(x, MAT.bone, -5, -21, 5, -6), () => {
           for (let i = 0; i < 4; i++) line(x, -4, -18 + i * 3, 4, -17 + i * 3, 0.4, css(MAT.bone[2]));
         }, 0.9);
-        strap(x, -2.2, -7, 2.2, -7, 1.8, MAT.leather);
+        strap(x, -2.2, TUSK_STRAP_Y, 2.2, TUSK_STRAP_Y, 1.8, MAT.leather);
         break;
       }
       default: {
         // flanged mace: six blades round a core, front ones lit
-        for (const [ox, k] of [[-4.6, 0.75], [4.6, 0.55], [-2.4, 0.95], [2.4, 0.8], [0, 1.1]] as Array<[number, number]>) {
-          part(x, () => pts(x, [ox, -19.5, ox + (ox >= 0 ? 1.8 : -1.8), -13, ox, -7, ox - (ox >= 0 ? 0.8 : -0.8), -13]), grad(x, m, ox - 2, -19, ox + 2, -7), () => {
+        for (const [ox, k] of FLANGE_XS.map((ox, i) => [ox, [0.75, 0.55, 0.95, 0.8, 1.1][i]] as [number, number])) {
+          part(x, () => trace(x, flange(ox)), grad(x, m, ox - 2, -19, ox + 2, -7), () => {
             x.fillStyle = `rgba(0,0,0,${(1.1 - k) * 0.6})`;
             x.fillRect(-10, -22, 20, 18);
           }, 0.75);
         }
-        part(x, () => pts(x, [-1, -19.5, 0, -22.5, 1, -19.5]), grad(x, t, -1, -22, 1, -19), undefined, 0.6);
-        part(x, () => { x.beginPath(); x.rect(-2, -7.5, 4, 2); }, polish(x, t, -2, 0, 2, 0), undefined, 0.6);
+        part(x, () => trace(x, maceTopSpike), grad(x, t, -1, -22, 1, -19), undefined, 0.6);
+        part(x, () => trace(x, maceCollar), polish(x, t, -2, 0, 2, 0), undefined, 0.6);
       }
     }
     if (gemc && style !== 'hammer' && style !== 'maul' && style !== 'tusk' && d.rarity !== 'common') gem(x, 0, style === 'morning' ? -12 : -13, 1.3, gemc);
@@ -1185,64 +1194,60 @@ function club(x: Ctx, d: ItemDef): void {
 function bow(x: Ctx, d: ItemDef): void {
   const { m, t, gemc } = weaponRamps(d);
   const wood: Ramp = d.setId === 'skyfeather' ? MAT.sky : m;
-  const recurve = d.rarity !== 'common';
+  const recurve = isRecurve(d);
   tilted(x, () => {
     // string, then limbs
-    line(x, -3.4, -19.5, -3.4, 19.5, 0.5, css(MAT.cloth[0]));
-    const limb = () => {
-      x.beginPath();
-      x.moveTo(recurve ? -1.5 : -3.4, -20.5);
-      if (recurve) x.quadraticCurveTo(-4.5, -18, -2, -15);
-      x.quadraticCurveTo(7, -7, 4.5, 0);
-      x.quadraticCurveTo(7, 7, recurve ? -2 : -3.4, recurve ? 15 : 20.5);
-      if (recurve) x.quadraticCurveTo(-4.5, 18, -1.5, 20.5);
-    };
+    line(x, BOW.stringX, -BOW.stringY, BOW.stringX, BOW.stringY, 0.5, css(MAT.cloth[0]));
+    const limb = () => trace(x, bowLimb(recurve), false);
     limb(); x.lineWidth = 4.2; x.strokeStyle = OUT; x.stroke();
-    limb(); x.lineWidth = 2.4; x.strokeStyle = grad(x, wood, -4, 0, 6, 0); x.stroke();
+    limb(); x.lineWidth = BOW.limbW; x.strokeStyle = grad(x, wood, -4, 0, 6, 0); x.stroke();
     limb(); x.lineWidth = 0.6; x.strokeStyle = css(wood[0]); x.stroke();
     // grip and nocks
-    part(x, () => { x.beginPath(); x.rect(3.4, -3, 3, 6); }, grad(x, MAT.leather, 3, 0, 7, 0), () => { for (let y = -3; y < 3; y += 1.2) line(x, 3, y, 7, y + 0.8, 0.4, css(MAT.leather[3])); }, 0.7);
-    for (const s of [-1, 1]) part(x, () => { x.beginPath(); x.arc(recurve ? -1.6 : -3.4, s * 20.5, 1.2, 0, Math.PI * 2); }, radial(x, t, -2, s * 20.5, 1.2), undefined, 0.6);
-    if (d.setId === 'skyfeather' || d.id === 'elven_longbow' || d.id === 'sylvan_bow') for (const s of [-1, 1]) {
-      part(x, () => { x.beginPath(); x.moveTo(5, s * 6); x.quadraticCurveTo(10, s * 9, 9.5, s * 13); x.quadraticCurveTo(7, s * 10, 4.5, s * 9); x.closePath(); }, grad(x, d.setId === 'skyfeather' ? MAT.sky : t, 5, s * 6, 10, s * 13), undefined, 0.6);
-    }
-    if (gemc && d.rarity !== 'common') gem(x, 5, 0, 1.3, gemc, 'diamond');
+    part(x, () => trace(x, rectPath(BOW.gripX0, BOW.gripY0, BOW.gripX1, BOW.gripY1)), grad(x, MAT.leather, 3, 0, 7, 0), () => { for (let y = -3; y < 3; y += 1.2) line(x, 3, y, 7, y + 0.8, 0.4, css(MAT.leather[3])); }, 0.7);
+    const nx = bowNockX(recurve);
+    for (const s of [-1, 1]) part(x, () => { x.beginPath(); x.arc(nx, s * 20.5, BOW.nockR, 0, Math.PI * 2); }, radial(x, t, -2, s * 20.5, BOW.nockR), undefined, 0.6);
+    if (hasBowWings(d)) for (const s of [-1, 1]) part(x, () => trace(x, bowWing(s)), grad(x, d.setId === 'skyfeather' ? MAT.sky : t, 5, s * 6, 10, s * 13), undefined, 0.6);
+    if (gemc && d.rarity !== 'common') gem(x, BOW.gemX, 0, 1.3, gemc, 'diamond');
   });
 }
 
 function crossbow(x: Ctx, d: ItemDef): void {
   const { m, t, gemc } = weaponRamps(d);
+  const C = CROSSBOW;
   tilted(x, () => {
-    part(x, () => { x.beginPath(); x.moveTo(-1.6, -14); x.lineTo(1.6, -14); x.lineTo(2, 12); x.lineTo(3.2, 19); x.lineTo(-3.2, 19); x.lineTo(-2, 12); x.closePath(); }, grad(x, m, -3, 0, 3, 0), () => line(x, -0.4, -13, -0.4, 18, 0.5, css(m[0])), 0.9);
-    const prod = () => { x.beginPath(); x.moveTo(-11, -7); x.quadraticCurveTo(0, -16, 11, -7); };
+    part(x, () => trace(x, crossbowStock), grad(x, m, -3, 0, 3, 0), () => line(x, -0.4, -13, -0.4, 18, 0.5, css(m[0])), 0.9);
+    const prod = () => trace(x, crossbowProd, false);
     prod(); x.lineWidth = 3.8; x.strokeStyle = OUT; x.stroke();
-    prod(); x.lineWidth = 2; x.strokeStyle = grad(x, t, -11, 0, 11, 0); x.stroke();
-    line(x, -11, -7, 0, -2, 0.5, css(MAT.cloth[0]));
-    line(x, 11, -7, 0, -2, 0.5, css(MAT.cloth[0]));
-    rod(x, 0, -16, 0, -3, 0.9, '#7a6050');
-    part(x, () => pts(x, [-1.3, -15.5, 0, -19, 1.3, -15.5]), grad(x, MAT.steel, -1, -19, 1, -15), undefined, 0.6);
-    part(x, () => { x.beginPath(); x.rect(-2.4, -12, 4.8, 2.6); }, polish(x, t, -2, 0, 2, 0), undefined, 0.6);
+    prod(); x.lineWidth = C.prodW; x.strokeStyle = grad(x, t, -11, 0, 11, 0); x.stroke();
+    line(x, -11, -7, 0, C.stringTo, 0.5, css(MAT.cloth[0]));
+    line(x, 11, -7, 0, C.stringTo, 0.5, css(MAT.cloth[0]));
+    rod(x, 0, C.boltY0, 0, C.boltY1, 0.9, '#7a6050');
+    part(x, () => trace(x, crossbowBoltHead), grad(x, MAT.steel, -1, -19, 1, -15), undefined, 0.6);
+    part(x, () => trace(x, rectPath(-2.4, C.latchY0, 2.4, C.latchY1)), polish(x, t, -2, 0, 2, 0), undefined, 0.6);
     rod(x, 1.5, 5, 3.4, 8, 0.8, css(t[1]));
-    if (gemc && d.rarity !== 'common') gem(x, 0, 2, 1.2, gemc);
+    if (gemc && d.rarity !== 'common') gem(x, 0, C.gemY, 1.2, gemc);
   });
 }
 
 function throwing(x: Ctx, d: ItemDef): void {
   const { m, t } = weaponRamps(d);
   if (d.id.endsWith('_star')) {
-    part(x, () => pts(x, [16, 1.5, 19, 13, 30.5, 16, 19, 19, 16, 30.5, 13, 19, 1.5, 16, 13, 13]), polish(x, m, 2, 2, 30, 30), () => {
-      line(x, 16, 2, 16, 30, 0.5, css(m[3]));
-      line(x, 2, 16, 30, 16, 0.5, css(m[3]));
+    x.save();
+    x.translate(16, 16);
+    part(x, () => trace(x, starPath), polish(x, m, -14, -14, 14, 14), () => {
+      line(x, 0, -14, 0, 14, 0.5, css(m[3]));
+      line(x, -14, 0, 14, 0, 0.5, css(m[3]));
     }, 0.9);
-    part(x, () => { x.beginPath(); x.arc(16, 16, 2.6, 0, Math.PI * 2); }, radial(x, t, 16, 16, 2.6), undefined, 0.8);
+    part(x, () => { x.beginPath(); x.arc(0, 0, STAR_HUB, 0, Math.PI * 2); }, radial(x, t, 0, 0, STAR_HUB), undefined, 0.8);
     x.fillStyle = DARK;
-    x.beginPath(); x.arc(16, 16, 1, 0, Math.PI * 2); x.fill();
+    x.beginPath(); x.arc(0, 0, 1, 0, Math.PI * 2); x.fill();
+    x.restore();
     return;
   }
   tilted(x, () => {
-    part(x, () => { x.beginPath(); x.rect(-1, -12, 2, 32); }, grad(x, rampOf(LOOKS[d.id]?.t ?? 0x7a5530), -1, 0, 1, 0), undefined, 0.7);
-    part(x, () => { x.beginPath(); x.moveTo(0, -21.5); x.quadraticCurveTo(3.4, -16, 1.4, -11); x.lineTo(-1.4, -11); x.quadraticCurveTo(-3.4, -16, 0, -21.5); x.closePath(); }, grad(x, m, -3, 0, 3, 0), () => line(x, 0, -21, 0, -11.5, 0.5, css(m[3])), 0.9);
-    strap(x, -1.6, -9.5, 1.6, -9.5, 1.8, d.id === 'royal_spear' || d.id === 'royal_javelin' ? MAT.gold : MAT.leather);
+    part(x, () => trace(x, rectPath(-SPEAR.shaftW / 2, SPEAR.shaftY0, SPEAR.shaftW / 2, SPEAR.shaftY1)), grad(x, rampOf(LOOKS[d.id]?.t ?? 0x7a5530), -1, 0, 1, 0), undefined, 0.7);
+    part(x, () => trace(x, spearHead), grad(x, m, -3, 0, 3, 0), () => line(x, 0, -21, 0, -11.5, 0.5, css(m[3])), 0.9);
+    strap(x, -1.6, SPEAR.strapY, 1.6, SPEAR.strapY, 1.8, d.id === 'royal_spear' || d.id === 'royal_javelin' ? MAT.gold : MAT.leather);
   });
 }
 
@@ -1250,25 +1255,24 @@ function wand(x: Ctx, d: ItemDef, rodLike: boolean): void {
   const { m, t, glow } = weaponRamps(d);
   const orb = LOOKS[d.id]?.c ?? 0x9a7ae0;
   tilted(x, () => {
-    const top = rodLike ? -14 : -8;
     if (rodLike) {
       // a twisted staff
-      part(x, () => { x.beginPath(); x.moveTo(-1.4, top); x.lineTo(1.4, top); x.lineTo(1.1, 20.5); x.lineTo(-1.1, 20.5); x.closePath(); }, grad(x, t, -1.4, 0, 1.4, 0), () => {
-        for (let y = top; y < 20; y += 2.6) line(x, -1.6, y, 1.6, y + 1.8, 0.55, css(t[3]));
+      part(x, () => trace(x, rodShaft), grad(x, t, -1.4, 0, 1.4, 0), () => {
+        for (let y = ROD.top; y < 20; y += 2.6) line(x, -1.6, y, 1.6, y + 1.8, 0.55, css(t[3]));
       }, 0.8);
       for (const s of [-1, 1]) {
-        x.beginPath(); x.moveTo(s * 1, top + 2); x.quadraticCurveTo(s * 6, top - 3, s * 2, top - 9);
+        trace(x, rodCurl(s), false);
         x.lineWidth = 2.6; x.strokeStyle = OUT; x.stroke();
-        x.lineWidth = 1.2; x.strokeStyle = css(t[1]); x.stroke();
+        x.lineWidth = ROD.curlW; x.strokeStyle = css(t[1]); x.stroke();
       }
     } else {
-      part(x, () => { x.beginPath(); x.moveTo(-1.5, top); x.lineTo(1.5, top); x.lineTo(0.9, 15); x.lineTo(-0.9, 15); x.closePath(); }, grad(x, t, -1.5, 0, 1.5, 0), undefined, 0.8);
-      for (const y of [top + 2, 4, 11]) part(x, () => { x.beginPath(); x.rect(-1.9, y, 3.8, 1.4); }, polish(x, MAT.gold, -2, 0, 2, 0), undefined, 0.5);
-      for (const s of [-1, 1]) part(x, () => pts(x, [s * 1.3, top + 1, s * 3.6, top - 4, s * 0.8, top - 1]), grad(x, MAT.gold, -3, top - 4, 3, top + 1), undefined, 0.5);
+      part(x, () => trace(x, wandShaft), grad(x, t, -1.5, 0, 1.5, 0), undefined, 0.8);
+      for (const y of WAND.rings) part(x, () => trace(x, rectPath(-WAND.ringW, y, WAND.ringW, y + WAND.ringH)), polish(x, MAT.gold, -2, 0, 2, 0), undefined, 0.5);
+      for (const s of [-1, 1]) part(x, () => trace(x, wandProng(s)), grad(x, MAT.gold, -3, -12, 3, -7), undefined, 0.5);
     }
-    const oy = rodLike ? top - 5.5 : top - 4;
+    const oy = rodLike ? ROD.orbY : WAND.orbY;
     glowAt(x, 0, oy, 10, glow ?? orb, 0.75);
-    gem(x, 0, oy, rodLike ? 4.2 : 3.6, orb);
+    gem(x, 0, oy, rodLike ? ROD.orbR : WAND.orbR, orb);
     void m;
   });
 }
