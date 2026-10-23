@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { toonGradient, type Mat } from './parts';
 import type { BipedRig, QuadRig } from './rigs';
+import { PAINTED } from '../style';
+import { cellRect, grimBody, grimFor, guessDetail, type Grim, type MonDetail } from './grimMonsters';
 
 /**
  * Core of the "dark realistic" monster models (the default look; the old
@@ -43,6 +45,8 @@ export interface PartOpt {
   two?: boolean;
   /** Not darkened toward the bottom of the limb (eyes, rims that must read). */
   flat?: boolean;
+  /** Painted style: the surface from the monster atlas (grimMonsters.ts); guessed when left out. */
+  d?: MonDetail;
 }
 
 /** Fresh blood is bright enough to read through the pixel pass at normal zoom. */
@@ -60,7 +64,16 @@ function hash(x: number, y: number, z: number, k: number): number {
   return h - Math.floor(h);
 }
 
-interface Piece { geo: THREE.BufferGeometry; color: THREE.Color; grit: number; blood: number; two: boolean; flat: boolean }
+interface Piece { geo: THREE.BufferGeometry; color: THREE.Color; grit: number; blood: number; two: boolean; flat: boolean; d?: MonDetail }
+
+const RIME = new THREE.Color(0xd8e8f4);
+const MOULD = new THREE.Color(0x4a4a24);
+const SOOT = new THREE.Color(0x120c08);
+const _c2 = new THREE.Color();
+/** Smooth 3D wobble in 0..1 (patches of rot, frost, soot that span several triangles). */
+function patch(x: number, y: number, z: number, f: number): number {
+  return 0.5 + 0.25 * Math.sin(x * f + Math.sin(y * f * 0.7) * 2) + 0.25 * Math.sin(z * f * 1.3 + y * f * 0.9);
+}
 
 /** Accumulates primitives into one merged geometry (plus one for glowing bits). */
 export class Mesher {
@@ -69,6 +82,8 @@ export class Mesher {
   private stack: THREE.Matrix4[] = [new THREE.Matrix4()];
   /** How much the lowest part of the limb is darkened (fake ambient occlusion). */
   ao = 0.22;
+  /** Painted style: the kind's grim look (UVs into the monster atlas + per-family grime). */
+  grim: Grim | null = null;
 
   /** Opens a sub-assembly with its own offset / rotation (e.g. a hunched upper body). */
   push(p: V3, r: V3 = [0, 0, 0], s: V3 = [1, 1, 1]): this {
@@ -87,7 +102,7 @@ export class Mesher {
     if (g !== geo) geo.dispose();
     _m.compose(_v.set(...p), _q.setFromEuler(_e.set(...(o.r ?? [0, 0, 0]))), _s.set(...(o.s ?? [1, 1, 1])));
     g.applyMatrix4(this.stack[this.stack.length - 1].clone().multiply(_m));
-    (o.glow ? this.glow : this.base).push({ geo: g, color: new THREE.Color(color), grit: o.grit ?? 0.14, blood: o.blood ?? 0, two: !!o.two, flat: !!o.flat || !!o.glow });
+    (o.glow ? this.glow : this.base).push({ geo: g, color: new THREE.Color(color), grit: o.grit ?? 0.14, blood: o.blood ?? 0, two: !!o.two, flat: !!o.flat || !!o.glow, d: o.d });
     return this;
   }
 
@@ -187,12 +202,50 @@ export class Mesher {
     const pos = new Float32Array(n * 3);
     const nor = new Float32Array(n * 3);
     const col = new Float32Array(n * 3);
+    const G = which === 'base' ? this.grim : null;
+    const uvs = G ? new Float32Array(n * 2) : null;
+    const bloodA = G?.bloodColor !== undefined ? new THREE.Color(G.bloodColor) : BLOOD;
+    const bloodB = G?.bloodColor !== undefined ? new THREE.Color(G.bloodColor).multiplyScalar(0.6) : BLOOD_DRY;
     const c = new THREE.Color();
     let o = 0;
+    let pi = 0;
     for (const p of list) {
       const P = p.geo.attributes.position.array as ArrayLike<number>;
       const N = p.geo.attributes.normal.array as ArrayLike<number>;
       const cnt = p.geo.attributes.position.count;
+      // painted style: which atlas cell this primitive samples, and how much of it
+      let U: ArrayLike<number> | null = null;
+      let u0 = 0, v0 = 0, us = 1, vs = 1, umin = 0, vmin = 0, uspan = 1, vspan = 1;
+      let blood = p.blood;
+      if (G && uvs) {
+        let bx0 = Infinity, by0 = Infinity, bz0 = Infinity, bx1 = -Infinity, by1 = -Infinity, bz1 = -Infinity;
+        for (let i = 0; i < P.length; i += 3) {
+          bx0 = Math.min(bx0, P[i]); bx1 = Math.max(bx1, P[i]);
+          by0 = Math.min(by0, P[i + 1]); by1 = Math.max(by1, P[i + 1]);
+          bz0 = Math.min(bz0, P[i + 2]); bz1 = Math.max(bz1, P[i + 2]);
+        }
+        const ext = [bx1 - bx0, by1 - by0, bz1 - bz0].sort((a, b) => b - a);
+        const size = ext[0], thin = ext[2] / Math.max(1e-4, ext[0]), long = ext[0] / Math.max(1e-4, ext[1]);
+        const d = p.d ?? guessDetail(G, p.color, size, thin, p.two, long);
+        // claws, fangs, horns and spikes of a bloody kind are stained (blood on hide comes from the atlas)
+        if (G.blood) {
+          if ((d === 'horn' || d === 'bone' || d === 'blade') && size < 0.6 && long > 2) blood = Math.max(blood, G.blood);
+          else if (d === 'blade' || d === 'steel' || d === 'iron') blood = Math.max(blood, G.blood * 0.25);
+        }
+        const r = cellRect(d);
+        const k = Math.min(1, Math.max(0.2, size / 1.4));
+        u0 = r[0] + hash(pi, 1, 2, 3) * r[2] * (1 - k);
+        v0 = r[1] + hash(pi, 4, 5, 6) * r[2] * (1 - k);
+        us = vs = r[2] * k;
+        const UA = p.geo.attributes.uv as THREE.BufferAttribute | undefined;
+        if (UA) {
+          U = UA.array as ArrayLike<number>;
+          let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+          for (let i = 0; i < U.length; i += 2) { a0 = Math.min(a0, U[i]); a1 = Math.max(a1, U[i]); b0 = Math.min(b0, U[i + 1]); b1 = Math.max(b1, U[i + 1]); }
+          umin = a0; vmin = b0; uspan = Math.max(1e-4, a1 - a0); vspan = Math.max(1e-4, b1 - b0);
+        }
+      }
+      pi++;
       const write = (flip: boolean) => {
         for (let t = 0; t < cnt; t += 3) {
           const cx = (P[t * 3] + P[t * 3 + 3] + P[t * 3 + 6]) / 3;
@@ -204,10 +257,30 @@ export class Mesher {
             const t01 = (cy - y0) / span;
             c.multiplyScalar(1 - this.ao * (1 - t01) * (1 - t01));
           }
-          if (p.blood > 0 && hash(cx, cy, cz, 7) < p.blood) c.lerp(hash(cx, cy, cz, 5) < 0.6 ? BLOOD : BLOOD_DRY, 0.75 + hash(cx, cy, cz, 3) * 0.25);
+          if (G && !p.flat) {
+            const t01 = (cy - y0) / span;
+            // a little duller and darker, like the painted characters
+            const l = c.r * 0.3 + c.g * 0.55 + c.b * 0.15;
+            c.setRGB(c.r + (l - c.r) * 0.18, c.g + (l - c.g) * 0.18, c.b + (l - c.b) * 0.18);
+            const ny = (N[t * 3 + 1] + N[t * 3 + 4] + N[t * 3 + 7]) / 3;
+            const w = patch(cx, cy, cz, 9);
+            if (G.frost && ny > 0.3) c.lerp(RIME, Math.min(0.62, G.frost * ((ny - 0.3) / 0.7) * 1.4 * (0.4 + w)));
+            if (G.soot && t01 < 0.55) c.lerp(SOOT, G.soot * (1 - t01 / 0.55) * (0.4 + 0.6 * w));
+            if (G.rot) {
+              if (w > 1 - G.rot * 0.7) c.lerp(MOULD, 0.45);
+              if (t01 < 0.35) c.lerp(_c2.copy(MOULD).multiplyScalar(0.5), G.rot * (1 - t01 / 0.35) * 0.6);
+            }
+          }
+          if (blood > 0 && hash(cx, cy, cz, 7) < blood) c.lerp(hash(cx, cy, cz, 5) < 0.6 ? bloodA : bloodB, 0.75 + hash(cx, cy, cz, 3) * 0.25);
           for (let j = 0; j < 3; j++) {
             const v = t + (flip ? 2 - j : j);
             pos[o * 3] = P[v * 3]; pos[o * 3 + 1] = P[v * 3 + 1]; pos[o * 3 + 2] = P[v * 3 + 2];
+            if (uvs) {
+              const a = U ? (U[v * 2] - umin) / uspan : 0.5 + P[v * 3] * 0.8;
+              const b = U ? (U[v * 2 + 1] - vmin) / vspan : (P[v * 3 + 1] - y0) / span;
+              uvs[o * 2] = u0 + Math.min(1, Math.max(0, a)) * us;
+              uvs[o * 2 + 1] = v0 + Math.min(1, Math.max(0, b)) * vs;
+            }
             const s = flip ? -1 : 1;
             nor[o * 3] = N[v * 3] * s; nor[o * 3 + 1] = N[v * 3 + 1] * s; nor[o * 3 + 2] = N[v * 3 + 2] * s;
             col[o * 3] = c.r; col[o * 3 + 1] = c.g; col[o * 3 + 2] = c.b;
@@ -223,6 +296,7 @@ export class Mesher {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    if (uvs) g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
     g.computeBoundingSphere();
     g.userData.shared = true;
     return g;
@@ -247,12 +321,16 @@ export interface DarkMats { body: Mat; glow: Mat }
  */
 export class Kit {
   readonly M: DarkMats;
+  /** Painted style: this kind's grim look (null in the classic style and for kinds without one). */
+  readonly grim: Grim | null;
 
   constructor(readonly kind: string, glow: number, glowBoost = 1.5) {
     this.M = {
       body: new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: toonGradient() }),
       glow: new THREE.MeshToonMaterial({ color: new THREE.Color(glow).multiplyScalar(0.25), emissive: glow, emissiveIntensity: glowBoost, vertexColors: true, gradientMap: toonGradient() }),
     };
+    this.grim = PAINTED ? grimFor(kind) : null;
+    if (this.grim) grimBody(this.M.body, this.grim);
   }
 
   /** A pivot group holding the shared geometry of one limb. */
@@ -261,6 +339,7 @@ export class Kit {
     let b = CACHE.get(key);
     if (!b) {
       const m = new Mesher();
+      m.grim = this.grim;
       make(m);
       b = { base: m.build('base'), glow: m.build('glow') };
       CACHE.set(key, b);
