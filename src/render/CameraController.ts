@@ -8,6 +8,8 @@ const DISTANCE = 60;
 const PIXEL_LEVELS = [1.5, 2, 2.5, 3, 3.5, 4, 5];
 /** Tiles of height at the farthest (and starting) zoom; you can only zoom in from here. */
 export const VIEW_TILES_HIGH = 11;
+/** Steps farther than the 11-tile view the camera starts at and may go (owner, 2026-10-23: two steps out). */
+export const ZOOM_OUT_STEPS = 2;
 
 /**
  * Orthographic, near-top-down camera. North (−Z) is always screen-up; the view
@@ -24,8 +26,8 @@ export class CameraController {
   private offset: THREE.Vector3;
   private tiltCos: number;
   /** Smooth mode: half of the visible height in tiles. */
-  private zoom = VIEW_TILES_HIGH / 2;
-  private zoomTarget = VIEW_TILES_HIGH / 2;
+  private zoom = (VIEW_TILES_HIGH / 2) * 1.5625;
+  private zoomTarget = (VIEW_TILES_HIGH / 2) * 1.5625;
   private screenW = 1;
   private screenH = 1;
   pixelMode = true;
@@ -48,7 +50,7 @@ export class CameraController {
    * height, like the old 2D client. You can zoom in from there, never out past it.
    */
   private farthestPixelLevel(): number {
-    return this.defaultPixelLevel();
+    return Math.max(0, this.defaultPixelLevel() - ZOOM_OUT_STEPS);
   }
 
   /** Picks the pixel scale that shows roughly VIEW_TILES_HIGH tiles of height. */
@@ -65,7 +67,7 @@ export class CameraController {
     const first = this.screenH === 1;
     this.screenW = Math.max(1, width);
     this.screenH = Math.max(1, height);
-    if (first) this.pixelLevel = this.defaultPixelLevel();
+    if (first) this.pixelLevel = this.farthestPixelLevel();
     else this.pixelLevel = Math.max(this.pixelLevel, this.farthestPixelLevel());
     this.applyProjection();
   }
@@ -92,7 +94,7 @@ export class CameraController {
   }
 
   private get maxZoom(): number {
-    return (VIEW_TILES_HIGH / 2) * Math.pow(0.85, this.zoomOutCut);
+    return (VIEW_TILES_HIGH / 2) * Math.pow(1.25, ZOOM_OUT_STEPS) * Math.pow(0.85, this.zoomOutCut);
   }
 
   /** Leaves out the `n` farthest zoom-out steps (a shorter view distance on Low graphics). */
