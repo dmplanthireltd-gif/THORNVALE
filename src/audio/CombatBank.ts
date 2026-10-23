@@ -1,4 +1,4 @@
-import { COMBAT_CLIPS, COMBAT_FILE, COMBAT_ONSET } from './combatBank';
+import { COMBAT_CLIPS, COMBAT_FILE, COMBAT_ONSET } from './combatClips';
 import { jitter, MAX_VOICES, pickVariant } from './combatSurface';
 
 interface Voice { src: AudioBufferSourceNode; g: GainNode; end: number }

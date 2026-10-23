@@ -18,7 +18,10 @@
     "server",
     "src/game",
     "scripts/music",
-    "scripts/site"
+    "scripts/site",
+    "scripts/sfx"
   ],
-  "exclude": []
+  "exclude": [
+    "scripts/sfx/before-reel.ts"
+  ]
 }

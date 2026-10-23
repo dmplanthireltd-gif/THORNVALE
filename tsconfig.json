@@ -33,6 +33,7 @@
     "scripts/music-test.ts",
     "scripts/music-audit.ts",
     "scripts/music",
-    "scripts/site"
+    "scripts/site",
+    "scripts/sfx"
   ]
 }

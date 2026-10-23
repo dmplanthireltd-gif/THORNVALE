@@ -4,6 +4,7 @@
  *
  *   npx tsx scripts/sfx/before-reel.ts <dir>     → <dir>/combat-reel-before.mp3
  *
+ * Not type-checked by `npm run typecheck` (it needs both the DOM sound types and Node); run it with tsx.
  * A small emulation of the Web Audio pieces the Kit uses (oscillators, RBJ biquads with
  * exponential sweeps, exponential gain envelopes). Close enough to hear the old sounds.
  */

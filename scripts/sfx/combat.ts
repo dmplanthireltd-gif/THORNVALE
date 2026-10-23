@@ -1,6 +1,6 @@
 /**
  * Thornvale's combat sound bank: every recipe is a physically-inspired model rendered offline
- * (scripts/sfx/render.ts → public/audio/sfx/combat.mp3 + src/audio/combatBank.ts). No samples.
+ * (scripts/sfx/render.ts → public/audio/sfx/combat.mp3 + src/audio/combatClips.ts). No samples.
  *
  *   metal (armour, shields, blades): inharmonic plate / bar modes with fast high-mode decay
  *   wood (shields, arrow into wood): damped plank modes + the stuck arrow's buzzing shaft
@@ -104,7 +104,7 @@ function squelch(rng: Rng, sec: number, fc = 1300, grains = 8): Buf {
 }
 
 /** A bubble (Minnaert): a sine that rises a little as it decays. */
-function bubble(rng: Rng, f0: number, tau: number): Buf {
+function bubble(_rng: Rng, f0: number, tau: number): Buf {
   const len = n(tau * 6);
   const b = new Float64Array(len);
   let ph = 0;

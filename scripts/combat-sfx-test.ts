@@ -9,7 +9,7 @@ import {
   arrowImpact, blockLayers, fallOf, flightTime, hitLayers, jitter, MAX_VOICES, MONSTER_SURFACE, pickVariant,
   playerSurface, shieldMaterial, surfaceOf, SURFACES, type Striker,
 } from '../src/audio/combatSurface';
-import { COMBAT_CLIPS } from '../src/audio/combatBank';
+import { COMBAT_CLIPS } from '../src/audio/combatClips';
 
 let fails = 0;
 const ok = (cond: boolean, msg: string) => { if (!cond) { fails++; console.error('FAIL', msg); } };
@@ -57,7 +57,7 @@ for (const el of ['energy', 'fire', 'ice', 'earth', 'death', 'holy']) { asked.ad
 for (const c of asked) {
   const vs = COMBAT_CLIPS[c];
   ok(!!vs && vs.length >= 2, `bank has ${c} with ≥2 variants`);
-  for (const [start, dur] of vs ?? []) ok(start > 0 && dur > 0.03 && dur < 1.6, `${c} slice is sane (${start}, ${dur})`);
+  for (const [start, dur] of vs ?? []) ok(start > 0 && dur > 0.03 && dur < (c.startsWith('fall_') ? 2 : 1.2), `${c} slice is sane (${start}, ${dur})`);
 }
 // slices never overlap
 const all = Object.values(COMBAT_CLIPS).flat().slice().sort((a, b) => a[0] - b[0]);
@@ -96,5 +96,5 @@ for (let i = 0; i < 100; i++) {
 ok(Math.abs(flightTime(1, true) - 0.12) < 1e-9 && Math.abs(flightTime(6, true) - 0.27) < 1e-9, 'flight time matches the renderer');
 ok(MAX_VOICES >= 8 && MAX_VOICES <= 24, 'voice cap');
 
-if (fails) { console.error(`combat-sfx-test: ${fails} failure(s)`); process.exit(1); }
+if (fails) throw new Error(`combat-sfx-test: ${fails} failure(s)`);
 console.log(`combat-sfx-test: ok (${Object.keys(ENEMIES).length} monsters, ${asked.size} clips checked)`);

@@ -1,7 +1,7 @@
 /**
  * Renders the combat sound bank (scripts/sfx/combat.ts) into one sprite file.
  *
- *   npx tsx scripts/sfx/render.ts                 # public/audio/sfx/combat.mp3 + src/audio/combatBank.ts
+ *   npx tsx scripts/sfx/render.ts                 # public/audio/sfx/combat.mp3 + src/audio/combatClips.ts
  *   npx tsx scripts/sfx/render.ts --reel <dir>    # also a listening reel (<dir>/combat-reel.mp3) and a WAV per clip
  *
  * Needs ffmpeg (libmp3lame). The game loads /play/audio/sfx/combat.mp3 once, decodes it and plays
@@ -88,7 +88,7 @@ export const COMBAT_FILE = 'audio/sfx/combat.mp3';
 export const COMBAT_ONSET = ${onset.toFixed(5)};
 export const COMBAT_CLIPS: Record<string, ReadonlyArray<readonly [number, number]>> = ${JSON.stringify(manifest, null, 0).replace(/\],"/g, '],\n  "').replace(/^\{/, '{\n  ').replace(/\}$/, ',\n}')};
 `;
-writeFileSync(join(ROOT, 'src', 'audio', 'combatBank.ts'), ts);
+writeFileSync(join(ROOT, 'src', 'audio', 'combatClips.ts'), ts);
 
 console.log(report.join('\n'));
 console.log(`\n${CLIPS.length} sounds, ${[...rendered.values()].reduce((a, v) => a + v.length, 0)} variants, ${total.toFixed(1)} s, combat.mp3 ${(statSync(mp3).size / 1024).toFixed(0)} KB`);

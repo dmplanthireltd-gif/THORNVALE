@@ -172,7 +172,7 @@ All of these exist in code (`src/style.css`, `site/styles.css`); reuse, don't re
 ## 9. Sound
 
 - **Music:** an original soundtrack. Each region has its own theme played by its own band of synthesized instruments (folk fiddle and lute in towns, pan pipes and hand drums in jungles, oud and darbuka in deserts, horns and taiko at volcanoes, brass and timpani in battle). It is generated in code (`scripts/music/`), with no samples.
-- **Effects:** layered, material-aware and synthesized (`src/audio/sfxlib.ts`, `foley.ts`). Footsteps follow the ground, hits follow the monster's material, and monsters have their own voices.
+- **Effects:** layered, material-aware and synthesized (`src/audio/sfxlib.ts`, `foley.ts`). Footsteps follow the ground, hits follow the monster's material, and monsters have their own voices. Combat (swings, hits, blocks, bows, arrows, falls) sounds natural, not electronic: it is rendered offline from physical models of metal, wood, flesh, bone and air (`scripts/sfx/`), never from sample packs.
 - **Brand sounds:** soft wooden clicks for buttons, coins for gold, a brass fanfare with bells for level-up. A website may offer music only behind a play button, never on autoplay.
 
 ---
