@@ -1,6 +1,8 @@
 import type { Controller } from '../client/Controller';
 import type { Renderer } from '../render/Renderer';
 import type { HUD } from '../ui/HUD';
+import { t } from '../i18n/i18n';
+import { trText } from '../i18n/gameText';
 
 const DIR_KEYS: Record<string, [number, number]> = {
   KeyW: [0, -1], ArrowUp: [0, -1], Numpad8: [0, -1],
@@ -159,7 +161,7 @@ export class Input {
     if (!hit) return;
     const right = e.button === 2;
     if (e.shiftKey && hit.kind !== 'tile') {
-      this.hud.log(`You see ${this.renderer.describeHover() || 'something'}.`, 'info');
+      this.hud.log(t('You see {item}.', { item: trText(this.renderer.describeHover()) || t('something') }), 'info');
       return;
     }
     switch (hit.kind) {

@@ -1,5 +1,6 @@
 import type { Controller } from '../client/Controller';
 import { Ground, Obj, WorldMap } from '../game/world/WorldMap';
+import { t } from '../i18n/i18n';
 
 export const GROUND_RGB: Record<number, string> = {
   [Ground.Grass]: '#3f8a2e', [Ground.Path]: '#a08a62', [Ground.Stone]: '#8a8a88', [Ground.Wood]: '#7a5530', [Ground.Water]: '#2f6ab0',
@@ -43,7 +44,7 @@ export class Minimap {
     this.canvas.className = 'minimap';
     this.canvas.width = SIZE;
     this.canvas.height = SIZE;
-    this.canvas.title = 'Minimap — click to walk, mouse wheel to zoom, right-drag to move, double-click to centre';
+    this.canvas.title = t('Minimap — click to walk, mouse wheel to zoom, right-drag to move, double-click to centre');
     try { this.zoom = Math.min(ZOOMS.length - 1, Math.max(0, Number(localStorage.getItem('thornvale.minimapZoom') ?? 2))); } catch { /* storage off */ }
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();

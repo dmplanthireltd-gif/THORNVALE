@@ -2,8 +2,7 @@ import { sessionOf, type Controller } from '../client/Controller';
 import type { GameEvent, MessageKind } from '../game/core/events';
 import type { Session } from '../game/Game';
 import { DEPOT_SLOTS, POCKET_SLOTS } from '../game/inventory/Inventory';
-import { bonusParts } from '../game/inventory/sets';
-import { describeItem, equipSlotFor, ITEMS, itemDef, runeGroup, runeIsAimed, type EquipSlot, type ItemStack } from '../game/inventory/items';
+import { equipSlotFor, ITEMS, itemDef, runeGroup, runeIsAimed, type EquipSlot, type ItemStack } from '../game/inventory/items';
 import { GROUP_COOLDOWN, isSpellId, SPELL_LIST, SPELLS, type CooldownGroup, type SpellDef, type SpellId } from '../game/magic/spells';
 import { NPCS } from '../game/npc/npcs';
 import { encodeAppearance } from '../game/player/appearance';
@@ -35,6 +34,10 @@ import { Minimap } from './Minimap';
 import { WorldMapView } from './WorldMapView';
 import { CharacterDesigner } from './CharacterDesigner';
 import { expStageLine, isClassic, stagesTable } from '../game/progression/stages';
+import { fmtNum, getLang, k, onLangChange, t } from '../i18n/i18n';
+import { trName, trText } from '../i18n/gameText';
+import { describeItemL, bonusPartsL } from '../i18n/describe';
+import { langPicker } from './lang';
 
 /** Where a dragged item comes from. */
 export type DragSrc = { kind: 'inv'; index: number } | { kind: 'eq'; slot: EquipSlot } | { kind: 'bag'; id: number };
@@ -48,10 +51,10 @@ const hotkeyName = (i: number): string => (i < 12 ? HOTKEY_LABELS[i] : `Ctrl+${H
 
 /** Tibia-style equipment layout, three columns. */
 const EQUIP_LAYOUT: Array<{ slot: EquipSlot; ph: string; name: string }> = [
-  { slot: 'amulet', ph: 'amulet_of_warding', name: 'Amulet' }, { slot: 'head', ph: 'iron_helmet', name: 'Helmet' }, { slot: 'backpack', ph: 'backpack', name: 'Backpack' },
-  { slot: 'weapon', ph: 'iron_sword', name: 'Weapon' }, { slot: 'armor', ph: 'chain_armor', name: 'Armour' }, { slot: 'shield', ph: 'wooden_shield', name: 'Shield / off-hand' },
-  { slot: 'ring', ph: 'ring_of_vigor', name: 'Ring' }, { slot: 'legs', ph: 'chain_legs', name: 'Legs' }, { slot: 'ammo', ph: 'arrow', name: 'Ammunition' },
-  { slot: 'cape', ph: 'thornvale_cape', name: 'Cape' }, { slot: 'feet', ph: 'leather_boots', name: 'Boots' }, { slot: null as unknown as EquipSlot, ph: '', name: '' },
+  { slot: 'amulet', ph: 'amulet_of_warding', name: k('Amulet') }, { slot: 'head', ph: 'iron_helmet', name: k('Helmet') }, { slot: 'backpack', ph: 'backpack', name: k('Backpack') },
+  { slot: 'weapon', ph: 'iron_sword', name: k('Weapon') }, { slot: 'armor', ph: 'chain_armor', name: k('Armour') }, { slot: 'shield', ph: 'wooden_shield', name: k('Shield / off-hand') },
+  { slot: 'ring', ph: 'ring_of_vigor', name: k('Ring') }, { slot: 'legs', ph: 'chain_legs', name: k('Legs') }, { slot: 'ammo', ph: 'arrow', name: k('Ammunition') },
+  { slot: 'cape', ph: 'thornvale_cape', name: k('Cape') }, { slot: 'feet', ph: 'leather_boots', name: k('Boots') }, { slot: null as unknown as EquipSlot, ph: '', name: '' },
 ];
 
 interface Bar {
@@ -143,6 +146,8 @@ export class HUD {
   private pixelBtn!: HTMLButtonElement;
   private pvpBtn!: HTMLButtonElement;
   private lvlBadge!: HTMLDivElement;
+  /** Labels that show a state ("Sound: on") and must be rebuilt in a new language. */
+  private relabelers: Array<() => void> = [];
   /** Current layout preset (remembered in this browser). */
   private layout: HudLayout = (() => {
     try { return localStorage.getItem('thornvale.hudLayout') === 'full' ? 'full' : 'flanks'; } catch { return 'flanks'; }
@@ -178,8 +183,8 @@ export class HUD {
     this.regionEl = el('div', 'region-banner', this.root);
     this.announceEl = el('div', 'announce-banner', this.root);
     this.deathEl = el('div', 'death-screen', this.root);
-    el('div', 'death-title', this.deathEl, 'You are dead');
-    el('div', 'death-sub', this.deathEl, 'You will wake in your home temple…');
+    el('div', 'death-title', this.deathEl, t('You are dead'));
+    el('div', 'death-sub', this.deathEl, t('You will wake in your home temple…'));
     this.toastEl = el('div', 'toast', this.root);
     this.menuEl = el('div', 'ctx-menu', this.root);
     this.menuEl.hidden = true;
@@ -194,6 +199,7 @@ export class HUD {
     window.addEventListener('mouseup', (e) => this.onDragEnd(e));
 
     this.loadHotbar();
+    onLangChange(() => this.languageChanged());
     for (const e of ctl.takeBacklog()) this.onEvent(e);
     ctl.game.events.on((e) => this.onEvent(e));
     ctl.onDisconnect = (why) => this.showDisconnect(why);
@@ -212,8 +218,8 @@ export class HUD {
     const me = this.ctl.pid;
     switch (e.type) {
       case 'message':
-        if (e.to === me) this.log(e.text, e.kind);
-        if (e.to === me && (e.kind === 'level' || e.kind === 'quest')) this.toast(e.text);
+        if (e.to === me) this.log(trText(e.text), e.kind);
+        if (e.to === me && (e.kind === 'level' || e.kind === 'quest')) this.toast(trText(e.text));
         break;
       case 'chat':
         this.log(`${e.name}: ${e.text}`, 'chat');
@@ -222,8 +228,8 @@ export class HUD {
         if (e.to === me) this.adminNotice(e.title, e.text);
         break;
       case 'announce':
-        this.log(e.text, 'event');
-        if (e.big) this.announce(e.title, e.text, e.style);
+        this.log(trText(e.text), 'event');
+        if (e.big) this.announce(trText(e.title), trText(e.text), e.style);
         break;
       case 'bagChanged':
       case 'bagRemoved':
@@ -313,13 +319,13 @@ export class HUD {
     const panel = el('div', 'panel status', this.colA);
     const head = el('div', 'status-head', panel);
     this.lvlBadge = el('div', 'lvl-badge', head);
-    this.lvlBadge.title = 'Level';
+    this.lvlBadge.title = t('Level');
     const who = el('div', 'status-who', head);
     this.nameEl = el('span', 'char-name', who);
     this.levelEl = el('span', 'char-level', who);
-    this.hp = this.makeBar(panel, 'hp', 'HP');
-    this.mp = this.makeBar(panel, 'mp', 'MP');
-    this.xp = this.makeBar(panel, 'xp', 'XP');
+    this.hp = this.makeBar(panel, 'hp', t('HP'));
+    this.mp = this.makeBar(panel, 'mp', t('MP'));
+    this.xp = this.makeBar(panel, 'xp', t('XP'));
     const foot = el('div', 'status-foot', panel);
     this.capEl = el('div', 'cap', foot);
     this.buffsEl = el('div', 'buffs', foot);
@@ -353,17 +359,20 @@ export class HUD {
     el('span', 'tb-fill', top);
     const mode = el('span', `tb-mode ${this.ctl.online ? 'online' : 'offline'}`, top);
     el('span', 'tb-dot', mode);
-    const label = el('span', '', mode, this.ctl.online ? 'Online' : 'Offline');
+    const label = el('span', '', mode, t(this.ctl.online ? 'Online' : 'Offline'));
     if (this.ctl.online) {
       // players online, from the server's public /status (the same number the website shows)
+      let count: number | null = null;
+      const show = () => { label.textContent = count === null ? t('Online') : t('{n} online', { n: count }); };
       const refresh = () => {
         fetch('/status', { cache: 'no-store' })
           .then((r) => (r.ok ? r.json() : null))
           .then((s: { online?: number } | null) => {
-            if (s && typeof s.online === 'number') label.textContent = `${s.online.toLocaleString('en-GB')} online`;
+            if (s && typeof s.online === 'number') { count = s.online; show(); }
           })
           .catch(() => { /* keep "Online" */ });
       };
+      onLangChange(show);
       refresh();
       window.setInterval(refresh, 30000);
     }
@@ -417,75 +426,82 @@ export class HUD {
   private buildSettings(): void {
     const b = this.makeWin('settings', 'Settings', 'settings-win').body;
     const sec = (title: string) => {
-      el('div', 'panel-title', b, title);
+      el('div', 'panel-title', b, t(title));
       return el('div', 'set-row', b);
     };
     // layout presets: "Two flanks" (side columns) or "Full view" (game fills the screen, floating docks)
     const lay = sec('Layout');
     const lb: Array<[HTMLButtonElement, HudLayout]> = [];
     const layBtn = (label: string, mode: HudLayout, tip: string) => {
-      const x = button(lay, label, () => {
+      const x = button(lay, t(label), () => {
         this.setLayout(mode);
         for (const [bb, m] of lb) bb.classList.toggle('on', m === this.layout);
       }, 'btn');
-      x.title = tip;
+      x.title = t(tip);
       lb.push([x, mode]);
     };
     layBtn('Two flanks', 'flanks', 'Character and combat on the left, map and inventory on the right, the game view in the middle');
     layBtn('Full view', 'full', 'The game view fills the screen; panels float in its corners');
     for (const [bb, m] of lb) bb.classList.toggle('on', m === this.layout);
 
+    // language: EN / PL / PT-BR (remembered in this browser); game messages follow at once
+    const langRow = sec('Language');
+    langPicker(langRow, 'lang-pick set-lang');
     const disp = sec('Display');
-    this.pixelBtn = button(disp, 'Pixels: on', () => this.togglePixels(), 'btn');
-    this.pixelBtn.title = 'Pixel-art look on or off';
+    this.pixelBtn = button(disp, t('Pixels: on'), () => this.togglePixels(), 'btn');
+    this.pixelBtn.title = t('Pixel-art look on or off');
     // weather effects: High / Low (half the particles) / Off (sandstorm visibility stays: it is gameplay)
     const wq = ['high', 'low', 'off'] as const;
-    const wqName = { high: 'High', low: 'Low', off: 'Off' };
-    const wb = button(disp, `Weather: ${wqName[this.renderer.weatherQuality]}`, () => {
+    const wqName = { high: k('High'), low: k('Low'), off: k('Off') };
+    const wLabel = (q: keyof typeof wqName) => t('Weather: {q}', { q: t(wqName[q]) });
+    const wb = button(disp, wLabel(this.renderer.weatherQuality), () => {
       const next = wq[(wq.indexOf(this.renderer.weatherQuality) + 1) % wq.length];
       this.renderer.setWeatherQuality(next);
-      wb.textContent = `Weather: ${wqName[next]}`;
+      wb.textContent = wLabel(next);
     }, 'btn');
-    wb.title = 'Weather effects: High, Low (half the rain, snow and sand) or Off (no weather pictures; sandstorms still limit how far you see)';
+    wb.title = t('Weather effects: High, Low (half the rain, snow and sand) or Off (no weather pictures; sandstorms still limit how far you see)');
     // graphics: High (full look) / Medium / Low (graphics.ts) — for slower computers
     const gq = ['high', 'medium', 'low'] as const;
-    const gb = button(disp, `Graphics: ${GRAPHICS_NAMES[this.renderer.graphics]}`, () => {
+    const gLabel = (q: (typeof gq)[number]) => t('Graphics: {q}', { q: t(GRAPHICS_NAMES[q]) });
+    const gb = button(disp, gLabel(this.renderer.graphics), () => {
       const next = gq[(gq.indexOf(this.renderer.graphics) + 1) % gq.length];
       this.renderer.setGraphics(next);
-      gb.textContent = `Graphics: ${GRAPHICS_NAMES[next]}`;
+      gb.textContent = gLabel(next);
     }, 'btn');
-    gb.title = 'Graphics: High (the full look), Medium (softer shadows, small props cast none) or Low (no shadows, no grass tufts, half the weather, a little less zoom-out) — for slower computers';
+    gb.title = t('Graphics: High (the full look), Medium (softer shadows, small props cast none) or Low (no shadows, no grass tufts, half the weather, a little less zoom-out) — for slower computers');
+    this.relabelers.push(() => { wb.textContent = wLabel(this.renderer.weatherQuality); gb.textContent = gLabel(this.renderer.graphics); this.pixelBtn.textContent = t(this.renderer.cam.pixelMode ? 'Pixels: on' : 'Pixels: off'); });
     const slider = (parent: HTMLElement, value: number, title: string, set: (v: number) => void, max = 100) => {
       const s = el('input', 'vol-slider', parent);
       s.type = 'range';
       s.min = '0';
       s.max = String(max);
       s.value = String(Math.round(value * 100));
-      s.title = title;
-      s.setAttribute('aria-label', title);
+      s.title = t(title);
+      s.setAttribute('aria-label', t(title));
       s.addEventListener('input', () => set(Number(s.value) / 100));
       s.addEventListener('keydown', (e) => e.stopPropagation());
       return s;
     };
     const snd = sec('Sound effects');
-    const sb = button(snd, this.sfx.muted ? 'Sound: off' : 'Sound: on', () => {
-      sb.textContent = this.sfx.toggleMute() ? 'Sound: off' : 'Sound: on';
+    const sb = button(snd, t(this.sfx.muted ? 'Sound: off' : 'Sound: on'), () => {
+      sb.textContent = t(this.sfx.toggleMute() ? 'Sound: off' : 'Sound: on');
     }, 'btn');
+    this.relabelers.push(() => { sb.textContent = t(this.sfx.muted ? 'Sound: off' : 'Sound: on'); });
     slider(snd, this.sfx.volume, 'Volume', (v) => this.sfx.setVolume(v));
 
     // each kind of sound on its own slider (0–150 %), on top of the main volume
-    el('div', 'panel-title', b, 'Sound mix');
+    el('div', 'panel-title', b, t('Sound mix'));
     const mix = el('div', 'mix-grid', b);
     for (const c of SFX_CATS) {
-      const name = el('span', 'mix-name', mix, c.name);
-      name.title = c.hint;
+      const name = el('span', 'mix-name', mix, t(c.name));
+      name.title = t(c.hint);
       const val = el('span', 'mix-val', mix);
       const show = (v: number) => { val.textContent = `${Math.round(v * 100)}%`; };
       const s = slider(mix, this.sfx.mix[c.id], c.name, (v) => { this.sfx.setMix(c.id, v); show(v); }, 150);
-      s.title = c.hint;
+      s.title = t(c.hint);
       show(this.sfx.mix[c.id]);
     }
-    button(b, 'Reset sound mix', () => {
+    button(b, t('Reset sound mix'), () => {
       for (const c of SFX_CATS) this.sfx.setMix(c.id, 1);
       mix.querySelectorAll<HTMLInputElement>('input').forEach((i) => { i.value = '100'; });
       mix.querySelectorAll<HTMLSpanElement>('.mix-val').forEach((v) => { v.textContent = '100%'; });
@@ -493,20 +509,21 @@ export class HUD {
     if (this.music) {
       const mu = this.music;
       const mus = sec('Music');
-      const label = { all: 'Music: all', outdoor: 'Music: outdoors only', off: 'Music: off' } as const;
-      const mb = button(mus, label[mu.mode], () => {
-        mb.textContent = label[mu.cycleMode()];
+      const label = { all: k('Music: all'), outdoor: k('Music: outdoors only'), off: k('Music: off') } as const;
+      const mb = button(mus, t(label[mu.mode]), () => {
+        mb.textContent = t(label[mu.cycleMode()]);
       }, 'btn');
-      mb.title = 'All music / outdoors only (quiet inside shops, depots and temples) / off';
+      mb.title = t('All music / outdoors only (quiet inside shops, depots and temples) / off');
+      this.relabelers.push(() => { mb.textContent = t(label[mu.mode]); });
       slider(mus, mu.volume, 'Music volume', (v) => mu.setVolume(v));
     }
     const game = sec('Game');
-    if (!this.ctl.online) button(game, 'Save now', () => this.saveNow(), 'btn');
-    button(game, 'Test console (`)', () => { this.closeWin('settings'); this.toggleWin('dev'); }, 'btn');
-    button(game, 'Reset layout', () => resetPanelLayout(), 'btn');
-    button(game, 'Full screen', () => {
+    if (!this.ctl.online) button(game, t('Save now'), () => this.saveNow(), 'btn');
+    button(game, t('Test console (`)'), () => { this.closeWin('settings'); this.toggleWin('dev'); }, 'btn');
+    button(game, t('Reset layout'), () => resetPanelLayout(), 'btn');
+    button(game, t('Full screen'), () => {
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-      else void document.documentElement.requestFullscreen().catch(() => this.log('Your browser refused full screen.', 'warn'));
+      else void document.documentElement.requestFullscreen().catch(() => this.log(t('Your browser refused full screen.'), 'warn'));
     }, 'btn');
   }
 
@@ -516,7 +533,7 @@ export class HUD {
 
     // classic combat controls: stance (attack / balanced / defence), chase / stand, and PvP secure mode
     const fight = el('div', 'panel fight-modes', col);
-    el('div', 'panel-title', fight, 'Combat');
+    el('div', 'panel-title', fight, t('Combat'));
     const fgrid = el('div', 'fm-grid', fight);
     let mode: FightMode = 'balanced';
     let chase = true;
@@ -532,8 +549,8 @@ export class HUD {
       for (const [b, on] of fbtn) b.classList.toggle('on', on());
     };
     const fb = (label: string, tip: string, click: () => void, on: () => boolean) => {
-      const b = button(fgrid, label, () => { click(); apply(); }, 'btn fm');
-      b.title = tip;
+      const b = button(fgrid, t(label), () => { click(); apply(); }, 'btn fm');
+      b.title = t(tip);
       fbtn.push([b, on]);
     };
     fb('Attack', 'Offensive: hit harder (+20%), take more damage', () => { mode = 'offensive'; }, () => mode === 'offensive');
@@ -541,8 +558,8 @@ export class HUD {
     fb('Defend', 'Defensive: take less damage (−25%), hit softer', () => { mode = 'defensive'; }, () => mode === 'defensive');
     fb('Follow', 'Chase: follow your target', () => { chase = true; }, () => chase);
     fb('Stand', 'Stand: keep your position while attacking', () => { chase = false; }, () => !chase);
-    this.pvpBtn = button(fgrid, 'Secure', () => this.ctl.send({ c: 'secureMode', on: !this.s.player.secure }), 'btn fm pvp');
-    this.pvpBtn.title = 'Secure mode: you cannot attack unmarked players and your area attacks spare them. Open: you can attack anyone, but attacking unmarked players gives you a skull.';
+    this.pvpBtn = button(fgrid, t('Secure'), () => this.ctl.send({ c: 'secureMode', on: !this.s.player.secure }), 'btn fm pvp');
+    this.pvpBtn.title = t('Secure mode: you cannot attack unmarked players and your area attacks spare them. Open: you can attack anyone, but attacking unmarked players gives you a skull.');
     this.pvpBtn.hidden = true;
     apply();
 
@@ -550,24 +567,24 @@ export class HUD {
     const right = this.colB;
     const mp = el('div', 'panel minimap-panel', right);
     const mt = el('div', 'panel-title map-title', mp);
-    el('span', '', mt, 'Map');
+    el('span', '', mt, t('Map'));
     this.floorEl = el('div', 'floor-ind', mt);
     this.minimap = new Minimap(mp, this.ctl);
-    button(mp, 'World map (M)', () => this.toggleWorldMap(), 'btn small wm-open');
+    button(mp, t('World map (M)'), () => this.toggleWorldMap(), 'btn small wm-open');
 
     const tools = el('div', 'panel toolbar', right);
-    button(tools, 'Spells', () => this.toggleWin('spells'), 'btn tool');
-    button(tools, 'Quests', () => this.toggleWin('quests'), 'btn tool');
-    this.friendsBtn = button(tools, 'Friends', () => { this.toggleWin('friends'); this.renderFriends(); }, 'btn tool');
-    button(tools, 'Appearance', () => this.toggleWin('appearance'), 'btn tool');
-    button(tools, 'Help', () => this.toggleWin('help'), 'btn tool');
-    button(tools, 'Settings', () => this.toggleWin('settings'), 'btn tool');
+    button(tools, t('Spells'), () => this.toggleWin('spells'), 'btn tool');
+    button(tools, t('Quests'), () => this.toggleWin('quests'), 'btn tool');
+    this.friendsBtn = button(tools, t('Friends'), () => { this.toggleWin('friends'); this.renderFriends(); }, 'btn tool');
+    button(tools, t('Appearance'), () => this.toggleWin('appearance'), 'btn tool');
+    button(tools, t('Help'), () => this.toggleWin('help'), 'btn tool');
+    button(tools, t('Settings'), () => this.toggleWin('settings'), 'btn tool');
     this.buildSettings();
     // running slowly on High for a while: suggest a lower graphics setting once (never switch by itself)
-    this.renderer.onSlow = () => this.log('The game is running slowly here. Settings → Display → Graphics: Medium or Low can make it smoother.', 'info');
+    this.renderer.onSlow = () => this.log(t('The game is running slowly here. Settings → Display → Graphics: Medium or Low can make it smoother.'), 'info');
 
     const eqp = el('div', 'panel equipment', right);
-    el('div', 'panel-title', eqp, 'Equipment');
+    el('div', 'panel-title', eqp, t('Equipment'));
     const grid = el('div', 'equip-grid', eqp);
     for (const e of EQUIP_LAYOUT) {
       if (!e.slot) {
@@ -576,7 +593,7 @@ export class HUD {
       }
       const d = el('div', 'slot equip', grid);
       d.dataset.slot = e.slot;
-      d.title = e.name;
+      d.title = t(e.name);
       d.addEventListener('mousedown', (ev) => {
         ev.preventDefault();
         if (ev.button !== 0 || !this.s.inventory.equipment[e.slot]) return;
@@ -588,8 +605,8 @@ export class HUD {
 
     // classic skills window: every skill with a thin bar to the next level; click the title to fold
     const sk = el('div', 'panel skills', col);
-    const st = el('div', 'panel-title skills-title', sk, 'Skills');
-    st.title = 'Click to fold or unfold. Skills rise by using them: fight with a weapon, block with a shield, spend mana, chop trees, fish.';
+    const st = el('div', 'panel-title skills-title', sk, t('Skills'));
+    st.title = t('Click to fold or unfold. Skills rise by using them: fight with a weapon, block with a shield, spend mana, chop trees, fish.');
     this.skillsEl = el('div', 'skills-list', sk);
     try {
       if (localStorage.getItem('thornvale.skillsFolded') === '1') sk.classList.add('folded');
@@ -600,8 +617,8 @@ export class HUD {
     });
 
     const battle = el('div', 'panel battle', this.colA);
-    const bt = el('div', 'panel-title battle-title', battle, 'Battle');
-    bt.title = 'Click to fold or unfold. Drag the bottom edge of the list to make it taller or shorter.';
+    const bt = el('div', 'panel-title battle-title', battle, t('Battle'));
+    bt.title = t('Click to fold or unfold. Drag the bottom edge of the list to make it taller or shorter.');
     this.battleEl = el('div', 'battle-list', battle);
     try {
       const h = localStorage.getItem('thornvale.battleHeight');
@@ -622,9 +639,9 @@ export class HUD {
     this.partyEl.hidden = true;
 
     const inv = el('div', 'panel inventory', this.colB);
-    el('div', 'panel-title', inv, 'Pockets');
+    el('div', 'panel-title', inv, t('Pockets'));
     this.pocketGrid = el('div', 'bag-grid', inv);
-    this.bagTitle = el('div', 'panel-title', inv, 'Backpack');
+    this.bagTitle = el('div', 'panel-title', inv, t('Backpack'));
     this.bagGrid = el('div', 'bag-grid', inv);
     this.statusLine = el('div', 'hover-line', this.colB);
   }
@@ -646,7 +663,7 @@ export class HUD {
       this.startDrag({ kind: 'inv', index: i }, ev, () => {
         const cur = this.s.inventory.slots[i];
         if (!cur) return;
-        if (shift) return this.log(`You see ${itemDef(cur.id).name}. ${describeItem(itemDef(cur.id))}`, 'info');
+        if (shift) return this.log(t('You see {item}. {about}', { item: trName(itemDef(cur.id).name), about: describeItemL(itemDef(cur.id)) }), 'info');
         if (this.ctl.depot() && ctrl) return this.ctl.send({ c: 'deposit', slot: i });
         this.useInventorySlot(i);
       });
@@ -742,7 +759,7 @@ export class HUD {
           this.hotbar[i] = { kind: 'item', id };
           this.storeHotbar();
           this.renderHotbar();
-        } else this.log('Only potions, food and runes go on the action bar.', 'warn');
+        } else this.log(t('Only potions, food and runes go on the action bar.'), 'warn');
       }
       return;
     }
@@ -786,7 +803,7 @@ export class HUD {
     this.aiming = itemId;
     this.root.classList.add('aiming');
     this.renderer.setAim(d.rune.radius, d.rune.range);
-    this.toast(`${d.name}: click where to throw it${d.rune.radius ? ' (area shown)' : ''}. Right-click or Esc cancels.`, 2.5);
+    this.toast(t(d.rune.radius ? '{item}: click where to throw it (area shown). Right-click or Esc cancels.' : '{item}: click where to throw it. Right-click or Esc cancels.', { item: trName(d.name) }), 2.5);
   }
 
   cancelAim(): void {
@@ -806,7 +823,7 @@ export class HUD {
     if (!id || !itemDef(id).rune) return;
     const inv = this.s.inventory;
     const slot = slotIndex ?? inv.slots.findIndex((st, idx) => idx < inv.size() && st?.id === id);
-    if (slot < 0) return this.log(`You have no ${itemDef(id).name.toLowerCase()} left.`, 'warn');
+    if (slot < 0) return this.log(t('You have no {item} left.', { item: trName(itemDef(id).name.toLowerCase()) }), 'warn');
     this.ctl.send({ c: 'useRuneOn', slot, id: cid });
   }
 
@@ -817,7 +834,7 @@ export class HUD {
     if (!id) return;
     const inv = this.s.inventory;
     const slot = inv.slots.findIndex((st, idx) => idx < inv.size() && st?.id === id);
-    if (slot < 0) return this.log(`You have no ${itemDef(id).name.toLowerCase()} left.`, 'warn');
+    if (slot < 0) return this.log(t('You have no {item} left.', { item: trName(itemDef(id).name.toLowerCase()) }), 'warn');
     this.ctl.send({ c: 'useRuneAt', slot, x, y });
   }
 
@@ -839,7 +856,7 @@ export class HUD {
       (i < POCKET_SLOTS ? this.pocketGrid : this.bagGrid).appendChild(d);
     }
     const bp = inv.equipment.backpack;
-    this.bagTitle.textContent = bp ? itemDef(bp.id).name : 'No backpack';
+    this.bagTitle.textContent = bp ? trName(itemDef(bp.id).name) : t('No backpack');
     this.bagGrid.hidden = !bp;
     if (this.wins.depot.open) this.renderDepot();
   }
@@ -850,25 +867,25 @@ export class HUD {
     const d = itemDef(st.id);
     const items: MenuItem[] = [];
     const eq = equipSlotFor(d);
-    if (eq) items.push({ label: 'Equip', run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
-    else if (d.kind === 'consumable') items.push({ label: d.mana && !d.heal ? 'Drink' : 'Use', run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
+    if (eq) items.push({ label: t('Equip'), run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
+    else if (d.kind === 'consumable') items.push({ label: t(d.mana && !d.heal ? 'Drink' : 'Use'), run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
     else if (d.rune) {
-      items.push({ label: 'Use with crosshair…', run: () => this.beginAim(d.id) });
-      items.push({ label: !runeIsAimed(d.rune) ? 'Use on yourself' : 'Use on target', run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
-    } else if (stationForItem(d.id)) items.push({ label: `Use (${stationForItem(d.id)!.title.toLowerCase()})`, run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
-    else if (d.kind === 'tool' || RAW_FOOD_ITEMS.includes(d.id)) items.push({ label: 'Use', run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
-    if (d.kind === 'consumable' || d.rune) items.push({ label: 'Assign to hotkey…', run: () => this.beginAssign({ kind: 'item', id: d.id }) });
-    if (this.ctl.depot()) items.push({ label: 'Put in depot', run: () => this.ctl.send({ c: 'deposit', slot: i }) });
-    const t = this.ctl.trade();
-    if (t && d.id !== 'gold') {
-      const offered = t.mine.slots.includes(i);
+      items.push({ label: t('Use with crosshair…'), run: () => this.beginAim(d.id) });
+      items.push({ label: t(!runeIsAimed(d.rune) ? 'Use on yourself' : 'Use on target'), run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
+    } else if (stationForItem(d.id)) items.push({ label: t('Use ({station})', { station: trName(stationForItem(d.id)!.title).toLowerCase() }), run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
+    else if (d.kind === 'tool' || RAW_FOOD_ITEMS.includes(d.id)) items.push({ label: t('Use'), run: () => this.ctl.send({ c: 'useSlot', slot: i }) });
+    if (d.kind === 'consumable' || d.rune) items.push({ label: t('Assign to hotkey…'), run: () => this.beginAssign({ kind: 'item', id: d.id }) });
+    if (this.ctl.depot()) items.push({ label: t('Put in depot'), run: () => this.ctl.send({ c: 'deposit', slot: i }) });
+    const tv = this.ctl.trade();
+    if (tv && d.id !== 'gold') {
+      const offered = tv.mine.slots.includes(i);
       items.push({
-        label: offered ? 'Remove from trade' : 'Offer in trade',
-        run: () => this.ctl.send({ c: 'tradeOffer', slots: offered ? t.mine.slots.filter((x) => x !== i) : [...t.mine.slots, i], gold: t.mine.gold }),
+        label: t(offered ? 'Remove from trade' : 'Offer in trade'),
+        run: () => this.ctl.send({ c: 'tradeOffer', slots: offered ? tv.mine.slots.filter((x) => x !== i) : [...tv.mine.slots, i], gold: tv.mine.gold }),
       });
     }
-    items.push({ label: 'Look', run: () => this.log(`You see ${d.name}${st.qty > 1 ? ` (${st.qty})` : ''}. ${describeItem(d)}${d.note ? ` ${d.note}` : ''}`, 'info') });
-    items.push({ label: 'Drop', run: () => this.ctl.send({ c: 'drop', slot: i }) });
+    items.push({ label: t('Look'), run: () => this.log(`${t('You see {item}.', { item: `${trName(d.name)}${st.qty > 1 ? ` (${fmtNum(st.qty)})` : ''}` })} ${describeItemL(d)}${d.note ? ` ${trText(d.note)}` : ''}`, 'info') });
+    items.push({ label: t('Drop'), run: () => this.ctl.send({ c: 'drop', slot: i }) });
     this.showMenu(items, x, y);
   }
 
@@ -896,43 +913,44 @@ export class HUD {
     const items: MenuItem[] = [];
     // your own character: change how you look (the same designer as at character creation)
     if (id === this.ctl.pid) {
-      items.push({ label: 'Change appearance…', run: () => this.toggleWin('appearance', true) });
-      items.push({ label: 'Inspect yourself', run: () => this.inspect(id) });
+      items.push({ label: t('Change appearance…'), run: () => this.toggleWin('appearance', true) });
+      items.push({ label: t('Inspect yourself'), run: () => this.inspect(id) });
       const own = g.partyView(this.ctl.pid);
       if (own) {
-        if (own.leader === this.ctl.pid) items.push({ label: own.shared ? 'Disable shared experience' : 'Enable shared experience', run: () => this.ctl.send({ c: 'partyShare', on: !own.shared }) });
-        items.push({ label: 'Leave party', run: () => this.ctl.send({ c: 'partyLeave' }) });
+        if (own.leader === this.ctl.pid) items.push({ label: t(own.shared ? 'Disable shared experience' : 'Enable shared experience'), run: () => this.ctl.send({ c: 'partyShare', on: !own.shared }) });
+        items.push({ label: t('Leave party'), run: () => this.ctl.send({ c: 'partyLeave' }) });
       }
       this.showMenu(items, x, y);
       return;
     }
-    if (kind === 'enemy') items.push({ label: `Attack ${c.name}`, run: () => this.ctl.send({ c: 'attack', id }) });
-    items.push({ label: `Follow ${c.name}`, run: () => this.ctl.send({ c: 'follow', id }) });
-    items.push({ label: kind === 'player' ? `Inspect ${c.name}` : `Look at ${c.name}`, run: () => this.inspect(id) });
-    if (kind === 'npc') items.push({ label: `Talk to ${c.name}`, run: () => this.ctl.send({ c: 'talk', id }) });
+    const who = kind === 'player' ? c.name : trName(c.name);
+    if (kind === 'enemy') items.push({ label: t('Attack {name}', { name: who }), run: () => this.ctl.send({ c: 'attack', id }) });
+    items.push({ label: t('Follow {name}', { name: who }), run: () => this.ctl.send({ c: 'follow', id }) });
+    items.push({ label: kind === 'player' ? t('Inspect {name}', { name: who }) : t('Look at {name}', { name: who }), run: () => this.inspect(id) });
+    if (kind === 'npc') items.push({ label: t('Talk to {name}', { name: who }), run: () => this.ctl.send({ c: 'talk', id }) });
     if (kind === 'player') {
-      if (g.pvp) items.push({ label: `Attack ${c.name}`, run: () => this.ctl.send({ c: 'attack', id }) });
-      items.push({ label: `Trade with ${c.name}`, run: () => this.ctl.send({ c: 'tradeRequest', id }) });
+      if (g.pvp) items.push({ label: t('Attack {name}', { name: who }), run: () => this.ctl.send({ c: 'attack', id }) });
+      items.push({ label: t('Trade with {name}', { name: who }), run: () => this.ctl.send({ c: 'tradeRequest', id }) });
       const fv = g.friendsView(this.ctl.pid);
       const isFriend = fv.friends.some((f) => f.name.toLowerCase() === c.name.toLowerCase());
-      if (fv.requests.some((r) => r.id === id)) items.push({ label: `Accept ${c.name}'s friend request`, run: () => this.ctl.send({ c: 'friendAccept', id }) });
-      else if (!isFriend) items.push({ label: `Add ${c.name} as friend`, run: () => this.ctl.send({ c: 'friendRequest', id }) });
+      if (fv.requests.some((r) => r.id === id)) items.push({ label: t("Accept {name}'s friend request", { name: who }), run: () => this.ctl.send({ c: 'friendAccept', id }) });
+      else if (!isFriend) items.push({ label: t('Add {name} as friend', { name: who }), run: () => this.ctl.send({ c: 'friendRequest', id }) });
       const flag = g.partyFlag(this.ctl.pid, id);
       const mine = g.partyView(this.ctl.pid);
       const lead = !mine || mine.leader === this.ctl.pid;
-      if (flag === 2) items.push({ label: `Join ${c.name}'s party`, run: () => this.ctl.send({ c: 'partyJoin', id }) });
-      else if (flag === 3) items.push({ label: `Revoke ${c.name}'s invitation`, run: () => this.ctl.send({ c: 'partyRevoke', id }) });
-      else if (flag === 0 && lead) items.push({ label: `Invite ${c.name} to party`, run: () => this.ctl.send({ c: 'partyInvite', id }) });
-      if (flag === 1 && mine?.leader === this.ctl.pid) items.push({ label: `Pass leadership to ${c.name}`, run: () => this.ctl.send({ c: 'partyLeader', id }) });
-      items.push({ label: `Heal ${c.name} (exura sio)`, run: () => this.ctl.send({ c: 'cast', spell: 'exura_sio', param: c.name }), disabled: !this.s.spells.has('exura_sio') });
-      items.push({ label: 'Message…', run: () => this.focusChat(`${c.name}, `) });
+      if (flag === 2) items.push({ label: t("Join {name}'s party", { name: who }), run: () => this.ctl.send({ c: 'partyJoin', id }) });
+      else if (flag === 3) items.push({ label: t("Revoke {name}'s invitation", { name: who }), run: () => this.ctl.send({ c: 'partyRevoke', id }) });
+      else if (flag === 0 && lead) items.push({ label: t('Invite {name} to party', { name: who }), run: () => this.ctl.send({ c: 'partyInvite', id }) });
+      if (flag === 1 && mine?.leader === this.ctl.pid) items.push({ label: t('Pass leadership to {name}', { name: who }), run: () => this.ctl.send({ c: 'partyLeader', id }) });
+      items.push({ label: t('Heal {name} (exura sio)', { name: who }), run: () => this.ctl.send({ c: 'cast', spell: 'exura_sio', param: c.name }), disabled: !this.s.spells.has('exura_sio') });
+      items.push({ label: t('Message…'), run: () => this.focusChat(`${c.name}, `) });
     }
     const pv = g.partyView(this.ctl.pid);
     if (pv) {
-      if (pv.leader === this.ctl.pid) items.push({ label: pv.shared ? 'Disable shared experience' : 'Enable shared experience', run: () => this.ctl.send({ c: 'partyShare', on: !pv.shared }) });
-      items.push({ label: 'Leave party', run: () => this.ctl.send({ c: 'partyLeave' }) });
+      if (pv.leader === this.ctl.pid) items.push({ label: t(pv.shared ? 'Disable shared experience' : 'Enable shared experience'), run: () => this.ctl.send({ c: 'partyShare', on: !pv.shared }) });
+      items.push({ label: t('Leave party'), run: () => this.ctl.send({ c: 'partyLeave' }) });
     }
-    items.push({ label: 'Look', run: () => this.log(`You see ${this.renderer.describeHover() || c.name}.`, 'info') });
+    items.push({ label: t('Look'), run: () => this.log(t('You see {item}.', { item: trText(this.renderer.describeHover()) || who }), 'info') });
     this.showMenu(items, x, y);
   }
 
@@ -942,10 +960,10 @@ export class HUD {
    */
   clickPlayer(id: number, x: number, y: number): void {
     const g = this.ctl.game;
-    const t = g.getPlayer(id);
-    if (!g.pvp || !t || id === this.ctl.pid) return this.creatureMenu('player', id, x, y);
-    if (this.s.player.secure && g.skullOf(t) === 0) {
-      this.log('Secure mode is on: you cannot attack unmarked players. Use the "PvP: secure" button to turn it off.', 'warn');
+    const tp = g.getPlayer(id);
+    if (!g.pvp || !tp || id === this.ctl.pid) return this.creatureMenu('player', id, x, y);
+    if (this.s.player.secure && g.skullOf(tp) === 0) {
+      this.log(t('Secure mode is on: you cannot attack unmarked players. Use the "Secure" button to turn it off.'), 'warn');
       return this.creatureMenu('player', id, x, y);
     }
     this.ctl.send({ c: 'attack', id });
@@ -1004,11 +1022,11 @@ export class HUD {
     const outer = el('div', 'hotbar', this.bottom);
     // shared cooldowns, so you can see when you may cast or drink again
     const strip = el('div', 'cd-strip', outer);
-    const groups: Array<[CooldownGroup, string]> = [['attack', 'Attack'], ['heal', 'Healing'], ['support', 'Support'], ['potion', 'Potions']];
+    const groups: Array<[CooldownGroup, string]> = [['attack', k('Attack')], ['heal', k('Healing')], ['support', k('Support')], ['potion', k('Potions')]];
     for (const [g, label] of groups) {
       const item = el('div', `cd-item cd-${g}`, strip);
-      item.title = `${label}: ${GROUP_COOLDOWN[g]} s shared cooldown`;
-      el('span', 'cd-label', item, label);
+      item.title = t('{group}: {s} s shared cooldown', { group: t(label), s: GROUP_COOLDOWN[g] });
+      el('span', 'cd-label', item, t(label));
       const barEl = el('div', 'cd-bar', item);
       const fill = el('div', 'cd-fill', barEl);
       const secs = el('span', 'cd-secs', item);
@@ -1016,7 +1034,7 @@ export class HUD {
     }
     const bar = el('div', 'hot-row', outer);
     const bar2 = el('div', 'hot-row hot-row-ctrl', outer);
-    bar2.title = 'Ctrl+1 … Ctrl+0 (or Alt+1 … Alt+0). In full screen your browser lets the game have Ctrl+number.';
+    bar2.title = t('Ctrl+1 … Ctrl+0 (or Alt+1 … Alt+0). In full screen your browser lets the game have Ctrl+number.');
     for (let i = 0; i < HOTBAR_SIZE; i++) {
       const btn = el('button', 'hot-slot', i < 12 ? bar : bar2);
       btn.type = 'button';
@@ -1039,8 +1057,8 @@ export class HUD {
         }
         if (e.button === 2) {
           this.showMenu([
-            { label: 'Clear hotkey', run: () => { this.hotbar[i] = null; this.storeHotbar(); this.renderHotbar(); } },
-            { label: 'Open spellbook to assign', run: () => this.openWin('spells') },
+            { label: t('Clear hotkey'), run: () => { this.hotbar[i] = null; this.storeHotbar(); this.renderHotbar(); } },
+            { label: t('Open spellbook to assign'), run: () => this.openWin('spells') },
           ], e.clientX, e.clientY);
           return;
         }
@@ -1053,7 +1071,7 @@ export class HUD {
   private beginAssign(entry: HotbarEntry): void {
     this.assigning = entry;
     this.root.classList.add('assigning');
-    this.toast('Click a hotkey slot to assign it.');
+    this.toast(t('Click a hotkey slot to assign it.'));
   }
 
   private renderHotbar(): void {
@@ -1062,7 +1080,7 @@ export class HUD {
       e.count.textContent = '';
       if (!h) {
         e.icon.hidden = true;
-        e.btn.title = `Hotkey ${hotkeyName(i)} — empty. Assign from the spellbook or an item's right-click menu.`;
+        e.btn.title = t("Hotkey {key} — empty. Assign from the spellbook or an item's right-click menu.", { key: hotkeyName(i) });
         e.btn.classList.add('empty');
         return;
       }
@@ -1071,14 +1089,14 @@ export class HUD {
       if (h.kind === 'spell') {
         const sp = SPELLS[h.id];
         e.icon.src = spellIcon(h.id);
-        e.btn.title = `${sp.name} — "${sp.words}" · ${sp.mana} mana${this.s.spells.has(h.id) ? '' : ' (not learned)'}`;
+        e.btn.title = `${trName(sp.name)} — "${sp.words}" · ${t('{n} mana', { n: sp.mana })}${this.s.spells.has(h.id) ? '' : ` ${t('(not learned)')}`}`;
         e.btn.classList.toggle('locked', !this.s.spells.has(h.id));
       } else {
         const d = itemDef(h.id);
         e.icon.src = itemIcon(h.id);
         const n = this.s.inventory.count(h.id);
         e.count.textContent = String(n);
-        e.btn.title = `${d.name} (${n})`;
+        e.btn.title = `${trName(d.name)} (${fmtNum(n)})`;
         e.btn.classList.toggle('locked', n === 0);
       }
     });
@@ -1099,7 +1117,7 @@ export class HUD {
     const inv = this.s.inventory;
     const slot = inv.slots.findIndex((st, idx) => idx < inv.size() && st?.id === h.id);
     if (slot < 0) {
-      this.log(`You have no ${itemDef(h.id).name.toLowerCase()} left.`, 'warn');
+      this.log(t('You have no {item} left.', { item: trName(itemDef(h.id).name.toLowerCase()) }), 'warn');
       return;
     }
     const r = itemDef(h.id).rune;
@@ -1128,7 +1146,7 @@ export class HUD {
         el('span', 'battle-dot', row);
         const skull = el('span', 'battle-skull', row, '☠');
         const info = el('div', 'battle-info', row);
-        const name = el('span', 'battle-name', info, c.name);
+        const name = el('span', 'battle-name', info, c.kind === 'player' ? c.name : trName(c.name));
         const bar = el('div', 'battle-bar', info);
         const fill = el('div', 'battle-fill', bar);
         row.dataset.cid = String(c.id);
@@ -1150,7 +1168,7 @@ export class HUD {
       }
       if (c.kind === 'player') {
         const pl = g.getPlayer(c.id);
-        const label = pl ? `${pl.name} · ${pl.level} ${VOCATIONS[pl.vocation].name}` : c.name;
+        const label = pl ? `${pl.name} · ${pl.level} ${trName(VOCATIONS[pl.vocation].name)}` : c.name;
         if (r.name.textContent !== label) r.name.textContent = label;
         const sk = pl ? g.skullOf(pl) : 0;
         const skCls = sk === 2 ? 'battle-skull red' : sk === 1 ? 'battle-skull white' : 'battle-skull';
@@ -1159,6 +1177,7 @@ export class HUD {
       }
       const frac = c.hp / c.maxHp;
       r.fill.style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`;
+      if (c.kind !== 'player') { const nm = trName(c.name); if (r.name.textContent !== nm) r.name.textContent = nm; }
       r.fill.style.background = c.kind === 'npc' ? '#6fc8ff' : hpColor(frac);
       r.row.classList.toggle('targeted', me.targetId === c.id);
       if (this.battleEl.children[i] !== r.row) this.battleEl.insertBefore(r.row, this.battleEl.children[i] ?? null);
@@ -1216,8 +1235,8 @@ export class HUD {
     const c = el('div', 'panel console', this.bottom);
     const tabs = el('div', 'log-tabs', c);
     const tabBtns: HTMLButtonElement[] = [];
-    for (const [id, label] of [['default', 'Default'], ['server', 'Server Log'], ['loot', 'Loot']] as const) {
-      const b = button(tabs, label, () => {
+    for (const [id, label] of [['default', k('Default')], ['server', k('Server Log')], ['loot', k('Loot')]] as const) {
+      const b = button(tabs, t(label), () => {
         this.logEl.className = `log tab-${id}`;
         tabBtns.forEach((x) => x.classList.toggle('on', x === b));
         this.logEl.scrollTop = this.logEl.scrollHeight;
@@ -1227,7 +1246,7 @@ export class HUD {
     this.logEl = el('div', 'log tab-default', c);
     const row = el('div', 'chat-row', c);
     this.chatInput = el('input', 'chat-input', row);
-    this.chatInput.placeholder = 'Press Enter to talk — spell words cast spells';
+    this.chatInput.placeholder = t('Press Enter to talk — spell words cast spells');
     this.chatInput.maxLength = 140;
     this.chatInput.addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -1284,8 +1303,8 @@ export class HUD {
   private makeWin(key: keyof HUD['wins'], title: string, cls: string): Win {
     const root = el('div', `window ${cls}`, this.root);
     const head = el('div', 'win-head', root);
-    el('span', 'win-title', head, title);
-    button(head, '✕', () => this.closeWin(key), 'btn tiny');
+    el('span', 'win-title', head, t(title));
+    button(head, '✕', () => this.closeWin(key), 'btn tiny').setAttribute('aria-label', t('Close'));
     const body = el('div', 'win-body', root);
     root.hidden = true;
     const w: Win = { root, body, open: false };
@@ -1393,27 +1412,27 @@ export class HUD {
     }
     w.open = true;
     w.root.hidden = false;
-    (w.root.querySelector('.win-title') as HTMLElement).textContent = `${view.npcName} — ${view.role}`;
+    (w.root.querySelector('.win-title') as HTMLElement).textContent = `${trName(view.npcName)} — ${trName(view.role)}`;
     const b = w.body;
     b.replaceChildren();
-    el('p', 'npc-text', b, view.text);
+    el('p', 'npc-text', b, trText(view.text));
     const gold = this.s.inventory.count('gold');
 
     if (view.shop) {
       const shop = el('div', 'shop', b);
-      el('div', 'shop-gold', shop, `You carry ${fmtGold(view.shop.gold)} gold · capacity ${Math.floor(this.s.player.capacity - this.s.inventory.weight())} oz free`);
+      el('div', 'shop-gold', shop, t('You carry {gold} gold · capacity {cap} oz free', { gold: view.shop.gold, cap: Math.floor(this.s.player.capacity - this.s.inventory.weight()) }));
       const cols = el('div', 'shop-cols', shop);
       if (view.shop.sells.length) {
         const sell = el('div', 'shop-col', cols);
-        el('div', 'panel-title', sell, 'Buy');
+        el('div', 'panel-title', sell, t('Buy'));
         for (const it of view.shop.sells) {
           const d = itemDef(it.id);
           const row = el('div', 'shop-row', sell);
           const ic = el('div', 'slot mini', row);
           paintSlot(ic, { id: it.id, qty: 1 });
           const info = el('div', 'shop-info', row);
-          el('div', 'shop-name', info, d.name);
-          el('div', 'shop-desc', info, describeItem(d));
+          el('div', 'shop-name', info, trName(d.name));
+          el('div', 'shop-desc', info, describeItemL(d));
           const btns = el('div', 'shop-btns', row);
           const qtys = d.stackable ? [1, 10, 50] : [1];
           for (const q of qtys) {
@@ -1424,40 +1443,40 @@ export class HUD {
       }
       if (view.shop.buys.length) {
         const buy = el('div', 'shop-col', cols);
-        el('div', 'panel-title', buy, 'Sell');
+        el('div', 'panel-title', buy, t('Sell'));
         const owned = view.shop.buys.filter((x) => x.have > 0);
-        if (!owned.length) el('div', 'shop-empty', buy, 'You have nothing this trader wants.');
+        if (!owned.length) el('div', 'shop-empty', buy, t('You have nothing this trader wants.'));
         for (const it of owned) {
           const d = itemDef(it.id);
           const row = el('div', 'shop-row', buy);
           const ic = el('div', 'slot mini', row);
           paintSlot(ic, { id: it.id, qty: it.have });
           const info = el('div', 'shop-info', row);
-          el('div', 'shop-name', info, d.name);
-          el('div', 'shop-desc', info, `${fmtGold(it.price)} gold each`);
+          el('div', 'shop-name', info, trName(d.name));
+          el('div', 'shop-desc', info, t('{price} gold each', { price: it.price }));
           const btns = el('div', 'shop-btns', row);
-          button(btns, `Sell 1`, () => this.ctl.send({ c: 'dialogue', action: `sell:${it.id}:1` }), 'btn small');
-          if (it.have > 1) button(btns, `All ${it.have}`, () => this.ctl.send({ c: 'dialogue', action: `sell:${it.id}:${it.have}` }), 'btn small');
+          button(btns, t('Sell 1'), () => this.ctl.send({ c: 'dialogue', action: `sell:${it.id}:1` }), 'btn small');
+          if (it.have > 1) button(btns, t('All {n}', { n: it.have }), () => this.ctl.send({ c: 'dialogue', action: `sell:${it.id}:${it.have}` }), 'btn small');
         }
       }
     }
 
     if (view.bank) {
       const bank = el('div', 'bank', b);
-      el('div', 'bank-line', bank, `Balance: ${fmtGold(view.bank.balance)} gold · carrying ${fmtGold(view.bank.gold)} gold`);
+      el('div', 'bank-line', bank, t('Balance: {balance} gold · carrying {gold} gold', { balance: view.bank.balance, gold: view.bank.gold }));
       const row = el('div', 'bank-row', bank);
       const amt = el('input', 'num-input', row);
       amt.type = 'number';
       amt.min = '1';
-      amt.placeholder = 'Amount';
+      amt.placeholder = t('Amount');
       const n = () => Math.max(0, Math.floor(Number(amt.value) || 0));
-      button(row, 'Deposit', () => n() && this.ctl.send({ c: 'dialogue', action: `deposit:${n()}` }), 'btn small');
-      button(row, 'Withdraw', () => n() && this.ctl.send({ c: 'dialogue', action: `withdraw:${n()}` }), 'btn small');
+      button(row, t('Deposit'), () => n() && this.ctl.send({ c: 'dialogue', action: `deposit:${n()}` }), 'btn small');
+      button(row, t('Withdraw'), () => n() && this.ctl.send({ c: 'dialogue', action: `withdraw:${n()}` }), 'btn small');
       const row2 = el('div', 'bank-row', bank);
       const who = el('input', 'text-input', row2);
-      who.placeholder = 'Transfer to (character name)';
+      who.placeholder = t('Transfer to (character name)');
       who.maxLength = 20;
-      button(row2, 'Transfer', () => {
+      button(row2, t('Transfer'), () => {
         const name = who.value.trim();
         if (n() && name) this.ctl.send({ c: 'dialogue', action: `transfer:${n()}:${name}` });
       }, 'btn small');
@@ -1473,9 +1492,9 @@ export class HUD {
         ic.src = spellIcon(o.id);
         ic.alt = '';
         const info = el('div', 'spell-info', row);
-        el('div', 'spell-name', info, `${sp.name} — "${sp.words}"`);
-        el('div', 'spell-desc', info, `Level ${o.level} · ${sp.mana} mana · ${sp.vocations.map((v) => VOCATIONS[v].name).join(', ')}`);
-        const label = o.known ? 'Known' : !o.allowed ? 'Not your vocation' : `Learn (${fmtGold(o.price)})`;
+        el('div', 'spell-name', info, `${trName(sp.name)} — "${sp.words}"`);
+        el('div', 'spell-desc', info, `${t('Level {n}', { n: o.level })} · ${t('{n} mana', { n: sp.mana })} · ${sp.vocations.map((v) => trName(VOCATIONS[v].name)).join(', ')}`);
+        const label = o.known ? t('Known') : !o.allowed ? t('Not your vocation') : t('Learn ({price})', { price: o.price });
         const bb = button(row, label, () => this.ctl.send({ c: 'dialogue', action: `learn:${o.id}` }), 'btn small');
         bb.disabled = o.known || !o.allowed || gold < o.price || this.s.player.level < o.level;
       }
@@ -1483,7 +1502,7 @@ export class HUD {
 
     const opts = el('div', 'npc-options', b);
     for (const o of view.options) {
-      const bb = button(opts, o.label, () => this.ctl.send({ c: 'dialogue', action: o.action }), 'npc-opt');
+      const bb = button(opts, trText(o.label), () => this.ctl.send({ c: 'dialogue', action: o.action }), 'npc-opt');
       bb.disabled = !!o.disabled;
     }
   }
@@ -1508,8 +1527,8 @@ export class HUD {
     let last = -1;
     depot.forEach((x, i) => { if (x) last = i; });
     const used = depot.filter(Boolean).length;
-    el('p', 'hint', b, `Your personal depot is shared by every locker in the world. Click an item to take it; right-click (or Ctrl-click) backpack items to store them. ${used} of ${cap} slots used${cap < PREMIUM_DEPOT_SLOTS ? ` (premium: ${PREMIUM_DEPOT_SLOTS})` : ''}.`);
-    if (used > cap) el('p', 'hint warn', b, 'Your depot holds more than a free account may fill. Everything stays; new items fit once it is back under the limit.');
+    el('p', 'hint', b, `${t('Your personal depot is shared by every locker in the world. Click an item to take it; right-click (or Ctrl-click) backpack items to store them.')} ${cap < PREMIUM_DEPOT_SLOTS ? t('{used} of {cap} slots used (premium: {premium}).', { used, cap, premium: PREMIUM_DEPOT_SLOTS }) : t('{used} of {cap} slots used.', { used, cap })}`);
+    if (used > cap) el('p', 'hint warn', b, t('Your depot holds more than a free account may fill. Everything stays; new items fit once it is back under the limit.'));
     const grid = el('div', 'bag-grid depot-grid', b);
     for (let i = 0; i < Math.min(depot.length, Math.max(cap, last + 1)); i++) {
       const d = el('div', 'slot', grid);
@@ -1527,15 +1546,15 @@ export class HUD {
     const s = this.s;
     const voc = s.player.vocation;
     const st = this.ctl.game.stages;
-    const key = `${voc}|${s.player.level}|${st.name}|${JSON.stringify(s.skills)}|${NONCOMBAT_SKILLS.map((d) => Math.floor(s.gathering[d.id])).join(',')}`;
+    const key = `${getLang()}|${voc}|${s.player.level}|${st.name}|${JSON.stringify(s.skills)}|${NONCOMBAT_SKILLS.map((d) => Math.floor(s.gathering[d.id])).join(',')}`;
     if (key === this.skillsKey) return;
     this.skillsKey = key;
     const box = this.skillsEl;
     box.replaceChildren();
     // server rates (exp stages): what this character earns right now
     if (!isClassic(st)) {
-      const rates = el('div', 'skill-rates', box, `Rates · ${expStageLine(st, s.player.level)}`);
-      rates.title = `Server rates (${st.name}):\n${stagesTable(st).join('\n')}`;
+      const rates = el('div', 'skill-rates', box, `${t('Rates')} · ${trText(expStageLine(st, s.player.level))}`);
+      rates.title = `${t('Server rates ({name}):', { name: t(st.name) })}\n${stagesTable(st).map((x) => trText(x)).join('\n')}`;
     }
     const row = (name: string, level: number, frac: number, tip: string) => {
       const r = el('div', 'skill-row', box);
@@ -1550,18 +1569,19 @@ export class HUD {
       const p = s.skills[k];
       const need = triesForNext(k, p.level, voc);
       const pct = Math.floor(skillProgress(k, p, voc) * 100);
-      const how = k === 'magic' ? 'mana to spend' : k === 'shielding' ? 'blows to block' : 'attacks';
-      row(SKILL_NAMES[k], p.level, skillProgress(k, p, voc), `${SKILL_NAMES[k]} ${p.level} — ${pct}% to the next level (${fmtGold(Math.max(0, Math.ceil(need - p.tries)))} more ${how})`);
+      const more = Math.max(0, Math.ceil(need - p.tries));
+      const how = k === 'magic' ? t('{n} more mana to spend', { n: more }) : k === 'shielding' ? t('{n} more blows to block', { n: more }) : t('{n} more attacks', { n: more });
+      row(trName(SKILL_NAMES[k]), p.level, skillProgress(k, p, voc), `${trName(SKILL_NAMES[k])} ${p.level} — ${t('{pct}% to the next level', { pct })} (${how})`);
     }
     // gathering and production skills come from the registry (gathering/skills.ts)
     for (const [kind, head] of [['gathering', 'Gathering'], ['production', 'Production']] as const) {
-      el('div', 'skill-head', box, head);
+      el('div', 'skill-head', box, t(head));
       for (const d of NONCOMBAT_SKILLS) {
         if (d.kind !== kind) continue;
         const xp = s.gathering[d.id];
         const lv = gatherLevelForXp(xp);
         const left = lv >= WC_MAX_LEVEL ? 0 : gatherXpForLevel(lv + 1) - xp;
-        row(d.name, lv, gatherProgress(xp), `${d.name} ${lv} — ${fmtGold(Math.floor(xp))} xp${lv < WC_MAX_LEVEL ? `, ${fmtGold(Math.ceil(left))} to level ${lv + 1}` : ' (maximum)'}. ${d.hint}`);
+        row(trName(d.name), lv, gatherProgress(xp), `${trName(d.name)} ${lv} — ${t('{xp} xp', { xp: Math.floor(xp) })}${lv < WC_MAX_LEVEL ? `, ${t('{left} to level {next}', { left: Math.ceil(left), next: lv + 1 })}` : ` ${t('(maximum)')}`}. ${trText(d.hint)}`);
       }
     }
   }
@@ -1593,7 +1613,7 @@ export class HUD {
     const st = this.cw;
     b.replaceChildren();
     const title = w.root.querySelector('.win-title');
-    if (title) title.textContent = view.title;
+    if (title) title.textContent = trName(view.title);
     const groups = [...new Set(view.recipes.map((r) => r.group))];
     if (st.station !== view.station || !groups.includes(st.tab)) {
       // open on the best metal you can work right now
@@ -1601,25 +1621,25 @@ export class HUD {
       const usable = view.recipes.filter((r) => !r.locked);
       st.tab = (usable.find((r) => r.can > 0) ? [...usable].reverse().find((r) => r.can > 0)!.group : usable[usable.length - 1]?.group) ?? groups[0];
     }
-    const name = SKILL_NAMES[view.skill];
-    el('div', 'shop-gold', b, `${name} level ${view.level}.${view.note ? ` ${view.note}` : ''} Walking away stops the work.`);
+    const name = trName(SKILL_NAMES[view.skill]);
+    el('div', 'shop-gold', b, `${t('{skill} level {n}.', { skill: name, n: view.level })}${view.note ? ` ${trText(view.note)}` : ''} ${t('Walking away stops the work.')}`);
     if (view.making) {
       const r = view.recipes.find((x) => x.id === view.making!.recipe);
       const row = el('div', 'craft-making', b);
-      el('span', '', row, `${r?.label ? r.label : `Making ${r ? itemDef(r.output.id).name.toLowerCase() : '…'}`} — ${view.making.left} left`);
-      button(row, 'Stop', () => this.ctl.send({ c: 'craft', recipe: '', count: 0 }), 'btn small');
+      el('span', '', row, `${r?.label ? trName(r.label) : t('Making {item}', { item: r ? trName(itemDef(r.output.id).name.toLowerCase()) : '…' })} — ${t('{n} left', { n: view.making.left })}`);
+      button(row, t('Stop'), () => this.ctl.send({ c: 'craft', recipe: '', count: 0 }), 'btn small');
     }
     if (groups.length > 1) {
       const tabs = el('div', 'market-tabs', b);
       for (const g of groups) {
-        button(tabs, g, () => {
+        button(tabs, trName(g), () => {
           st.tab = g;
           this.drawCraft(view);
         }, `btn small${st.tab === g ? ' on' : ''}`);
       }
     }
     const amount = el('div', 'bank-row', b);
-    el('span', 'hint', amount, 'Make X:');
+    el('span', 'hint', amount, t('Make X:'));
     const qi = el('input', 'num-input qty', amount);
     qi.type = 'number';
     qi.min = '1';
@@ -1633,25 +1653,25 @@ export class HUD {
       if (r.group !== st.tab) continue;
       const d = itemDef(r.output.id);
       const locked = r.locked;
-      const rname = SKILL_NAMES[r.skill];
+      const rname = trName(SKILL_NAMES[r.skill]);
       const row = el('div', `shop-row${locked ? ' locked' : ''}`, list);
       const ic = el('div', 'slot mini', row);
       paintSlot(ic, { id: r.output.id, qty: r.output.qty });
-      ic.title = describeItem(d);
+      ic.title = describeItemL(d);
       const info = el('div', 'shop-info', row);
-      el('div', 'shop-name', info, r.label ?? `${r.output.qty > 1 ? `${r.output.qty}× ` : ''}${d.name}`);
-      const needs = r.inputs.map((it) => `${it.qty} ${itemDef(it.id).name.toLowerCase()} (${it.have})`).join(' + ');
-      el('div', 'shop-desc', info, `${r.skill === view.skill ? 'Level' : `${rname} level`} ${r.level} · ${needs} · ${r.xp} xp${r.chance < 100 ? ` · ${r.chance}% success` : ''}${r.hasTool ? '' : ` · needs ${itemDef(r.tool!).name.toLowerCase()}`}`);
+      el('div', 'shop-name', info, r.label ? trName(r.label) : `${r.output.qty > 1 ? `${r.output.qty}× ` : ''}${trName(d.name)}`);
+      const needs = r.inputs.map((it) => `${fmtNum(it.qty)}× ${trName(itemDef(it.id).name.toLowerCase())} (${fmtNum(it.have)})`).join(' + ');
+      el('div', 'shop-desc', info, `${r.skill === view.skill ? t('Level {n}', { n: r.level }) : t('{skill} level {n}', { skill: rname, n: r.level })} · ${needs} · ${t('{xp} xp', { xp: r.xp })}${r.chance < 100 ? ` · ${t('{pct}% success', { pct: r.chance })}` : ''}${r.hasTool ? '' : ` · ${t('needs {item}', { item: trName(itemDef(r.tool!).name.toLowerCase()) })}`}`);
       const btns = el('div', 'shop-btns', row);
       const make = (label: string, n: () => number) => {
         const bt = button(btns, label, () => this.ctl.send({ c: 'craft', recipe: r.id, count: n() }), 'btn small');
         bt.disabled = locked || r.can <= 0;
-        if (locked) bt.title = `Needs ${rname.toLowerCase()} level ${r.level}`;
+        if (locked) bt.title = t('Needs {skill} level {n}', { skill: rname.toLowerCase(), n: r.level });
       };
       make('1', () => 1);
       make('5', () => 5);
       make('X', () => st.qty);
-      make('All', () => Math.max(1, Math.min(MAX_BATCH, r.can)));
+      make(t('All'), () => Math.max(1, Math.min(MAX_BATCH, r.can)));
     }
   }
 
@@ -1691,11 +1711,11 @@ export class HUD {
     const st = this.mk;
     b.replaceChildren();
     const carried = this.s.inventory.count('gold');
-    el('div', 'shop-gold', b, `Bank ${fmtGold(view.bank)} gold · carrying ${fmtGold(carried)} gold. Purchases are paid from the bank (then from your backpack) and delivered to your depot.`);
-    if (!view.enabled) el('p', 'hint warn', b, 'The market is closed for now. Your offers and items are safe.');
+    el('div', 'shop-gold', b, t('Bank {bank} gold · carrying {gold} gold. Purchases are paid from the bank (then from your backpack) and delivered to your depot.', { bank: view.bank, gold: carried }));
+    if (!view.enabled) el('p', 'hint warn', b, t('The market is closed for now. Your offers and items are safe.'));
     const tabs = el('div', 'market-tabs', b);
     const mine = view.offers.filter((o) => o.mine);
-    for (const [id, label] of [['browse', 'Buy'], ['sell', 'Sell'], ['mine', `My offers (${mine.length})`]] as const) {
+    for (const [id, label] of [['browse', t('Buy')], ['sell', t('Sell')], ['mine', t('My offers ({n})', { n: mine.length })]] as const) {
       button(tabs, label, () => {
         st.tab = id;
         this.drawMarket(view);
@@ -1721,31 +1741,31 @@ export class HUD {
     if (st.tab === 'browse') {
       const sr = el('div', 'bank-row', b);
       const q = el('input', 'text-input', sr);
-      q.placeholder = 'Search items…';
+      q.placeholder = t('Search items…');
       q.value = st.search;
       stop(q);
       const list = el('div', 'market-list', b);
       const fill = () => {
         list.replaceChildren();
         const needle = st.search.trim().toLowerCase();
-        const shown = view.offers.filter((o) => !needle || itemDef(o.item).name.toLowerCase().includes(needle));
-        if (!shown.length) el('div', 'shop-empty', list, view.offers.length ? 'No offers match.' : 'Nobody is selling anything yet.');
+        const shown = view.offers.filter((o) => !needle || itemDef(o.item).name.toLowerCase().includes(needle) || trName(itemDef(o.item).name).toLowerCase().includes(needle));
+        if (!shown.length) el('div', 'shop-empty', list, t(view.offers.length ? 'No offers match.' : 'Nobody is selling anything yet.'));
         for (const o of shown.slice(0, 200)) {
           const d = itemDef(o.item);
           const r = el('div', 'shop-row', list);
           itemCell(r, o.item, o.qty);
           const info = el('div', 'shop-info', r);
-          el('div', 'shop-name', info, `${o.qty}× ${d.name}`);
-          el('div', 'shop-desc', info, `${fmtGold(o.price)} gold each · from ${o.seller}${o.mine ? ' (you)' : ''}`);
+          el('div', 'shop-name', info, `${fmtNum(o.qty)}× ${trName(d.name)}`);
+          el('div', 'shop-desc', info, `${t('{price} gold each', { price: o.price })} · ${t('from {seller}', { seller: o.seller })}${o.mine ? ` ${t('(you)')}` : ''}`);
           const btns = el('div', 'shop-btns', r);
           if (o.mine) {
-            el('span', 'shop-empty', btns, 'your offer');
+            el('span', 'shop-empty', btns, t('your offer'));
             continue;
           }
           let n = Math.min(o.qty, st.buyQty.get(o.id) ?? 1);
           const buy = button(btns, '', () => this.ctl.send({ c: 'marketBuy', id: o.id, qty: n }), 'btn small');
           const label = () => {
-            buy.textContent = `Buy ${n} · ${fmtGold(n * o.price)}`;
+            buy.textContent = t('Buy {n} · {price}', { n, price: n * o.price });
             buy.disabled = !view.enabled || n * o.price > view.bank + carried;
           };
           if (o.qty > 1) numInput(btns, n, 1, o.qty, (v) => { n = v; st.buyQty.set(o.id, v); label(); }).classList.add('qty');
@@ -1758,11 +1778,11 @@ export class HUD {
       });
       fill();
     } else if (st.tab === 'sell') {
-      el('p', 'hint', b, `Pick an item from your depot or backpack, then set how many and the price for each. Listing costs 1% of the total (at least 1 gold) from your bank. The items wait in the market until someone buys them; the gold goes to your bank, even while you are away.`);
+      el('p', 'hint', b, t('Pick an item from your depot or backpack, then set how many and the price for each. Listing costs 1% of the total (at least 1 gold) from your bank. The items wait in the market until someone buys them; the gold goes to your bank, even while you are away.'));
       const cols = el('div', 'shop-cols', b);
       const pick = (title: string, from: 'depot' | 'inv', stacks: Array<ItemStack | null>) => {
         const c = el('div', 'shop-col', cols);
-        el('div', 'panel-title', c, title);
+        el('div', 'panel-title', c, t(title));
         const grid = el('div', 'bag-grid market-pick', c);
         let any = false;
         stacks.forEach((x, i) => {
@@ -1779,7 +1799,7 @@ export class HUD {
             this.drawMarket(view);
           });
         });
-        if (!any) el('div', 'shop-empty', c, 'Nothing to sell here.');
+        if (!any) el('div', 'shop-empty', c, t('Nothing to sell here.'));
       };
       pick('Depot', 'depot', view.depot);
       const inv = this.s.inventory;
@@ -1788,39 +1808,39 @@ export class HUD {
       const stack = sel ? (sel.from === 'depot' ? view.depot[sel.index] : inv.slots[sel.index]) : null;
       const form = el('div', 'market-form', b);
       if (!sel || !stack) {
-        el('div', 'shop-empty', form, 'Select an item to sell.');
+        el('div', 'shop-empty', form, t('Select an item to sell.'));
       } else {
         const d = itemDef(stack.id);
         const r = el('div', 'bank-row', form);
         itemCell(r, stack.id, stack.qty);
-        el('span', 'shop-name', r, d.name);
-        el('span', 'dev-label', r, 'Amount');
+        el('span', 'shop-name', r, trName(d.name));
+        el('span', 'dev-label', r, t('Amount'));
         st.qty = Math.max(1, Math.min(stack.qty, st.qty));
         const summary = el('div', 'shop-desc', form);
-        const go = button(form, 'Create offer', () => this.ctl.send({ c: 'marketSell', from: sel.from, index: sel.index, qty: st.qty, price: st.price }), 'btn');
+        const go = button(form, t('Create offer'), () => this.ctl.send({ c: 'marketSell', from: sel.from, index: sel.index, qty: st.qty, price: st.price }), 'btn');
         const update = () => {
           const total = st.qty * st.price;
           const fee = marketFee(total);
-          summary.textContent = `${st.qty}× ${d.name} at ${fmtGold(st.price)} gold each = ${fmtGold(total)} gold. Listing fee: ${fmtGold(fee)} gold. Traders would pay ${fmtGold(d.value)} each.`;
+          summary.textContent = t('{qty}× {item} at {price} gold each = {total} gold. Listing fee: {fee} gold. Traders would pay {value} each.', { qty: st.qty, item: trName(d.name), price: st.price, total, fee, value: d.value });
           go.disabled = !view.enabled || st.price < 1 || fee > view.bank + carried;
         };
         numInput(r, st.qty, 1, stack.qty, (v) => { st.qty = v; update(); });
-        el('span', 'dev-label', r, 'Price each');
+        el('span', 'dev-label', r, t('Price each'));
         numInput(r, st.price, 1, MARKET_MAX_PRICE, (v) => { st.price = v; update(); });
         update();
       }
     } else {
       const list = el('div', 'market-list', b);
-      if (!mine.length) el('div', 'shop-empty', list, 'You have no offers. Use the Sell tab to list something.');
+      if (!mine.length) el('div', 'shop-empty', list, t('You have no offers. Use the Sell tab to list something.'));
       for (const o of mine) {
         const d = itemDef(o.item);
         const r = el('div', 'shop-row', list);
         itemCell(r, o.item, o.qty);
         const info = el('div', 'shop-info', r);
-        el('div', 'shop-name', info, `${o.qty}× ${d.name}`);
+        el('div', 'shop-name', info, `${fmtNum(o.qty)}× ${trName(d.name)}`);
         const days = Math.max(0, Math.ceil((o.expires - Date.now()) / 86_400_000));
-        el('div', 'shop-desc', info, `${fmtGold(o.price)} gold each · ends in ${days} day${days === 1 ? '' : 's'}`);
-        const bb = button(r, 'Cancel', () => this.ctl.send({ c: 'marketCancel', id: o.id }), 'btn small');
+        el('div', 'shop-desc', info, `${t('{price} gold each', { price: o.price })} · ${t('ends in {n} day|ends in {n} days', { n: days })}`);
+        const bb = button(r, t('Cancel'), () => this.ctl.send({ c: 'marketCancel', id: o.id }), 'btn small');
         bb.disabled = !view.enabled;
       }
     }
@@ -1830,50 +1850,50 @@ export class HUD {
 
   private renderTrade(): void {
     const w = this.wins.trade;
-    const t = this.ctl.trade();
+    const tv = this.ctl.trade();
     this.renderInventory();
-    if (!t) {
+    if (!tv) {
       w.open = false;
       w.root.hidden = true;
       return;
     }
     w.open = true;
     w.root.hidden = false;
-    (w.root.querySelector('.win-title') as HTMLElement).textContent = `Trade with ${t.partnerName}`;
+    (w.root.querySelector('.win-title') as HTMLElement).textContent = t('Trade with {name}', { name: tv.partnerName });
     const b = w.body;
     b.replaceChildren();
-    el('p', 'hint', b, 'Drag items from your backpack here (or onto the other player) to offer them; click an item in your offer to take it back. Changing an offer clears both acceptances; the trade happens only when both of you accept.');
+    el('p', 'hint', b, t('Drag items from your backpack here (or onto the other player) to offer them; click an item in your offer to take it back. Changing an offer clears both acceptances; the trade happens only when both of you accept.'));
     const cols = el('div', 'trade-cols', b);
     const side = (title: string, items: ItemStack[], gold: number, accepted: boolean, onClick?: (i: number) => void) => {
       const c = el('div', 'trade-col', cols);
-      el('div', 'panel-title', c, `${title}${accepted ? ' ✔ accepted' : ''}`);
+      el('div', 'panel-title', c, `${title}${accepted ? ` ✔ ${t('accepted')}` : ''}`);
       const grid = el('div', 'bag-grid', c);
       items.forEach((it, i) => {
         const d = el('div', 'slot', grid);
         paintSlot(d, it);
         if (onClick) {
-          d.title = `${itemDef(it.id).name} — click to take it back`;
+          d.title = `${trName(itemDef(it.id).name)} — ${t('click to take it back')}`;
           d.style.cursor = 'pointer';
           d.addEventListener('click', () => onClick(i));
         }
       });
-      if (!items.length) el('div', 'shop-empty', c, 'No items.');
-      el('div', 'trade-gold', c, `Gold: ${fmtGold(gold)}`);
+      if (!items.length) el('div', 'shop-empty', c, t('No items.'));
+      el('div', 'trade-gold', c, t('Gold: {gold}', { gold }));
       return c;
     };
-    const mine = side('Your offer', t.mine.items, t.mine.gold, t.mine.accepted, (i) => this.ctl.send({ c: 'tradeOffer', slots: t.mine.slots.filter((_, k) => k !== i), gold: t.mine.gold }));
-    side(`${t.partnerName}'s offer`, t.theirs.items, t.theirs.gold, t.theirs.accepted);
+    const mine = side(t('Your offer'), tv.mine.items, tv.mine.gold, tv.mine.accepted, (i) => this.ctl.send({ c: 'tradeOffer', slots: tv.mine.slots.filter((_, k) => k !== i), gold: tv.mine.gold }));
+    side(t("{name}'s offer", { name: tv.partnerName }), tv.theirs.items, tv.theirs.gold, tv.theirs.accepted);
     const gr = el('div', 'bank-row', mine);
     const gi = el('input', 'num-input', gr);
     gi.type = 'number';
     gi.min = '0';
-    gi.value = String(t.mine.gold);
+    gi.value = String(tv.mine.gold);
     gi.addEventListener('keydown', (e) => e.stopPropagation());
-    button(gr, 'Set gold', () => this.ctl.send({ c: 'tradeOffer', slots: t.mine.slots, gold: Math.max(0, Math.floor(Number(gi.value) || 0)) }), 'btn small');
+    button(gr, t('Set gold'), () => this.ctl.send({ c: 'tradeOffer', slots: tv.mine.slots, gold: Math.max(0, Math.floor(Number(gi.value) || 0)) }), 'btn small');
     const row = el('div', 'trade-actions', b);
-    const acc = button(row, t.mine.accepted ? 'Waiting for partner…' : 'Accept', () => this.ctl.send({ c: 'tradeAccept' }), 'btn');
-    acc.disabled = t.mine.accepted;
-    button(row, 'Cancel trade', () => this.ctl.send({ c: 'tradeCancel' }), 'btn');
+    const acc = button(row, t(tv.mine.accepted ? 'Waiting for partner…' : 'Accept'), () => this.ctl.send({ c: 'tradeAccept' }), 'btn');
+    acc.disabled = tv.mine.accepted;
+    button(row, t('Cancel trade'), () => this.ctl.send({ c: 'tradeCancel' }), 'btn');
   }
 
   // ---------------------------------------------------------------- appearance
@@ -1896,11 +1916,11 @@ export class HUD {
     };
     d.setGear(this.designerGear ? gearNow() : null);
     const opts = el('div', 'dev-row', b);
-    el('span', 'dev-label', opts, 'Preview');
-    const gb = button(opts, this.designerGear ? 'Worn gear: shown' : 'Worn gear: hidden', () => {
+    el('span', 'dev-label', opts, t('Preview'));
+    const gb = button(opts, t(this.designerGear ? 'Worn gear: shown' : 'Worn gear: hidden'), () => {
       this.designerGear = !this.designerGear;
       d.setGear(this.designerGear ? gearNow() : null);
-      gb.textContent = this.designerGear ? 'Worn gear: shown' : 'Worn gear: hidden';
+      gb.textContent = t(this.designerGear ? 'Worn gear: shown' : 'Worn gear: hidden');
       gb.classList.toggle('on', this.designerGear);
     }, `btn small${this.designerGear ? ' on' : ''}`);
     // founder looks: cloak and title can be switched off per character
@@ -1911,32 +1931,33 @@ export class HUD {
     const titled = !!this.ctl.game.getPlayer(this.ctl.pid)?.title || this.s.cosmetics.hideTitle;
     if (tier || capeOn || titled) {
       const fr = el('div', 'dev-row', b);
-      el('span', 'dev-label', fr, tier ? 'Founder' : capeOn ? 'Cape' : 'Pioneer');
+      el('span', 'dev-label', fr, t(tier ? 'Founder' : capeOn ? 'Cape' : 'Pioneer'));
       const cos = this.s.cosmetics;
       if (tier || capeOn) {
-        const what = tier ? (capeOn ? 'Cloak & cape' : 'Cloak') : 'Cape';
-        const cb = button(fr, cos.hideCloak ? `${what}: hidden` : `${what}: shown`, () => {
+        const what = tier ? (capeOn ? k('Cloak & cape') : k('Cloak')) : k('Cape');
+        const shown = () => t(cos.hideCloak ? '{what}: hidden' : '{what}: shown', { what: t(what) });
+        const cb = button(fr, shown(), () => {
           this.ctl.send({ c: 'cosmetics', cloak: cos.hideCloak });
           cos.hideCloak = !cos.hideCloak;
-          cb.textContent = cos.hideCloak ? `${what}: hidden` : `${what}: shown`;
+          cb.textContent = shown();
           cb.classList.toggle('on', !cos.hideCloak);
         }, `btn small${cos.hideCloak ? '' : ' on'}`);
       }
       if (tier || titled) {
-        const tb = button(fr, cos.hideTitle ? 'Title: hidden' : 'Title: shown', () => {
+        const tb = button(fr, t(cos.hideTitle ? 'Title: hidden' : 'Title: shown'), () => {
           this.ctl.send({ c: 'cosmetics', title: cos.hideTitle });
           cos.hideTitle = !cos.hideTitle;
-          tb.textContent = cos.hideTitle ? 'Title: hidden' : 'Title: shown';
+          tb.textContent = t(cos.hideTitle ? 'Title: hidden' : 'Title: shown');
           tb.classList.toggle('on', !cos.hideTitle);
         }, `btn small${cos.hideTitle ? '' : ' on'}`);
       }
     }
     const row = el('div', 'trade-actions', b);
-    button(row, 'Confirm', () => {
+    button(row, t('Confirm'), () => {
       this.ctl.send({ c: 'appearance', ap: encodeAppearance(d.value) });
       this.closeWin('appearance');
     }, 'btn on');
-    button(row, 'Cancel', () => this.closeWin('appearance'), 'btn');
+    button(row, t('Cancel'), () => this.closeWin('appearance'), 'btn');
   }
 
   // ---------------------------------------------------------------- test console
@@ -1945,78 +1966,78 @@ export class HUD {
     const b = this.wins.dev.body;
     b.replaceChildren();
     const cmd = (text: string) => this.ctl.send({ c: 'say', text });
-    el('p', 'hint', b, this.ctl.online
+    el('p', 'hint', b, t(this.ctl.online
       ? 'Test commands work online for game masters (ouriolis, dawid and names in ADMINS). Results appear in the chat log.'
-      : 'Give yourself levels, gold and items for testing. Results appear in the chat log. You can also type the commands in chat, e.g. /level 100.');
+      : 'Give yourself levels, gold and items for testing. Results appear in the chat log. You can also type the commands in chat, e.g. /level 100.'));
     const stop = (i: HTMLInputElement) => i.addEventListener('keydown', (e) => e.stopPropagation());
     const numRow = (label: string, def: number, quick: number[], run: (n: number) => void, fmt: (n: number) => string = String) => {
       const row = el('div', 'dev-row', b);
-      el('span', 'dev-label', row, label);
+      el('span', 'dev-label', row, t(label));
       const inp = el('input', 'num-input', row);
       inp.type = 'number';
       inp.value = String(def);
       stop(inp);
-      button(row, 'Set', () => run(Math.floor(Number(inp.value) || 0)), 'btn small');
+      button(row, t('Set'), () => run(Math.floor(Number(inp.value) || 0)), 'btn small');
       for (const q of quick) button(row, fmt(q), () => run(q), 'btn small');
     };
     numRow('Level', 100, [20, 50, 100, 200, 500], (n) => cmd(`/level ${n}`));
     numRow('Gold', 10000, [1000, 10000, 100000, 1000000], (n) => cmd(`/gold ${n}`), (n) => (n >= 1e6 ? `${n / 1e6}m` : n >= 1000 ? `${n / 1000}k` : String(n)));
 
     const tools = el('div', 'dev-row', b);
-    button(tools, 'Learn all spells', () => cmd('/spells'), 'btn small');
-    button(tools, 'Full heal', () => cmd('/heal'), 'btn small');
-    button(tools, this.s.player.god ? 'God mode: on' : 'God mode: off', () => {
+    button(tools, t('Learn all spells'), () => cmd('/spells'), 'btn small');
+    button(tools, t('Full heal'), () => cmd('/heal'), 'btn small');
+    button(tools, t(this.s.player.god ? 'God mode: on' : 'God mode: off'), () => {
       cmd('/god');
       setTimeout(() => this.wins.dev.open && this.renderDev(), 150);
     }, 'btn small');
-    button(tools, 'Kill target', () => cmd('/kill'), 'btn small');
+    button(tools, t('Kill target'), () => cmd('/kill'), 'btn small');
 
     const cp = el('div', 'dev-row', b);
-    el('span', 'dev-label', cp, 'Capes & pets');
-    button(cp, 'All 30 capes', () => cmd('/capes'), 'btn small');
-    button(cp, 'Max all skills', () => cmd('/maxskills'), 'btn small');
-    button(cp, 'All 8 pets', () => cmd('/pets'), 'btn small');
-    button(cp, 'Pets to level 10', () => cmd('/petlevel 10'), 'btn small');
-    el('span', 'hint', cp, 'Skill capes need the skill: press Max all skills to wear every cape. Use a pet item to call the pet.');
+    el('span', 'dev-label', cp, t('Capes & pets'));
+    button(cp, t('All 30 capes'), () => cmd('/capes'), 'btn small');
+    button(cp, t('Max all skills'), () => cmd('/maxskills'), 'btn small');
+    button(cp, t('All 8 pets'), () => cmd('/pets'), 'btn small');
+    button(cp, t('Pets to level 10'), () => cmd('/petlevel 10'), 'btn small');
+    el('span', 'hint', cp, t('Skill capes need the skill: press Max all skills to wear every cape. Use a pet item to call the pet.'));
 
     const tp = el('div', 'dev-row', b);
-    el('span', 'dev-label', tp, 'Teleport');
+    el('span', 'dev-label', tp, t('Teleport'));
     const sel = el('select', 'text-input', tp);
     const seen = new Set<string>();
     for (const r of this.ctl.game.world.regions) {
       if (seen.has(r.name) || (r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1) < 60) continue;
       seen.add(r.name);
-      const o = el('option', '', sel, `${r.name}${r.level && r.level !== '—' ? ` (${r.level})` : ''}${r.z0 < 0 ? ` · floor ${r.z0}` : ''}`);
+      const o = el('option', '', sel, `${trName(r.name)}${r.level && r.level !== '—' ? ` (${r.level})` : ''}${r.z0 < 0 ? ` · ${t('floor {z}', { z: String(r.z0) })}` : ''}`);
       o.value = r.name;
     }
-    button(tp, 'Go', () => cmd(`/goto ${sel.value}`), 'btn small');
+    button(tp, t('Go'), () => cmd(`/goto ${sel.value}`), 'btn small');
 
     const sets = el('div', 'dev-row', b);
-    el('span', 'dev-label', sets, 'Gear sets');
+    el('span', 'dev-label', sets, t('Gear sets'));
     const giveAll = (list: Array<[string, number]>) => {
       list.forEach(([id, n], i) => setTimeout(() => cmd(`/item ${id} ${n}`), i * 60));
     };
-    button(sets, 'Knight', () => giveAll([['dragonhide_pack', 1], ['kings_edge', 1], ['demon_reaver', 1], ['demon_helm', 1], ['demonplate', 1], ['demon_legs', 1], ['windstride_boots', 1], ['demon_shield', 1], ['demonbone_amulet', 1], ['ring_of_might', 1], ['great_health_potion', 100]]), 'btn small');
-    button(sets, 'Paladin', () => giveAll([['dragonhide_pack', 1], ['dragonbane_crossbow', 1], ['infernal_bolt', 100], ['elven_longbow', 1], ['flaming_arrow', 100], ['royal_javelin', 50], ['elven_circlet', 1], ['elven_mail', 1], ['elven_leggings', 1], ['windstride_boots', 1], ['strong_health_potion', 100]]), 'btn small');
-    button(sets, 'Sorcerer', () => giveAll([['dragonhide_pack', 1], ['wand_of_inferno', 1], ['storm_tome', 1], ['elven_circlet', 1], ['arcane_robe', 1], ['elven_leggings', 1], ['windstride_boots', 1], ['great_mana_potion', 100], ['fireball_rune', 50], ['death_rune', 50]]), 'btn small');
-    button(sets, 'Druid', () => giveAll([['dragonhide_pack', 1], ['rod_of_wilds', 1], ['storm_tome', 1], ['elven_circlet', 1], ['arcane_robe', 1], ['elven_leggings', 1], ['windstride_boots', 1], ['great_mana_potion', 100], ['healing_rune', 50], ['avalanche_rune', 50], ['stoneshower_rune', 50]]), 'btn small');
-    button(sets, 'Tools', () => giveAll([['rope', 1], ['shovel', 1]]), 'btn small');
+    button(sets, trName('Knight'), () => giveAll([['dragonhide_pack', 1], ['kings_edge', 1], ['demon_reaver', 1], ['demon_helm', 1], ['demonplate', 1], ['demon_legs', 1], ['windstride_boots', 1], ['demon_shield', 1], ['demonbone_amulet', 1], ['ring_of_might', 1], ['great_health_potion', 100]]), 'btn small');
+    button(sets, trName('Paladin'), () => giveAll([['dragonhide_pack', 1], ['dragonbane_crossbow', 1], ['infernal_bolt', 100], ['elven_longbow', 1], ['flaming_arrow', 100], ['royal_javelin', 50], ['elven_circlet', 1], ['elven_mail', 1], ['elven_leggings', 1], ['windstride_boots', 1], ['strong_health_potion', 100]]), 'btn small');
+    button(sets, trName('Sorcerer'), () => giveAll([['dragonhide_pack', 1], ['wand_of_inferno', 1], ['storm_tome', 1], ['elven_circlet', 1], ['arcane_robe', 1], ['elven_leggings', 1], ['windstride_boots', 1], ['great_mana_potion', 100], ['fireball_rune', 50], ['death_rune', 50]]), 'btn small');
+    button(sets, trName('Druid'), () => giveAll([['dragonhide_pack', 1], ['rod_of_wilds', 1], ['storm_tome', 1], ['elven_circlet', 1], ['arcane_robe', 1], ['elven_leggings', 1], ['windstride_boots', 1], ['great_mana_potion', 100], ['healing_rune', 50], ['avalanche_rune', 50], ['stoneshower_rune', 50]]), 'btn small');
+    button(sets, t('Tools'), () => giveAll([['rope', 1], ['shovel', 1]]), 'btn small');
 
     const qtyRow = el('div', 'dev-row', b);
-    el('span', 'dev-label', qtyRow, 'Items');
-    el('span', 'hint', qtyRow, 'Click an item to get it. Stackable items come in this amount:');
+    el('span', 'dev-label', qtyRow, t('Items'));
+    el('span', 'hint', qtyRow, t('Click an item to get it. Stackable items come in this amount:'));
     const qty = el('input', 'num-input', qtyRow);
     qty.type = 'number';
     qty.value = '100';
     stop(qty);
     const grid = el('div', 'dev-items', b);
     const kinds: Array<[string, string[]]> = [
-      ['Weapons', ['weapon']], ['Ammo', ['ammo']], ['Shields & books', ['shield']], ['Helmets', ['helmet']], ['Armour', ['armor']],
-      ['Legs', ['legs']], ['Boots', ['boots']], ['Amulets & rings', ['amulet', 'ring']], ['Backpacks & tools', ['backpack', 'tool']],
-      ['Capes', ['cape']], ['Pets', ['pet']], ['Potions & food', ['consumable']], ['Runes', ['rune']], ['Loot', ['material']],
+      [k('Weapons'), ['weapon']], [k('Ammo'), ['ammo']], [k('Shields & books'), ['shield']], [k('Helmets'), ['helmet']], [k('Armour'), ['armor']],
+      [k('Legs'), ['legs']], [k('Boots'), ['boots']], [k('Amulets & rings'), ['amulet', 'ring']], [k('Backpacks & tools'), ['backpack', 'tool']],
+      [k('Capes'), ['cape']], [k('Pets'), ['pet']], [k('Potions & food'), ['consumable']], [k('Runes'), ['rune']], [k('Loot'), ['material']],
     ];
     for (const [title, ks] of kinds) {
-      el('div', 'panel-title', grid, title);
+      el('div', 'panel-title', grid, t(title));
       const g = el('div', 'dev-grid', grid);
       for (const d of Object.values(ITEMS)) {
         if (!ks.includes(d.kind)) continue;
@@ -2032,19 +2053,19 @@ export class HUD {
 
     const line = el('div', 'dev-row', b);
     const inp = el('input', 'text-input', line);
-    inp.placeholder = '/help, /level 80, /item dragon helm, /goto caldera, /vocation druid…';
+    inp.placeholder = t('/help, /level 80, /item dragon helm, /goto caldera, /vocation druid…');
     inp.addEventListener('keydown', (e) => {
       e.stopPropagation();
       if (e.key === 'Escape') inp.blur();
       if (e.key === 'Enter' && inp.value.trim()) {
-        const t = inp.value.trim();
-        cmd(t.startsWith('/') ? t : `/${t}`);
+        const v = inp.value.trim();
+        cmd(v.startsWith('/') ? v : `/${v}`);
         inp.value = '';
       }
     });
-    button(line, 'Run', () => {
-      const t = inp.value.trim();
-      if (t) cmd(t.startsWith('/') ? t : `/${t}`);
+    button(line, t('Run'), () => {
+      const v = inp.value.trim();
+      if (v) cmd(v.startsWith('/') ? v : `/${v}`);
       inp.value = '';
     }, 'btn small');
   }
@@ -2056,7 +2077,7 @@ export class HUD {
     b.replaceChildren();
     const s = this.s;
     const voc = s.player.vocation;
-    el('p', 'hint', b, 'Say a spell\'s words in chat, press its hotkey, or click Cast. Trainers in towns teach the spells you have not learned yet.');
+    el('p', 'hint', b, t("Say a spell's words in chat, press its hotkey, or click Cast. Trainers in towns teach the spells you have not learned yet."));
     const list = el('div', 'spell-offers', b);
     const mine = SPELL_LIST.filter((sp) => sp.vocations.includes(voc)).sort((a, c) => a.level - c.level);
     const row = (sp: SpellDef) => {
@@ -2066,12 +2087,12 @@ export class HUD {
       ic.src = spellIcon(sp.id);
       ic.alt = '';
       const info = el('div', 'spell-info', r);
-      el('div', 'spell-name', info, `${sp.name} — "${sp.words}${sp.kind === 'healFriend' ? ' "name"' : sp.param ? ` "${sp.param}` : ''}"`);
-      el('div', 'spell-desc', info, `${sp.description} · Level ${sp.level} · ${sp.mana} mana · cooldown ${sp.cooldown}s${known ? '' : ` · learn for ${fmtGold(sp.price)} gold`}`);
+      el('div', 'spell-name', info, `${trName(sp.name)} — "${sp.words}${sp.kind === 'healFriend' ? ` "${t('name')}` : sp.param ? ` "${t(sp.param)}` : ''}"`);
+      el('div', 'spell-desc', info, `${trText(sp.description)} · ${t('Level {n}', { n: sp.level })} · ${t('{n} mana', { n: sp.mana })} · ${t('cooldown {s}s', { s: sp.cooldown })}${known ? '' : ` · ${t('learn for {price} gold', { price: sp.price })}`}`);
       const btns = el('div', 'shop-btns', r);
-      const cast = button(btns, 'Cast', () => sp.kind === 'healFriend' || sp.param ? this.focusChat(`${sp.words} "`) : this.ctl.send({ c: 'cast', spell: sp.id }), 'btn small');
+      const cast = button(btns, t('Cast'), () => sp.kind === 'healFriend' || sp.param ? this.focusChat(`${sp.words} "`) : this.ctl.send({ c: 'cast', spell: sp.id }), 'btn small');
       cast.disabled = !known;
-      button(btns, 'Hotkey', () => {
+      button(btns, t('Hotkey'), () => {
         this.beginAssign({ kind: 'spell', id: sp.id });
       }, 'btn small');
     };
@@ -2090,19 +2111,19 @@ export class HUD {
       if (!st || st.status === 'locked') continue;
       any = true;
       const r = el('div', `quest q-${st.status}`, b);
-      const giver = NPCS[q.giver]?.name ?? q.giver;
-      el('div', 'quest-title', r, q.title);
-      const status = st.status === 'available' ? `Ask ${giver} about it${q.minLevel ? ` (level ${q.minLevel}+)` : ''}.`
-        : st.status === 'active' ? `${q.targetName}: ${st.kills}/${q.count}`
-        : st.status === 'ready' ? `Done — return to ${giver}.` : 'Completed.';
+      const giver = trName(NPCS[q.giver]?.name ?? q.giver);
+      el('div', 'quest-title', r, trName(q.title));
+      const status = st.status === 'available' ? (q.minLevel ? t('Ask {giver} about it (level {level}+).', { giver, level: q.minLevel }) : t('Ask {giver} about it.', { giver }))
+        : st.status === 'active' ? `${trName(q.targetName)}: ${st.kills}/${q.count}`
+        : st.status === 'ready' ? t('Done — return to {giver}.', { giver }) : t('Completed.');
       el('div', 'quest-status', r, status);
       if (st.status === 'active' || st.status === 'ready') {
         const bar = el('div', 'bar quest-bar', r);
         el('div', 'bar-fill', bar).style.width = `${(st.kills / q.count) * 100}%`;
       }
-      if (st.status !== 'done') el('div', 'quest-reward', r, `Reward: ${fmtGold(q.rewardExp)} exp${q.rewardItems.length ? `, ${q.rewardItems.map((i) => `${i.qty > 1 ? `${i.qty} ` : ''}${itemDef(i.id).name}`).join(', ')}` : ''}`);
+      if (st.status !== 'done') el('div', 'quest-reward', r, `${t('Reward: {exp} exp', { exp: q.rewardExp })}${q.rewardItems.length ? `, ${q.rewardItems.map((i) => i.id === 'gold' ? t('{n} gold', { n: i.qty }) : `${i.qty > 1 ? `${fmtNum(i.qty)}× ` : ''}${trName(itemDef(i.id).name)}`).join(', ')}` : ''}`);
     }
-    if (!any) el('p', 'hint', b, 'No quests yet. Talk to people in town.');
+    if (!any) el('p', 'hint', b, t('No quests yet. Talk to people in town.'));
   }
 
   // ---------------------------------------------------------------- help
@@ -2110,55 +2131,78 @@ export class HUD {
   private renderHelp(): void {
     const b = this.wins.help.body;
     const intro = el('p', 'hint', b);
-    intro.textContent = this.ctl.online
+    intro.textContent = t(this.ctl.online
       ? 'You are playing online. Other adventurers share this world with you; the server keeps your character.'
-      : 'You are playing offline. Your character is saved in this browser.';
-    const lay = el('p', 'hint', b, 'Layout: drag the striped bar at the top of a side panel to move it, drag its bottom edge to resize it, drag the left edge of the side bar to widen it, drag the top edge of the chat to make it taller, and ⇅ on the action bar moves it to the top of the game view. ');
-    button(lay, 'Reset layout', () => resetPanelLayout(), 'btn small');
+      : 'You are playing offline. Your character is saved in this browser.');
+    const lay = el('p', 'hint', b, t('Layout: drag the striped bar at the top of a side panel to move it, drag its bottom edge to resize it, drag the left edge of the side bar to widen it, drag the top edge of the chat to make it taller, and ⇅ on the action bar moves it to the top of the game view.') + ' ');
+    button(lay, t('Reset layout'), () => resetPanelLayout(), 'btn small');
     const grid = el('div', 'help-grid', b);
     const rows: Array<[string, string]> = [
-      ['WASD / arrows', 'Walk (Q E Z C or numpad for diagonals)'],
-      ['Left-click ground', 'Walk there (path-finding)'],
-      ['Left-click monster', 'Attack — your character fights automatically'],
-      ['Left-click NPC', 'Talk: trade, bank, quests, travel, spells'],
-      ['Click ladders, ropes, lockers…', 'Use them (rope spots need a rope, loose stones a shovel)'],
-      ['Right-click', 'Context menu: trade with players, item actions'],
-      ['F1 – F12', 'Hotkeys (spells, potions, runes)'],
-      ['Ctrl+1 – Ctrl+0', 'Second hotkey row, made for runes in PvP (Alt+1 – Alt+0 also works; use Full screen in Settings so the browser lets the game have Ctrl+number)'],
-      ['Enter', 'Chat; saying spell words casts spells (e.g. exura)'],
-      ['Tab / Space', 'Target the next monster'],
-      ['Esc', 'Close windows / clear target'],
-      ['Mouse wheel', 'Zoom'],
-      ['M', 'World map (every floor, click to walk)'],
-      ['Ctrl + direction / Ctrl+R', 'Turn without moving'],
-      ['` (key under Esc)', 'Test console: levels, gold, items, teleports (also /help in chat)'],
-      ['Ctrl-click item', 'Store in depot while a locker is open'],
-      ['Click a tree (with an axe)', 'Chop it: logs and woodcutting experience (higher trees need higher woodcutting)'],
-      ['Click water within 3 tiles (with a fishing rod)', 'Fish: catches to eat or sell and fishing experience (better fish need higher fishing; ice fish near snow, swordfish in deep sea)'],
-      ['Market board (in depots)', 'Buy from and sell to other players; gold goes to the bank, items to the depot'],
-      ['Click an ore rock (with a pickaxe)', 'Mine it: ore, sometimes a gem, and mining experience (copper and tin near towns, rarer ore deeper underground)'],
-      ['Furnace / anvil (in every smithy)', "Furnace: smelt ore into bars, or cast rings and amulets from silver/gold bars and cut gems (crafting). Anvil (with a smith's hammer): smith bars into weapons, armour, pickaxes and arrowheads. Make 1, 5, X or All; walking stops it"],
-      ['Use a knife (or arrow shafts)', 'Fletching: carve logs into arrow shafts, bows and crossbow stocks; shafts + feathers + arrowheads make arrows'],
-      ['Use a needle / a chisel', 'Crafting: sew leather and fur (with thread) into armour, bags and backpacks; cut gems. Tan hides at the tanning rack in every smithy'],
-      ['Use a tinderbox', 'Firemaking: light logs where you stand (not in towns); you step aside. The fire burns 1–2 minutes'],
-      ['Click a campfire or a stove', 'Cooking: raw fish and meat become food that heals more; burns less as you level. Every depot has a stove'],
+      [k('WASD / arrows'), k('Walk (Q E Z C or numpad for diagonals)')],
+      [k('Left-click ground'), k('Walk there (path-finding)')],
+      [k('Left-click monster'), k('Attack — your character fights automatically')],
+      [k('Left-click NPC'), k('Talk: trade, bank, quests, travel, spells')],
+      [k('Click ladders, ropes, lockers…'), k('Use them (rope spots need a rope, loose stones a shovel)')],
+      [k('Right-click'), k('Context menu: trade with players, item actions')],
+      [k('F1 – F12'), k('Hotkeys (spells, potions, runes)')],
+      [k('Ctrl+1 – Ctrl+0'), k('Second hotkey row, made for runes in PvP (Alt+1 – Alt+0 also works; use Full screen in Settings so the browser lets the game have Ctrl+number)')],
+      [k('Enter'), k('Chat; saying spell words casts spells (e.g. exura)')],
+      [k('Tab / Space'), k('Target the next monster')],
+      [k('Esc'), k('Close windows / clear target')],
+      [k('Mouse wheel'), k('Zoom')],
+      [k('M'), k('World map (every floor, click to walk)')],
+      [k('Ctrl + direction / Ctrl+R'), k('Turn without moving')],
+      [k('` (key under Esc)'), k('Test console: levels, gold, items, teleports (also /help in chat)')],
+      [k('Ctrl-click item'), k('Store in depot while a locker is open')],
+      [k('Click a tree (with an axe)'), k('Chop it: logs and woodcutting experience (higher trees need higher woodcutting)')],
+      [k('Click water within 3 tiles (with a fishing rod)'), k('Fish: catches to eat or sell and fishing experience (better fish need higher fishing; ice fish near snow, swordfish in deep sea)')],
+      [k('Market board (in depots)'), k('Buy from and sell to other players; gold goes to the bank, items to the depot')],
+      [k('Click an ore rock (with a pickaxe)'), k('Mine it: ore, sometimes a gem, and mining experience (copper and tin near towns, rarer ore deeper underground)')],
+      [k('Furnace / anvil (in every smithy)'), k("Furnace: smelt ore into bars, or cast rings and amulets from silver/gold bars and cut gems (crafting). Anvil (with a smith's hammer): smith bars into weapons, armour, pickaxes and arrowheads. Make 1, 5, X or All; walking stops it")],
+      [k('Use a knife (or arrow shafts)'), k('Fletching: carve logs into arrow shafts, bows and crossbow stocks; shafts + feathers + arrowheads make arrows')],
+      [k('Use a needle / a chisel'), k('Crafting: sew leather and fur (with thread) into armour, bags and backpacks; cut gems. Tan hides at the tanning rack in every smithy')],
+      [k('Use a tinderbox'), k('Firemaking: light logs where you stand (not in towns); you step aside. The fire burns 1–2 minutes')],
+      [k('Click a campfire or a stove'), k('Cooking: raw fish and meat become food that heals more; burns less as you level. Every depot has a stove')],
     ];
     for (const [k, v] of rows) {
-      el('div', 'help-key', grid, k);
-      el('div', 'help-val', grid, v);
+      el('div', 'help-key', grid, t(k));
+      el('div', 'help-val', grid, t(v));
     }
     const st = this.ctl.game.stages;
-    el('div', 'panel-title', b, `Server rates (${st.name})`);
-    el('p', 'hint help-rates', b, (isClassic(st) ? ['Classic: everything ×1.'] : stagesTable(st)).join('\n'));
-    el('p', 'hint', b, 'Stairs and holes take you between floors; mountains, towers and dungeons go up to two floors high and four deep. Towns are protection zones: monsters cannot follow you in.');
+    el('div', 'panel-title', b, t('Server rates ({name})', { name: t(st.name) }));
+    el('p', 'hint help-rates', b, (isClassic(st) ? [t('Classic: everything ×1.')] : stagesTable(st).map((x) => trText(x))).join('\n'));
+    el('p', 'hint', b, t('Stairs and holes take you between floors; mountains, towers and dungeons go up to two floors high and four deep. Towns are protection zones: monsters cannot follow you in.'));
   }
 
   // ================================================================ misc actions
 
+  /** A new language was picked: rebuild everything that shows text (fixed labels were relabelled by ui/lang.ts). */
+  private languageChanged(): void {
+    for (const f of this.relabelers) f();
+    this.skillsKey = '';
+    this.partyKey = '';
+    this.lastRegion = '';
+    this.wins.help.body.replaceChildren();
+    this.renderHelp();
+    this.renderInventory();
+    this.renderHotbar();
+    this.renderTutorial();
+    this.renderFriends();
+    if (this.wins.dialog.open) this.renderDialog();
+    if (this.wins.spells.open) this.renderSpells();
+    if (this.wins.quests.open) this.renderQuests();
+    if (this.wins.trade.open) this.renderTrade();
+    if (this.wins.market.open) this.renderMarket();
+    if (this.wins.craft.open) this.renderCraft();
+    if (this.wins.depot.open) this.renderDepot();
+    if (this.wins.dev.open) this.renderDev();
+    if (this.wins.corpse.open) this.renderCorpse();
+  }
+
   private togglePixels(): void {
     const on = !this.renderer.cam.pixelMode;
     this.renderer.setPixelMode(on);
-    this.pixelBtn.textContent = `Pixels: ${on ? 'on' : 'off'}`;
+    this.pixelBtn.textContent = t(on ? 'Pixels: on' : 'Pixels: off');
     try {
       storage()?.setItem('thornvale.pixels', on ? '1' : '0');
     } catch {
@@ -2175,16 +2219,16 @@ export class HUD {
   }
 
   saveNow(): void {
-    if (this.ctl.save()) this.toast('Game saved.');
-    else this.toast('Could not save right now.');
+    if (this.ctl.save()) this.toast(t('Game saved.'));
+    else this.toast(t('Could not save right now.'));
   }
 
   private showDisconnect(why: string): void {
     this.disconnectEl.hidden = false;
     this.disconnectEl.replaceChildren();
-    el('div', 'death-title', this.disconnectEl, 'Disconnected');
-    el('div', 'death-sub', this.disconnectEl, why);
-    button(this.disconnectEl, 'Back to the title screen', () => location.reload(), 'btn');
+    el('div', 'death-title', this.disconnectEl, t('Disconnected'));
+    el('div', 'death-sub', this.disconnectEl, trText(why));
+    button(this.disconnectEl, t('Back to the title screen'), () => location.reload(), 'btn');
   }
 
   // ================================================================ per frame
@@ -2195,7 +2239,7 @@ export class HUD {
     const card = el('div', 'admin-card', box);
     el('div', 'admin-title', card, `⚠ ${title}`);
     el('div', 'admin-text', card, text);
-    const ok = button(card, 'OK, understood', () => box.remove(), 'btn');
+    const ok = button(card, t('OK, understood'), () => box.remove(), 'btn');
     ok.focus();
     this.log(`${title}: ${text}`, 'warn');
   }
@@ -2203,7 +2247,7 @@ export class HUD {
   /** Friends window: online first; friend requests at the top. */
   private renderFriends(): void {
     const fv = this.ctl.game.friendsView(this.ctl.pid);
-    this.friendsBtn.textContent = fv.requests.length ? `Friends (${fv.requests.length})` : 'Friends';
+    this.friendsBtn.textContent = fv.requests.length ? t('Friends ({n})', { n: fv.requests.length }) : t('Friends');
     this.friendsBtn.classList.toggle('on', fv.requests.length > 0);
     const w = this.wins.friends;
     if (!w.open) return;
@@ -2211,17 +2255,17 @@ export class HUD {
     b.replaceChildren();
     for (const r of fv.requests) {
       const row = el('div', 'friend-row request', b);
-      el('span', 'friend-name', row, `${r.name} wants to be your friend`);
-      button(row, 'Accept', () => this.ctl.send({ c: 'friendAccept', id: r.id }), 'btn small');
-      button(row, 'Decline', () => this.ctl.send({ c: 'friendDecline', id: r.id }), 'btn small');
+      el('span', 'friend-name', row, t('{name} wants to be your friend', { name: r.name }));
+      button(row, t('Accept'), () => this.ctl.send({ c: 'friendAccept', id: r.id }), 'btn small');
+      button(row, t('Decline'), () => this.ctl.send({ c: 'friendDecline', id: r.id }), 'btn small');
     }
-    if (!fv.friends.length) el('p', 'hint', b, 'No friends yet. Right-click a player and choose "Add … as friend"; they have to accept.');
+    if (!fv.friends.length) el('p', 'hint', b, t('No friends yet. Right-click a player and choose "Add … as friend"; they have to accept.'));
     for (const f of fv.friends) {
       const row = el('div', `friend-row${f.online ? ' online' : ''}`, b);
       el('span', 'friend-dot', row);
       el('span', 'friend-name', row, f.online ? `${f.name}${f.level ? ` (${f.level})` : ''}` : f.name);
-      el('span', 'friend-state', row, f.online ? 'online' : 'offline');
-      button(row, 'Message', () => this.focusChat(`${f.name}, `), 'btn tiny');
+      el('span', 'friend-state', row, t(f.online ? 'online' : 'offline'));
+      button(row, t('Message'), () => this.focusChat(`${f.name}, `), 'btn tiny');
       button(row, '✕', () => this.ctl.send({ c: 'friendRemove', name: f.name }), 'btn tiny');
     }
   }
@@ -2245,23 +2289,23 @@ export class HUD {
       this.closeWin('corpse');
       return;
     }
-    (w.root.querySelector('.win-title') as HTMLElement).textContent = `Dead body of ${bag.corpse ?? 'someone'}`;
+    (w.root.querySelector('.win-title') as HTMLElement).textContent = t('Dead body of {name}', { name: bag.corpse ? trName(bag.corpse) : t('someone') });
     if (!bag.items.length) {
-      el('p', 'hint', b, 'Nothing left on the body.');
+      el('p', 'hint', b, t('Nothing left on the body.'));
       return;
     }
-    el('p', 'hint', b, 'Click an item to take it.');
+    el('p', 'hint', b, t('Click an item to take it.'));
     const grid = el('div', 'bag-grid', b);
     bag.items.forEach((it, i) => {
       const d = el('div', 'slot', grid);
       paintSlot(d, it);
-      d.title = describeItem(itemDef(it.id));
+      d.title = `${trName(itemDef(it.id).name)}\n${describeItemL(itemDef(it.id))}`;
       d.addEventListener('mousedown', (ev) => {
         ev.preventDefault();
         this.ctl.send({ c: 'pickup', id: bag.id, take: i });
       });
     });
-    button(b, 'Take all', () => this.ctl.send({ c: 'pickup', id: bag.id, take: -1 }), 'btn');
+    button(b, t('Take all'), () => this.ctl.send({ c: 'pickup', id: bag.id, take: -1 }), 'btn');
   }
 
   inspect(id: number): void {
@@ -2277,47 +2321,47 @@ export class HUD {
     const c = g.getCreature(this.inspectId);
     const b = w.body;
     b.replaceChildren();
-    if (!c) { el('p', 'hint', b, 'Out of sight.'); return; }
-    (w.root.querySelector('.win-title') as HTMLElement).textContent = c.name;
+    if (!c) { el('p', 'hint', b, t('Out of sight.')); return; }
+    (w.root.querySelector('.win-title') as HTMLElement).textContent = c.kind === 'player' ? c.name : trName(c.name);
     const pl = g.getPlayer(c.id);
     const lines: Array<[string, string]> = [];
     if (pl) {
-      if (pl.title) lines.push(['Title', pl.title]);
-      lines.push(['Level', String(pl.level)], ['Vocation', VOCATIONS[pl.vocation].name], ['Health', `${Math.round((pl.hp / pl.maxHp) * 100)}%`]);
-      if (pl.premium) lines.push(['Account', '♛ Premium']);
+      if (pl.title) lines.push([k('Title'), trText(pl.title)]);
+      lines.push([k('Level'), String(pl.level)], [k('Vocation'), trName(VOCATIONS[pl.vocation].name)], [k('Health'), `${Math.round((pl.hp / pl.maxHp) * 100)}%`]);
+      if (pl.premium) lines.push([k('Account'), `♛ ${t('Premium')}`]);
       const sk = g.skullOf(pl);
-      if (sk) lines.push(['Skull', sk === 2 ? 'red' : 'white']);
+      if (sk) lines.push([k('Skull'), t(sk === 2 ? 'red' : 'white')]);
       const pf = g.partyFlag(this.ctl.pid, pl.id);
-      if (pf === 1) lines.push(['Party', 'in your party']);
-      if (pl.id === this.ctl.pid) lines.push(['Experience', fmtGold(pl.exp)]);
+      if (pf === 1) lines.push([k('Party'), t('in your party')]);
+      if (pl.id === this.ctl.pid) lines.push([k('Experience'), fmtNum(pl.exp)]);
     } else {
       const en = g.getEnemy(c.id);
-      lines.push(['Health', `${Math.round((c.hp / c.maxHp) * 100)}%`]);
-      if (en) lines.push(['Experience', String(en.def.exp)], ['Hit points', String(en.maxHp)]);
+      lines.push([k('Health'), `${Math.round((c.hp / c.maxHp) * 100)}%`]);
+      if (en) lines.push([k('Experience'), fmtNum(en.def.exp)], [k('Hit points'), fmtNum(en.maxHp)]);
     }
     const tbl = el('div', 'inspect-stats', b);
-    for (const [k, v] of lines) { el('span', 'k', tbl, k); el('span', 'v', tbl, v); }
+    for (const [k, v] of lines) { el('span', 'k', tbl, t(k)); el('span', 'v', tbl, v); }
     const sess = pl ? g.session(pl.id) : null;
     if (sess) {
-      el('div', 'panel-title', b, 'Equipment');
+      el('div', 'panel-title', b, t('Equipment'));
       const grid = el('div', 'bag-grid', b);
       for (const e of EQUIP_LAYOUT) {
         const st = sess.inventory.equipment[e.slot];
         const d = el('div', 'slot', grid);
         paintSlot(d, st, e.ph);
-        if (st) d.title = itemDef(st.id).name;
+        if (st) d.title = trName(itemDef(st.id).name);
       }
       const sets = g.activeSets(sess);
       if (sets.length) {
-        el('div', 'panel-title', b, 'Set bonuses');
-        for (const a of sets) el('div', 'hint', b, `${a.set.name} (${a.count}/${a.set.pieces.length}): ${a.bonuses.flatMap(bonusParts).join(', ')}`);
+        el('div', 'panel-title', b, t('Set bonuses'));
+        for (const a of sets) el('div', 'hint', b, `${trName(`${a.set.name} set`)} (${a.count}/${a.set.pieces.length}): ${a.bonuses.flatMap(bonusPartsL).join(', ')}`);
       }
     }
     if (pl && pl.id !== this.ctl.pid) {
       const row = el('div', 'trade-actions', b);
-      button(row, 'Follow', () => this.ctl.send({ c: 'follow', id: pl.id }), 'btn small');
-      button(row, 'Trade', () => this.ctl.send({ c: 'tradeRequest', id: pl.id }), 'btn small');
-      button(row, 'Add friend', () => this.ctl.send({ c: 'friendRequest', id: pl.id }), 'btn small');
+      button(row, t('Follow'), () => this.ctl.send({ c: 'follow', id: pl.id }), 'btn small');
+      button(row, t('Trade'), () => this.ctl.send({ c: 'tradeRequest', id: pl.id }), 'btn small');
+      button(row, t('Add friend'), () => this.ctl.send({ c: 'friendRequest', id: pl.id }), 'btn small');
     }
   }
 
@@ -2326,12 +2370,12 @@ export class HUD {
     const pv = this.ctl.game.partyView(this.ctl.pid);
     this.partyEl.hidden = !pv;
     if (!pv) { this.partyKey = ''; return; }
-    const key = JSON.stringify([pv.leader, pv.shared, pv.sharedActive, pv.members.map((m) => [m.id, m.name, m.level])]);
+    const key = JSON.stringify([getLang(), pv.leader, pv.shared, pv.sharedActive, pv.members.map((m) => [m.id, m.name, m.level])]);
     if (key !== this.partyKey) {
       this.partyKey = key;
       const b = this.partyEl;
       b.replaceChildren();
-      el('div', 'panel-title', b, 'Party');
+      el('div', 'panel-title', b, t('Party'));
       for (const m of pv.members) {
         const row = el('div', 'party-row', b);
         row.dataset.pid = String(m.id);
@@ -2341,11 +2385,11 @@ export class HUD {
         if (m.id !== this.ctl.pid) row.addEventListener('mousedown', (e) => { e.preventDefault(); this.creatureMenu('player', m.id, e.clientX, e.clientY); });
       }
       const st = el('div', `party-share${pv.shared ? (pv.sharedActive ? ' on' : ' idle') : ''}`, b,
-        pv.shared ? (pv.sharedActive ? 'Shared experience: active (+20%)' : 'Shared experience: on, inactive (too far apart or levels too different)') : 'Shared experience: off');
-      st.title = 'Members on the same floor within 30 tiles of the kill share its experience evenly, with a 20% bonus. The lowest level must be at least 2/3 of the highest.';
+        t(pv.shared ? (pv.sharedActive ? 'Shared experience: active (+20%)' : 'Shared experience: on, inactive (too far apart or levels too different)') : 'Shared experience: off'));
+      st.title = t('Members on the same floor within 30 tiles of the kill share its experience evenly, with a 20% bonus. The lowest level must be at least 2/3 of the highest.');
       const row = el('div', 'trade-actions', b);
-      if (pv.leader === this.ctl.pid) button(row, pv.shared ? 'Share exp: ON' : 'Share exp: OFF', () => this.ctl.send({ c: 'partyShare', on: !pv.shared }), `btn small${pv.shared ? ' on' : ''}`);
-      button(row, 'Leave', () => this.ctl.send({ c: 'partyLeave' }), 'btn small');
+      if (pv.leader === this.ctl.pid) button(row, t(pv.shared ? 'Share exp: ON' : 'Share exp: OFF'), () => this.ctl.send({ c: 'partyShare', on: !pv.shared }), `btn small${pv.shared ? ' on' : ''}`);
+      button(row, t('Leave'), () => this.ctl.send({ c: 'partyLeave' }), 'btn small');
     }
     for (const m of pv.members) {
       const live = this.ctl.game.getPlayer(m.id);
@@ -2360,14 +2404,14 @@ export class HUD {
   private buildTutorial(): void {
     const root = el('div', 'panel tut-bar', this.root);
     const head = el('div', 'tut-head', root);
-    el('span', 'tut-tag', head, 'Tutorial');
+    el('span', 'tut-tag', head, t('Tutorial'));
     const title = el('span', 'tut-title', head);
     const nav = el('span', 'tut-nav', head);
     const arrow = el('span', 'tut-arrow', nav, '➤');
     const dist = el('span', 'tut-dist', nav);
     const hint = el('div', 'tut-hint', root);
     const todo = el('div', 'tut-todo', root);
-    const skip = button(head, 'Skip tutorial', () => {
+    const skip = button(head, t('Skip tutorial'), () => {
       // two clicks, so nobody leaves the island by accident
       if (this.tut.armed > 0) {
         this.tut.armed = 0;
@@ -2375,31 +2419,31 @@ export class HUD {
         return;
       }
       this.tut.armed = 4;
-      skip.textContent = 'Click again to sail to Thornvale';
+      skip.textContent = t('Click again to sail to Thornvale');
     }, 'btn tiny tut-skip');
-    skip.title = 'Your account has finished the island before. Skipping gives you the same gear a graduate leaves with.';
+    skip.title = t('Your account has finished the island before. Skipping gives you the same gear a graduate leaves with.');
     this.tut = { root, title, arrow, dist, hint, todo, skip, armed: 0, timer: 0 };
   }
 
   private renderTutorial(): void {
     if (!this.tut) return;
-    const t = this.s.tutorial;
-    const on = t.state === 'active';
+    const ts = this.s.tutorial;
+    const on = ts.state === 'active';
     this.tut.root.classList.toggle('on', on);
     if (!on) return;
-    const st = tutorialStep(t.step);
+    const st = tutorialStep(ts.step);
     if (!st) return;
-    this.tut.title.textContent = `${t.step}/${TUTORIAL_LAST} · ${st.title}${st.optional ? ' (optional)' : ''}`;
-    this.tut.hint.textContent = st.hint;
+    this.tut.title.textContent = `${ts.step}/${TUTORIAL_LAST} · ${trName(st.title)}${st.optional ? ` ${t('(optional)')}` : ''}`;
+    this.tut.hint.textContent = trText(st.hint);
     const parts: string[] = [];
-    if (st.id === 'rats') parts.push(`Rats slain: ${t.count}/${st.need ?? 3}`);
-    if (st.id === 'loot') parts.push(`${t.flags & 1 ? '✔' : '○'} pick up loot`, `${t.flags & 2 ? '✔' : '○'} eat`);
-    if (st.id === 'depot') parts.push(`${t.flags & 1 ? '✔' : '○'} store an item in the depot`, `${t.flags & 2 ? '✔' : '○'} bank your gold`);
-    if (st.id === 'cellar') parts.push(`${t.flags & 1 ? '✔' : '○'} down into the cellar`, '○ climb out by rope');
+    if (st.id === 'rats') parts.push(t('Rats slain: {count}/{need}', { count: ts.count, need: st.need ?? 3 }));
+    if (st.id === 'loot') parts.push(`${ts.flags & 1 ? '✔' : '○'} ${t('pick up loot')}`, `${ts.flags & 2 ? '✔' : '○'} ${t('eat')}`);
+    if (st.id === 'depot') parts.push(`${ts.flags & 1 ? '✔' : '○'} ${t('store an item in the depot')}`, `${ts.flags & 2 ? '✔' : '○'} ${t('bank your gold')}`);
+    if (st.id === 'cellar') parts.push(`${ts.flags & 1 ? '✔' : '○'} ${t('down into the cellar')}`, `○ ${t('climb out by rope')}`);
     this.tut.todo.textContent = parts.join('   ');
     this.tut.todo.hidden = !parts.length;
-    this.tut.skip.hidden = !t.canSkip;
-    if (!this.tut.armed) this.tut.skip.textContent = 'Skip tutorial';
+    this.tut.skip.hidden = !ts.canSkip;
+    if (!this.tut.armed) this.tut.skip.textContent = t('Skip tutorial');
     this.tut.timer = 0;
   }
 
@@ -2409,7 +2453,7 @@ export class HUD {
     if (!tut || this.s.tutorial.state !== 'active') return;
     if (tut.armed > 0) {
       tut.armed -= dt;
-      if (tut.armed <= 0) { tut.armed = 0; tut.skip.textContent = 'Skip tutorial'; }
+      if (tut.armed <= 0) { tut.armed = 0; tut.skip.textContent = t('Skip tutorial'); }
     }
     tut.timer -= dt;
     if (tut.timer > 0) return;
@@ -2424,18 +2468,18 @@ export class HUD {
     tut.arrow.hidden = false;
     if (goal.z !== p.z) {
       tut.arrow.style.transform = `rotate(${goal.z < p.z ? 90 : -90}deg)`;
-      tut.dist.textContent = goal.z < p.z ? 'go down' : 'go up';
+      tut.dist.textContent = t(goal.z < p.z ? 'go down' : 'go up');
       return;
     }
     const dx = goal.x - p.x, dy = goal.y - p.y;
     const d = Math.max(Math.abs(dx), Math.abs(dy));
     if (d <= 1) {
       tut.arrow.hidden = true;
-      tut.dist.textContent = 'here';
+      tut.dist.textContent = t('here');
       return;
     }
     tut.arrow.style.transform = `rotate(${Math.round(Math.atan2(dy, dx) * 180 / Math.PI)}deg)`;
-    tut.dist.textContent = `${d} tiles`;
+    tut.dist.textContent = t('{n} tile|{n} tiles', { n: d });
   }
 
   update(dt: number): void {
@@ -2450,69 +2494,71 @@ export class HUD {
     this.nameEl.textContent = p.name;
     const lvl = String(p.level);
     if (this.lvlBadge.textContent !== lvl) this.lvlBadge.textContent = lvl;
-    this.levelEl.textContent = `${VOCATIONS[p.vocation].name} · level ${p.level}`;
+    this.levelEl.textContent = `${trName(VOCATIONS[p.vocation].name)} · ${t('level {n}', { n: p.level })}`;
     this.setBar(this.hp, p.hp / p.maxHp, `${Math.ceil(p.hp)} / ${p.maxHp}`);
     this.hp.fill.style.background = hpColor(p.hp / p.maxHp);
     this.setBar(this.mp, p.maxMana ? p.mana / p.maxMana : 0, `${Math.floor(p.mana)} / ${p.maxMana}`);
     const need = expForLevel(p.level + 1) - p.exp;
-    this.setBar(this.xp, p.levelProgress(), `${Math.floor(p.levelProgress() * 100)}% · ${fmtGold(need)} to go`);
+    this.setBar(this.xp, p.levelProgress(), `${Math.floor(p.levelProgress() * 100)}% · ${t('{n} to go', { n: need })}`);
     const w = s.inventory.weight();
-    this.capEl.textContent = `Cap ${Math.floor(p.capacity - w)} oz · Gold ${fmtGold(s.inventory.count('gold'))}${s.bank ? ` (+${fmtGold(s.bank)} bank)` : ''}`;
+    this.capEl.textContent = `${t('Cap {n} oz', { n: Math.floor(p.capacity - w) })} · ${t('Gold {n}', { n: s.inventory.count('gold') })}${s.bank ? ` (${t('+{n} bank', { n: s.bank })})` : ''}`;
     const buffs: string[] = [];
-    if (p.buffs.strongHaste > 0) buffs.push('⇶ strong haste');
-    else if (p.buffs.haste > 0) buffs.push('⇶ haste');
-    if (p.buffs.magicShield > 0) buffs.push('◈ magic shield');
-    if (p.buffs.light > 0 || p.buffs.greatLight > 0 || p.buffs.ultimateLight > 0) buffs.push('☀ light');
-    if (p.buffs.invisible > 0) buffs.push('◌ invisible');
-    if (p.buffs.illusion > 0 && p.illusion) buffs.push(`◐ illusion`);
-    if (p.buffs.poisoned > 0) buffs.push('☣ poisoned');
-    if (p.buffs.rooted > 0) buffs.push('❦ rooted');
-    const mins = (t: number) => `${Math.ceil(t / 60)}m`;
-    if (p.buffs.berserk > 0) buffs.push(`⚔ fury ${mins(p.buffs.berserk)}`);
-    if (p.buffs.bullseye > 0) buffs.push(`◎ hawk eye ${mins(p.buffs.bullseye)}`);
-    if (p.buffs.mastermind > 0) buffs.push(`✦ clarity ${mins(p.buffs.mastermind)}`);
-    if (g.isProtected(p)) buffs.push('⛨ protection zone');
-    if (p.pzLock > 0) buffs.push(`⚠ PZ-locked ${Math.ceil(p.pzLock)}s`);
+    if (p.buffs.strongHaste > 0) buffs.push(`⇶ ${t('strong haste')}`);
+    else if (p.buffs.haste > 0) buffs.push(`⇶ ${t('haste')}`);
+    if (p.buffs.magicShield > 0) buffs.push(`◈ ${t('magic shield')}`);
+    if (p.buffs.light > 0 || p.buffs.greatLight > 0 || p.buffs.ultimateLight > 0) buffs.push(`☀ ${t('light')}`);
+    if (p.buffs.invisible > 0) buffs.push(`◌ ${t('invisible')}`);
+    if (p.buffs.illusion > 0 && p.illusion) buffs.push(`◐ ${t('illusion')}`);
+    if (p.buffs.poisoned > 0) buffs.push(`☣ ${t('poisoned')}`);
+    if (p.buffs.rooted > 0) buffs.push(`❦ ${t('rooted')}`);
+    const mins = (secs: number) => t('{n}m', { n: Math.ceil(secs / 60) });
+    if (p.buffs.berserk > 0) buffs.push(`⚔ ${t('fury')} ${mins(p.buffs.berserk)}`);
+    if (p.buffs.bullseye > 0) buffs.push(`◎ ${t('hawk eye')} ${mins(p.buffs.bullseye)}`);
+    if (p.buffs.mastermind > 0) buffs.push(`✦ ${t('clarity')} ${mins(p.buffs.mastermind)}`);
+    if (g.isProtected(p)) buffs.push(`⛨ ${t('protection zone')}`);
+    if (p.pzLock > 0) buffs.push(`⚠ ${t('PZ-locked {n}s', { n: Math.ceil(p.pzLock) })}`);
     const prem = g.premiumView(this.ctl.pid);
-    if (prem && prem.until > Date.now()) buffs.push(`♛ premium ${Math.ceil((prem.until - Date.now()) / 86_400_000)}d`);
-    else if (prem?.enforced) buffs.push('free account');
+    if (prem && prem.until > Date.now()) buffs.push(`♛ ${t('premium {n}d', { n: Math.ceil((prem.until - Date.now()) / 86_400_000) })}`);
+    else if (prem?.enforced) buffs.push(t('free account'));
     const mySkull = g.skullOf(p);
-    if (mySkull === 2) buffs.push('☠ red skull');
-    else if (mySkull === 1) buffs.push('☠ white skull');
+    if (mySkull === 2) buffs.push(`☠ ${t('red skull')}`);
+    else if (mySkull === 1) buffs.push(`☠ ${t('white skull')}`);
     this.pvpBtn.hidden = !g.pvp;
-    const pvpLabel = p.secure ? 'Secure' : 'Open PvP';
+    const pvpLabel = t(p.secure ? 'Secure' : 'Open PvP');
     if (this.pvpBtn.textContent !== pvpLabel) {
       this.pvpBtn.textContent = pvpLabel;
       this.pvpBtn.classList.toggle('pvp-open', !p.secure);
     }
     const bt = buffs.join('  ');
     if (this.buffsEl.textContent !== bt) this.buffsEl.textContent = bt;
-    const floorText = p.z === 0 ? 'Ground floor' : p.z > 0 ? `Floor +${p.z}` : `Underground ${p.z}`;
+    const floorText = p.z === 0 ? t('Ground floor') : p.z > 0 ? t('Floor +{z}', { z: String(p.z) }) : t('Underground {z}', { z: String(p.z) });
     if (this.floorEl.textContent !== floorText) this.floorEl.textContent = floorText;
-    const where = g.world.regionAt(p.x, p.y, p.z)?.name;
+    const whereEn = g.world.regionAt(p.x, p.y, p.z)?.name;
+    const where = whereEn ? trName(whereEn) : whereEn;
     const loc = where ? `${where} · ${floorText}` : floorText;
     if (this.topLoc.textContent !== loc) this.topLoc.textContent = loc;
 
-    this.statsEl.textContent = `Atk ${g.attackValue(s)} · Def ${g.defense(s)} · Arm ${g.armor(s)} · Speed ${Math.round(100 * 0.27 / p.stepTime)}`;
+    this.statsEl.textContent = t('Atk {atk} · Def {def} · Arm {arm} · Speed {speed}', { atk: g.attackValue(s), def: g.defense(s), arm: g.armor(s), speed: Math.round(100 * 0.27 / p.stepTime) });
 
     const region = g.world.regionAt(p.x, p.y, p.z);
     const rname = region ? region.name : '';
     if (rname !== this.lastRegion) {
       this.lastRegion = rname;
       if (region) {
-        this.regionEl.textContent = `${region.name}${region.level && region.level !== '—' ? ` · level ${region.level}` : ''}`;
+        this.regionEl.textContent = `${trName(region.name)}${region.level && region.level !== '—' ? ` · ${t('level {n}', { n: region.level })}` : ''}`;
         this.regionEl.classList.remove('show');
         void this.regionEl.offsetWidth;
         this.regionEl.classList.add('show');
       }
     }
 
-    const t = g.getTarget(p.targetId);
-    if (t && !t.dead) {
+    const tg = g.getTarget(p.targetId);
+    if (tg && !tg.dead) {
       this.targetEl.classList.add('on');
-      this.targetName.textContent = t instanceof Enemy && t.def.boss ? `♛ ${t.name}${t.def.title ? `, ${t.def.title}` : ''}` : t instanceof Enemy && t.def.elite ? `★ ${t.name}` : t.name;
-      this.targetFill.style.width = `${(t.hp / t.maxHp) * 100}%`;
-      this.targetFill.style.background = hpColor(t.hp / t.maxHp);
+      const tname = tg instanceof Enemy || !this.ctl.game.getPlayer(tg.id) ? trName(tg.name) : tg.name;
+      this.targetName.textContent = tg instanceof Enemy && tg.def.boss ? `♛ ${tname}${tg.def.title ? `, ${trName(tg.def.title)}` : ''}` : tg instanceof Enemy && tg.def.elite ? `★ ${tname}` : tname;
+      this.targetFill.style.width = `${(tg.hp / tg.maxHp) * 100}%`;
+      this.targetFill.style.background = hpColor(tg.hp / tg.maxHp);
     } else {
       this.targetEl.classList.remove('on');
     }
@@ -2531,7 +2577,7 @@ export class HUD {
     this.minimap.update(dt);
     this.worldMap.update(dt);
     this.deathEl.classList.toggle('show', p.dead);
-    const hover = this.renderer.describeHover();
+    const hover = trText(this.renderer.describeHover());
     if (this.statusLine.textContent !== hover) this.statusLine.textContent = hover;
 
     if (this.announceTimer > 0) {

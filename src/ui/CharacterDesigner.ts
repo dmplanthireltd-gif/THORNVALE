@@ -6,6 +6,8 @@ import type { GearLook } from '../render/models/humanoid';
 import { CharacterPreview } from './CharacterPreview';
 import './designer.css';
 import { button, el } from './dom';
+import { onLangChange, t } from '../i18n/i18n';
+import { trName } from '../i18n/gameText';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -20,6 +22,7 @@ export class CharacterDesigner {
   private a: Appearance;
   private preview: CharacterPreview;
   private form: HTMLDivElement;
+  private offLang: () => void;
 
   constructor(parent: HTMLElement, initial: Appearance = DEFAULT_APPEARANCE, private readonly onChange?: (a: Appearance) => void) {
     this.a = sanitizeAppearance(initial);
@@ -27,11 +30,12 @@ export class CharacterDesigner {
     const stage = el('div', 'cd-stage', this.root);
     this.preview = new CharacterPreview(stage);
     const turn = el('div', 'cd-turn', stage);
-    button(turn, '⟲', () => this.preview.turn(-0.6), 'cd-arrow').setAttribute('aria-label', 'Turn left');
-    button(turn, 'Random', () => this.update(randomAppearance()), 'cd-random');
-    button(turn, '⟳', () => this.preview.turn(0.6), 'cd-arrow').setAttribute('aria-label', 'Turn right');
+    button(turn, '⟲', () => this.preview.turn(-0.6), 'cd-arrow').setAttribute('aria-label', t('Turn left'));
+    const rnd = button(turn, t('Random'), () => this.update(randomAppearance()), 'cd-random');
+    button(turn, '⟳', () => this.preview.turn(0.6), 'cd-arrow').setAttribute('aria-label', t('Turn right'));
     this.form = el('div', 'cd-form', this.root);
     this.render();
+    this.offLang = onLangChange(() => { rnd.textContent = t('Random'); this.render(); });
     this.preview.set(this.a);
   }
 
@@ -49,6 +53,7 @@ export class CharacterDesigner {
   }
 
   dispose(): void {
+    this.offLang();
     this.preview.dispose();
     this.root.remove();
   }
@@ -75,12 +80,12 @@ export class CharacterDesigner {
     const body = this.row('Body');
     const tg = el('div', 'cd-toggle', body);
     for (const b of BODY_TYPES) {
-      const bb = button(tg, b.name, () => this.patch({ body: b.id }), `cd-opt${a.body === b.id ? ' on' : ''}`);
+      const bb = button(tg, trName(b.name), () => this.patch({ body: b.id }), `cd-opt${a.body === b.id ? ' on' : ''}`);
       bb.setAttribute('aria-pressed', String(a.body === b.id));
     }
 
     this.stepper('Build', BUILDS, a.build, (id) => this.patch({ build: id }));
-    this.swatches('Skin', SKIN_TONES.map((c, i) => ({ name: `Skin tone ${i + 1}`, hex: c })), a.skin, (i) => this.patch({ skin: i }));
+    this.swatches('Skin', SKIN_TONES.map((c, i) => ({ name: t('Skin tone {n}', { n: i + 1 }), hex: c, raw: true })), a.skin, (i) => this.patch({ skin: i }));
     this.stepper('Hair', HAIR_STYLES, a.hair, (id) => this.patch({ hair: id }));
     this.swatches('Hair colour', HAIR_COLORS, a.hairColor, (i) => this.patch({ hairColor: i }));
     if (a.body === 'male') this.stepper('Facial hair', BEARDS, a.beard, (id) => this.patch({ beard: id }));
@@ -88,12 +93,12 @@ export class CharacterDesigner {
     this.swatches('Eyes', EYE_COLORS, a.eyes, (i) => this.patch({ eyes: i }));
     this.swatches('Shirt', CLOTH_COLORS, a.top, (i) => this.patch({ top: i }));
     this.swatches('Trousers', CLOTH_COLORS, a.bottom, (i) => this.patch({ bottom: i }));
-    el('p', 'cd-hint', f, 'Worn armour shows over your clothes. Helmets cover the hair beneath them.');
+    el('p', 'cd-hint', f, t('Worn armour shows over your clothes. Helmets cover the hair beneath them.'));
   }
 
   private row(label: string): HTMLDivElement {
     const r = el('div', 'cd-row', this.form);
-    el('span', 'cd-label', r, label);
+    el('span', 'cd-label', r, t(label));
     return r;
   }
 
@@ -102,19 +107,20 @@ export class CharacterDesigner {
     const s = el('div', 'cd-step', r);
     const i = Math.max(0, list.findIndex((x) => x.id === cur));
     const go = (d: number) => set(list[(i + d + list.length) % list.length].id);
-    button(s, '◀', () => go(-1), 'cd-arrow').setAttribute('aria-label', `Previous ${label.toLowerCase()}`);
-    el('span', 'cd-value', s, list[i].name);
-    button(s, '▶', () => go(1), 'cd-arrow').setAttribute('aria-label', `Next ${label.toLowerCase()}`);
+    button(s, '◀', () => go(-1), 'cd-arrow').setAttribute('aria-label', t('Previous: {what}', { what: t(label) }));
+    el('span', 'cd-value', s, trName(list[i].name));
+    button(s, '▶', () => go(1), 'cd-arrow').setAttribute('aria-label', t('Next: {what}', { what: t(label) }));
   }
 
-  private swatches(label: string, list: Array<{ name: string; hex: number }>, cur: number, set: (i: number) => void): void {
+  private swatches(label: string, list: Array<{ name: string; hex: number; raw?: boolean }>, cur: number, set: (i: number) => void): void {
     const r = this.row(label);
     const s = el('div', 'cd-swatches', r);
     list.forEach((c, i) => {
       const b = button(s, '', () => set(i), `cd-sw${i === cur ? ' on' : ''}`);
       b.style.background = hex(c.hex);
-      b.title = c.name;
-      b.setAttribute('aria-label', `${label}: ${c.name}`);
+      const nm = c.raw ? c.name : c.name === 'Moss' ? t('Moss green') : trName(c.name);
+      b.title = nm;
+      b.setAttribute('aria-label', `${t(label)}: ${nm}`);
       b.setAttribute('aria-pressed', String(i === cur));
     });
   }

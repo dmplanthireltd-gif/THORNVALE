@@ -1,0 +1,16 @@
+/* Language picker (EN / PL / PT-BR): the title strip and Settings → Language. BRAND.md: iron buttons,
+   square corners, the chosen one in gold; Verdana capitals for the short labels. */
+.lang-pick { display: inline-flex; gap: 4px; align-items: center; }
+.lang-btn {
+  font: 700 11px/1 Verdana, Tahoma, system-ui, sans-serif; letter-spacing: 0.06em;
+  color: #e8dfcc; background: linear-gradient(180deg, #3e362e, #2b2621);
+  border: 1px solid #5a4a30; box-shadow: inset 1px 1px 0 #6a5e50, inset -1px -1px 0 #120f0c;
+  padding: 5px 7px; min-height: 24px; cursor: pointer; border-radius: 0;
+}
+.lang-btn:hover { background: linear-gradient(180deg, #4a4138, #36302a); }
+.lang-btn.on { background: #4f4126; border-color: #c9a24a; color: #ffe9a8; box-shadow: inset 1px 1px 0 #8a7340, inset -1px -1px 0 #2a2214; }
+.lang-btn:focus-visible { outline: 2px solid #ffe9a8; outline-offset: 1px; }
+.set-lang .lang-btn { font-size: 12px; padding: 6px 10px; }
+@media (max-width: 640px) {
+  .gate-lang .lang-btn { padding: 6px 6px; min-height: 28px; }
+}

@@ -17,7 +17,9 @@
     "server",
     "src/game",
     "scripts/music",
-    "scripts/site"
+    "scripts/site",
+    "scripts/i18n",
+    "scripts/i18n-test.ts"
   ],
   "exclude": []
 }
