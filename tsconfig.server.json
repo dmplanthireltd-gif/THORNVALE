@@ -14,6 +14,7 @@
     "scripts/storage-test.ts",
     "scripts/store-test.ts",
     "scripts/music-test.ts",
+    "scripts/music-audit.ts",
     "server",
     "src/game",
     "scripts/music",

@@ -31,6 +31,7 @@
     "scripts/storage-test.ts",
     "scripts/store-test.ts",
     "scripts/music-test.ts",
+    "scripts/music-audit.ts",
     "scripts/music",
     "scripts/site"
   ]
