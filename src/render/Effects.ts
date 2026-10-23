@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { Effect } from '../game/core/events';
+import { PAINTED } from './style';
+import { paintedEffectTextures, paintedFieldFrames, paintedFxAtlas, premultBlend } from './paint/fxArt';
 
 /**
  * Spell, rune, missile and hit effects in the classic tile-sprite style.
@@ -71,7 +73,7 @@ function col(hex: number): THREE.Color {
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
 /** Opacity stepped into a few levels so fades read as pixel-art frames. */
-const step4 = (k: number) => Math.round(Math.max(0, Math.min(1, k)) * 4) / 4;
+const step4 = (k: number) => (PAINTED ? Math.max(0, Math.min(1, k)) : Math.round(Math.max(0, Math.min(1, k)) * 4) / 4);
 
 function reducedMotion(): boolean {
   try {
@@ -667,14 +669,32 @@ export class Effects {
     this.spriteCell = new THREE.InstancedBufferAttribute(new Float32Array(MAX_TILE_FX * 2), 2);
     this.spriteCell.setUsage(THREE.DynamicDrawUsage);
     quad.setAttribute('aCell', this.spriteCell);
-    const spriteMat = new THREE.MeshBasicMaterial({ map: buildAtlas(), transparent: true, alphaTest: 0.5, depthWrite: false });
-    spriteMat.onBeforeCompile = (sh) => {
+    const spriteMat = PAINTED
+      // painted style: full-resolution frames, glow and smoke in one premultiplied texture, frames cross-fade (paint/fxArt.ts)
+      ? premultBlend(new THREE.MeshBasicMaterial({ map: paintedFxAtlas() }))
+      : new THREE.MeshBasicMaterial({ map: buildAtlas(), transparent: true, alphaTest: 0.5, depthWrite: false });
+    spriteMat.onBeforeCompile = PAINTED ? (sh) => {
+      sh.vertexShader = 'attribute vec2 aCell;\nvarying vec2 vUv2;\nvarying float vMix;\n' + sh.vertexShader.replace(
+        '#include <uv_vertex>',
+        `#include <uv_vertex>
+  float c0 = floor(aCell.x);
+  vMix = aCell.x - c0;
+  float c1 = min(c0 + 1.0, ${ACOLS - 1}.0);
+  float vv = 1.0 - ((1.0 - uv.y) + aCell.y) / ${AROWS}.0;
+  vMapUv = vec2((uv.x + c0) / ${ACOLS}.0, vv);
+  vUv2 = vec2((uv.x + c1) / ${ACOLS}.0, vv);`,
+      );
+      sh.fragmentShader = 'varying vec2 vUv2;\nvarying float vMix;\n' + sh.fragmentShader.replace(
+        '#include <map_fragment>',
+        'diffuseColor *= mix(texture2D(map, vMapUv), texture2D(map, vUv2), vMix);',
+      );
+    } : (sh) => {
       sh.vertexShader = 'attribute vec2 aCell;\n' + sh.vertexShader.replace(
         '#include <uv_vertex>',
         `#include <uv_vertex>\n  vMapUv = vec2((uv.x + aCell.x) / ${ACOLS}.0, 1.0 - ((1.0 - uv.y) + aCell.y) / ${AROWS}.0);`,
       );
     };
-    spriteMat.customProgramCacheKey = () => 'tile-sprites';
+    spriteMat.customProgramCacheKey = () => (PAINTED ? 'tile-sprites-painted' : 'tile-sprites');
     this.spriteMesh = new THREE.InstancedMesh(quad, spriteMat, MAX_TILE_FX);
     this.spriteMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.spriteMesh.count = 0;
@@ -683,9 +703,12 @@ export class Effects {
     this.group.add(this.spriteMesh);
 
     const box = new THREE.BoxGeometry(1, 1, 1);
-    this.solidMesh = new THREE.InstancedMesh(box, new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_SOLID);
-    this.glowMesh = new THREE.InstancedMesh(box, new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    // painted style: round debris and soft, camera-facing glowing motes (embers, sparks) instead of little cubes
+    const halo = new THREE.PlaneGeometry(3, 3);
+    halo.rotateX(-(Math.PI / 2 - TILT));
+    this.solidMesh = new THREE.InstancedMesh(PAINTED ? new THREE.IcosahedronGeometry(0.58, 1) : box, new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_SOLID);
+    this.glowMesh = new THREE.InstancedMesh(PAINTED ? halo : box, new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, map: PAINTED ? this.tex.glow : null,
     }), MAX_GLOW);
     for (const m of [this.solidMesh, this.glowMesh]) {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -930,6 +953,8 @@ export class Effects {
         return bub ? [200, 255, 140, 255] : [40 + Math.round(n * 40), 120 + Math.round(n * 50), 20, 255];
       });
     }
+    // painted style: smooth, full-resolution ground marks, glow, magic wall and field textures
+    if (PAINTED && typeof document !== 'undefined') Object.assign(this.tex, paintedEffectTextures());
   }
 
   /** Texture for a field's ground tile or a magic wall. */
@@ -1034,7 +1059,7 @@ export class Effects {
       }));
     }
     for (const t of slime) t.colorSpace = THREE.SRGBColorSpace;
-    this.fieldFrames = { flame, arc, slime };
+    this.fieldFrames = PAINTED ? paintedFieldFrames() : { flame, arc, slime };
 
     const quad = new THREE.PlaneGeometry(1, 1.25);
     quad.translate(0, 0.625, 0);
@@ -1063,6 +1088,14 @@ export class Effects {
       wall: new THREE.MeshBasicMaterial({ map: this.tex.wall, color: 0xc8dcff, transparent: true, opacity: 0.82, depthWrite: false }),
       wallGlow: add(this.tex.glow, 0x6a9aff, 0.7),
     };
+    if (PAINTED) {
+      // painted flames and arcs carry glow and smoke in premultiplied textures; slime has soft edges
+      const F = this.fieldFrames!;
+      const pm = (map: THREE.Texture) => premultBlend(new THREE.MeshBasicMaterial({ map, side: THREE.DoubleSide }));
+      const slimeMat = (map: THREE.Texture) => new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      (this.fieldMats.fireGround as THREE.MeshBasicMaterial).opacity = 0.5;
+      Object.assign(this.fieldMats, { flameA: pm(F.flame[0]), flameB: pm(F.flame[2]), arcA: pm(F.arc[0]), arcB: pm(F.arc[2]), slimeA: slimeMat(F.slime[0]), slimeB: slimeMat(F.slime[2]) });
+    }
   }
 
   /**
@@ -1134,13 +1167,18 @@ export class Effects {
     M.arcB.map = F.arc[(ai + 1) % 4];
     // arcs blink like real sparks
     const blink = Math.floor(this.time * 20) % 5;
-    M.arcA.opacity = blink === 0 ? 0.35 : 1;
-    M.arcB.opacity = blink === 2 ? 0.35 : 1;
+    if (PAINTED) {
+      M.arcA.color.setScalar(blink === 0 ? 0.4 : 1);
+      M.arcB.color.setScalar(blink === 2 ? 0.4 : 1);
+    } else {
+      M.arcA.opacity = blink === 0 ? 0.35 : 1;
+      M.arcB.opacity = blink === 2 ? 0.35 : 1;
+    }
     M.slimeA.map = F.slime[si];
     M.slimeB.map = F.slime[(si + 2) % 4];
-    const step = (v: number) => Math.round(v * 5) / 5;
+    const step = (v: number) => (PAINTED ? v : Math.round(v * 5) / 5);
     M.fireGlow.opacity = step(0.45 + 0.2 * Math.sin(this.time * 11) * Math.sin(this.time * 4.3));
-    M.fireGround.opacity = step(0.7 + 0.2 * Math.sin(this.time * 9));
+    M.fireGround.opacity = step(0.7 + 0.2 * Math.sin(this.time * 9)) * (PAINTED ? 0.6 : 1);
     M.energyGround.opacity = Math.floor(this.time * 20) % 7 === 0 ? 1 : 0.7;
     M.wall.opacity = step(0.74 + 0.1 * Math.sin(this.time * 3));
     M.wallGlow.opacity = step(0.55 + 0.2 * Math.sin(this.time * 5));
@@ -1594,6 +1632,8 @@ export class Effects {
   private stepParticles(list: Particle[], mesh: THREE.InstancedMesh, dt: number, cap: number): void {
     let n = 0;
     const c = new THREE.Color();
+    // painted style: glowing motes are camera-facing halos (never rotated)
+    const facing = PAINTED && mesh === this.glowMesh;
     for (let i = list.length - 1; i >= 0; i--) {
       const p = list[i];
       p.life += dt;
@@ -1637,7 +1677,10 @@ export class Effects {
       const fade = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
       const s = p.size * (1 + p.grow * t) * (0.35 + 0.65 * fade);
       dummy.position.set(p.x, p.y, p.z);
-      if (p.stretch > 0 && !p.orbit) {
+      if (facing) {
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(s, s, s);
+      } else if (p.stretch > 0 && !p.orbit) {
         const sp = Math.hypot(p.vx, p.vy, p.vz);
         if (sp > 0.05) {
           tmpV.set(p.vx / sp, p.vy / sp, p.vz / sp);
@@ -1724,7 +1767,8 @@ export class Effects {
     }
     for (const fx of list) {
       if (fx.delay > 0 || n >= MAX_TILE_FX) continue;
-      const frame = Math.min(FRAMES - 1, Math.floor((fx.t / fx.dur) * FRAMES));
+      // painted style: frames cross-fade (fractional column, see the sprite shader)
+      const frame = PAINTED ? Math.min(FRAMES - 1, (fx.t / fx.dur) * (FRAMES - 1)) : Math.min(FRAMES - 1, Math.floor((fx.t / fx.dur) * FRAMES));
       this.spriteInstance(n++, fx.x, fx.y, fx.z, fx.scale, frame, fx.row);
     }
 

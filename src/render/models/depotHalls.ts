@@ -3,6 +3,10 @@ import type { DepotHall, DepotTheme, HallProp } from '../../game/world/depotHall
 import { Mesher } from './darkRigsCore';
 import type { Mat } from './parts';
 import type { MatFn } from './spawnPlaza';
+import { PAINTED } from '../style';
+import { paintDetail } from '../paint/detail';
+import { useBuiltAtlas } from '../paint/builtAtlas';
+import { GlowSprites } from '../paint/glowSprites';
 
 /**
  * The big depot halls of the other towns (layout in game/world/depotHalls.ts): the
@@ -152,10 +156,14 @@ export function buildDepotHallsView(halls: DepotHall[], M: MatFn): DepotHallsVie
   const inside: Array<{ hall: DepotHall; mesh: THREE.Mesh }> = [];
   const baseMat = M(0xffffff);
   baseMat.vertexColors = true;
+  // painted style: hand-painted wear from the built atlas on the merged hall details
+  if (PAINTED) useBuiltAtlas(baseMat);
   const depotFace = M(0xffffff, { map: signTexture('DEPOT', 'chest') });
   const bankFace = M(0xffffff, { map: signTexture('BANK', 'coin') });
   const faceGeo = new THREE.PlaneGeometry(1, 1);
 
+  // painted style: soft halos round the lanterns, sconces and braziers (one instanced mesh per chunk for all halls)
+  const halos = PAINTED ? new GlowSprites() : null;
   for (const hall of halls) {
     const S = new Mesher();
     S.ao = 0.08;
@@ -164,6 +172,7 @@ export function buildDepotHallsView(halls: DepotHall[], M: MatFn): DepotHallsVie
     const fz = hall.y + hall.h - 1 + 0.5; // the south façade's outer face
 
     const flame = (x: number, y: number, z: number, s = 1) => {
+      halos?.add(x, y + 0.12 * s, z, 1.3 * s, look.flame, 0.9);
       S.cone(0.09 * s, 0.24 * s, look.flame, [x, y + 0.12 * s, z], { glow: true }, 5);
       S.cone(0.05 * s, 0.16 * s, 0xffe8a8, [x, y + 0.1 * s, z], { glow: true }, 4);
     };
@@ -241,6 +250,7 @@ export function buildDepotHallsView(halls: DepotHall[], M: MatFn): DepotHallsVie
 
     const base = S.build('base');
     if (base) {
+      if (PAINTED) paintDetail(base);
       const me = new THREE.Mesh(base, baseMat);
       me.castShadow = true;
       me.receiveShadow = true;
@@ -257,12 +267,14 @@ export function buildDepotHallsView(halls: DepotHall[], M: MatFn): DepotHallsVie
     }
   }
 
+  halos?.build(group);
   let time = 0;
   return {
     group,
     flameMats,
     update(dt: number, px: number, py: number, pz: number): void {
       time += dt;
+      if (halos) halos.material.opacity = 0.5 + Math.sin(time * 8) * 0.06 + Math.sin(time * 21) * 0.04;
       glowMat.color.setScalar(0.86 + Math.sin(time * 8) * 0.08 + Math.sin(time * 21) * 0.05);
       poolMat.opacity = 0.5 + Math.sin(time * 5.3) * 0.04 + Math.sin(time * 13) * 0.025;
       for (const { hall: h, mesh } of inside) mesh.visible = pz === 0 && px >= h.x && py >= h.y && px < h.x + h.w && py < h.y + h.h;

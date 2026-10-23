@@ -6,6 +6,9 @@ import { Mesher, type V3 } from './darkRigsCore';
 import type { Mat } from './parts';
 import { applyWind, WIND, WIND_CLOTH } from '../weather/wind';
 import { PAINTED } from '../style';
+import { paintDetail } from '../paint/detail';
+import { useBuiltAtlas } from '../paint/builtAtlas';
+import { GlowSprites } from '../paint/glowSprites';
 
 /** Makes a cel material; WorldView passes its floor-tracked factory so the plaza dims with its floor. */
 export type MatFn = (color: number, opts?: { emissive?: number; map?: THREE.Texture | null }) => Mat;
@@ -1299,6 +1302,8 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   if (base) {
     const bm = M(0xffffff);
     bm.vertexColors = true;
+    // painted style: hand-painted wear (grain, chips, moss, rust) from the built atlas, same vertex colours
+    if (PAINTED) { paintDetail(base); useBuiltAtlas(bm); }
     const me = new THREE.Mesh(base, bm);
     me.castShadow = true;
     me.receiveShadow = true;
@@ -1323,6 +1328,9 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
 
   const spray = emitters.length ? new Particles(emitters, Math.min(110, emitters.length * 18), pz.style === 5 ? 0xb8d8d4 : 0xf4fbff, 0.048, 4.2, 1.4) : null;
   if (spray) group.add(spray.mesh);
+  // painted style: a soft halo over every brazier / fire bowl
+  const halos = PAINTED && embers.length ? new GlowSprites() : null;
+  if (halos) { for (const e of embers) halos.add(e.p[0], e.p[1] + 0.05, e.p[2], 1.9, 0xffa040); halos.build(group); }
   const sparks = embers.length ? new Particles(embers, embers.length * 6, 0xffa040, 0.025, -0.4, 1.3) : null;
   if (sparks) group.add(sparks.mesh);
   const fumes = smoke.length ? new Particles(smoke, smoke.length * 28, 0x8a8480, 0.13, -0.15, 3.2) : null;
@@ -1354,6 +1362,7 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
     update(dt: number): void {
       time += dt;
       glowMat.color.setScalar(0.86 + Math.sin(time * 9) * 0.08 + Math.sin(time * 23) * 0.06);
+      if (halos) halos.material.opacity = 0.5 + Math.sin(time * 9) * 0.07 + Math.sin(time * 23) * 0.05;
       for (const a of animTex) {
         a.t.offset.x = (a.t.offset.x + a.vx * dt) % 1;
         a.t.offset.y = (a.t.offset.y + a.vy * dt) % 1;

@@ -16,6 +16,11 @@ import { applyWind, WIND_BUSH, WIND_CROP, WIND_GRASS, WIND_PALM, WIND_TREE } fro
 import { PAINTED } from './style';
 import { groundIdTexture, paintsGround, usePaintedGround } from './paintGround';
 import { paintedProps } from './paintProps';
+import { PaintMesher } from './paint/paintMesh';
+import { PaintBuildings, paintedRoof } from './paint/buildings';
+import { PaintProps } from './paint/props';
+import { GlowSprites } from './paint/glowSprites';
+import { Cell, useBuiltAtlas } from './paint/builtAtlas';
 
 /** Vertical distance between floors in world units. */
 export const FLOOR_H = 3.4;
@@ -287,6 +292,16 @@ function joinGeometries(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return out;
 }
 
+/** Painted style: a wheat stalk with a bearded ear and two drooping leaves (one geometry, instanced like the classic cone). */
+function paintedWheat(): THREE.BufferGeometry {
+  const stalk = new THREE.CylinderGeometry(0.008, 0.012, 0.46, 4).translate(0, 0.23, 0);
+  const ear = new THREE.IcosahedronGeometry(0.035, 0).scale(0.8, 2.6, 0.8).translate(0.012, 0.52, 0);
+  const beard = new THREE.ConeGeometry(0.03, 0.12, 4).translate(0.014, 0.66, 0);
+  const leaf1 = new THREE.BoxGeometry(0.18, 0.004, 0.03).translate(0.09, 0, 0).rotateZ(-0.5).translate(0, 0.22, 0);
+  const leaf2 = new THREE.BoxGeometry(0.16, 0.004, 0.03).translate(-0.08, 0, 0).rotateZ(0.6).translate(0, 0.14, 0);
+  return joinGeometries([stalk, ear, beard, leaf1, leaf2]);
+}
+
 function geo<T extends THREE.BufferGeometry>(g: T, ty = 0): T {
   if (ty) g.translate(0, ty, 0);
   return g;
@@ -307,6 +322,8 @@ export class WorldView {
   private time = 0;
   private waterTex: THREE.Texture[] = [];
   private flameMats: Mat[] = [];
+  /** Painted style: the halo materials round flames and lamps (flicker with the flames). */
+  private haloMats: THREE.MeshBasicMaterial[] = [];
   /** The Thornvale spawn plaza (fountain, paving, decorations), animated while its floor shows. */
   private plaza: PlazaView | null = null;
   /** The big depot halls of the other towns (signs, lanterns, lit interiors). */
@@ -318,6 +335,8 @@ export class WorldView {
   private pool: THREE.PointLight[] = [];
   private poolPick: LightSource[] = [];
   private poolTimer = 0;
+  /** Painted style: the merger of the floor being built (static props go in here). */
+  private pm: PaintMesher | null = null;
   /** Fields laid by runes: they are drawn by the animated field sprites, not as static flames. */
   isRuneField: (x: number, y: number, z: number) => boolean = () => false;
 
@@ -536,7 +555,7 @@ export class WorldView {
     const berry = B(new THREE.IcosahedronGeometry(0.06, 0), plainMat, true, 'decor');
     const flowers = B(new THREE.IcosahedronGeometry(0.065, 0), flowerMat, false);
     const stems = B(geo(new THREE.CylinderGeometry(0.012, 0.012, 0.2, 3), 0.1), stemMat, false);
-    const wheat = B(geo(new THREE.ConeGeometry(0.06, 0.55, 4), 0.27), wheatMat, false);
+    const wheat = B(PAINTED ? paintedWheat() : geo(new THREE.ConeGeometry(0.06, 0.55, 4), 0.27), wheatMat, false);
     const plaster = M(0xffffff, objTex.plaster());
     const brick = M(0xffffff, objTex.brick());
     const wallsWood = B(geo(new THREE.BoxGeometry(1, 1.7, 1), 0.85), plaster);
@@ -583,6 +602,13 @@ export class WorldView {
     const pineColors = [0x2f5e34, 0x2a5530, 0x356a3a, 0x284f2d];
     const isA = (xx: number, yy: number, objs: Obj[]) => w.inBounds(xx, yy) && objs.includes(w.getObj(xx, yy, z));
     const decor = new DecorBuilder(w, z, (col, o) => fv.m(col, o), this.flameMats);
+    // painted style: walls, fences, furniture and props merge into one atlas-textured mesh per chunk (render/paint/)
+    const pm = PAINTED ? new PaintMesher(chunkKey) : null;
+    this.pm = pm;
+    const pb = pm ? new PaintBuildings(w, z, pm) : null;
+    const pp = pm ? new PaintProps(w, z, pm) : null;
+    const halos = PAINTED ? new GlowSprites() : null;
+    const lit = (lx: number, ly: number, lh: number, color: number, power: number) => { if (PAINTED && z >= 0) fv.lights.push({ x: lx, y: ly, h: lh, color, power }); };
 
     for (let y = 0; y < w.height; y++) {
       for (let x = 0; x < w.width; x++) {
@@ -604,6 +630,7 @@ export class WorldView {
         const h = hash2(x, y, 3);
         const rot = hash2(x, y, 5) * Math.PI * 2;
         const c = new THREE.Color();
+        if (pp && pp.add(o, x, y)) continue;
         switch (o) {
           case Obj.Tree: {
             const s = 0.9 + h * 0.35;
@@ -676,6 +703,7 @@ export class WorldView {
             }
             break;
           case Obj.Wall: {
+            if (pb) { pb.wall(x, y, o); break; }
             const house = w.houseAt(x, y, z);
             if (house?.stone) {
               stoneWalls.add(compose(x, 0, y), c.setHex(house.wallColor).multiplyScalar(1.3));
@@ -689,9 +717,11 @@ export class WorldView {
             break;
           }
           case Obj.StoneWall:
+            if (pb) { pb.wall(x, y, o); break; }
             stoneWalls.add(compose(x, 0, y, 0, 1, 0.75 + h * 0.3, 1), c.setScalar(0.85 + h * 0.2));
             break;
           case Obj.Door: {
+            if (pb) { pb.door(x, y); break; }
             const horizontal = isA(x - 1, y, [Obj.Wall, Obj.StoneWall]) || isA(x + 1, y, [Obj.Wall, Obj.StoneWall]);
             if (horizontal) {
               doorPosts.add(compose(x - 0.42, 0, y));
@@ -705,18 +735,21 @@ export class WorldView {
             break;
           }
           case Obj.Fence: {
+            if (pb) { pb.fence(x, y); break; }
             fPosts.add(compose(x, 0, y));
             if (isA(x + 1, y, [Obj.Fence])) { rails.add(compose(x + 0.5, 0.35, y)); rails.add(compose(x + 0.5, 0.65, y)); }
             if (isA(x, y + 1, [Obj.Fence])) { rails.add(compose(x, 0.35, y + 0.5, Math.PI / 2)); rails.add(compose(x, 0.65, y + 0.5, Math.PI / 2)); }
             break;
           }
           case Obj.Railing: {
+            if (pb) { pb.railing(x, y); break; }
             railPosts.add(compose(x, 0, y));
             if (isA(x + 1, y, [Obj.Railing])) rails.add(compose(x + 0.5, 0.6, y));
             if (isA(x, y + 1, [Obj.Railing])) rails.add(compose(x, 0.6, y + 0.5, Math.PI / 2));
             break;
           }
           case Obj.Palisade: {
+            if (pb) { pb.palisade(x, y); break; }
             const horiz = isA(x - 1, y, [Obj.Palisade]) || isA(x + 1, y, [Obj.Palisade]);
             stakes.add(compose(x, 0, y, horiz ? 0 : Math.PI / 2, 1, 0.9 + h * 0.2, 1));
             for (let i = -1; i <= 1; i++) stakeTips.add(compose(x + (horiz ? i * 0.33 : 0), 0, y + (horiz ? 0 : i * 0.33), 0, 1, 0.9 + h * 0.2, 1));
@@ -750,7 +783,7 @@ export class WorldView {
             counters.add(compose(x, 0, y));
             break;
           case Obj.Altar:
-            altars.add(compose(x, 0, y));
+            if (pp) { pp.altar(x, y); halos!.add(x, 0.95, y, 1.1, 0xffb050, 0.8); } else altars.add(compose(x, 0, y));
             flames.add(compose(x - 0.25, 0.8, y, 0, 0.6, 0.6, 0.6));
             flames.add(compose(x + 0.25, 0.8, y, 0, 0.6, 0.6, 0.6));
             break;
@@ -761,20 +794,22 @@ export class WorldView {
             hay.add(compose(x, 0, y, rot * 0.1));
             break;
           case Obj.Lamp:
-            lampPost.add(compose(x, 0, y));
+            if (pp) { pp.lamp(x, y); halos!.add(x, 1.85, y, 1.7, 0xffc070); lit(x, y, 1.9, 0xffb060, 0.35); } else lampPost.add(compose(x, 0, y));
             lampGlow.add(compose(x, 1.85, y));
             break;
           case Obj.Torch:
-            torchSticks.add(compose(x, 0, y - 0.35, 0, 1, 1, 1, -0.3));
+            if (pp) { pp.torch(x, y); halos!.add(x, 1.6, y - 0.42, 1.4, 0xff9a40); lit(x, y, 1.6, 0xff9a40, 0.35); } else torchSticks.add(compose(x, 0, y - 0.35, 0, 1, 1, 1, -0.3));
             torchFlame.add(compose(x, 0, y - 0.42));
             break;
           case Obj.Campfire:
             fv.staticFires.add(this.world.idx(x, y));
+            if (pp) { pp.campfireStones(x, y); halos!.add(x, 0.45, y, 2.0, 0xff8a30); }
             for (let i = 0; i < 3; i++) flames.add(compose(x + Math.cos(i * 2.1) * 0.12, 0, y + Math.sin(i * 2.1) * 0.12, 0, 1, 1.2, 1));
             for (let i = 0; i < 4; i++) deadBranch.add(compose(x + Math.cos(i * 1.6) * 0.2, 0.05, y + Math.sin(i * 1.6) * 0.2, i * 1.6, 0.6, 0.6, 0.6, Math.PI / 2, 0));
             break;
           case Obj.FireField:
             if (this.isRuneField(x, y, z)) break;
+            halos?.add(x, 0.4, y, 1.6, 0xff7a20, 0.8);
             for (let i = 0; i < 4; i++) flames.add(compose(x + (hash2(x, y, i) - 0.5) * 0.6, 0, y + (hash2(x, y, i + 9) - 0.5) * 0.6, 0, 0.9, 0.7 + hash2(x, y, i + 3) * 0.8, 0.9));
             break;
           case Obj.Well:
@@ -782,9 +817,11 @@ export class WorldView {
             break;
           case Obj.StairsUp:
           case Obj.StairsDown:
+            if (pb) { pb.stairs(x, y, o === Obj.StairsUp); break; }
             this.buildStairs(fv, x, y, o === Obj.StairsUp);
             break;
           case Obj.Ladder:
+            if (pb) { pb.ladder(x, y); break; }
             this.buildLadder(fv, x, y);
             break;
           case Obj.RopeSpot:
@@ -846,6 +883,24 @@ export class WorldView {
     }
     decor.build(fv.group);
     fv.lights.push(...decor.lights);
+    this.pm = null;
+    if (pm && !pm.empty) pm.build(fv.group, useBuiltAtlas(fv.m(0xffffff)));
+    if (pm && z === 0) {
+      // a far-away probe of the fading (transparent) roof variant, so its shader is compiled at load (Renderer.warmUp)
+      const probe = new PaintMesher(() => 0);
+      probe.box(0.01, 0.01, 0.01, { cell: 0 }, [this.world.width / 2, -60, this.world.height / 2]);
+      const pmat = useBuiltAtlas(fv.m(0xffffff));
+      pmat.transparent = true;
+      pmat.depthWrite = false;
+      pmat.opacity = 0.5;
+      probe.build(fv.group, pmat, false, 'roofProbe');
+    }
+    if (halos) {
+      // braziers and other decor lights above ground get a halo too
+      if (z >= 0) for (const L of decor.lights) halos.add(L.x, L.h, L.y, 1.8, L.color, 0.8);
+      halos.build(fv.group);
+      this.haloMats.push(halos.material);
+    }
 
     const all = [trunks, rocks, bushes, ferns, berry, flowers, stems, wheat, wallsWood, wallsStone, beams, doorPosts, lintels, fPosts, rails, railPosts,
       headstones, mounds, barrels, hoops, crates, tableTop, tableLeg, hay, lampPost, lampGlow, deadBranch, stakes, stakeTips,
@@ -899,6 +954,23 @@ export class WorldView {
   private buildFurnace(fv: FloorView, x: number, y: number): void {
     const g = new THREE.Group();
     g.position.set(x, 0, y);
+    if (this.pm) {
+      // painted style: a rough, soot-blackened fieldstone furnace with a brick chimney; the glowing mouth stays animated
+      const S = this.pm;
+      S.box(0.86, 1.05, 0.8, { cell: Cell.Fieldstone, tint: 0.8, jitter: 0.03, ao: 0.4 }, [x, 0.52, y], [2, 2, 2]);
+      S.box(0.94, 0.12, 0.88, { cell: Cell.Steps, tint: 0.6, jitter: 0.015, ao: 0 }, [x, 1.1, y]);
+      S.box(0.36, 0.86, 0.36, { cell: Cell.Brick, tint: 0.75, jitter: 0.012, ao: 0 }, [x + 0.18, 1.55, y - 0.16]);
+      S.box(0.3, 0.02, 0.3, { cell: Cell.Soot, tint: 0.3, ao: 0 }, [x + 0.18, 1.99, y - 0.16]);
+      S.box(0.6, 0.5, 0.02, { cell: Cell.Soot, tint: 0.6, ao: 0 }, [x, 0.5, y + 0.405]);
+      const fire = fv.m(0xff8a2a, { emissive: 0xff5a10 });
+      this.flameMats.push(fire);
+      const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.34, 0.05), fire);
+      mouth.position.set(0, 0.38, 0.42);
+      g.add(mouth);
+      this.add(fv, g);
+      fv.lights.push({ x, y: y + 0.5, h: 0.5, color: 0xff7a20, power: 0.45 });
+      return;
+    }
     const stone = fv.m(0x8a7a6a, { map: objTex.rock() });
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.86, 1.05, 0.8), stone);
     body.position.y = 0.52;
@@ -941,6 +1013,23 @@ export class WorldView {
   private buildStove(fv: FloorView, x: number, y: number): void {
     const g = new THREE.Group();
     g.position.set(x, 0, y);
+    if (this.pm) {
+      // painted style: a rusty iron stove on stone feet with a blackened pot; the glowing grate stays animated
+      const S = this.pm;
+      S.box(0.8, 0.64, 0.7, { cell: Cell.Iron, tint: 0.8, ao: 0.35 }, [x, 0.38, y]);
+      for (const [fx, fz] of [[-0.34, -0.28], [0.34, -0.28], [-0.34, 0.28], [0.34, 0.28]]) S.box(0.1, 0.08, 0.1, { cell: Cell.Steps, tint: 0.6 }, [x + fx, 0.04, y + fz]);
+      S.box(0.86, 0.06, 0.76, { cell: Cell.Iron, tint: 1.0, ao: 0 }, [x, 0.73, y]);
+      S.cyl(0.07, 0.07, 0.9, { cell: Cell.Iron, tint: 0.8, ao: 0 }, [x - 0.26, 1.18, y - 0.22], 8);
+      S.cyl(0.18, 0.14, 0.22, { cell: Cell.Soot, tint: 0.7, ao: 0 }, [x + 0.12, 0.87, y + 0.05], 10);
+      S.cyl(0.16, 0.16, 0.01, { cell: Cell.Soot, tint: 0x6a5030, ao: 0 }, [x + 0.12, 0.98, y + 0.05], 10);
+      const fire = fv.m(0xff8a2a, { emissive: 0xff5a10 });
+      this.flameMats.push(fire);
+      const grate = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.04), fire);
+      grate.position.set(0, 0.28, 0.36);
+      g.add(grate);
+      this.add(fv, g);
+      return;
+    }
     const iron = fv.m(0x3a3c42);
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.7), iron);
     body.position.y = 0.35;
@@ -1244,6 +1333,18 @@ export class WorldView {
   // ================================================================ roofs
 
   private buildRoof(fv: FloorView, h: House): void {
+    if (PAINTED) {
+      // painted style: one sagging, overhanging roof mesh per house in its town's material (paint/buildings.ts)
+      const { geo, eave: ey } = paintedRoof(this.world, h);
+      const rm = useBuiltAtlas(fv.m(0xffffff));
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(geo, rm));
+      g.position.set(h.x + (h.w - 1) / 2, ey, h.y + (h.h - 1) / 2);
+      if (h.w < h.h) g.rotation.y = Math.PI / 2;
+      this.addLive(fv, g);
+      fv.roofs.push({ house: h, group: g, materials: [rm], opacity: 1 });
+      return;
+    }
     const eave = h.stone ? 1.9 : 1.7;
     const overhang = 0.3;
     const alongX = h.w >= h.h;
@@ -1344,6 +1445,7 @@ export class WorldView {
     this.sea?.update(dt, pz);
     const flick = 0.75 + Math.sin(this.time * 9) * 0.12 + Math.sin(this.time * 23) * 0.08;
     for (const m of this.flameMats) m.emissiveIntensity = flick;
+    for (const m of this.haloMats) m.opacity = 0.42 + (flick - 0.75) * 1.2;
 
     const p0 = playerTiles[playerTiles.length - 1] ?? { x: 0, y: 0 };
     this.depotHalls?.update(dt, Math.round(p0.x), Math.round(p0.y), pz);
