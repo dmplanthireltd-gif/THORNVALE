@@ -255,6 +255,23 @@ function choir(o: Out, t0: number, dur: number, f: number, vol: number, pan: num
   }
 }
 
+/** Throat-sung drone: a low buzzing voice with one whistling overtone picked out near 1.3 kHz. */
+function overtone(o: Out, t0: number, dur: number, f: number, vol: number, pan: number): void {
+  const start = Math.floor(t0 * SR), len = Math.floor(dur * SR), rel = 0.6;
+  const total = len + Math.floor(rel * SR);
+  const h = Math.max(4, Math.round(1300 / f));
+  const lo = new Biquad('bp', 380, 4), mid = new Biquad('bp', 900, 6), sing = new Biquad('bp', f * h, 40);
+  let ph = rnd();
+  for (let i = 0; i < total; i++) {
+    const tt = i / SR, fr = f * vibrato(tt, 0.002, 4.1, 0.5), dt = fr / SR;
+    ph += dt; ph -= Math.floor(ph);
+    const s = 2 * ph - 1 - polyblep(ph, dt);
+    const sweep = 0.6 + 0.4 * Math.sin(TAU * 0.13 * tt);
+    const x = lo.run(s) * 1.0 + mid.run(s) * 0.35 + sing.run(s) * 5 * sweep;
+    o.add(start + i, x * vol * ar(i, len, 0.4, rel), pan);
+  }
+}
+
 // ------------------------------------------------------------------ the instrument list
 
 export type Inst =
@@ -264,7 +281,8 @@ export type Inst =
   | 'accordion' | 'concertina'
   | 'horn' | 'brass' | 'tuba'
   | 'celesta' | 'glock' | 'musicbox' | 'bells' | 'marimba' | 'kalimba' | 'dulcimer'
-  | 'choir' | 'choirOo';
+  | 'choir' | 'choirOo'
+  | 'hardanger' | 'throat' | 'pipes' | 'steelpan';
 
 /** Play one note. `vol` is the part's level; each instrument is pre-balanced against the others. */
 export function play(inst: Inst, o: Out, t: number, dur: number, f: number, vol: number, pan: number): void {
@@ -300,6 +318,13 @@ export function play(inst: Inst, o: Out, t: number, dur: number, f: number, vol:
     case 'dulcimer': return pluck(o, t, dur, f, vol * 0.9, pan, { decay: 2.4, bright: 0.85, ring: true, body: 700 });
     case 'choir': return choir(o, t, dur, f, vol * 0.45, pan, 'ah');
     case 'choirOo': return choir(o, t, dur, f, vol * 0.5, pan, 'oo');
+    // fiddle with sympathetic strings: a faint, slow shimmer an octave above every bowed note
+    case 'hardanger':
+      bowed(o, t, dur, f, vol * 0.5, pan, { bright: 8, vib: 0.005, atk: 0.04 });
+      return bowed(o, t + 0.04, dur, f * 2, vol * 0.1, -pan, { bright: 5, vib: 0.003, atk: 0.4, rel: 0.6, voices: 2, detune: 0.002 });
+    case 'throat': return overtone(o, t, dur, f, vol * 0.6, pan);
+    case 'pipes': return reed(o, t, dur, f, vol * 0.36, pan, 11, 0.0012);
+    case 'steelpan': return mallet(o, t, f, vol * 0.85, pan, [[1, 1, 1.1], [2, 0.45, 0.6], [3.01, 0.18, 0.35], [4.2, 0.07, 0.18]], 0.08);
   }
 }
 
@@ -343,7 +368,7 @@ function metal(o: Out, t0: number, freqs: number[], dec: number, vol: number, pa
   }
 }
 
-export type KitName = 'folk' | 'hand' | 'darbuka' | 'orchestral' | 'taiko' | 'soft';
+export type KitName = 'folk' | 'hand' | 'darbuka' | 'orchestral' | 'taiko' | 'soft' | 'forge' | 'frame' | 'war';
 
 type Hit = (o: Out, t: number, v: number) => void;
 
@@ -407,6 +432,36 @@ const KITS: Record<KitName, Record<string, Hit>> = {
     t: (o, t, v) => drumTone(o, t, 95, 80, 0.04, 0.6, v * 0.6, -0.2),
     p: (o, t, v) => drumTone(o, t, 1150, 1100, 0.005, 0.05, v * 0.2, 0.3),
     x: (o, t, v) => hiss(o, t, 2.5, v * 0.07, -0.1, 4000, 1.2),
+  },
+  // deep drum, anvil rings and pick strikes on stone: dwarven halls and mines
+  forge: {
+    k: (o, t, v) => drumTone(o, t, 82, 48, 0.06, 0.75, v, 0, 0.35, 160, 0.1),
+    s: (o, t, v) => { metal(o, t, [1245, 2433, 3871, 5212], 1.1, v * 0.22, 0.25); hiss(o, t, 0.02, v * 0.25, 0.25, 3000, 0.0005); },
+    h: (o, t, v) => { metal(o, t, [2890, 4310, 6070], 0.07, v * 0.16, -0.3); hiss(o, t, 0.05, v * 0.22, -0.3, 1200, 0.0005, 2400); },
+    o: (o, t, v) => hiss(o, t, 0.3, v * 0.06, 0.2, 5000, 0.02),
+    t: (o, t, v) => drumTone(o, t, 105, 70, 0.05, 0.5, v * 0.85, -0.2, 0.3, 200, 0.06),
+    p: (o, t, v) => metal(o, t, [1870, 3650, 5810], 0.45, v * 0.14, 0.35),
+    x: (o, t, v) => { drumTone(o, t, 62, 42, 0.1, 1.1, v * 0.7, 0); metal(o, t, [1245, 2433, 3871, 5212], 1.6, v * 0.18, 0); },
+  },
+  // frame drum, rim slaps and a deep boom: the north
+  frame: {
+    k: (o, t, v) => drumTone(o, t, 92, 58, 0.05, 0.7, v, 0, 0.4, 190, 0.09),
+    s: (o, t, v) => { drumTone(o, t, 260, 230, 0.01, 0.1, v * 0.3, 0.2); hiss(o, t, 0.06, v * 0.3, 0.2, 700, 0.001, 1400); },
+    h: (o, t, v) => hiss(o, t, 0.05, v * 0.08, 0.3, 4000, 0.004),
+    o: (o, t, v) => hiss(o, t, 0.25, v * 0.07, -0.3, 3000, 0.03),
+    t: (o, t, v) => drumTone(o, t, 70, 46, 0.07, 1.0, v * 0.95, -0.15, 0.45, 140, 0.12),
+    p: (o, t, v) => drumTone(o, t, 150, 120, 0.03, 0.3, v * 0.6, 0.25, 0.35, 600, 0.04),
+    x: (o, t, v) => { drumTone(o, t, 60, 40, 0.1, 1.4, v * 0.8, 0, 0.4, 120, 0.2); hiss(o, t, 1.2, v * 0.06, -0.1, 2500, 0.3); },
+  },
+  // huge skin drums, clanking iron and a slap: orc warcamps
+  war: {
+    k: (o, t, v) => drumTone(o, t, 76, 44, 0.07, 0.9, v * 1.1, 0, 0.55, 140, 0.14),
+    s: (o, t, v) => { drumTone(o, t, 180, 140, 0.02, 0.18, v * 0.5, 0.15, 0.6, 900, 0.07); metal(o, t, [610, 1490, 2730], 0.18, v * 0.1, 0.15); },
+    h: (o, t, v) => metal(o, t, [1530, 2810, 4470, 6020], 0.12, v * 0.1, 0.3),
+    o: (o, t, v) => metal(o, t, [1530, 2810, 4470, 6020], 0.5, v * 0.12, 0.3),
+    t: (o, t, v) => drumTone(o, t, 110, 62, 0.06, 0.6, v, -0.25, 0.4, 180, 0.1),
+    p: (o, t, v) => drumTone(o, t, 150, 95, 0.05, 0.45, v * 0.85, 0.25, 0.4, 260, 0.08),
+    x: (o, t, v) => { drumTone(o, t, 58, 38, 0.12, 1.4, v * 0.9, 0, 0.5, 110, 0.2); metal(o, t, [610, 1490, 2730, 4100], 1.2, v * 0.12, -0.1); },
   },
 };
 

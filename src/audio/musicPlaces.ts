@@ -17,11 +17,23 @@ export type Track =
   | 'jungle' | 'swamp' | 'snow' | 'desert' | 'volcano'
   | 'court' | 'reach' | 'crypt' | 'steppe' | 'boss'
   | 'shop' | 'hall' | 'temple' | 'smithy'
-  | 'battle';
+  | 'battle'
+  // town themes
+  | 'westmarch' | 'elderglen' | 'stonedeep' | 'highmoor' | 'millbrook' | 'valdrheim' | 'aurelion' | 'briarwatch'
+  | 'harbour' | 'palmreach' | 'oasis' | 'isle'
+  // hunting-ground themes
+  | 'warcamp' | 'labyrinth' | 'mines' | 'dragon' | 'serpent' | 'tomb';
+
+/** A town with a theme of its own (its protection zone and its harbour). */
+export type TownPlace =
+  | 'westmarch' | 'elderglen' | 'stonedeep' | 'highmoor' | 'millbrook' | 'valdrheim' | 'aurelion' | 'briarwatch'
+  | 'harbour' | 'palmreach' | 'oasis' | 'isle';
 
 export type Place =
   | 'title' | 'town' | 'court' | 'fields' | 'forest' | 'jungle' | 'swamp' | 'snow' | 'desert' | 'volcano'
-  | 'deep' | 'sea' | 'reach' | 'crypt' | 'steppe' | 'boss' | 'shop' | 'hall' | 'temple' | 'smithy' | 'battle';
+  | 'deep' | 'sea' | 'reach' | 'crypt' | 'steppe' | 'boss' | 'shop' | 'hall' | 'temple' | 'smithy' | 'battle'
+  | TownPlace
+  | 'warcamp' | 'labyrinth' | 'elfwood' | 'mines' | 'icecave' | 'dragon' | 'serpent' | 'tomb';
 
 /** The tracks of each place, in the order they take turns. */
 export const PLACE_TRACKS: Record<Place, Track[]> = {
@@ -46,6 +58,26 @@ export const PLACE_TRACKS: Record<Place, Track[]> = {
   temple: ['temple'],
   smithy: ['smithy'],
   battle: ['battle'],
+  westmarch: ['westmarch'],
+  elderglen: ['elderglen'],
+  stonedeep: ['stonedeep'],
+  highmoor: ['highmoor'],
+  millbrook: ['millbrook'],
+  valdrheim: ['valdrheim'],
+  aurelion: ['aurelion'],
+  briarwatch: ['briarwatch'],
+  harbour: ['harbour'],
+  palmreach: ['palmreach'],
+  oasis: ['oasis'],
+  isle: ['isle'],
+  warcamp: ['warcamp'],
+  labyrinth: ['labyrinth'],
+  elfwood: ['forest2'], // Mossbound: ocarina, flute and harp already sound elven
+  mines: ['mines'],
+  icecave: ['snow'], // Frostfang: celesta and harp over cold strings, glassy enough for the ice caves
+  dragon: ['dragon'],
+  serpent: ['serpent'],
+  tomb: ['tomb'],
 };
 
 export const TRACKS: Track[] = [...new Set(Object.values(PLACE_TRACKS).flat())];
@@ -64,6 +96,9 @@ export const LOOP_SAMPLES: Record<Track, number> = {
   title: 3221217, town2: 2646000, fields2: 2822400, forest2: 2886545, deep2: 3175200, sea2: 2646000,
   court: 3024000, reach: 2886545, crypt: 3175200, steppe: 3342316, boss: 2646000,
   shop: 2646000, hall: 2646000, temple: 2822400, smithy: 2761043,
+  westmarch: 3024000, elderglen: 3528000, stonedeep: 2886545, highmoor: 2761043, millbrook: 3528000, valdrheim: 3342316,
+  aurelion: 3528000, briarwatch: 3136000, harbour: 3024000, palmreach: 3256615, oasis: 3386880, isle: 3175200,
+  warcamp: 3386880, labyrinth: 3221217, mines: 2761043, dragon: 3528000, serpent: 3024000, tomb: 3848727,
 };
 export const loopSeconds = (t: Track): number => LOOP_SAMPLES[t] / 44100;
 
@@ -74,6 +109,67 @@ export function indoorPlace(name: string): 'shop' | 'hall' | 'temple' | 'smithy'
   if (/depot|bank|hall|palace|longhouse|gallery|tower/i.test(name)) return 'hall';
   return 'shop'; // shops, outfitters, magic shops, homes, barns, the trading post
 }
+
+/**
+ * Each town's own theme, by the name of its protection zone. "<Town> Harbour" plays its town's theme;
+ * island landings and other protection zones keep the shared town themes. Thornvale has the Temple Court.
+ */
+export const TOWN_THEMES: Readonly<Record<string, TownPlace | 'court'>> = {
+  Thornvale: 'court',
+  Westmarch: 'westmarch', // stately citadel
+  Elderglen: 'elderglen', // elven harp and flute
+  Stonedeep: 'stonedeep', // dwarven low brass, anvils, deep drums
+  Highmoor: 'highmoor', // highland pipes and fiddle
+  Millbrook: 'millbrook', // pastoral farm town
+  'Pearl Pier': 'millbrook', // Millbrook's pier out to the whirlpool
+  Valdrheim: 'valdrheim', // the north: hardanger fiddle, throat drone, frame drum
+  Aurelion: 'aurelion', // the crown city
+  Briarwatch: 'briarwatch', // frontier stockade
+  Corvane: 'harbour', // harbour towns: a shanty
+  Saltmere: 'harbour',
+  Palmreach: 'palmreach', // jungle port: steel pan and marimba
+  Sunspire: 'oasis', // desert towns: oud, ney, darbuka
+  Dunewatch: 'oasis',
+  "Wayfarer's Rest": 'isle', // the tutorial isle
+};
+
+/** The theme of a protection zone's region (null = the shared town themes). */
+export function townTheme(regionName: string): TownPlace | 'court' | null {
+  return TOWN_THEMES[regionName] ?? TOWN_THEMES[regionName.replace(/ Harbour$/, '')] ?? null;
+}
+
+/**
+ * Hunting grounds whose music the land mix and the cave rules can't work out, by region name, or
+ * "name@floor" for one floor only. Checked after boss lairs, the Sunken Reach and protection zones.
+ */
+export const REGION_THEMES: Readonly<Record<string, Place>> = {
+  // orc warcamps
+  'Grimtusk Fortress': 'warcamp', 'Orc Ridge': 'warcamp',
+  // the minotaur labyrinth
+  'Minotaur Hold': 'labyrinth',
+  // elven woods around Elderglen
+  'Silverbough Woods': 'elfwood', 'Silverbough Fortress': 'elfwood', 'Glimmer Vale': 'elfwood',
+  // dwarven mines under Stonedeep
+  'Stonedeep Mines': 'mines', 'Deep Delvings': 'mines',
+  // ice caves
+  'Crystal Mines': 'icecave', 'Crystal Depths': 'icecave', 'Jotun Isle@-1': 'icecave',
+  // dragon lairs
+  'Dragon Lair': 'dragon', 'Dragonspire Plateau': 'dragon', 'The Caldera': 'dragon', 'Frost Dragon Lair': 'dragon',
+  // jungle and lizard temples
+  'Lizard Temple': 'serpent', 'Temple Undercroft': 'serpent', 'Scalemire Sanctum': 'serpent', 'Temple of the Sunken Eye': 'serpent',
+  // swamps and mires (the caves under them too)
+  'Hydra Bog': 'swamp', 'Mire Caves': 'swamp', 'Hydra Nest': 'swamp', 'Mangrove Mire': 'swamp',
+  // desert tombs
+  'Valley of Tombs': 'tomb', 'Pyramid of Kesh': 'tomb', 'Tomb of Kesh': 'tomb', 'Kesh Catacombs': 'tomb', "Pharaoh's Vault": 'tomb',
+  // fire under the earth
+  'Burning Catacombs': 'volcano', 'Abyssal Halls': 'volcano', 'The Demon Pit': 'volcano', 'Infernal Rift': 'volcano', 'Ember Forge': 'volcano',
+  // ruins of the dead in the open
+  'Ruins of Varkh': 'crypt',
+  // smugglers' sea cave
+  "Smugglers' Cove": 'sea',
+  // the tutorial isle outside the refuge
+  "Wayfarer's Isle@0": 'isle',
+};
 
 /** Underground regions that are tombs and haunts of the dead. */
 const CRYPT_NAMES = /crypt|catacomb|tomb|vault|undercroft|bonecrag|abyssal/i;
@@ -109,7 +205,9 @@ export class PlaceFinder {
     const name = w.regionAt(x, y, z)?.name ?? '';
     const c = this.court;
     if (z >= 0 && c && x >= c.x0 && x <= c.x1 && y >= c.y0 && y <= c.y1) return /graveyard/i.test(name) ? 'crypt' : 'court';
-    if (safe) return 'town';
+    if (safe) return townTheme(name) ?? 'town';
+    const theme = REGION_THEMES[`${name}@${z}`] ?? REGION_THEMES[name];
+    if (theme) return theme;
     if (z < 0) {
       const land = this.surroundings(x, y, z);
       if (land === 'volcano') return 'volcano';

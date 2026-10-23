@@ -1,4 +1,5 @@
 import type { Song } from './synth';
+import { PLACE_SONGS } from './songsPlaces';
 
 /**
  * Thornvale's soundtrack: original pieces, each played by a band of instruments that suits its region (two themes that take turns for
@@ -781,4 +782,5 @@ export const SONGS: Song[] = [
     },
     form: ['A', 'B', 'A'],
   },
+  ...PLACE_SONGS,
 ];
