@@ -57,6 +57,17 @@ const BODIES: Record<string, Body> = {
   dwarf: B('dwarf', 'metal', 'small'), dwarf_soldier: B('dwarf', 'metal', 'small'), dwarf_guard: B('dwarf', 'metal', 'small'),
   bandit: B('man', 'cloth', 'medium'), amazon: B('woman', 'cloth', 'medium'), valkyrie: B('woman', 'metal', 'medium'),
   snake: B('snake', 'scale', 'small'), lizard_sentinel: B('reptile', 'scale', 'medium'), lizard_templar: B('reptile', 'metal', 'medium'),
+  // Gravewind Steppe, bosses and the Sunken Reach (sizes matter for death falls and footsteps)
+  dread_weaver: B('insect', 'chitin', 'large'), gravesilk_colossus: B('insect', 'chitin', 'huge'),
+  boss_ironjaw: B('orc', 'metal', 'large'), boss_bonebound: B('skeleton', 'bone', 'large'), boss_delving_king: B('dwarf', 'metal', 'medium'),
+  boss_labyrinth_lord: B('bovine', 'fur', 'huge'), boss_venom_oracle: B('reptile', 'scale', 'large'), boss_ember_matriarch: B('dragon', 'scale', 'huge'),
+  boss_sand_king: B('mummy', 'cloth', 'large'), boss_mire_hydra: B('hydra', 'scale', 'huge'), boss_rime_wyrm: B('dragon', 'ice', 'huge'),
+  boss_ashen_sovereign: B('demon', 'scale', 'huge'), wb_mountain: B('golem', 'stone', 'huge'), wb_storm_serpent: B('reptile', 'scale', 'huge'),
+  wb_blight_mother: B('insect', 'chitin', 'huge'), raid_tusk_warlord: B('orc', 'metal', 'large'), raid_grave_warden: B('ghoul', 'cloth', 'large'),
+  raid_frost_jarl: B('giant', 'metal', 'huge'), raid_swarm_queen: B('insect', 'chitin', 'large'),
+  lantern_jelly: B('critter', 'cloth', 'small'), blight_jelly: B('critter', 'cloth', 'small'), ironshell_crab: B('insect', 'chitin', 'large'),
+  deepfin_raider: B('reptile', 'scale', 'medium'), deepfin_harpooner: B('reptile', 'scale', 'medium'), deepfin_tidecaller: B('reptile', 'scale', 'medium'),
+  gloom_eel: B('snake', 'scale', 'large'), boss_drowned_tyrant: B('demon', 'scale', 'huge'),
 };
 
 export function bodyOf(kind: string): Body {

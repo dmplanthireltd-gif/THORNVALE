@@ -9,6 +9,11 @@ import { Enemy } from '../game/enemies/Enemy';
 import { bodyFall, bodyOf, elementHit, footstep, impact, spellSweep, voice, type Body, type Cry, type Kit, type SpellElement } from './foley';
 import { Ambience } from './ambience';
 import { SOUNDS, type SoundName } from './sfxlib';
+import { CombatBank } from './CombatBank';
+import {
+  blockLayers, fallOf, flightTime, hitLayers, playerSurface, shieldMaterial, surfaceOf,
+  type Layer, type Striker, type Surface,
+} from './combatSurface';
 
 /**
  * Small synthesized sound effects (Web Audio, no sound files). Sounds near the
@@ -17,6 +22,10 @@ import { SOUNDS, type SoundName } from './sfxlib';
 type Sound = SoundName;
 
 const HEARING = 11;
+/** Level of the pre-rendered combat clips against the synthesized sounds (see scripts/sfx/render.ts). */
+const BANK_GAIN = 0.35;
+/** How long a projectile's impact waits for its damage event (ms). */
+const PENDING_MS = 150;
 
 /** Sound groups with their own volume slider (Settings → Sound mix). */
 export type SfxCat = 'steps' | 'creatures' | 'combat' | 'magic' | 'world' | 'ui' | 'ambience';
@@ -64,6 +73,9 @@ export class Sfx {
   private lastChat = 0;
   private gear = new Map<string, string | null>();
   private buses = new Map<SfxCat, GainNode>();
+  private bank: CombatBank | null = null;
+  /** Projectiles in flight, by target: their impact sounds wait for the flight time. */
+  private pending = new Map<number, { at: number; delay: number; striker: Striker | null; el: SpellElement | null }>();
   volume = 0.6;
   muted = false;
   /** Per-group volume, 0 … 1.5 (1 = normal). Remembered in this browser. */
@@ -135,6 +147,8 @@ export class Sfx {
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this.ambience = new Ambience(this.ctx, this.bus('ambience')!, this.noiseBuf);
+    this.bank = new CombatBank(this.ctx);
+    this.bank.load();
     return this.ctx;
   }
 
@@ -274,7 +288,7 @@ export class Sfx {
       case 'attack': {
         const v = this.atId(e.attackerId);
         const sw = this.swingOf(e.attackerId);
-        if (v && sw) this.play(sw, v * 0.6);
+        if (v && sw && !this.clip(this.swingClip(e.attackerId, sw), v * 0.6)) this.play(sw, v * 0.6);
         const body = this.bodyOfId(e.attackerId);
         if (v && body && Math.random() < 0.45) this.cry(e.attackerId, body, 'attack', v, 3500);
         break;
@@ -282,14 +296,25 @@ export class Sfx {
       case 'damage': {
         const v = this.atId(e.targetId);
         if (!v) break;
-        if (e.result === 'miss') this.play('miss', v);
-        else if (e.result === 'blocked') this.play(this.blockOf(e.targetId), v);
-        else {
+        const fly = this.inFlight(e.targetId);
+        const delay = fly?.delay ?? 0;
+        if (e.result === 'miss') {
+          // a missed arrow thunks into the ground beyond; a missed blow just cuts the air
+          if (fly?.striker) { if (!this.clip('arrow_wood', v * 0.45, delay + 0.05)) this.play('miss', v); }
+          else if (!this.clip('miss', v)) this.play('miss', v);
+        } else if (e.result === 'blocked') {
+          if (!this.layers(this.blockFor(e.targetId, fly?.striker ?? null), v, delay)) this.play(this.blockOf(e.targetId), v);
+        } else {
           const body = this.bodyOfId(e.targetId);
           const c = this.ctl.game.getCreature(e.targetId);
           const big = !!c && e.amount >= c.maxHp * 0.15;
-          if (e.element === 'physical') this.sound((k) => impact(k, body?.material ?? 'flesh', 1, e.amount > 60 || big), v, 0, 'combat');
-          else { const el = spellElement(e.element); if (el) this.sound((k) => elementHit(k, el, big ? 1 : 0.7), v * 0.8, 0, 'magic'); }
+          if (e.element === 'physical') {
+            const striker = fly?.striker ?? this.strikerOf(e.sourceId);
+            if (!this.layers(hitLayers(this.surfaceOfId(e.targetId), striker, big), v, delay)) this.sound((k) => impact(k, body?.material ?? 'flesh', 1, e.amount > 60 || big), v, 0, 'combat');
+          } else {
+            const el = spellElement(e.element);
+            if (el && !this.clip(`zaphit_${el}`, v * (big ? 1 : 0.8), delay, 'magic')) this.sound((k) => elementHit(k, el, big ? 1 : 0.7), v * 0.8, 0, 'magic');
+          }
           if (body && big && !c?.dead) this.cry(e.targetId, body, 'hurt', v, 1200);
           if (e.targetId === me && big) this.cry(me, { family: 'man', material: 'flesh', size: 'medium' }, 'hurt', 0.7, 1500);
         }
@@ -298,7 +323,8 @@ export class Sfx {
       case 'projectile': {
         const s = this.elementSound(e.effect);
         const v = Math.max(this.atId(e.fromId), this.atId(e.toId));
-        if (s) this.play(s, v * 0.8);
+        this.launched(e.fromId, e.toId, e.effect);
+        if (s && !this.release(e.fromId, e.effect, v)) this.play(s, v * 0.8);
         if (e.effect === 'death') this.play('implode', v * 0.9, 0.1);
         break;
       }
@@ -359,7 +385,8 @@ export class Sfx {
           const body = this.bodyOfId(e.id);
           if (v && body) {
             this.sound((k) => voice(k, body, 'die', 1), v, 0, 'creatures');
-            this.sound((k) => bodyFall(k, body, 1), v, 0, 'creatures');
+            const fall = `fall_${fallOf(this.surfaceOfId(e.id), body.size)}`;
+            if (!this.clip(fall, v, body.size === 'huge' ? 0.5 : 0.3, 'creatures')) this.sound((k) => bodyFall(k, body, 1), v, 0, 'creatures');
           } else if (v) this.play('monsterDie', v);
         }
         break;
@@ -630,6 +657,106 @@ export class Sfx {
       case 'club': return 'swingBlunt';
       default: return null;
     }
+  }
+
+  // ------------------------------------------------------------------ pre-rendered combat bank
+
+  /** Plays one bank clip at a volume (distance falloff); false if the bank can't (Sfx falls back). */
+  private clip(name: string, gain: number, delay = 0, cat: SfxCat = 'combat', pitch = 1): boolean {
+    if (this.muted || this.mix[cat] <= 0.001) return true;
+    if (gain <= 0.02) return true;
+    const c = this.ctx;
+    if (!c || !this.bank?.ready || c.state !== 'running') return false;
+    const bus = this.bus(cat);
+    if (!bus) return false;
+    // distance (0 here … 1 at the edge of hearing) from the volume falloff in at()
+    const dist = Math.max(0, Math.min(1, (1 - Math.min(1, gain)) / 0.8));
+    return this.bank.play(name, bus, gain * BANK_GAIN, delay, pitch, dist);
+  }
+
+  private layers(ls: Layer[], v: number, delay: number, cat: SfxCat = 'combat'): boolean {
+    if (!this.bank?.ready) return false;
+    for (const l of ls) this.clip(l.clip, v * l.gain, delay + l.delay, cat, l.pitch ?? 1);
+    return true;
+  }
+
+  /** A projectile left: remember its flight so the hit can wait for it. */
+  private launched(fromId: number, toId: number, effect: Effect): void {
+    const a = this.ctl.game.getCreature(fromId), b = this.ctl.game.getCreature(toId);
+    if (!a || !b) return;
+    const tiles = Math.hypot(a.x - b.x, a.y - b.y);
+    const striker: Striker | null = effect === 'arrow' || effect === 'bolt' || effect === 'spear' || effect === 'star' || effect === 'stone' ? effect : null;
+    const el = spellElement(effect);
+    if (!striker && !el) return;
+    this.pending.set(toId, { at: performance.now(), delay: flightTime(tiles, !!striker), striker, el });
+  }
+
+  private inFlight(toId: number): { delay: number; striker: Striker | null } | null {
+    const p = this.pending.get(toId);
+    if (!p) return null;
+    if (performance.now() - p.at > PENDING_MS) { this.pending.delete(toId); return null; }
+    return p;
+  }
+
+  /** Bows, crossbows, thrown weapons and wand/rod bolts leaving; false if the bank can't play them. */
+  private release(fromId: number, effect: Effect, v: number): boolean {
+    switch (effect) {
+      case 'arrow': return this.layers([{ clip: 'bow', gain: 0.8, delay: 0 }, { clip: 'arrow_fly', gain: 0.45, delay: 0.03 }], v, 0);
+      case 'bolt': return this.layers([{ clip: 'crossbow', gain: 0.8, delay: 0 }, { clip: 'arrow_fly', gain: 0.35, delay: 0.03, pitch: 0.85 }], v, 0);
+      case 'spear': return this.clip('throw_spear', v * 0.8);
+      case 'star': return this.clip('throw_star', v * 0.8);
+      case 'stone': return this.clip('throw_spear', v * 0.8, 0, 'combat', 0.75);
+    }
+    // a wand or rod: a bolt with the element's own sound
+    const el = spellElement(effect);
+    const w = this.ctl.game.session(fromId)?.inventory.equipment.weapon?.id;
+    const wt = w ? this.def(w)?.weaponType : undefined;
+    if (el && (wt === 'wand' || wt === 'rod')) return this.clip(`zap_${el}`, v * 0.8, 0, 'magic');
+    return false;
+  }
+
+  /** What a creature is made of, for the sound of a blow landing. */
+  private surfaceOfId(id: number): Surface {
+    const c = this.ctl.game.getCreature(id);
+    if (c instanceof Enemy) return surfaceOf(c.enemyKind);
+    const a = this.ctl.game.session(id)?.inventory.equipment.armor?.id;
+    return playerSurface(a ? this.def(a)?.name : null);
+  }
+
+  /** What a melee blow was struck with. */
+  private strikerOf(id: number): Striker {
+    const c = this.ctl.game.getCreature(id);
+    if (!c) return 'fist';
+    if (c instanceof Enemy) { const s = bodyOf(c.enemyKind).size; return s === 'huge' || s === 'large' ? 'big' : 'claw'; }
+    const w = this.ctl.game.session(id)?.inventory.equipment.weapon?.id;
+    switch (w ? this.def(w)?.weaponType : undefined) {
+      case 'sword': return 'sword';
+      case 'axe': return 'axe';
+      case 'club': return 'club';
+      default: return 'fist';
+    }
+  }
+
+  private swingClip(id: number, sw: Sound): string {
+    switch (sw) {
+      case 'swingBlade': return 'swing_blade';
+      case 'swingHeavy': return 'swing_axe';
+      case 'swingBlunt': return 'swing_club';
+      case 'swingFist': return 'swing_fist';
+      default: return this.strikerOf(id) === 'big' ? 'swing_big' : 'swing_claw';
+    }
+  }
+
+  /** A blocked blow or arrow: on a wooden or metal shield, a parry, or a monster's hide. */
+  private blockFor(id: number, striker: Striker | null): Layer[] {
+    const sh = this.ctl.game.session(id)?.inventory.equipment.shield?.id;
+    const shield = sh ? shieldMaterial(this.def(sh)?.name ?? '') : null;
+    if (striker) {
+      const surface = shield ? (shield === 'wood' ? null : 'armour') : this.surfaceOfId(id);
+      return [{ clip: surface === null ? 'arrow_wood' : surface === 'armour' ? 'arrow_armour' : `hit_${surface}`, gain: 0.9, delay: 0 }];
+    }
+    const hasWeapon = !!this.ctl.game.session(id)?.inventory.equipment.weapon;
+    return blockLayers(shield, hasWeapon, this.surfaceOfId(id));
   }
 
   /** A blocked blow rings on metal and knocks on wood or hide. */
