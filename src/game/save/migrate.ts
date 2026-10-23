@@ -17,7 +17,7 @@ import { PALETTE } from '../player/outfits';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -79,6 +79,14 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   },
   // v13 → v14: pets. Nobody has a pet out yet, no pet experience, an empty tortoise pouch.
   13: (d) => ({ ...d, pets: { active: null, xp: {}, pouch: [] }, version: 14 }),
+  // v14 → v15: battle scars in the appearance; everyone starts without one (every other look field is kept)
+  14: (d) => {
+    const pl = (d.player ?? {}) as Record<string, unknown>;
+    const ap = pl.appearance;
+    if (!ap || typeof ap !== 'object') return { ...d, version: 15 };
+    const a = ap as Record<string, unknown>;
+    return { ...d, player: { ...pl, appearance: { ...a, scar: typeof a.scar === 'string' ? a.scar : 'none' } }, version: 15 };
+  },
 };
 
 export interface MigrationResult {

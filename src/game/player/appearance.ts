@@ -25,6 +25,8 @@ export interface Appearance {
   /** Indices into CLOTH_COLORS: shirt/tunic and trousers, shown where no armour is worn. */
   top: number;
   bottom: number;
+  /** Id from SCARS ('none' = no scar); any body type (save v15+). */
+  scar: string;
 }
 
 export const BODY_TYPES: Array<{ id: BodyType; name: string }> = [
@@ -78,6 +80,28 @@ export const BEARDS: Array<{ id: string; name: string }> = [
   { id: 'goatee', name: 'Goatee' },
   { id: 'short', name: 'Short beard' },
   { id: 'full', name: 'Full beard' },
+  // 2026-10-23 (grim look): more beards
+  { id: 'chinstrap', name: 'Chinstrap' },
+  { id: 'mutton', name: 'Mutton chops' },
+  { id: 'handlebar', name: 'Handlebar' },
+  { id: 'forked', name: 'Forked beard' },
+  { id: 'braided', name: 'Braided beard' },
+  { id: 'long', name: 'Long beard' },
+  { id: 'wild', name: 'Wild beard' },
+];
+
+/** Battle scars (2026-10-23, grim look). Any body type. */
+export const SCARS: Array<{ id: string; name: string }> = [
+  { id: 'none', name: 'None' },
+  { id: 'brow', name: 'Split brow' },
+  { id: 'cheek', name: 'Cheek slash' },
+  { id: 'eye', name: 'Blind eye' },
+  { id: 'lip', name: 'Split lip' },
+  { id: 'jaw', name: 'Jaw line' },
+  { id: 'cross', name: 'Crossed cuts' },
+  { id: 'claw', name: 'Claw marks' },
+  { id: 'burn', name: 'Burn' },
+  { id: 'nose', name: 'Broken nose' },
 ];
 
 export const EYE_COLORS: Array<{ name: string; hex: number }> = [
@@ -110,7 +134,7 @@ export const CLOTH_COLORS: Array<{ name: string; hex: number }> = [
 ];
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  body: 'male', skin: 2, hair: 'short', hairColor: 2, beard: 'none', build: 'average', eyes: 0, top: 12, bottom: 2,
+  body: 'male', skin: 2, hair: 'short', hairColor: 2, beard: 'none', build: 'average', eyes: 0, top: 12, bottom: 2, scar: 'none',
 };
 
 const inRange = (n: unknown, len: number): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n < len;
@@ -128,7 +152,8 @@ export function isAppearance(a: unknown): a is Appearance {
     && BUILDS.some((b) => b.id === x.build)
     && inRange(x.eyes, EYE_COLORS.length)
     && inRange(x.top, CLOTH_COLORS.length)
-    && inRange(x.bottom, CLOTH_COLORS.length);
+    && inRange(x.bottom, CLOTH_COLORS.length)
+    && SCARS.some((c) => c.id === x.scar);
 }
 
 /** Lenient: keeps every valid field of a stored appearance and fills the rest from the default (saves). */
@@ -147,6 +172,7 @@ export function sanitizeAppearance(a: unknown): Appearance {
     eyes: inRange(x.eyes, EYE_COLORS.length) ? x.eyes : d.eyes,
     top: inRange(x.top, CLOTH_COLORS.length) ? x.top : d.top,
     bottom: inRange(x.bottom, CLOTH_COLORS.length) ? x.bottom : d.bottom,
+    scar: SCARS.some((c) => c.id === x.scar) ? x.scar! : 'none',
   };
 }
 
@@ -154,20 +180,21 @@ export function sameAppearance(a: Appearance, b: Appearance): boolean {
   return encodeAppearance(a).every((v, i) => v === encodeAppearance(b)[i]);
 }
 
-/** Compact wire form: nine small numbers (list positions), e.g. [0,2,2,2,0,1,0,12,2]. */
+/** Compact wire form: ten small numbers (list positions), e.g. [0,2,2,2,0,1,0,12,2,0] (the scar was added in protocol 28). */
 export function encodeAppearance(a: Appearance): number[] {
   return [
     BODY_TYPES.findIndex((b) => b.id === a.body), a.skin, HAIR_STYLES.findIndex((h) => h.id === a.hair), a.hairColor,
     BEARDS.findIndex((b) => b.id === a.beard), BUILDS.findIndex((b) => b.id === a.build), a.eyes, a.top, a.bottom,
+    Math.max(0, SCARS.findIndex((c) => c.id === a.scar)),
   ];
 }
 
-/** Reverse of encodeAppearance; null when the array is not a valid appearance. */
+/** Reverse of encodeAppearance; null when the array is not a valid appearance. Nine numbers (no scar) still decode. */
 export function decodeAppearance(v: unknown): Appearance | null {
   if (!Array.isArray(v) || v.length < 9) return null;
   const a = {
     body: BODY_TYPES[v[0]]?.id, skin: v[1], hair: HAIR_STYLES[v[2]]?.id, hairColor: v[3], beard: BEARDS[v[4]]?.id,
-    build: BUILDS[v[5]]?.id, eyes: v[6], top: v[7], bottom: v[8],
+    build: BUILDS[v[5]]?.id, eyes: v[6], top: v[7], bottom: v[8], scar: v.length > 9 ? SCARS[v[9]]?.id : 'none',
   };
   return isAppearance(a) ? a : null;
 }
@@ -191,6 +218,8 @@ export function randomAppearance(rnd: () => number = Math.random, body?: BodyTyp
     eyes: Math.floor(rnd() * EYE_COLORS.length) % EYE_COLORS.length,
     top: Math.floor(rnd() * CLOTH_COLORS.length) % CLOTH_COLORS.length,
     bottom: Math.floor(rnd() * CLOTH_COLORS.length) % CLOTH_COLORS.length,
+    // drawn last, so the other picks stay what they were before scars existed
+    scar: rnd() < 0.3 ? pick(SCARS.slice(1)).id : 'none',
   };
 }
 
@@ -234,5 +263,5 @@ export function appearanceFromOutfit(o: unknown, palette: number[]): Appearance 
   // trousers in a different swatch than the shirt when the colours were close, so the two still read apart
   const bottomRaw = nearest(col(x.legs, 0x222a4a), CLOTH_COLORS);
   const bottom = bottomRaw === top ? nearest(col(x.legs, 0x222a4a), CLOTH_COLORS, [top]) : bottomRaw;
-  return { body: 'male', skin: DEFAULT_APPEARANCE.skin, hair, hairColor: nearest(col(x.head, 0x5e3b22), HAIR_COLORS), beard, build, eyes: 0, top, bottom };
+  return { body: 'male', skin: DEFAULT_APPEARANCE.skin, hair, hairColor: nearest(col(x.head, 0x5e3b22), HAIR_COLORS), beard, build, eyes: 0, top, bottom, scar: 'none' };
 }

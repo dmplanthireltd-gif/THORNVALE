@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import type { ItemDef } from '../../game/inventory/items';
-import { MAT, type GearLook, type Ramp } from './gearLooks';
+import { grimLook, MAT, matKeyOf, type GearLook, type Ramp } from './gearLooks';
 import { group, sbox, scone, ssphere, type MatFn } from './parts';
+import { PAINTED } from '../style';
+import type { Detail } from './grimDetail';
 
 /**
  * Worn shields (the left-hand "shield" slot), built big enough to read as a
@@ -119,6 +121,12 @@ function slab(kind: Outline, w: number, h: number, k: number, depth: number, z0:
   const g = geo(`sh:${kind}:${w}:${h}:${k}:${depth}`, () => {
     const e = new THREE.ExtrudeGeometry(outline(kind, w, h, k), { depth, bevelEnabled: false, curveSegments: kind === 'round' || kind === 'buckler' ? 10 : 5 });
     e.computeVertexNormals();
+    if (PAINTED) {
+      // painted style: UVs 0..1 across the face (the extruder writes raw x/y), so the detail
+      // atlas cell (grimDetail.ts) covers the whole shield face once, upright
+      const uv = e.attributes.uv as THREE.BufferAttribute, pos = e.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / (w * 1.08) + 0.5, pos.getY(i) / (h * 1.08) + 0.5);
+    }
     return e;
   });
   const me = new THREE.Mesh(g, m);
@@ -196,12 +204,71 @@ function straps(back: THREE.Material, metal: THREE.Material, w: number, h: numbe
 }
 
 /** Builds the shield model for a look (no mount transform). */
-export function buildShieldModel(d: ItemDef, lk: GearLook, legacy: { face: number; rim: number; glow?: number } | undefined, M: MatFn): THREE.Group {
-  const style: Outline | 'book' = lk.shield;
+export function buildShieldModel(d: ItemDef, lk0: GearLook, legacy: { face: number; rim: number; glow?: number } | undefined, M: MatFn): THREE.Group {
+  const g = buildShieldParts(d, lk0, legacy, M);
+  if (PAINTED) grimShield(d, lk0, g, M);
+  return g;
+}
+
+/**
+ * Painted style (owner 2026-10-23, grim look): the same shield in the grim palette with worn
+ * surfaces from the detail atlas — riveted, dented plate or scales or tarnished gilt on the
+ * face, pitted iron on the rim, grain and splits on wooden boards, leather on the back —
+ * plus a few gouges and nail heads. Sizes and shapes are unchanged.
+ */
+function faceSurface(lk: GearLook): Detail {
+  const k = matKeyOf(lk.m);
+  if (k === 'wood') return 'wood';
+  if (k === 'gold' || k === 'dwarven') return 'gilt';
+  if (k === 'bone' || k === 'pearl') return 'bone';
+  if (k === 'dragon' || k === 'tide' || k === 'elven') return 'scale';
+  if (k === 'leather' || k === 'darkleather') return 'studded';
+  if (k === 'arcane' || k === 'void' || k === 'royal' || k === 'rime') return 'leather'; // book covers
+  return 'plate';
+}
+
+function grimShield(d: ItemDef, lk: GearLook, g: THREE.Group, M: MatFn): void {
   const wooden = d.id === 'wooden_shield' || lk.m === MAT.wood;
-  const glow = legacy?.glow ?? lk.glow;
+  const face = faceSurface(lk);
+  const tk = matKeyOf(lk.t);
+  const rimD: Detail = tk === 'gold' || tk === 'dwarven' || tk === 'bronze' ? 'gilt' : tk === 'bone' ? 'bone' : 'iron';
+  // the face plate is the second child (after the rim body); the back plate the third
+  g.children.forEach((c, i) => {
+    const me = c as THREE.Mesh;
+    if (!me.isMesh || me.userData.detail) return;
+    me.userData.detail = lk.shield === 'book' ? (i === 1 ? 'plain' : i === 0 ? 'leather' : 'gilt') : i === 1 ? face : i === 2 ? (wooden ? 'wood' : 'leather') : rimD;
+  });
+  if (lk.shield === 'book') return;
+  const [w, h] = SHIELD_SIZE[lk.shield];
+  const z = THICK + 0.018;
+  const dark = M(0x120d0a);
+  // deep gouges across the face, and nail heads hammered through it
+  const cuts: Array<[number, number, number, number]> = [[0.18, 0.12, 0.2, 0.7], [-0.12, -0.05, 0.16, -0.5], [0.05, -0.22, 0.12, 1.2]];
+  for (const [x, y, l, a] of cuts) {
+    if (Math.abs(x) > w * 0.38 || Math.abs(y) > h * 0.36) continue;
+    const c = sbox(l * Math.min(w, h), 0.012, 0.008, dark, x * w, y * h, z);
+    c.rotation.z = a;
+    c.userData.detail = 'iron';
+    g.add(c);
+  }
+  const nail = M(MAT.iron[2]);
+  for (const [x, y] of [[-0.22, 0.25], [0.24, -0.1], [-0.05, -0.3], [0.1, 0.32]] as const) {
+    if (lk.shield === 'buckler') break;
+    const n = ssphere(0.014, nail, x * w, y * h, z - 0.004, 1, 1, 0.6, 0);
+    n.userData.detail = 'iron';
+    g.add(n);
+  }
+  if (wooden) for (let i = -1; i <= 1; i += 2) { const b = sbox(w * 0.84, 0.04, 0.012, M(MAT.iron[1]), 0, i * h * 0.28, z); b.userData.detail = 'iron'; g.add(b); }
+}
+
+function buildShieldParts(d: ItemDef, lk0: GearLook, legacy: { face: number; rim: number; glow?: number } | undefined, M: MatFn): THREE.Group {
+  const lk = PAINTED ? grimLook(lk0) : lk0;
+  const style: Outline | 'book' = lk.shield;
+  const wooden = d.id === 'wooden_shield' || lk0.m === MAT.wood;
+  const glow = PAINTED ? undefined : legacy?.glow ?? lk.glow;
   const m: Ramp = lk.m, t: Ramp = lk.t;
   const faceM = M(wooden ? MAT.wood[1] : m[1], glow);
+  // (painted style: M maps MAT colours to the grim palette — weapons.ts makeShield passes grimMats)
   const hiM = M(m[0], glow);
   const rimM = M(wooden ? MAT.iron[1] : t[1]);
   const rimD = M(wooden ? MAT.iron[2] : t[2]);

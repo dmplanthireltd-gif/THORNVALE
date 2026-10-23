@@ -191,6 +191,7 @@ function looks(def: NpcDef, who: Who, r: Rng): Appearance {
     build: r.pick(builds),
     eyes: r.int(0, 5),
     top: 3, bottom: r.pick([2, 3, 13]),
+    scar: 'none', // appearance field since save v15 (NPC faces keep their own scars)
   };
 }
 

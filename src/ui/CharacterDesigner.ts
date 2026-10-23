@@ -1,6 +1,6 @@
 import {
   BEARDS, BODY_TYPES, BUILDS, CLOTH_COLORS, DEFAULT_APPEARANCE, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, randomAppearance,
-  sanitizeAppearance, SKIN_TONES, type Appearance,
+  sanitizeAppearance, SCARS, SKIN_TONES, type Appearance,
 } from '../game/player/appearance';
 import type { GearLook } from '../render/models/humanoid';
 import { CharacterPreview } from './CharacterPreview';
@@ -11,7 +11,7 @@ const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
 /**
  * The character designer: a turning 3D preview and one row per option (body type, build,
- * skin, hair style and colour, facial hair, eyes, shirt and trousers), with ◀ ▶ arrows or
+ * skin, hair style and colour, facial hair, scar, eyes, shirt and trousers), with ◀ ▶ arrows or
  * swatches and a Random button. Used by the hero creator on the title screen (online and
  * offline) and by the in-game Appearance window; the host adds its own Confirm button.
  */
@@ -84,6 +84,7 @@ export class CharacterDesigner {
     this.stepper('Hair', HAIR_STYLES, a.hair, (id) => this.patch({ hair: id }));
     this.swatches('Hair colour', HAIR_COLORS, a.hairColor, (i) => this.patch({ hairColor: i }));
     if (a.body === 'male') this.stepper('Facial hair', BEARDS, a.beard, (id) => this.patch({ beard: id }));
+    this.stepper('Scar', SCARS, a.scar, (id) => this.patch({ scar: id }));
     this.swatches('Eyes', EYE_COLORS, a.eyes, (i) => this.patch({ eyes: i }));
     this.swatches('Shirt', CLOTH_COLORS, a.top, (i) => this.patch({ top: i }));
     this.swatches('Trousers', CLOTH_COLORS, a.bottom, (i) => this.patch({ bottom: i }));

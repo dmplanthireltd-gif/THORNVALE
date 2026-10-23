@@ -32,7 +32,7 @@ const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 27;
+export const PROTOCOL_VERSION = 28;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -117,7 +117,7 @@ export interface CreatureSnap {
   name?: string;
   lvl?: number;
   voc?: Vocation;
-  /** Appearance, compact (encodeAppearance: nine small numbers). */
+  /** Appearance, compact (encodeAppearance: ten small numbers; nine = no scar). */
   ap?: number[];
   eq?: Record<string, string | null>;
   /** Shows equipment on the model. */

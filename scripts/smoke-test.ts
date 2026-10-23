@@ -32,7 +32,7 @@ import { FISH_ITEMS } from '../src/game/gathering/fishing';
 import { ENEMIES } from '../src/game/enemies/enemyDefs';
 import { FOODS } from '../src/game/production/cooking';
 import { TOWNS } from '../src/game/world/townList';
-import { appearanceFromOutfit, decodeAppearance, encodeAppearance, isAppearance, randomAppearance, type Appearance } from '../src/game/player/appearance';
+import { appearanceFromOutfit, BEARDS, decodeAppearance, encodeAppearance, isAppearance, randomAppearance, sanitizeAppearance, SCARS, type Appearance } from '../src/game/player/appearance';
 import { PALETTE } from '../src/game/player/outfits';
 import {
   extendPremium, FREE_DEPOT_SLOTS, FREE_MARKET_OFFERS, FREE_TOWNS, LAUNCH_AT, NO_PERKS, PREMIUM_DEPOT_SLOTS, PREMIUM_MARKET_OFFERS, PRODUCTS,
@@ -554,7 +554,7 @@ console.log('Save / load');
     for (let y = 0; y < g.world.height && !up; y++) for (let x = 0; x < g.world.width; x++) if (g.world.isWalkable(x, y, 1)) { up = [x, y]; break; }
     g.teleport(s.player, up![0], up![1], 1);
   }
-  const look: Appearance = { body: 'female', skin: 5, hair: 'braids', hairColor: 6, beard: 'none', build: 'slim', eyes: 3, top: 10, bottom: 13 };
+  const look: Appearance = { body: 'female', skin: 5, hair: 'braids', hairColor: 6, beard: 'none', build: 'slim', eyes: 3, top: 10, bottom: 13, scar: 'claw' };
   check(g.setAppearance(pid, look), 'appearance set');
   check(saves.save(g, pid), 'saved');
   const t = solo('knight');
@@ -2426,16 +2426,16 @@ console.log('Appearance and the character designer (save v11 → v12)');
   check(isAppearance(appearanceFromOutfit({ type: 'warden', head: 0, body: 0, legs: 0, feet: 0 }, PALETTE)), 'founder and premium outfit types map too');
 
   // round trip: save and load, wire encoding
-  const look: Appearance = { body: 'male', skin: 7, hair: 'topknot', hairColor: 11, beard: 'goatee', build: 'broad', eyes: 5, top: 15, bottom: 0 };
+  const look: Appearance = { body: 'male', skin: 7, hair: 'topknot', hairColor: 11, beard: 'braided', build: 'broad', eyes: 5, top: 15, bottom: 0, scar: 'eye' };
   check(g.setAppearance(pid, look) && JSON.stringify(g.serialize(pid).player.appearance) === JSON.stringify(look), 'appearance goes into the save');
   const t2 = solo('druid');
   check(t2.g.applySave(t2.pid, g.serialize(pid)) && JSON.stringify(t2.s.player.appearance) === JSON.stringify(look), 'appearance round-trips save and load');
-  check(JSON.stringify(decodeAppearance(encodeAppearance(look))) === JSON.stringify(look) && encodeAppearance(look).length === 9, 'the wire form is nine small numbers and decodes back');
+  check(JSON.stringify(decodeAppearance(encodeAppearance(look))) === JSON.stringify(look) && encodeAppearance(look).length === 10, 'the wire form is ten small numbers and decodes back');
   for (let i = 0; i < 200; i++) if (!isAppearance(randomAppearance())) { check(false, 'random appearances are valid'); break; }
 
   // the command validates every value
   const before = JSON.stringify(s.player.appearance);
-  const bad: number[][] = [[2, 0, 0, 0, 0, 0, 0, 0, 0], [0, 8, 0, 0, 0, 0, 0, 0, 0], [0, 0, 12, 0, 0, 0, 0, 0, 0], [0, 0, 0, 12, 0, 0, 0, 0, 0], [0, 0, 0, 0, 6, 0, 0, 0, 0],
+  const bad: number[][] = [[2, 0, 0, 0, 0, 0, 0, 0, 0], [0, 8, 0, 0, 0, 0, 0, 0, 0], [0, 0, 12, 0, 0, 0, 0, 0, 0], [0, 0, 0, 12, 0, 0, 0, 0, 0], [0, 0, 0, 0, BEARDS.length, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, SCARS.length], [0, 0, 0, 0, 0, 0, 0, 0, 0, -1],
     [0, 0, 0, 0, 0, 3, 0, 0, 0], [0, 0, 0, 0, 0, 0, 6, 0, 0], [0, 0, 0, 0, 0, 0, 0, 16, 0], [0, 0, 0, 0, 0, 0, 0, 0, -1], [1, 0, 0, 0, 2, 0, 0, 0, 0], [0, 0.5, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0]];
   for (const ap2 of bad) executeCommand(g, pid, { c: 'appearance', ap: ap2 });
   executeCommand(g, pid, { c: 'appearance', ap: 'junk' as unknown as number[] });
@@ -2443,6 +2443,32 @@ console.log('Appearance and the character designer (save v11 → v12)');
   check(!g.setAppearance(pid, { ...look, skin: 99 }) && !g.setAppearance(pid, { ...look, hair: 'afro' }), 'setAppearance refuses unknown values');
   executeCommand(g, pid, { c: 'appearance', ap: [1, 3, 7, 4, 0, 0, 2, 6, 9] });
   check(s.player.appearance.body === 'female' && s.player.appearance.hair === 'ponytail' && s.player.appearance.top === 6, 'a valid appearance command changes the look');
+  check(s.player.appearance.scar === 'none', 'an old nine-number appearance (no scar) still works: no scar');
+
+  // more beards and battle scars (2026-10-23, save v15)
+  for (const b of BEARDS) check(g.setAppearance(pid, { ...look, body: 'male', beard: b.id, scar: 'none' }) && s.player.appearance.beard === b.id, `beard "${b.name}" can be chosen`);
+  check(BEARDS.length >= 13 && SCARS.length >= 10, 'at least 13 beards and 10 scars to choose from');
+  for (const c of SCARS) {
+    check(g.setAppearance(pid, { ...look, body: 'male', scar: c.id }) && s.player.appearance.scar === c.id, `scar "${c.name}" can be chosen (male)`);
+    check(g.setAppearance(pid, { ...look, body: 'female', beard: 'none', scar: c.id }) && s.player.appearance.scar === c.id, `scar "${c.name}" can be chosen (female)`);
+  }
+  const before2 = JSON.stringify(s.player.appearance);
+  check(!g.setAppearance(pid, { ...look, scar: 'eyepatch' }) && !g.setAppearance(pid, { ...look, beard: 'tentacles' }) && !g.setAppearance(pid, { ...look, body: 'female', beard: 'wild' }), 'unknown scars and beards, and beards on a female body, are refused');
+  check(!g.setAppearance(pid, { ...look, scar: undefined as unknown as string }), 'an appearance without a scar field is refused by the command');
+  check(JSON.stringify(s.player.appearance) === before2, 'refused appearances change nothing');
+  executeCommand(g, pid, { c: 'appearance', ap: [0, 1, 2, 3, BEARDS.findIndex((b) => b.id === 'forked'), 2, 1, 4, 5, SCARS.findIndex((c) => c.id === 'burn')] });
+  check(s.player.appearance.beard === 'forked' && s.player.appearance.scar === 'burn', 'the appearance command carries the new beards and scars');
+  for (const b of BEARDS) for (const c of SCARS) {
+    const x: Appearance = { ...look, body: 'male', beard: b.id, scar: c.id };
+    if (JSON.stringify(decodeAppearance(encodeAppearance(x))) !== JSON.stringify(x)) { check(false, `wire round trip ${b.id}/${c.id}`); break; }
+  }
+  // a v14 save gets "no scar" and keeps every other look field
+  const v14 = JSON.parse(JSON.stringify({ ...g.serialize(pid), version: 14 })) as Record<string, unknown>;
+  const ap14 = (v14.player as Record<string, unknown>).appearance as Record<string, unknown>;
+  delete ap14.scar;
+  const m14 = migrateSave(v14);
+  check(typeof m14 !== 'string' && m14.from === 14 && m14.data.player.appearance?.scar === 'none' && m14.data.player.appearance?.beard === 'forked' && isAppearance(m14.data.player.appearance), 'save v14 → v15: no scar, every other look field kept');
+  check(sanitizeAppearance({ ...look, scar: 'nope' }).scar === 'none' && sanitizeAppearance({ ...look, scar: 'jaw' }).scar === 'jaw', 'stored looks with an unknown scar fall back to none');
 
   // other players see it (online snapshot → mirror)
   const other = g.addPlayer('Watcher', { intent: new BufferedIntent() });
@@ -2455,7 +2481,7 @@ console.log('Appearance and the character designer (save v11 → v12)');
   check(JSON.stringify(mirror.getPlayer(pid)?.appearance) === JSON.stringify(s.player.appearance), 'other players receive the appearance');
   executeCommand(g, pid, { c: 'appearance', ap: [0, 0, 10, 10, 5, 2, 0, 3, 3] });
   const snap2 = buildSnapshot(g, other) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>;
-  check(snap2.c.find((c) => c.id === pid)?.ap?.join(',') === '0,0,10,10,5,2,0,3,3', 'a change goes out in the next snapshot');
+  check(snap2.c.find((c) => c.id === pid)?.ap?.join(',') === '0,0,10,10,5,2,0,3,3,0', 'a change goes out in the next snapshot (ten numbers, scar last)');
   applySnapshot(mirror, snap2, { depot: null, trade: null } as unknown as MirrorExtras);
   check(mirror.getPlayer(pid)?.appearance.hair === 'mohawk' && looks.length >= 2, 'the mirror updates the look and tells the renderer');
   const snap3 = buildSnapshot(g, other) as Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>;

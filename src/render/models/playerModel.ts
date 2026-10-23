@@ -6,6 +6,7 @@ import { group, mat, sbox, scone, sshell, ssphere, type Mat } from './parts';
 import type { BipedRig } from './rigs';
 import { PAINTED } from '../style';
 import { detail, type Detail } from './grimDetail';
+import { addMoreBeard, addScar } from './beardsScars';
 
 /**
  * Painted style (owner 2026-10-23, "more detail, more brutal"): rounder heads and hands,
@@ -209,6 +210,7 @@ export function buildPlayerRig(a: Appearance): BipedRig {
   head.scale.setScalar(sh.head);
   addHair(head, a.hair, hairM, blend(hairHex, skinHex, 0.45));
   if (!female) addBeard(head, a.beard, hairM, blend(hairHex, skinHex, 0.5));
+  addScar(head, a.scar, skinHex, PAINTED, female);
 
   // ---- arms: sleeves in the shirt colour, bare forearms and hands
   const armX = 0.27 * sh.tx + 0.07 * sh.arm + 0.012;
@@ -361,6 +363,7 @@ function addBeard(head: THREE.Group, style: string, m: Mat, stubble: number): vo
       for (const s of [-1, 1]) add(sbox(0.06, 0.18, 0.12, m, s * 0.18, -0.06, 0.07));
       return;
     default:
+      addMoreBeard(head, style, m); // the newer beards (beardsScars.ts)
   }
 }
 

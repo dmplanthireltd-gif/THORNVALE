@@ -21,16 +21,21 @@ import type { Rig } from './rigs';
  */
 export type Detail =
   | 'plain' | 'cloth' | 'clothBlood' | 'leather' | 'leatherBurnt' | 'steel' | 'iron' | 'chain'
-  | 'skin' | 'skinSoot' | 'hair' | 'wood' | 'fur' | 'bone' | 'blade' | 'runeCloth';
+  | 'skin' | 'skinSoot' | 'hair' | 'wood' | 'fur' | 'bone' | 'blade' | 'runeCloth'
+  // worn gear (2026-10-23): riveted plate, overlapping scales, tarnished gilt, studded leather
+  | 'plate' | 'scale' | 'gilt' | 'studded';
 
 const CELLS: Detail[] = [
   'plain', 'cloth', 'clothBlood', 'runeCloth',
   'leather', 'leatherBurnt', 'fur', 'wood',
   'steel', 'iron', 'chain', 'blade',
   'skin', 'skinSoot', 'hair', 'bone',
+  'plate', 'scale', 'gilt', 'studded',
 ];
 const CELL = 256;
 const COLS = 4;
+/** Atlas rows (cells are appended a row at a time; the atlas is COLS × ROWS cells). */
+const ROWS = Math.ceil(CELLS.length / COLS);
 
 /** Tags a part with the detail it should get (read and removed by paintRig). */
 export function detail<T extends THREE.Object3D>(o: T, d: Detail): T {
@@ -317,6 +322,98 @@ const PAINTERS: Record<Detail, (p: P) => void> = {
     });
     scratches(p, 25, 'rgba(255,255,240,0.3)', 'rgba(60,40,20,0.45)', 16);
   },
+  plate: (p) => {
+    // riveted armour plate: brushed, dented and scratched, a bevelled seam and a row of rivets
+    // near the top and bottom edge, rust running down from the rivets, grime collecting low
+    field(p, (x, y) => {
+      const brush = (p.n.at(x * 0.15, y, 128) - 0.5) * 0.1;
+      const mott = (p.n.fbm(x, y, 4) - 0.5) * 0.34;
+      const soot = Math.max(0, p.n.fbm(x + 31, y + 17, 4) - 0.55) * 0.9;
+      return grey(0.7 + brush + mott - soot - low(y, 0.55) * 0.42, 0);
+    });
+    dents(p, 14);
+    scratches(p, 70, 'rgba(255,255,255,0.28)', 'rgba(0,0,0,0.4)', 30);
+    const { ctx, r } = p;
+    for (let i = 0; i < 5; i++) splat(p, r.next() * CELL, 60 + r.next() * 170, 6 + r.next() * 12, `rgba(${70 + r.int(0, 30)},8,4,0.55)`, 5); // old blood
+    for (const y of [22, CELL - 24]) {
+      ctx.fillStyle = 'rgba(0,0,0,0.38)'; ctx.fillRect(0, y + 9, CELL, 3); // seam shadow
+      ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(0, y + 12, CELL, 2);
+      for (let x = 12; x < CELL; x += 28) {
+        const rx = x + (r.next() - 0.5) * 2;
+        ctx.fillStyle = `rgba(${110 + r.int(0, 30)},52,22,0.45)`; // rust streak under the rivet
+        ctx.fillRect(rx - 1.5, y + 4, 3 + r.next() * 2, 10 + r.next() * 22);
+        const g = ctx.createRadialGradient(rx - 2, y - 2, 0, rx, y, 7);
+        g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(0.45, 'rgba(150,150,150,1)'); g.addColorStop(1, 'rgba(20,20,20,1)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(rx, y, 6, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // darker edge bands (plates overlap there) and a couple of deep gouges
+    const e = ctx.createLinearGradient(0, 0, 0, CELL);
+    e.addColorStop(0, 'rgba(0,0,0,0.35)'); e.addColorStop(0.06, 'rgba(0,0,0,0)'); e.addColorStop(0.94, 'rgba(0,0,0,0)'); e.addColorStop(1, 'rgba(0,0,0,0.45)');
+    ctx.fillStyle = e; ctx.fillRect(0, 0, CELL, CELL);
+    scratches(p, 6, 'rgba(255,255,255,0.6)', 'rgba(0,0,0,0.7)', 70);
+  },
+  scale: (p) => {
+    // overlapping scales (lamellar / dragon hide): lit top, dark lower lip, worn and grimy
+    field(p, (x, y) => grey(0.55 + (p.n.fbm(x, y, 4) - 0.5) * 0.2 - low(y, 0.6) * 0.25, 0.01));
+    const { ctx, r } = p;
+    const sw = 32, sh = 26;
+    for (let row = -1; row < CELL / sh + 1; row++) {
+      for (let col = -1; col < CELL / sw + 1; col++) {
+        const cx = col * sw + (row % 2 ? sw / 2 : 0), cy = row * sh;
+        const g = ctx.createLinearGradient(0, cy - sh * 0.4, 0, cy + sh);
+        const v = 0.78 + r.next() * 0.16 - (cy / CELL) * 0.22;
+        g.addColorStop(0, `rgba(${Math.round(255 * v)},${Math.round(255 * v)},${Math.round(250 * v)},1)`);
+        g.addColorStop(1, `rgba(${Math.round(120 * v)},${Math.round(118 * v)},${Math.round(112 * v)},1)`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(cx - sw / 2, cy - sh * 0.3);
+        ctx.quadraticCurveTo(cx - sw / 2, cy + sh * 0.85, cx, cy + sh);
+        ctx.quadraticCurveTo(cx + sw / 2, cy + sh * 0.85, cx + sw / 2, cy - sh * 0.3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(10,10,8,0.75)'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + sh * 0.7); ctx.stroke(); // a ridge down each scale
+      }
+    }
+    scratches(p, 40, 'rgba(255,255,255,0.3)', 'rgba(0,0,0,0.35)', 20);
+    for (let i = 0; i < 4; i++) splat(p, r.next() * CELL, 100 + r.next() * 150, 6 + r.next() * 10, 'rgba(60,10,6,0.5)', 4);
+  },
+  gilt: (p) => {
+    // tarnished gilt and brass: blackened in the recesses, worn bright on the edges, faint chased
+    // scrollwork, verdigris and grime low down
+    field(p, (x, y) => {
+      const tarnish = Math.max(0, p.n.fbm(x, y, 4) - 0.45) * 1.4;
+      const v = 0.86 - tarnish * 0.5 + (p.n.at(x, y, 64) - 0.5) * 0.08 - low(y, 0.6) * 0.35;
+      return [v + 0.02, v, v - 0.04];
+    });
+    const { ctx, r } = p;
+    ctx.strokeStyle = 'rgba(30,22,8,0.5)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 7; i++) { // chased scrolls
+      const x = r.next() * CELL, y = r.next() * CELL, rad = 10 + r.next() * 16;
+      ctx.beginPath(); ctx.arc(x, y, rad, r.next() * 3, r.next() * 3 + 3.5); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x + rad, y, rad * 0.5, 0, Math.PI * 1.4); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,250,220,0.35)'; // worn-bright border
+    ctx.fillRect(0, 0, CELL, 5); ctx.fillRect(0, CELL - 5, CELL, 5);
+    for (let i = 0; i < 6; i++) splat(p, r.next() * CELL, 150 + r.next() * 100, 5 + r.next() * 9, 'rgba(60,90,70,0.35)', 3); // verdigris
+    scratches(p, 50, 'rgba(255,245,210,0.4)', 'rgba(20,12,0,0.35)', 24);
+  },
+  studded: (p) => {
+    // hardened leather with rows of iron studs and stitched edges
+    PAINTERS.leather(p);
+    const { ctx, r } = p;
+    for (let y = 20; y < CELL; y += 26) {
+      for (let x = 10 + ((y / 26) % 2) * 13; x < CELL; x += 26) {
+        ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.arc(x + 1.5, y + 2, 4.5, 0, Math.PI * 2); ctx.fill();
+        const g = ctx.createRadialGradient(x - 1.5, y - 1.5, 0, x, y, 4.2);
+        g.addColorStop(0, 'rgba(255,250,240,1)'); g.addColorStop(0.5, 'rgba(150,145,140,1)'); g.addColorStop(1, 'rgba(40,38,36,1)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+        if (r.next() < 0.3) { ctx.fillStyle = 'rgba(110,50,20,0.35)'; ctx.fillRect(x - 1, y + 4, 2, 5 + r.next() * 8); }
+      }
+    }
+  },
 };
 
 let atlasTex: THREE.CanvasTexture | null = null;
@@ -324,7 +421,8 @@ let atlasTex: THREE.CanvasTexture | null = null;
 export function detailAtlas(): THREE.CanvasTexture {
   if (atlasTex) return atlasTex;
   const c = document.createElement('canvas');
-  c.width = c.height = CELL * COLS;
+  c.width = CELL * COLS;
+  c.height = CELL * ROWS;
   const out = c.getContext('2d')!;
   const cell = document.createElement('canvas');
   cell.width = cell.height = CELL;
@@ -356,8 +454,9 @@ function cellGeometry(geo: THREE.BufferGeometry, cell: number): THREE.BufferGeom
   g = geo.clone();
   const uv = g.attributes.uv as THREE.BufferAttribute | undefined;
   const n = g.attributes.position.count;
-  const u0 = (cell % COLS) / COLS, v0 = 1 - (Math.floor(cell / COLS) + 1) / COLS;
+  const u0 = (cell % COLS) / COLS, v0 = 1 - (Math.floor(cell / COLS) + 1) / ROWS;
   const inset = 0.06 / COLS, span = 1 / COLS - 2 * inset;
+  const insetV = 0.06 / ROWS, spanV = 1 / ROWS - 2 * insetV;
   const out = new Float32Array(n * 2);
   // geometry without UVs (custom gear shells): project the cell onto it from the front/side
   const pos = g.attributes.position as THREE.BufferAttribute;
@@ -368,7 +467,7 @@ function cellGeometry(geo: THREE.BufferGeometry, cell: number): THREE.BufferGeom
     const u = uv ? Math.min(1, Math.max(0, uv.getX(i))) : 0.5 * ((pos.getX(i) - bb.min.x) / sx + (pos.getZ(i) - bb.min.z) / sz);
     const v = uv ? Math.min(1, Math.max(0, uv.getY(i))) : (pos.getY(i) - bb.min.y) / sy;
     out[i * 2] = u0 + inset + u * span;
-    out[i * 2 + 1] = v0 + inset + v * span;
+    out[i * 2 + 1] = v0 + insetV + v * spanV;
   }
   g.setAttribute('uv', new THREE.BufferAttribute(out, 2));
   g.userData = { ...geo.userData, detailCell: cell };
@@ -435,7 +534,8 @@ export function paintRig(rig: Rig): void {
     me.geometry = cellGeometry(me.geometry, CELLS.indexOf(d));
     if (m.map !== atlas) {
       m.map = atlas;
-      if (!m.vertexColors && !lit) grim(m, 0.38);
+      // gear already toned to the grim palette (gear3d.ts, weapons.ts, shields3d.ts) keeps its colours
+      if (!m.vertexColors && !lit && !m.userData.grimToned) grim(m, 0.38);
       m.needsUpdate = true;
     }
   }

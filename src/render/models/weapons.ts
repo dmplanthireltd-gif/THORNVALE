@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { ITEMS, type ItemDef } from '../../game/inventory/items';
-import { gearLook, MAT, rampOf } from './gearLooks';
+import { GRIM_MAT, gearLook, grimColor, MAT, rampOf, type MatKey } from './gearLooks';
 import { group, matCache, sbox, scone, scyl, ssphere, storus, type MatFn } from './parts';
 import { buildShieldModel, wornShield } from './shields3d';
+import { PAINTED } from '../style';
+import type { Detail } from './grimDetail';
+import { grimMats } from './gear3d';
 
 /**
  * Hand-held weapon and shield models, built from each item's weapon type and a
@@ -132,8 +135,38 @@ function weaponLook(d: ItemDef, l: Look): { blade: number; hi: number; trim: num
   const lk = gearLook(d, l.c, l.t);
   const metal = !!d.setId || /^(bronze|iron|steel|starsteel|darkstone|moonsilver|gilded|bone)_/.test(d.id);
   const blade = metal ? lk.m[1] : l.c;
-  return { blade, hi: metal ? lk.m[0] : rampOf(l.c)[0], trim: l.t ?? lk.t[1], glow: l.g ?? lk.glow, gem: lk.gem ?? (l.g ? l.c : undefined) };
+  const c = { blade, hi: metal ? lk.m[0] : rampOf(l.c)[0], trim: l.t ?? lk.t[1], glow: l.g ?? lk.glow, gem: lk.gem ?? (l.g ? l.c : undefined) };
+  if (!PAINTED) return c;
+  // painted style: the grim palette; the blade loses its glow (a lit part gets no worn detail),
+  // enchanted weapons keep a glowing stone instead
+  return { blade: grim(c.blade), hi: grim(c.hi), trim: grim(c.trim), glow: undefined, gem: c.gem !== undefined ? grimColor(c.gem, 0.15, 0.9) : c.glow !== undefined ? grimColor(l.c, 0.15, 0.9) : undefined };
 }
+
+// ------------------------------------------------------------------ painted style: grim weapons
+
+/** MAT colours become their GRIM_MAT twins; any other colour is dulled. */
+const GRIM_OF = new Map<number, number>();
+for (const k of Object.keys(MAT) as MatKey[]) MAT[k].forEach((c, i) => { if (!GRIM_OF.has(c)) GRIM_OF.set(c, GRIM_MAT[k][i]); });
+const grim = (c: number): number => GRIM_OF.get(c) ?? grimColor(c, 0.35, 0.85);
+
+/** Painted style: tags a part with its atlas surface (notched bloody blade, wood, leather, iron, gilt). */
+function T<O extends THREE.Object3D>(o: O, d: Detail): O {
+  if (PAINTED) o.traverse((c) => { if ((c as THREE.Mesh).isMesh) c.userData.detail = d; });
+  return o;
+}
+/** Gold-coloured fittings get tarnished gilt, the rest pitted iron. */
+function metalSurface(c: number): Detail {
+  const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+  return r > b + 30 && g > b + 10 ? 'gilt' : 'iron';
+}
+/** A grip wrapped in leather bands (painted extras), along +z from z0 to z1. */
+function wrap(M: MatFn, z0: number, z1: number, r: number, n = 3): THREE.Object3D[] {
+  const out: THREE.Object3D[] = [];
+  const m = M(0x2a1c12);
+  for (let i = 0; i < n; i++) out.push(T(X(scyl(r, r, 0.022, m, 0, 0, z0 + ((i + 0.5) / n) * (z1 - z0), 6)), 'leather'));
+  return out;
+}
+const stud = (m: THREE.Material, x: number, y: number, z: number, r = 0.018) => ssphere(r, m, x, y, z, 1, 1, 1, 0);
 
 const X = (o: THREE.Mesh) => { o.rotation.x = Math.PI / 2; return o; };
 
@@ -149,17 +182,24 @@ function sword(d: ItemDef, l: Look, M: MatFn): THREE.Group {
   const c = weaponLook(d, l);
   const blade = M(c.blade, c.glow);
   const guard = M(c.trim);
+  const gs = metalSurface(c.trim);
   const g = group(0, 0, 0,
-    X(scyl(0.03, 0.03, 0.2, M(MAT.leather[2]), 0, 0, -0.04, 6)),
-    ssphere(0.045, guard, 0, 0, -0.16, 1, 1, 1, 0),
-    sbox(w * 3.6, 0.05, 0.06, guard, 0, 0, 0.08),
-    ssphere(0.03, guard, w * 1.8, 0, 0.1), ssphere(0.03, guard, -w * 1.8, 0, 0.1),
-    sbox(w, 0.026, len, blade, 0, 0, 0.11 + len / 2),
-    sbox(w * 0.3, 0.03, len * 0.7, M(c.hi, c.glow), -w * 0.12, 0, 0.11 + len * 0.36),
-    X(scone(w / 2, 0.12, blade, 0, 0, 0.11 + len + 0.05, 4)),
+    T(X(scyl(0.03, 0.03, 0.2, M(MAT.leather[2]), 0, 0, -0.04, 6)), 'leather'),
+    T(ssphere(0.045, guard, 0, 0, -0.16, 1, 1, 1, 0), gs),
+    T(sbox(w * 3.6, 0.05, 0.06, guard, 0, 0, 0.08), gs),
+    T(ssphere(0.03, guard, w * 1.8, 0, 0.1), gs), T(ssphere(0.03, guard, -w * 1.8, 0, 0.1), gs),
+    T(sbox(w, 0.026, len, blade, 0, 0, 0.11 + len / 2), 'blade'),
+    T(sbox(w * 0.3, 0.03, len * 0.7, M(c.hi, c.glow), -w * 0.12, 0, 0.11 + len * 0.36), 'blade'),
+    T(X(scone(w / 2, 0.12, blade, 0, 0, 0.11 + len + 0.05, 4)), 'blade'),
   );
   if (st === 'curved') { g.children[5].rotation.y = 0.06; g.children[7].position.x = 0.04; }
   if (c.gem && d.rarity !== 'common') g.add(ssphere(0.03, M(c.gem, c.gem), 0, 0.03, 0.08));
+  if (PAINTED) {
+    // leather-wrapped grip, a peened pommel nut, a ricasso block and a nick out of the edge
+    g.add(...wrap(M, -0.13, 0.05, 0.034, 4), T(X(scyl(0.02, 0.02, 0.03, guard, 0, 0, -0.2, 6)), gs));
+    g.add(T(sbox(w * 1.1, 0.034, 0.06, M(c.hi), 0, 0, 0.14), 'blade'));
+    g.add(T(sbox(0.03, 0.03, 0.04, M(0x16100c), w * 0.48, 0, 0.11 + len * 0.62), 'iron'));
+  }
   return g;
 }
 
@@ -171,20 +211,26 @@ function axe(d: ItemDef, l: Look, M: MatFn): THREE.Group {
   const head = M(c.blade, c.glow);
   const edge = M(c.hi, c.glow);
   const trim = M(c.trim);
-  const g = group(0, 0, 0, haft(len, M(d.id === 'demon_reaver' ? 0x2a1a14 : MAT.wood[1])), X(scyl(0.036, 0.036, 0.14, M(MAT.leather[2]), 0, 0, 0.02, 6)));
+  const g = group(0, 0, 0, T(haft(len, M(d.id === 'demon_reaver' ? 0x2a1a14 : MAT.wood[1])), 'wood'), T(X(scyl(0.036, 0.036, 0.14, M(MAT.leather[2]), 0, 0, 0.02, 6)), 'leather'));
   const hz = len - 0.25;
   const blade = (side: number) => st === 'cleaver'
-    ? group(0, 0, hz, sbox(0.045, 0.42 * s, 0.32 * s, head, side * 0.17 * s, -0.04, -0.04), sbox(0.04, 0.44 * s, 0.05, edge, side * 0.34 * s, -0.04, -0.04))
+    ? group(0, 0, hz, T(sbox(0.045, 0.42 * s, 0.32 * s, head, side * 0.17 * s, -0.04, -0.04), 'iron'), T(sbox(0.04, 0.44 * s, 0.05, edge, side * 0.34 * s, -0.04, -0.04), 'blade'))
     : group(0, 0, hz,
-      sbox(0.05, 0.22 * s, 0.18 * s, head, side * 0.1 * s, -0.01, 0),
-      sbox(0.05, 0.32 * s, 0.1 * s, head, side * 0.18 * s, -0.03, 0),
-      sbox(0.04, 0.38 * s, 0.05, edge, side * 0.24 * s, -0.04, 0),
+      T(sbox(0.05, 0.22 * s, 0.18 * s, head, side * 0.1 * s, -0.01, 0), 'iron'),
+      T(sbox(0.05, 0.32 * s, 0.1 * s, head, side * 0.18 * s, -0.03, 0), 'blade'),
+      T(sbox(0.04, 0.38 * s, 0.05, edge, side * 0.24 * s, -0.04, 0), 'blade'),
     );
   g.add(blade(1));
   if (st === 'double') g.add(blade(-1));
-  else if (st === 'battle') g.add(rot(scone(0.035, 0.14, head, -0.1, 0, hz, 4), 0, 0, Math.PI / 2));
-  g.add(sbox(0.08, 0.1, 0.13, trim, 0, 0, hz), X(scone(0.03, 0.12, head, 0, 0, hz + 0.12, 4)));
+  else if (st === 'battle') g.add(T(rot(scone(0.035, 0.14, head, -0.1, 0, hz, 4), 0, 0, Math.PI / 2), 'iron'));
+  g.add(T(sbox(0.08, 0.1, 0.13, trim, 0, 0, hz), metalSurface(c.trim)), T(X(scone(0.03, 0.12, head, 0, 0, hz + 0.12, 4)), 'iron'));
   if (c.gem && d.rarity !== 'common') g.add(ssphere(0.03, M(c.gem, c.gem), 0.045, 0, hz));
+  if (PAINTED) {
+    // iron wedge rivets through the eye, leather wraps up the haft
+    const iron = M(MAT.iron[2]);
+    for (const sy of [-1, 1]) g.add(T(stud(iron, 0.045, sy * 0.03, hz), 'iron'), T(stud(iron, -0.045, sy * 0.03, hz), 'iron'));
+    g.add(...wrap(M, hz - 0.3, hz - 0.12, 0.034, 2), ...wrap(M, -0.1, 0.12, 0.038, 3));
+  }
   return g;
 }
 
@@ -195,8 +241,17 @@ function club(d: ItemDef, l: Look, M: MatFn): THREE.Group {
   const c = weaponLook(d, l);
   const head = M(c.blade, c.glow);
   const trim = M(c.trim);
-  const g = group(0, 0, 0, haft(len, st === 'flanged' && d.rarity !== 'common' ? trim : M(MAT.wood[1])), X(scyl(0.036, 0.036, 0.14, M(MAT.leather[2]), 0, 0, 0.02, 6)));
+  const g = group(0, 0, 0, T(haft(len, st === 'flanged' && d.rarity !== 'common' ? trim : M(MAT.wood[1])), st === 'flanged' && d.rarity !== 'common' ? 'iron' : 'wood'), T(X(scyl(0.036, 0.036, 0.14, M(MAT.leather[2]), 0, 0, 0.02, 6)), 'leather'));
   const hz = len - 0.18;
+  if (PAINTED) {
+    // iron bands under the head, a leather-wrapped grip, studs driven into the head
+    const iron = M(MAT.iron[2]);
+    g.add(T(X(scyl(0.04, 0.04, 0.03, iron, 0, 0, hz - 0.2, 6)), 'iron'), T(X(scyl(0.04, 0.04, 0.03, iron, 0, 0, hz - 0.28, 6)), 'iron'), ...wrap(M, -0.1, 0.12, 0.038, 3));
+    if (st === 'hammer' || st === 'maul') {
+      const big = (st === 'maul' ? 1.35 : 1) * s;
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) g.add(T(stud(iron, sx * 0.1 * big, sy * 0.09 * big, hz - 0.02, 0.02), 'iron'));
+    }
+  }
   switch (st) {
     case 'hammer':
     case 'maul': {
@@ -206,11 +261,11 @@ function club(d: ItemDef, l: Look, M: MatFn): THREE.Group {
       if (st === 'hammer') g.add(rot(scone(0.06, 0.18, trim, -0.22 * s, 0, hz - 0.02, 4), 0, 0, Math.PI / 2));
       if (d.id === 'thunder_maul') g.add(ssphere(0.06, M(0xf0f080, 0xa0a020), 0.18 * s, 0, hz - 0.02));
       if (c.gem && st === 'maul' && d.rarity === 'legendary') g.add(ssphere(0.045, M(c.gem, c.gem), 0, 0.13, hz - 0.02));
-      return g;
+      return clubDone(g);
     }
     case 'tusk':
-      g.add(rot(scone(0.09 * s, 0.4 * s, M(MAT.bone[1]), 0.03, 0, hz, 6), -Math.PI / 2, 0, 0.2), sbox(0.08, 0.08, 0.05, M(MAT.leather[1]), 0, 0, hz - 0.18));
-      return g;
+      g.add(T(rot(scone(0.09 * s, 0.4 * s, M(MAT.bone[1]), 0.03, 0, hz, 6), -Math.PI / 2, 0, 0.2), 'bone'), T(sbox(0.08, 0.08, 0.05, M(MAT.leather[1]), 0, 0, hz - 0.18), 'leather'));
+      return clubDone(g);
     case 'morning': {
       const h = group(0, 0, hz, ssphere(0.11 * s, head, 0, 0, 0, 1, 1, 1, 0));
       for (let i = 0; i < 8; i++) {
@@ -222,7 +277,7 @@ function club(d: ItemDef, l: Look, M: MatFn): THREE.Group {
       }
       h.add(X(scone(0.035, 0.12, trim, 0, 0, 0.14 * s, 4)));
       g.add(h);
-      return g;
+      return clubDone(g);
     }
     default: {
       // flanged mace: six blades round a core
@@ -234,23 +289,34 @@ function club(d: ItemDef, l: Look, M: MatFn): THREE.Group {
       h.add(X(scone(0.03, 0.1, trim, 0, 0, 0.14 * s, 4)), X(scyl(0.045, 0.045, 0.04, trim, 0, 0, -0.13 * s, 8)));
       if (c.gem && d.rarity !== 'common') h.add(ssphere(0.03, M(c.gem, c.gem), 0, 0, 0.1 * s));
       g.add(h);
-      return g;
+      return clubDone(g);
     }
   }
+}
+
+/** Painted style: every club part not tagged yet is pitted iron. */
+function clubDone(g: THREE.Group): THREE.Group {
+  if (PAINTED) g.traverse((c) => { if ((c as THREE.Mesh).isMesh && !c.userData.detail) c.userData.detail = 'iron'; });
+  return g;
 }
 
 function bow(d: ItemDef, l: Look, M: MatFn): THREE.Group {
   const s = l.s ?? 1;
   const c = weaponLook(d, l);
-  const wd = M(d.setId === 'skyfeather' ? MAT.sky[1] : l.c, c.glow);
+  const wd = M(d.setId === 'skyfeather' ? MAT.sky[1] : PAINTED ? grim(l.c) : l.c, c.glow);
   const g = group(0, 0, 0.05);
   // the bow is held upright in front of the hand
   const r = 0.45 * s;
   const arc = storus(r, 0.03, wd, Math.PI * 0.9, 4, 12);
   arc.rotation.set(0, Math.PI / 2, Math.PI / 2 + Math.PI * 0.05);
   arc.position.z = -r * 0.55;
-  g.add(arc, sbox(0.012, r * 1.95, 0.012, M(0xe8e0c6), 0, 0, -r * 0.55 + r * 0.16), sbox(0.06, 0.12, 0.06, M(MAT.leather[1]), 0, 0, r * 0.4));
-  for (const sy of [-1, 1]) g.add(ssphere(0.03, M(c.trim), 0, sy * r * 0.97, -r * 0.4));
+  g.add(T(arc, 'wood'), sbox(0.012, r * 1.95, 0.012, M(0xe8e0c6), 0, 0, -r * 0.55 + r * 0.16), T(sbox(0.06, 0.12, 0.06, M(MAT.leather[1]), 0, 0, r * 0.4), 'leather'));
+  for (const sy of [-1, 1]) g.add(T(ssphere(0.03, M(c.trim), 0, sy * r * 0.97, -r * 0.4), metalSurface(c.trim)));
+  if (PAINTED) {
+    // a grip wrapped in sinew above and below the hand
+    const sinew = M(0x3a2a1a);
+    g.add(T(sbox(0.07, 0.04, 0.07, sinew, 0, 0.07, r * 0.4), 'leather'), T(sbox(0.07, 0.04, 0.07, sinew, 0, -0.07, r * 0.4), 'leather'));
+  }
   if (d.setId === 'skyfeather' || d.rarity === 'rare' || d.rarity === 'legendary') for (const sy of [-1, 1]) g.add(rot(sbox(0.02, 0.18, 0.06, M(d.setId === 'skyfeather' ? 0xffffff : c.trim, c.glow), 0, sy * r * 0.55, r * 0.3), sy * 0.5, 0, 0));
   if (c.gem && d.rarity !== 'common') g.add(ssphere(0.03, M(c.gem, c.gem), 0, 0, r * 0.47));
   g.rotation.x = -Math.PI / 2;
@@ -260,52 +326,74 @@ function bow(d: ItemDef, l: Look, M: MatFn): THREE.Group {
 function crossbow(d: ItemDef, l: Look, M: MatFn): THREE.Group {
   const s = l.s ?? 1;
   const c = weaponLook(d, l);
-  const wd = M(l.c, c.glow);
+  const wd = M(PAINTED ? grim(l.c) : l.c, c.glow);
   const metal = M(c.trim);
-  return group(0, 0, 0,
-    sbox(0.08, 0.08, 0.7 * s, wd, 0, 0, 0.25),
-    sbox(0.75 * s, 0.05, 0.06, metal, 0, 0.02, 0.5 * s),
-    sbox(0.012, 0.012, 0.36 * s, M(0xe8e0c6), 0, 0.05, 0.38),
-    sbox(0.1, 0.1, 0.08, metal, 0, 0, 0.5 * s),
-    X(scone(0.025, 0.08, M(MAT.steel[1]), 0, 0.06, 0.62 * s, 4)),
-  );
-}
-
-function throwing(d: ItemDef, l: Look, M: MatFn): THREE.Group {
-  const head = M(l.c, l.g);
-  if (d.id.endsWith('_star')) {
-    const g = group(0, 0, 0.08);
-    for (let i = 0; i < 4; i++) g.add(rot(scone(0.04, 0.16, head, Math.cos(i * Math.PI / 2) * 0.08, 0, Math.sin(i * Math.PI / 2) * 0.08, 3), 0, 0, i * Math.PI / 2 + Math.PI / 2));
-    return g;
-  }
-  return group(0, 0, 0, haft(1.15 * (l.s ?? 1), M(l.t ?? 0x7a5530)), X(scone(0.05, 0.2, head, 0, 0, 1.1 * (l.s ?? 1), 4)), X(scyl(0.035, 0.035, 0.05, M(MAT.leather[1]), 0, 0, 0.95 * (l.s ?? 1), 6)));
-}
-
-function wand(l: Look, M: MatFn, staff: boolean): THREE.Group {
-  const shaft = M(l.t ?? 0x3a2a4a);
-  const orb = M(l.c, l.g ?? 0x404040);
-  const gold = M(MAT.gold[1]);
-  if (!staff) {
-    return group(0, 0, 0,
-      X(scyl(0.022, 0.03, 0.45, shaft, 0, 0, 0.12, 6)),
-      X(scyl(0.034, 0.034, 0.03, gold, 0, 0, 0.0, 8)), X(scyl(0.032, 0.032, 0.03, gold, 0, 0, 0.3, 8)),
-      ssphere(0.065, orb, 0, 0, 0.39),
-      rot(scone(0.015, 0.08, gold, 0.04, 0, 0.36, 4), 0.5, 0, 0), rot(scone(0.015, 0.08, gold, -0.04, 0, 0.36, 4), 0.5, 0, 0),
-    );
-  }
   const g = group(0, 0, 0,
-    X(scyl(0.026, 0.032, 1.1, shaft, 0, 0, 0.3, 6)),
-    ssphere(0.085, orb, 0, 0, 0.9, 1, 1, 1.25),
+    T(sbox(0.08, 0.08, 0.7 * s, wd, 0, 0, 0.25), 'wood'),
+    T(sbox(0.75 * s, 0.05, 0.06, metal, 0, 0.02, 0.5 * s), 'iron'),
+    sbox(0.012, 0.012, 0.36 * s, M(0xe8e0c6), 0, 0.05, 0.38),
+    T(sbox(0.1, 0.1, 0.08, metal, 0, 0, 0.5 * s), 'iron'),
+    T(X(scone(0.025, 0.08, M(MAT.steel[1]), 0, 0.06, 0.62 * s, 4)), 'blade'),
   );
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI * 2;
-    g.add(rot(scone(0.02, 0.16, shaft, Math.cos(a) * 0.07, Math.sin(a) * 0.07, 0.86, 4), Math.PI / 2 - Math.sin(a) * 0.4, Math.cos(a) * 0.4, 0));
+  if (PAINTED) {
+    // iron strapping on the stock, rivets, a trigger lever
+    const iron = M(MAT.iron[2]);
+    g.add(T(sbox(0.09, 0.09, 0.025, iron, 0, 0, 0.05), 'iron'), T(sbox(0.09, 0.09, 0.025, iron, 0, 0, 0.32), 'iron'), T(sbox(0.02, 0.08, 0.03, iron, 0, -0.07, 0.15), 'iron'));
+    for (const sx of [-1, 1]) g.add(T(stud(iron, sx * 0.3 * s, 0.05, 0.5 * s, 0.015), 'iron'));
   }
   return g;
 }
 
-export function makeWeapon(id: string | null, M: MatFn = matCache()): THREE.Group | null {
+function throwing(d: ItemDef, l: Look, M: MatFn): THREE.Group {
+  const head = PAINTED ? M(grim(l.c)) : M(l.c, l.g);
+  if (d.id.endsWith('_star')) {
+    const g = group(0, 0, 0.08);
+    for (let i = 0; i < 4; i++) g.add(T(rot(scone(0.04, 0.16, head, Math.cos(i * Math.PI / 2) * 0.08, 0, Math.sin(i * Math.PI / 2) * 0.08, 3), 0, 0, i * Math.PI / 2 + Math.PI / 2), 'blade'));
+    if (PAINTED) g.add(T(X(scyl(0.03, 0.03, 0.02, M(MAT.iron[2]), 0, 0, 0, 6)), 'iron'));
+    return g;
+  }
+  const k = l.s ?? 1;
+  const g = group(0, 0, 0, T(haft(1.15 * k, M(PAINTED ? grim(l.t ?? 0x7a5530) : l.t ?? 0x7a5530)), 'wood'), T(X(scone(0.05, 0.2, head, 0, 0, 1.1 * k, 4)), 'blade'), T(X(scyl(0.035, 0.035, 0.05, M(MAT.leather[1]), 0, 0, 0.95 * k, 6)), 'leather'));
+  if (PAINTED) g.add(...wrap(M, 0.2, 0.42, 0.034, 3), T(X(scyl(0.03, 0.03, 0.03, M(MAT.iron[2]), 0, 0, 0.99 * k, 6)), 'iron')); // grip wraps, a socket ring
+  return g;
+}
+
+function wand(l: Look, M: MatFn, staff: boolean): THREE.Group {
+  // painted style: a dark, gnarled shaft of the old colour, tarnished fittings; the orb keeps its glow
+  const shaft = M(PAINTED ? grim(l.t ?? 0x3a2a4a) : l.t ?? 0x3a2a4a);
+  const orb = M(l.c, l.g ?? 0x404040);
+  const gold = M(MAT.gold[1]);
+  if (!staff) {
+    const g = group(0, 0, 0,
+      T(X(scyl(0.022, 0.03, 0.45, shaft, 0, 0, 0.12, 6)), 'wood'),
+      T(X(scyl(0.034, 0.034, 0.03, gold, 0, 0, 0.0, 8)), 'gilt'), T(X(scyl(0.032, 0.032, 0.03, gold, 0, 0, 0.3, 8)), 'gilt'),
+      ssphere(0.065, orb, 0, 0, 0.39),
+      T(rot(scone(0.015, 0.08, gold, 0.04, 0, 0.36, 4), 0.5, 0, 0), 'gilt'), T(rot(scone(0.015, 0.08, gold, -0.04, 0, 0.36, 4), 0.5, 0, 0), 'gilt'),
+    );
+    if (PAINTED) g.add(...wrap(M, -0.06, 0.1, 0.03, 3), T(rot(scone(0.015, 0.08, gold, 0, 0.04, 0.36, 4), 0, 0, 0), 'gilt'));
+    return g;
+  }
+  const g = group(0, 0, 0,
+    T(X(scyl(0.026, 0.032, 1.1, shaft, 0, 0, 0.3, 6)), 'wood'),
+    ssphere(0.085, orb, 0, 0, 0.9, 1, 1, 1.25),
+  );
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    g.add(T(rot(scone(0.02, 0.16, shaft, Math.cos(a) * 0.07, Math.sin(a) * 0.07, 0.86, 4), Math.PI / 2 - Math.sin(a) * 0.4, Math.cos(a) * 0.4, 0), 'wood'));
+  }
+  if (PAINTED) {
+    // leather wraps and a hanging charm: a bone and two beads on a thong below the head
+    g.add(...wrap(M, -0.05, 0.15, 0.036, 3), ...wrap(M, 0.68, 0.76, 0.032, 2));
+    const thong = M(0x2a1c12);
+    g.add(T(sbox(0.008, 0.16, 0.008, thong, 0.04, -0.08, 0.7), 'leather'), T(ssphere(0.02, M(MAT.bone[1]), 0.04, -0.17, 0.7, 0.7, 1.5, 0.7, 0), 'bone'), T(ssphere(0.016, M(MAT.bone[2]), 0.04, -0.12, 0.7, 1, 1, 1, 0), 'bone'));
+    for (let i = 0; i < 3; i++) g.add(T(X(scyl(0.03, 0.03, 0.012, gold, 0, 0, 0.8 + i * 0.012, 6)), 'gilt'));
+  }
+  return g;
+}
+
+export function makeWeapon(id: string | null, M0: MatFn = matCache()): THREE.Group | null {
   if (!id) return null;
+  const M = grimMats(M0);
   const d = ITEMS[id];
   if (!d?.weaponType) return null;
   const l = LOOKS[id] ?? { c: 0xc9d0da };
@@ -355,7 +443,7 @@ export function makeShield(id: string | null, M: MatFn = matCache()): THREE.Grou
   const s = id ? SHIELDS[id] : undefined;
   if (!d || !s) return null;
   const lk = gearLook(d, s.face, s.rim);
-  return wornShield(buildShieldModel(d, lk, s, M), lk.shield === 'book', id === 'wooden_shield' || lk.m === MAT.wood);
+  return wornShield(buildShieldModel(d, lk, s, grimMats(M)), lk.shield === 'book', id === 'wooden_shield' || lk.m === MAT.wood);
 }
 
 /** Shoulder plates show which body armour is worn. */

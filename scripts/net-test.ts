@@ -6,7 +6,7 @@
 import { NetController } from '../src/client/Controller';
 import { DEFAULT_APPEARANCE, type Appearance } from '../src/game/player/appearance';
 
-const ANN_LOOK: Appearance = { body: 'female', skin: 4, hair: 'braids', hairColor: 5, beard: 'none', build: 'slim', eyes: 2, top: 10, bottom: 13 };
+const ANN_LOOK: Appearance = { body: 'female', skin: 4, hair: 'braids', hairColor: 5, beard: 'none', build: 'slim', eyes: 2, top: 10, bottom: 13, scar: 'cheek' };
 
 const process = (globalThis as unknown as { process: { argv: string[]; exit(code: number): never } }).process;
 const url = process.argv[2] ?? 'ws://localhost:8080/ws';
@@ -49,6 +49,9 @@ async function main(): Promise<void> {
   a.send({ c: 'appearance', ap: [0, 6, 10, 0, 5, 2, 0, 3, 7] });
   await pump([a, b], 0.6);
   check(b.game.getPlayer(a.pid)?.appearance.hair === 'mohawk' && b.game.getPlayer(a.pid)?.appearance.beard === 'full', 'an appearance change reaches other players');
+  a.send({ c: 'appearance', ap: [0, 6, 10, 0, 10, 2, 0, 3, 7, 7] });
+  await pump([a, b], 0.6);
+  check(b.game.getPlayer(a.pid)?.appearance.beard === 'braided' && b.game.getPlayer(a.pid)?.appearance.scar === 'claw', 'new beards and scars reach other players');
   a.send({ c: 'appearance', ap: [1, 0, 0, 0, 3, 0, 0, 0, 0] });
   await pump([a, b], 0.4);
   check(a.game.getPlayer(a.pid)?.appearance.hair === 'mohawk', 'the server refuses an impossible appearance (female with a beard)');
