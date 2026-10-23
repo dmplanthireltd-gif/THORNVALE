@@ -128,7 +128,7 @@ export function flange(ox: number): Path {
   return poly([ox, -19.5, ox + o * 1.8, -13, ox, -7, ox - o * 0.8, -13]);
 }
 /** The flange profile from the haft outwards (x ≥ 0), for the 3D flanges spun round the haft. */
-export const flangeProfile: Path = poly([0, -20.5, 2.6, -19.5, 6.4, -13, 2.6, -7, 0, -6.5]);
+export const flangeProfile: Path = poly([0, -20.8, 3.4, -19.8, 5.6, -17.2, 6.4, -13, 5.6, -9.4, 3.4, -7.2, 0, -6.6]);
 export const FLANGE_XS = [-4.6, 4.6, -2.4, 2.4, 0] as const;
 export const maceTopSpike: Path = poly([-1, -19.5, 0, -22.5, 1, -19.5]);
 export const maceCollar: Path = rectPath(-2, -7.5, 2, -5.5);

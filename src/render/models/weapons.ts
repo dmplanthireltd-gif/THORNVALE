@@ -186,6 +186,8 @@ const X = (o: THREE.Mesh) => { o.rotation.x = Math.PI / 2; return o; };
  * Geometries are cached per outline and shared by every character (never mutated).
  */
 const WIDE = 1.2;
+/** The side the camera sees of a held weapon (local −y): studs, gems and bolts go here. */
+const FRONT = -1;
 const extrudeCache = new Map<string, THREE.BufferGeometry>();
 
 class Shaper {
@@ -259,6 +261,8 @@ class Shaper {
   }
 }
 
+/** A colour scaled toward black. */
+const dim = (c: number, k: number): number => (Math.round(((c >> 16) & 255) * k) << 16) | (Math.round(((c >> 8) & 255) * k) << 8) | Math.round((c & 255) * k);
 const r4 = (v: number) => Math.round(v * 10000) / 10000;
 
 function meshOf(g: THREE.BufferGeometry, m: THREE.Material): THREE.Mesh {
@@ -385,7 +389,7 @@ function club(d: ItemDef, l: Look, M: MatFn): THREE.Group {
       if (d.id === 'thunder_maul') g.add(S.ext(thunderBolt, deep * 1.06, M(0xfff27a, 0xc0a020)));
       if (PAINTED) {
         const iron = M(MAT.iron[2]);
-        for (const [x, y] of [[0.2, -15.8], [4.6, -15.8], [0.2, -10.7], [4.6, -10.7]]) g.add(stud(iron, S.X(x), deep / 2, S.Z(y), 0.016));
+        for (const [x, y] of [[0.2, -15.8], [4.6, -15.8], [0.2, -10.7], [4.6, -10.7]]) g.add(stud(iron, S.X(x), FRONT * deep / 2, S.Z(y), 0.016));
       }
       break;
     }
@@ -395,11 +399,10 @@ function club(d: ItemDef, l: Look, M: MatFn): THREE.Group {
       g.add(S.box(U.x0, U.y0, U.x1, U.y1, deep, d.id === 'stone_maul' ? M(MAT.iron[1]) : head));
       if (d.id !== 'stone_maul') {
         for (const y of U.bands) g.add(S.box(U.x0 - 0.15, y - 0.7, U.x1 + 0.15, y + 0.7, deep * 1.06, trim));
-        for (const [x, y] of U.rivets) g.add(S.ball(x, y, S.w(0.8), trim, 1, 0), S.ball(x, y, S.w(0.8), trim, 1, 0).translateY(-deep * 1.06));
-        for (const m of g.children.slice(-U.rivets.length * 2)) m.position.y += deep * 0.53;
+        for (const [x, y] of U.rivets) g.add(S.ball(x, y, S.w(0.8), trim, 1, 0).translateY(FRONT * deep * 0.53));
       }
-      if (d.setId === 'wardbreaker') g.add(S.ball(0, -14.5, S.w(1.5), M(c.gem ?? 0xff9a2a, c.gem ?? 0xff9a2a), 0.6, 0).translateY(deep * 0.55));
-      else if (c.gem && d.rarity === 'legendary') g.add(S.ball(0, -14.5, S.w(1.3), M(c.gem, c.gem), 0.6, 0).translateY(deep * 0.55));
+      if (d.setId === 'wardbreaker') g.add(S.ball(0, -14.5, S.w(1.5), M(c.gem ?? 0xff9a2a, c.gem ?? 0xff9a2a), 0.6, 0).translateY(FRONT * deep * 0.55));
+      else if (c.gem && d.rarity === 'legendary') g.add(S.ball(0, -14.5, S.w(1.3), M(c.gem, c.gem), 0.6, 0).translateY(FRONT * deep * 0.55));
       break;
     }
     case 'tusk':
@@ -424,9 +427,11 @@ function club(d: ItemDef, l: Look, M: MatFn): THREE.Group {
     }
     default: {
       // flanged mace: six flanges round the haft, a top spike and a collar
-      for (let i = 0; i < 6; i++) {
-        const f = S.ext(flangeProfile, S.w(1.3), head, S.w(0.25));
-        f.rotation.z = (i / 6) * Math.PI * 2;
+      g.add(S.rod(0, -20, -6.8, S.w(3), head, S.w(3), 8));
+      for (let i = 0; i < 8; i++) {
+        // alternate flanges in the blade's shadow tone, so the ridges read like the icon's lit and shaded flanges
+        const f = S.ext(flangeProfile, S.w(1.2), i % 2 ? M(c.lo, c.glow) : head, S.w(0.25));
+        f.rotation.z = ((i + 0.5) / 8) * Math.PI * 2; // none straight at the camera: the gem shows between
         g.add(f);
       }
       g.add(S.ext(maceTopSpike, S.w(1.6), trim, S.w(0.3)), S.rod(0, -7.5, -5.5, S.w(2), trim, S.w(2), 8));
@@ -434,7 +439,7 @@ function club(d: ItemDef, l: Look, M: MatFn): THREE.Group {
   }
   if (c.gem && st !== 'hammer' && st !== 'maul' && st !== 'tusk' && d.rarity !== 'common') {
     const y = st === 'morning' ? -12 : -13;
-    const r = st === 'morning' ? S.w(MORNING_BALL.r) : S.w(2.2);
+    const r = st === 'morning' ? S.w(MORNING_BALL.r) : S.w(3.2);
     for (const side of [-1, 1]) g.add(S.ball(0, y, S.w(1.3), M(c.gem, c.gem), 0.6, 0).translateY(side * r));
   }
   return clubDone(g);
@@ -455,14 +460,14 @@ function bow(d: ItemDef, l: Look, M: MatFn): THREE.Group {
   const wood = M(d.setId === 'skyfeather' ? MAT.sky[1] : c.blade, c.glow);
   const trim = M(c.trim);
   const g = group(0, 0, 0,
-    T(S.tube(bowLimb(recurve), S.w(1.45), wood), 'wood'),
+    T(S.tube(bowLimb(recurve), S.w(1.75), wood), 'wood'),
     S.rod(BOW.stringX, -BOW.stringY, BOW.stringY, 0.005, M(MAT.cloth[0]), 0.005, 4),
     T(S.box(BOW.gripX0, BOW.gripY0, BOW.gripX1, BOW.gripY1, S.w(3.2), M(MAT.leather[1])), 'leather'),
   );
   const nx = bowNockX(recurve);
   for (const sy of [-1, 1]) g.add(T(S.ball(nx, sy * 20.5, S.w(BOW.nockR), trim, 1, 0), metalSurface(c.trim)));
   if (hasBowWings(d)) for (const sy of [-1, 1]) g.add(S.ext(bowWing(sy), S.w(0.8), M(d.setId === 'skyfeather' ? MAT.sky[0] : c.trim, c.glow), S.w(0.2)));
-  if (c.gem && d.rarity !== 'common') g.add(S.ball(BOW.gemX, 0, S.w(1.3), M(c.gem, c.gem), 1, 0).translateY(S.w(1.7)));
+  if (c.gem && d.rarity !== 'common') g.add(S.ball(BOW.gemX, 0, S.w(1.3), M(c.gem, c.gem), 1, 0).translateY(FRONT * S.w(1.7)));
   if (PAINTED) {
     // sinew wrapped above and below the hand
     const sinew = M(0x3a2a1a);
@@ -483,12 +488,12 @@ function crossbow(d: ItemDef, l: Look, M: MatFn): THREE.Group {
     T(S.ext(crossbowStock, deep, M(c.blade, c.glow), S.w(0.4)), 'wood'),
     T(S.tube(crossbowProd, S.w(1.25), metal), 'iron'),
     S.tube([['M', -11, -7], ['L', 0, C.stringTo]], 0.005, string), S.tube([['M', 11, -7], ['L', 0, C.stringTo]], 0.005, string),
-    S.rod(0, C.boltY0 + 1, C.boltY1, S.w(0.5), M(0x7a6050)).translateY(deep / 2),
-    T(S.ext(crossbowBoltHead, S.w(1), M(MAT.steel[1]), S.w(0.2)), 'blade').translateY(deep / 2),
+    S.rod(0, C.boltY0 + 1, C.boltY1, S.w(0.5), M(0x7a6050)).translateY(FRONT * deep / 2),
+    T(S.ext(crossbowBoltHead, S.w(1), M(MAT.steel[1]), S.w(0.2)), 'blade').translateY(FRONT * deep / 2),
     T(S.box(-2.4, C.latchY0, 2.4, C.latchY1, deep * 1.15, metal), 'iron'),
     T(S.tube([['M', 1.5, 5], ['L', 3.4, 8]], S.w(0.45), metal), 'iron'),
   );
-  if (c.gem && d.rarity !== 'common') g.add(S.ball(0, C.gemY, S.w(1.2), M(c.gem, c.gem), 1, 0).translateY(deep / 2));
+  if (c.gem && d.rarity !== 'common') g.add(S.ball(0, C.gemY, S.w(1.2), M(c.gem, c.gem), 1, 0).translateY(FRONT * deep / 2));
   if (PAINTED) {
     // iron strapping on the stock, rivets on the prod
     const iron = M(MAT.iron[2]);
@@ -523,7 +528,9 @@ function throwing(d: ItemDef, l: Look, M: MatFn): THREE.Group {
 function wand(l: Look, M: MatFn, staff: boolean): THREE.Group {
   // painted style: a dark, gnarled shaft of the old colour, tarnished fittings; the orb keeps its glow
   const shaft = M(PAINTED ? grim(l.t ?? 0x3a2a4a) : l.t ?? 0x3a2a4a);
-  const orb = M(l.c, l.g ?? 0x404040);
+  // the orb glows in its own colour; a dark orb (the Ashen Sovereign's) only smoulders with its glow colour
+  const lum = (((l.c >> 16) & 255) * 0.3 + ((l.c >> 8) & 255) * 0.55 + (l.c & 255) * 0.15) / 255;
+  const orb = M(l.c, lum < 0.25 ? dim(l.g ?? 0x404040, 0.45) : l.g ?? 0x404040);
   const gold = M(MAT.gold[1]);
   if (!staff) {
     const S = new Shaper({ ...HAND.wand, k: 0.018 });
