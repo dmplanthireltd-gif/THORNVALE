@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { buildWorld } from '../src/game/world/worldGen';
 import { SEA_ARRIVAL } from '../src/game/world/sea';
 import { DUNGEON_BOSSES } from '../src/game/bosses/bosses';
-import { INDOOR_PLACES, LOOP_SAMPLES, MusicPicker, PLACE_TRACKS, PlaceFinder, REROTATE_MS, TRACKS, indoorPlace, type Place } from '../src/audio/musicPlaces';
+import { INDOOR_PLACES, LOOP_SAMPLES, MusicPicker, PLACE_TRACKS, PlaceFinder, REGION_THEMES, REROTATE_MS, TOWN_THEMES, TRACKS, indoorPlace, townTheme, type Place } from '../src/audio/musicPlaces';
+import { PLACE_SONGS } from './music/songsPlaces';
 import { SONGS } from './music/songs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -44,6 +45,13 @@ for (const p of INDOOR_PLACES) {
 const added = ['title', 'town2', 'fields2', 'forest2', 'deep2', 'sea2', 'court', 'reach', 'crypt', 'steppe', 'boss', 'shop', 'hall', 'temple', 'smithy'];
 const bytes = added.reduce((a, t) => a + (existsSync(join(ROOT, 'public', 'audio', 'music', `${t}.m4a`)) ? statSync(join(ROOT, 'public', 'audio', 'music', `${t}.m4a`)).size : 0), 0);
 check(bytes < 9 * 1024 * 1024, `new tracks total ${(bytes / 1048576).toFixed(1)} MB`);
+const placeBytes = PLACE_SONGS.reduce((a, s) => a + (existsSync(join(ROOT, 'public', 'audio', 'music', `${s.id}.m4a`)) ? statSync(join(ROOT, 'public', 'audio', 'music', `${s.id}.m4a`)).size : 0), 0);
+check(placeBytes < 12 * 1024 * 1024, `town and hunting-ground tracks total ${(placeBytes / 1048576).toFixed(1)} MB`);
+for (const s of PLACE_SONGS) {
+  const sec = LOOP_SAMPLES[s.id as keyof typeof LOOP_SAMPLES] / 44100;
+  check(sec >= 60 && sec <= 120, `${s.id} loops in 60–120 s (${sec.toFixed(1)} s)`);
+}
+check(Object.values(PLACE_TRACKS).every((l) => l.length > 0), 'every place has a track');
 for (const p of ['town', 'fields', 'forest', 'deep', 'sea'] as Place[]) check(PLACE_TRACKS[p].length >= 2, `${p} has two themes`);
 check(PLACE_TRACKS.title[0] === 'title', 'title screen theme');
 
@@ -115,7 +123,7 @@ const pt = tile(plaza.x0, plaza.y0, plaza.x1, plaza.y1, 0, (x, y) => !world.hous
 at(pt ? finder.placeAt(pt.x, pt.y, 0) : null, 'court', 'Temple Court plaza');
 at(inRegion('Thornvale', 0, (x, y) => !world.houseAt(x, y, 0) && !world.isSafe(x, y, 0)), 'court', 'Thornvale streets');
 at(inRegion('Old Graveyard', 0), 'crypt', 'Old Graveyard');
-at(inRegion('Millbrook', 0, (x, y) => !world.houseAt(x, y, 0)), 'town', 'Millbrook streets');
+at(inRegion('Millbrook', 0, (x, y) => !world.houseAt(x, y, 0)), 'millbrook', 'Millbrook streets');
 at(finder.placeAt(SEA_ARRIVAL.x, SEA_ARRIVAL.y, SEA_ARRIVAL.z), 'reach', 'Pearl Grotto');
 at(inRegion('Coral Gardens', -1), 'reach', 'Coral Gardens');
 at(inRegion('Gravewind Steppe', 0), 'steppe', 'Gravewind Steppe');
@@ -127,12 +135,85 @@ for (const b of bosses) at(finder.placeAt(b.x, b.y, b.z), 'boss', `${b.kind}'s l
 const farFromBoss = (z: number) => (x: number, y: number) => bosses.every((b) => b.z !== z || Math.max(Math.abs(b.x - x), Math.abs(b.y - y)) > 10);
 at(inRegion('Hollow Crypt', -1, farFromBoss(-1)), 'crypt', 'Hollow Crypt');
 at(inRegion('Aurelion Catacombs', -2, farFromBoss(-2)), 'crypt', 'Aurelion Catacombs');
-at(inRegion('Tomb of Kesh', -1, farFromBoss(-1)), 'crypt', 'Tomb of Kesh');
-at(inRegion('Stonedeep Mines', -1, (x, y) => farFromBoss(-1)(x, y) && !world.isSafe(x, y, -1)), 'deep', 'Stonedeep Mines');
+at(inRegion('Tomb of Kesh', -1, farFromBoss(-1)), 'tomb', 'Tomb of Kesh');
+at(inRegion('Stonedeep Mines', -1, (x, y) => farFromBoss(-1)(x, y) && !world.isSafe(x, y, -1)), 'mines', 'Stonedeep Mines');
 at(inRegion('Thornvale Sewers', -1), 'deep', 'Thornvale Sewers');
 at(inRegion('Molten Deep', -3, farFromBoss(-3)), 'volcano', 'Molten Deep');
 at(inRegion('Frostfang Glacier', 0, farFromBoss(0)), 'snow', 'Frostfang Glacier');
 at(inRegion('Sunspire Dunes', 0), 'desert', 'Sunspire Dunes');
+
+// ---------------------------------------------------------------- every town its own theme
+const TOWNS: Array<[string, Place]> = [
+  ['Westmarch', 'westmarch'], ['Elderglen', 'elderglen'], ['Stonedeep', 'stonedeep'], ['Highmoor', 'highmoor'],
+  ['Millbrook', 'millbrook'], ['Valdrheim', 'valdrheim'], ['Aurelion', 'aurelion'], ['Briarwatch', 'briarwatch'],
+  ['Corvane', 'harbour'], ['Saltmere', 'harbour'], ['Palmreach', 'palmreach'], ['Sunspire', 'oasis'], ['Dunewatch', 'oasis'],
+  ["Wayfarer's Rest", 'isle'],
+];
+for (const [town, want] of TOWNS) {
+  const r = world.regions.find((q) => q.name === town && q.safe);
+  check(!!r, `${town} is a protection zone`);
+  if (!r) continue;
+  const z = r.z0 <= 0 && r.z1 >= 0 ? 0 : r.z0;
+  at(inRegion(town, z, (x, y) => !world.houseAt(x, y, z) && world.isSafe(x, y, z)), want, `${town} streets`);
+  const harbour = world.regions.find((q) => q.name === `${town} Harbour`);
+  if (harbour) at(inRegion(harbour.name, 0, (x, y) => !world.houseAt(x, y, 0)), want, `${town} Harbour`);
+}
+at(inRegion('Stonedeep', -1, (x, y) => !world.houseAt(x, y, -1) && world.isSafe(x, y, -1)), 'stonedeep', 'Stonedeep under the mountain');
+at(inRegion('Thornvale Harbour', 0), 'court', 'Thornvale Harbour');
+at(inRegion('Pearl Pier', 0), 'millbrook', 'Pearl Pier');
+at(inRegion('Frostholm Landing', 0), 'town', 'island landings keep the shared town themes');
+check(townTheme('Nowhere') === null, 'unknown protection zones: shared town themes');
+check(new Set(Object.values(TOWN_THEMES)).size >= 12, 'at least 12 different town themes');
+// indoor music still wins inside every town's buildings
+for (const [town] of TOWNS) {
+  const r = world.regions.find((q) => q.name === town && q.safe)!;
+  const h = world.houses.find((q) => q.x >= r.x0 && q.x + q.w - 1 <= r.x1 && q.y >= r.y0 && q.y + q.h - 1 <= r.y1 && q.z >= r.z0 && q.z <= r.z1);
+  if (!h) continue;
+  const t = tile(h.x + 1, h.y + 1, h.x + h.w - 2, h.y + h.h - 2, h.z);
+  if (t && world.isSafe(t.x, t.y, h.z)) check(INDOOR_PLACES.has(finder.placeAt(t.x, t.y, h.z)), `indoors first in ${town} (${h.name})`);
+}
+
+// ---------------------------------------------------------------- hunting-ground families
+const far = (z: number) => farFromBoss(z);
+at(inRegion('Grimtusk Fortress', 0, far(0)), 'warcamp', 'Grimtusk Fortress (orc warcamp)');
+at(inRegion('Grimtusk Fortress', -1, far(-1)), 'warcamp', 'Grimtusk Fortress cellars');
+at(inRegion('Orc Ridge', 0), 'warcamp', 'Orc Ridge');
+at(inRegion('Minotaur Hold', -1, far(-1)), 'labyrinth', 'Minotaur Hold (labyrinth)');
+at(inRegion('Silverbough Woods', 0), 'elfwood', 'Silverbough Woods (elven forest)');
+at(inRegion('Silverbough Fortress', 0), 'elfwood', 'Silverbough Fortress');
+at(inRegion('Deep Delvings', -2, far(-2)), 'mines', 'Deep Delvings (dwarven mines)');
+at(inRegion('Crystal Mines', -1, far(-1)), 'icecave', 'Crystal Mines (ice caves)');
+at(inRegion('Jotun Isle', -1, far(-1)), 'icecave', 'Jotun Isle caves');
+at(inRegion('Dragon Lair', -1, far(-1)), 'dragon', 'Dragon Lair');
+at(inRegion('Frost Dragon Lair', -1, far(-1)), 'dragon', 'Frost Dragon Lair');
+at(inRegion('Dragonspire Plateau', 0), 'dragon', 'Dragonspire Plateau');
+at(inRegion('Lizard Temple', 0), 'serpent', 'Lizard Temple (jungle temple)');
+at(inRegion('Scalemire Sanctum', -1, far(-1)), 'serpent', 'Scalemire Sanctum');
+at(inRegion('Mire Caves', -1, far(-1)), 'swamp', 'Mire Caves (swamp)');
+at(inRegion('Hydra Bog', 0), 'swamp', 'Hydra Bog');
+at(inRegion('Pharaoh\'s Vault', -3, far(-3)), 'tomb', "Pharaoh's Vault (desert tomb)");
+at(inRegion('Valley of Tombs', 0), 'tomb', 'Valley of Tombs');
+at(inRegion('Westmarch Catacombs', -1, far(-1)), 'crypt', 'Westmarch Catacombs (undead crypt)');
+at(inRegion('The Crypt', -1, far(-1)), 'crypt', 'The Crypt');
+at(inRegion('Burning Catacombs', -2, far(-2)), 'volcano', 'Burning Catacombs (fire)');
+at(inRegion('Kelpwood', -1), 'reach', 'Kelpwood (sea)');
+at(inRegion("Wayfarer's Isle", 0, (x, y) => !world.isSafe(x, y, 0)), 'isle', 'the tutorial isle');
+for (const key of Object.keys(REGION_THEMES)) {
+  const name = key.replace(/@-?\d+$/, '');
+  check(world.regions.some((q) => q.name === name), `REGION_THEMES names a real region: ${name}`);
+}
+// no region floor without music (every sampled tile picks a place that has a track)
+{
+  let n = 0, ok = 0;
+  for (const r of world.regions) for (let z = r.z0; z <= r.z1; z++) {
+    const t = tile(r.x0, r.y0, r.x1, r.y1, z, (x, y) => world.regionAt(x, y, z)?.name === r.name);
+    if (!t) continue;
+    n++;
+    const p = finder.placeAt(t.x, t.y, z);
+    if (PLACE_TRACKS[p]?.length && PLACE_TRACKS[p].every((tr) => TRACKS.includes(tr))) ok++;
+  }
+  check(n > 150 && ok === n, `every region floor has music: ${ok}/${n}`);
+}
 
 // ---------------------------------------------------------------- taking turns
 {

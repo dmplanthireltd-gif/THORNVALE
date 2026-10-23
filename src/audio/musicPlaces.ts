@@ -162,9 +162,9 @@ export const REGION_THEMES: Readonly<Record<string, Place>> = {
   // desert tombs
   'Valley of Tombs': 'tomb', 'Pyramid of Kesh': 'tomb', 'Tomb of Kesh': 'tomb', 'Kesh Catacombs': 'tomb', "Pharaoh's Vault": 'tomb',
   // fire under the earth
-  'Burning Catacombs': 'volcano', 'Abyssal Halls': 'volcano', 'The Demon Pit': 'volcano', 'Infernal Rift': 'volcano', 'Ember Forge': 'volcano',
+  Emberhold: 'volcano', 'Burning Catacombs': 'volcano', 'Abyssal Halls': 'volcano', 'The Demon Pit': 'volcano', 'Infernal Rift': 'volcano', 'Ember Forge': 'volcano',
   // ruins of the dead in the open
-  'Ruins of Varkh': 'crypt',
+  'Ruins of Varkh': 'crypt', 'Bonecrag@0': 'crypt',
   // smugglers' sea cave
   "Smugglers' Cove": 'sea',
   // the tutorial isle outside the refuge

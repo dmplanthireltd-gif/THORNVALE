@@ -79,6 +79,7 @@ function expected(r: Region, z: number, info: Info): { want: Place[]; why: strin
     fire = share(mon, (k) => /fire_elemental|behemoth|demon|ashen/.test(k)), ice = share(mon, (k) => /crystal_spider|ice_golem|frost|rime/.test(k)),
     bog = share(mon, (k) => /hydra|crocodile/.test(k));
   const gr = (k: string) => share(info.ground, (g) => g === k);
+  if (/ember|infernal|burning|abyssal|demon pit/i.test(n)) return { want: ['volcano'], why: 'fire and brimstone' };
   if (orc >= 0.5) return { want: ['warcamp'], why: 'orc warcamp' };
   if (mino >= 0.5) return { want: ['labyrinth'], why: 'minotaur labyrinth' };
   if (elf >= 0.4 || /silverbough|glimmer/i.test(n)) return { want: ['elfwood'], why: 'elven woods' };
@@ -91,20 +92,31 @@ function expected(r: Region, z: number, info: Info): { want: Place[]; why: strin
   if (z < 0 && /jotun/i.test(n)) return { want: ['icecave'], why: 'frost giant caves' };
   if (fire >= 0.5 && (z < 0 || gr('lava') + gr('ash') > 0.15)) return { want: ['volcano', 'crypt'], why: 'fire and brimstone' };
   if (dead >= 0.5 || /crypt|catacomb|bonecrag|ruins/i.test(n)) return { want: ['crypt'], why: 'undead crypt' };
-  if (bog >= 0.5 || /mire|bog|hydra/i.test(n)) return { want: ['swamp', 'jungle'], why: 'swamp / mire' };
+  if (bog >= 0.5 || /mire|bog|hydra/i.test(n)) return { want: z < 0 ? ['swamp'] : ['swamp', ...landThemes(r, z)], why: 'swamp / mire' };
   if (/smugglers/i.test(n)) return { want: ['sea', 'deep'], why: "smugglers' sea cave" };
   if (z < 0) return { want: ['deep', 'volcano'], why: 'cave' };
-  // surface: the land itself decides (land mix), any outdoor land theme that matches its ground is fine
-  const snow = gr('snow') + gr('ice'), sand = gr('sand'), jungle = gr('jungle'), swamp = gr('swamp'), wood = gr('darkgrass'), hot = gr('lava') + gr('ash');
-  const land: Place[] = [];
-  if (snow > 0.25) land.push('snow');
-  if (hot > 0.15) land.push('volcano');
-  if (sand > 0.3) land.push('desert');
-  if (jungle > 0.25) land.push('jungle');
-  if (swamp > 0.2) land.push('swamp', 'jungle');
-  if (wood > 0.25) land.push('forest');
-  land.push('fields', 'sea', 'forest');
-  return { want: land, why: 'open land' };
+  // surface: the land itself decides (land mix): any outdoor land theme whose ground is really there
+  return { want: landThemes(r, z), why: 'open land' };
+}
+
+/**
+ * Land themes that fit a surface region: the ones whose ground covers at least 5% of the region and
+ * its 4-tile rim (the land mix looks 4 tiles around the player), most common first; fields always fit.
+ */
+function landThemes(r: Region, z: number): Place[] {
+  const c = new Map<Place, number>();
+  let n = 0;
+  for (let y = r.y0 - 4; y <= r.y1 + 4; y++) for (let x = r.x0 - 4; x <= r.x1 + 4; x++) {
+    const g = world.getGround(x, y, z);
+    if (g === Ground.Void) continue;
+    n++;
+    const p: Place | null = g === Ground.Snow || g === Ground.Ice ? 'snow' : g === Ground.Lava || g === Ground.Ash ? 'volcano' : g === Ground.Sand ? 'desert'
+      : g === Ground.Jungle ? 'jungle' : g === Ground.Swamp ? 'swamp' : g === Ground.DarkGrass ? 'forest' : g === Ground.Water || g === Ground.DeepWater ? 'sea' : null;
+    if (p) c.set(p, (c.get(p) ?? 0) + 1);
+  }
+  const out = [...c].filter(([, k]) => k >= n * 0.05).sort((a, b) => b[1] - a[1]).map(([p]) => p);
+  if (out.includes('swamp') && !out.includes('jungle')) out.push('jungle');
+  return [...out, 'fields'];
 }
 
 /** Up to five sample tiles: the walkable tile nearest the region's centre and four spread out. */

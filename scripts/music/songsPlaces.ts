@@ -10,7 +10,7 @@ import type { Song } from './synth';
 export const PLACE_SONGS: Song[] = [
   // ------------------------------------------------------------------ towns
   {
-    id: 'westmarch', title: 'The Westmarch Banners', bpm: 84, ceiling: 0.5, kbps: 56,
+    id: 'westmarch', title: 'The Westmarch Banners', bpm: 84, ceiling: 0.5, kbps: 56, loudness: -0.6,
     band: { lead: 'horn', harmony: 'strings', pad: 'strings', arp: 'harp', bass: 'contrabass', kit: 'orchestral' },
     lead: { vol: 0.2 }, bass: 'pump', arp: 'updown', arpVol: 0.08, padVol: 0.08,
     drums: 'k.......k...t...', drumVol: 0.35, echo: 0.18, reverb: 0.4, mix: { drums: -4, bass: -2 },
@@ -160,7 +160,7 @@ export const PLACE_SONGS: Song[] = [
     form: ['A', 'A2', 'B', 'A2'],
   },
   {
-    id: 'valdrheim', title: 'Hearthsmoke Fjord', bpm: 76, ceiling: 0.5, kbps: 56,
+    id: 'valdrheim', title: 'Hearthsmoke Fjord', bpm: 76, ceiling: 0.5, kbps: 56, loudness: -0.6,
     band: { lead: 'hardanger', harmony: 'cello', pad: 'strings', arp: 'harp', bass: 'throat', kit: 'frame' },
     lead: { vol: 0.2 }, bass: 'drone', arp: 'pick', arpVol: 0.06, padVol: 0.06,
     drums: 'k.......k..k....', drumVol: 0.45, echo: 0.24, reverb: 0.45, mix: { bass: 1, pad: -2, arp: -2, drums: -1 },
@@ -189,7 +189,7 @@ export const PLACE_SONGS: Song[] = [
     form: ['A', 'B', 'A2'],
   },
   {
-    id: 'aurelion', title: 'Crown of Aurelion', bpm: 96, ceiling: 0.5, kbps: 56,
+    id: 'aurelion', title: 'Crown of Aurelion', bpm: 96, ceiling: 0.5, kbps: 56, loudness: -0.5,
     band: { lead: 'brass', harmony: 'horn', pad: 'strings', arp: 'harp', bass: 'contrabass', kit: 'orchestral' },
     lead: { vol: 0.21 }, bass: 'pump', arp: 'updown', arpVol: 0.08, padVol: 0.08,
     drums: 'k.....s.k.k.s...', drumVol: 0.42, echo: 0.14, reverb: 0.36, mix: { drums: -2, bass: -1 },
@@ -218,7 +218,7 @@ export const PLACE_SONGS: Song[] = [
     form: ['A', 'A2', 'B', 'A2'],
   },
   {
-    id: 'briarwatch', title: 'Briarwatch Palisade', bpm: 108, ceiling: 0.5, kbps: 56,
+    id: 'briarwatch', title: 'Briarwatch Palisade', bpm: 108, ceiling: 0.5, kbps: 56, loudness: -0.7,
     band: { lead: 'fiddle', harmony: 'whistle', pad: 'strings', arp: 'guitar', bass: 'upright', kit: 'folk' },
     lead: { vol: 0.2 }, bass: 'gallop', arp: 'strum', arpVol: 0.12, padVol: 0.05,
     drums: 'k..hs.h.k.khs.h.', drumVol: 0.45, echo: 0.14, reverb: 0.24, mix: { pad: -3, drums: -1 },
@@ -276,7 +276,7 @@ export const PLACE_SONGS: Song[] = [
     form: ['A', 'A2', 'B', 'A2'],
   },
   {
-    id: 'palmreach', title: 'Palmreach Tide', bpm: 104, ceiling: 0.5, kbps: 56,
+    id: 'palmreach', title: 'Palmreach Tide', bpm: 104, ceiling: 0.5, kbps: 56, loudness: 1.5,
     band: { lead: 'steelpan', harmony: 'marimba', pad: 'choirOo', arp: 'marimba', bass: 'upright', kit: 'hand' },
     lead: { vol: 0.2 }, bass: 'root8', arp: 'off', arpVol: 0.08, padVol: 0.05,
     drums: 'k..pk.p.k..pk.t.', drumVol: 0.5, echo: 0.2, swing: 0.1, reverb: 0.28, mix: { pad: -3 },
@@ -305,7 +305,7 @@ export const PLACE_SONGS: Song[] = [
     form: ['A', 'A2', 'B', 'A2'],
   },
   {
-    id: 'oasis', title: 'Sunspire Bazaar', bpm: 100, ceiling: 0.5, kbps: 56,
+    id: 'oasis', title: 'Sunspire Bazaar', bpm: 100, ceiling: 0.5, kbps: 56, loudness: 0.7,
     band: { lead: 'oud', harmony: 'ney', pad: 'strings', arp: 'dulcimer', bass: 'upright', kit: 'darbuka' },
     lead: { vol: 0.2 }, bass: 'pump', arp: 'off', arpVol: 0.07, padVol: 0.05,
     drums: 'k.s.p.s.k.p.s.pp', drumVol: 0.5, echo: 0.22, reverb: 0.3, mix: { pad: -3 },
