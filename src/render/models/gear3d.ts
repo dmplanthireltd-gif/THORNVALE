@@ -355,6 +355,7 @@ function buildArmourParts(lk: GearLook, k: Mats, M: MatFn): ArmourParts {
       L.forEach((l, i) => c.add(tagged(rot(sbox(0.075, l, 0.025, cm, -0.21 + i * 0.084, -0.68 - l / 2, 0), 0, 0, (i % 2 ? 1 : -1) * 0.06), 'clothBlood')));
     }
     c.rotation.x = 0.1;
+    c.userData.armourCape = true; // hidden under a worn cape item (humanoid.ts)
     torso.push(c);
   }
   switch (lk.body) {

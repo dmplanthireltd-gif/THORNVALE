@@ -163,7 +163,7 @@ export class PetSystem {
 
   private tortoise(s: Session): boolean {
     if (activePet(s.pets)?.id === 'tortoise') return true;
-    this.game.msg(s.id, 'Only a Mossback Tortoise carries a pouch. Call one first.', 'warn');
+    this.game.msg(s.id, 'Only a Mossback War Tortoise carries a pouch. Call one first.', 'warn');
     return false;
   }
 

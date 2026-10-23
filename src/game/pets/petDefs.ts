@@ -27,7 +27,7 @@ export interface PetDef {
 }
 
 export const PET_DEFS: PetDef[] = [
-  { id: 'tortoise', item: 'pet_tortoise', name: 'Mossback Tortoise', species: 'tortoise', perk: 'Carries a pouch of 8 items for you and adds +1 health regeneration (+2 at pet level 10).', source: 'Thistle the pet keeper in Elderglen; rarely crocodiles.' },
+  { id: 'tortoise', item: 'pet_tortoise', name: 'Mossback War Tortoise', species: 'war tortoise', perk: 'A huge armoured tortoise in war harness: carries a pouch of 8 items for you and adds +1 health regeneration (+2 at pet level 10).', source: 'Thistle the pet keeper in Elderglen; rarely crocodiles.' },
   { id: 'fox', item: 'pet_fox', name: 'Rustbrush Fox', species: 'fox', perk: 'Now and then fetches gold from loot and bodies near you; +2% walking speed (+3% at pet level 10).', source: 'Thistle the pet keeper in Elderglen; very rarely wolves and winter wolves.' },
   { id: 'owl', item: 'pet_owl', name: 'Duskwing Owl', species: 'owl', perk: '+1 mana regeneration (+2 at pet level 10) and a glow that lights dark caves.', source: 'Thistle the pet keeper in Elderglen; rarely elf arcanists.' },
   { id: 'beaver', item: 'pet_beaver', name: 'Timbertooth Beaver', species: 'beaver', perk: 'Chopping trees succeeds 5% more often (up to 9.5% at pet level 10).', source: 'Found while chopping trees (1 in 5,000 logs).' },
@@ -51,7 +51,7 @@ export function isPetId(v: unknown): v is PetId {
 
 /** Item definitions (merged into items.ts). Pet items do not stack and weigh little: the pet walks. */
 export const PET_ITEM_SPECS: ItemSpec[] = [
-  { id: 'pet_tortoise', name: 'Mossback Tortoise', kind: 'pet', weight: 5, value: 2000, rarity: 'uncommon', tint: '#7f9a4a', icon: '◒', note: 'Use it to call or swap your pet.' },
+  { id: 'pet_tortoise', name: 'Mossback War Tortoise', kind: 'pet', weight: 5, value: 2000, rarity: 'uncommon', tint: '#7f9a4a', icon: '◒', note: 'Use it to call or swap your pet.' },
   { id: 'pet_fox', name: 'Rustbrush Fox', kind: 'pet', weight: 5, value: 2500, rarity: 'uncommon', tint: '#d0702a', icon: '◒', note: 'Use it to call or swap your pet.' },
   { id: 'pet_owl', name: 'Duskwing Owl', kind: 'pet', weight: 5, value: 2500, rarity: 'uncommon', tint: '#a08a6a', icon: '◒', note: 'Use it to call or swap your pet.' },
   { id: 'pet_beaver', name: 'Timbertooth Beaver', kind: 'pet', weight: 5, value: 5000, rarity: 'rare', tint: '#8a5a32', icon: '◒', note: 'Use it to call or swap your pet.' },
@@ -111,6 +111,15 @@ export function petProgress(xp: number): number {
   if (l >= PET_MAX_LEVEL) return 1;
   const a = petXpForLevel(l);
   return (xp - a) / (petXpForLevel(l + 1) - a);
+}
+
+/** How much bigger a pet's model is per pet level above 1 (+2% a level: ×1.18 at level 10). */
+export const PET_GROWTH = 0.02;
+
+/** Size factor of a pet's model at a pet level (1 at level 1, 1.18 at the cap; out-of-range levels are clamped). */
+export function petSizeFactor(level: number): number {
+  const l = Number.isFinite(level) ? Math.max(1, Math.min(PET_MAX_LEVEL, Math.floor(level))) : 1;
+  return 1 + PET_GROWTH * (l - 1);
 }
 
 /** Tortoise pouch size. */

@@ -746,6 +746,8 @@ export function applyGear(rig: BipedRig, eq: GearLook): void {
     rig.cape = own;
   }
   // worn cape item: sized to the torso as dressed above, swings like any cape (rig.cape)
+  // the body armour's own short cape goes under a worn cape item (no double cape poking through)
+  for (const c of rig.torso.children) if (c.userData.armourCape) c.visible = !eq.cape;
   const worn = eq.cape ? buildCape(rig, eq.cape, M, own ?? null) : null;
   if (worn) {
     attach(rig.torso, worn.mantle);

@@ -408,7 +408,7 @@ export const MESSAGES: Table = {
   "{name} comes out to follow you. Open the pet window to see what it does.": ["{name} wychodzi, by ci towarzyszyć. Otwórz okno zwierzaka, aby zobaczyć, co potrafi.", "{name} sai para seguir você. Abra a janela do mascote para ver o que ele faz."],
   "Your backpack is full. Make room before you send your pet away.": ["Twój plecak jest pełny. Zrób miejsce, zanim odeślesz zwierzaka.", "Sua mochila está cheia. Abra espaço antes de mandar o mascote embora."],
   "{name} climbs back into your backpack.": ["{name} wraca do plecaka.", "{name} volta para a mochila."],
-  "Only a Mossback Tortoise carries a pouch. Call one first.": ["Sakwę nosi tylko Omszały żółw. Najpierw go przywołaj.", "Só a Tartaruga Dorso-de-Musgo carrega uma bolsa. Chame uma primeiro."],
+  "Only a Mossback War Tortoise carries a pouch. Call one first.": ["Sakwę nosi tylko Omszały żółw wojenny. Najpierw go przywołaj.", "Só a Tartaruga de Guerra Dorso-de-Musgo carrega uma bolsa. Chame uma primeiro."],
   "A pet will not ride in a pouch.": ["Zwierzak nie pojedzie w sakwie.", "Um mascote não anda dentro de uma bolsa."],
   "The pouch is full.": ["Sakwa jest pełna.", "A bolsa está cheia."],
   "Your tortoise carries {what}.": ["Twój żółw niesie: {what}.", "Sua tartaruga carrega: {what}."],

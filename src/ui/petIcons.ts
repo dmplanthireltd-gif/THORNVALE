@@ -61,9 +61,18 @@ const DRAW: Record<PetId, (x: Ctx) => void> = {
     path(x, '#5a5236');
     for (const [px, py, r] of [[16, 13, 3.6], [10.5, 17.5, 3], [21.5, 17.5, 3], [16, 19.5, 2.6]]) ell(x, px, py, r, r * 0.8, '#8a7a4e', 0, 0.9);
     ell(x, 12, 9.5, 2.4, 1.2, '#4a6a2a', 0, 0.8); // moss
-    x.fillStyle = '#7aa83a';
-    x.fillRect(17, 4.5, 1.2, 3);
-    ell(x, 19.4, 4.6, 1.8, 0.9, '#7aa83a', -0.4, 0.7);
+    // war harness: a red saddle cloth with a saddle, bone spikes on the rim, a torn banner
+    ell(x, 17, 8.2, 5, 1.8, '#6a1612', 0, 0.95);
+    x.fillStyle = '#3a2416';
+    x.fillRect(14.5, 6, 5, 2.2);
+    x.fillStyle = '#cabd98';
+    for (const [sx, sy, dx] of [[7.5, 15, -2], [24.6, 15, 2], [11, 9, -1.4], [22.5, 9.5, 1.4]]) {
+      x.beginPath(); x.moveTo(sx, sy - 1.2); x.lineTo(sx + dx, sy - 2.6); x.lineTo(sx, sy + 1.2); x.closePath(); x.fill();
+    }
+    x.fillStyle = '#3a2a1a';
+    x.fillRect(20, 0.5, 1, 7);
+    x.fillStyle = '#8a1a14';
+    x.beginPath(); x.moveTo(21, 0.8); x.lineTo(27, 0.8); x.lineTo(25.5, 2.4); x.lineTo(27, 4.2); x.lineTo(21, 4.2); x.closePath(); x.fill();
     x.strokeStyle = '#2e2a1c';
     x.lineWidth = 1.2;
     x.beginPath();

@@ -12,7 +12,7 @@ import { applySnapshot, buildSnapshot, executeCommand, type MirrorExtras } from 
 import { NPCS } from '../src/game/npc/npcs';
 import {
   foxChance, PET_BY_ID, PET_DEFS, PET_ITEMS, PET_KEEPER, PET_MAX_LEVEL, PET_SELLS, petBonus, petGatherBoost, petLevelForXp, petXpForLevel, POUCH_SLOTS,
-  ravenRange, SKILL_PETS, type PetId,
+  petSizeFactor, ravenRange, SKILL_PETS, type PetId,
 } from '../src/game/pets/petDefs';
 import { activePet, parsePetLook, petLevel, petLook } from '../src/game/pets/PetSystem';
 import { migrateSave, SAVE_VERSION } from '../src/game/save/migrate';
@@ -81,6 +81,15 @@ console.log('Pets: content');
 console.log('Pets: levels and perks');
 {
   check(petXpForLevel(1) === 0 && petXpForLevel(2) === 25_000 && petXpForLevel(10) === 2_025_000, 'pet level curve 25,000 × (level − 1)²');
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+  check(near(petSizeFactor(1), 1) && near(petSizeFactor(2), 1.02) && near(petSizeFactor(10), 1.18) && near(petSizeFactor(99), 1.18) && near(petSizeFactor(0), 1) && near(petSizeFactor(NaN), 1), 'pets grow 2% a level (×1.18 at 10, clamped)');
+  {
+    const r1 = buildPet('fox', 1), r10 = buildPet('fox', 10);
+    check(near(r10.root.scale.x / r1.root.scale.x, 1.18), 'the pet model is drawn bigger at a higher pet level');
+    const tort = buildPet('tortoise', 1), fx = buildPet('fox', 1);
+    check(tort.height > 1.6 * fx.height, 'the war tortoise is far bigger than the small pets');
+    disposePet(r1); disposePet(r10); disposePet(tort); disposePet(fx);
+  }
   check(petLevelForXp(0) === 1 && petLevelForXp(24_999) === 1 && petLevelForXp(25_000) === 2 && petLevelForXp(1e12) === PET_MAX_LEVEL, 'levels from experience, capped at 10');
   check(petBonus('tortoise', 1)?.hpRegen === 1 && petBonus('tortoise', 10)?.hpRegen === 2, 'tortoise: +1 health regeneration, +2 at level 10');
   check(petBonus('owl', 1)?.manaRegen === 1 && petBonus('owl', 1)?.light === 2 && petBonus('owl', 10)?.light === 3, 'owl: mana regeneration and light');
@@ -136,7 +145,7 @@ console.log('Pets: tortoise pouch');
   s.inventory.add('iron_ore', 10);
   s.inventory.add('pet_fox', 1);
   executeCommand(g, s.id, { c: 'pet', a: 'put', i: 0 });
-  check(/Only a Mossback Tortoise/.test(lastMsg()), 'no pouch without the tortoise');
+  check(/Only a Mossback War Tortoise/.test(lastMsg()), 'no pouch without the tortoise');
   g.useSlot(s.id, s.inventory.slots.findIndex((x) => x?.id === 'pet_tortoise'));
   const ore = s.inventory.slots.findIndex((x) => x?.id === 'iron_ore');
   executeCommand(g, s.id, { c: 'pet', a: 'put', i: ore });

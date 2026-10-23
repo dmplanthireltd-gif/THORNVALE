@@ -90,6 +90,17 @@ function rnd(i: number): number {
 /** The hem outline along the bottom edge, as points from right to left (y measured from the top). */
 export function hemPoints(hem: CapeHem, w: number, h: number): number[] {
   const out: number[] = [];
+  if (hem === 'tattered') {
+    // a torn, fringed hem: ragged strips of uneven length with deep narrow rents between them
+    const n = 22;
+    for (let i = n; i >= 0; i--) {
+      const u = i / n;
+      const x = w * Math.min(1, Math.max(0, u + (rnd(i * 5.3) - 0.5) * (0.6 / n)));
+      const cut = i % 2 ? 0.1 + rnd(i * 2.7) * 0.14 : rnd(i * 3.1) * 0.05;
+      out.push(x, h - cut * h);
+    }
+    return out;
+  }
   const n = 8;
   for (let i = n; i >= 0; i--) {
     const x = (w * i) / n;
@@ -98,7 +109,6 @@ export function hemPoints(hem: CapeHem, w: number, h: number): number[] {
     if (hem === 'pointed') y = h - Math.abs(u - 0.5) * h * 0.18;
     else if (hem === 'swallow') y = h - (0.5 - Math.abs(u - 0.5)) * h * 0.22;
     else if (hem === 'scalloped') y = h - (i % 2 ? h * 0.05 : 0);
-    else if (hem === 'tattered') y = h - rnd(i * 3.1) * h * 0.1 - (i % 2 ? h * 0.04 : 0);
     out.push(x, y);
   }
   return out;
@@ -314,6 +324,21 @@ export function paintCapeFace(x: Ctx, lk: CapeLook, w: number, h: number, still 
   v.addColorStop(0, 'rgba(255,255,255,0.10)'); v.addColorStop(0.6, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.30)');
   x.fillStyle = v; x.fillRect(0, 0, w, h);
   if (still) fxStill(x, lk, w, h);
+  else {
+    // worn cloth on the 3D cape: a coarse weave, road grime rising from the hem, a few darker stains
+    const s = w / 64;
+    x.fillStyle = 'rgba(0,0,0,0.07)';
+    for (let yy = 0; yy < h; yy += 2 * s) x.fillRect(0, yy, w, 0.7 * s);
+    x.fillStyle = 'rgba(255,255,255,0.035)';
+    for (let xx = 0; xx < w; xx += 2 * s) x.fillRect(xx, 0, 0.7 * s, h);
+    const grime = x.createLinearGradient(0, h * 0.62, 0, h);
+    grime.addColorStop(0, 'rgba(30,20,10,0)'); grime.addColorStop(1, 'rgba(30,20,10,0.38)');
+    x.fillStyle = grime; x.fillRect(0, h * 0.62, w, h * 0.38);
+    for (let i = 0; i < 9; i++) {
+      x.fillStyle = `rgba(20,12,6,${0.08 + rnd(i + 70) * 0.1})`;
+      x.beginPath(); x.ellipse(rnd(i + 30) * w, h * (0.35 + rnd(i + 50) * 0.6), (2 + rnd(i) * 5) * s, (1.5 + rnd(i + 9) * 3) * s, rnd(i + 2) * 3, 0, Math.PI * 2); x.fill();
+    }
+  }
   drawCapeEmblem(x, lk.emblem, w / 2, h * 0.42, w * 0.46, lk.emblemColor, lk.dark);
   // trim: both edges and the hem
   const t = Math.max(1.5, w * 0.07);
