@@ -238,13 +238,13 @@ vec4 rkW(float t) {
   float t2 = t * t, t3 = t2 * t, u = 1.0 - t;
   vec4 cr = vec4(-t3 + 2.0 * t2 - t, 3.0 * t3 - 5.0 * t2 + 2.0, -3.0 * t3 + 4.0 * t2 + t, t3 - t2) * 0.5;
   vec4 bs = vec4(u * u * u, 3.0 * t3 - 6.0 * t2 + 4.0, -3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0, t3) / 6.0;
-  return mix(cr, bs, 0.5);
+  return mix(cr, bs, 0.8);
 }
 vec4 rkD(float t) {
   float t2 = t * t, u = 1.0 - t;
   vec4 cr = vec4(-3.0 * t2 + 4.0 * t - 1.0, 9.0 * t2 - 10.0 * t, -9.0 * t2 + 8.0 * t + 1.0, 3.0 * t2 - 2.0 * t) * 0.5;
   vec4 bs = vec4(-u * u, 3.0 * t2 - 4.0 * t, -3.0 * t2 + 2.0 * t + 1.0, t2) * 0.5;
-  return mix(cr, bs, 0.5);
+  return mix(cr, bs, 0.8);
 }
 float rockDist(vec2 w) {
   vec2 b = floor(w), t = w - b;

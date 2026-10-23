@@ -15,7 +15,7 @@ import { StaticMerger } from './staticMerge';
 import { applyWind, WIND_BUSH, WIND_CROP, WIND_GRASS, WIND_PALM, WIND_TREE } from './weather/wind';
 import { PAINTED } from './style';
 import { paintedGroundData, paintsGround, paintsLiquid, usePaintedGround } from './paintGround';
-import { buildEmbers, buildReeds, cliffLook, filletGeo, innerCorners, ROCK_CLASSES, ROCK_TINT, RockLook, rockGeo, rockMat, rockShape, SIDE_E, SIDE_N, SIDE_S, SIDE_W } from './paint/terrain';
+import { buildEmbers, buildReeds, cliffLooks, filletGeo, innerCorners, ROCK_CLASSES, ROCK_TINT, RockLook, rockGeo, rockMat, rockShape, SIDE_E, SIDE_N, SIDE_S, SIDE_W } from './paint/terrain';
 const _corners: Array<{ x: number; y: number; rot: number }> = [];
 
 /** Open sides of a tile (N = −z, E = +x, S = +z, W = −x) for the painted rock shapes. */
@@ -461,10 +461,12 @@ export class WorldView {
             // the Sunken Reach: reef walls, paler and blue-green instead of cave rock
             const reef = sea && z === sea.z && x >= sea.x0 && x <= sea.x1 && y >= sea.y0 && y <= sea.y1;
             if (reef && PAINTED) {
-              const sh = rockShape(openSides((ax, ay) => w.getGround(ax, ay, z) !== Ground.Void, x, y));
+              // the reef ring is one rock mass: sides facing open water or the void beyond the ring are both rounded (no square silhouette)
+              const inRing = (ax: number, ay: number) => w.getGround(ax, ay, z) === Ground.Void && this.bordersOpen(ax, ay, z);
+              const sh = rockShape(openSides((ax, ay) => !inRing(ax, ay), x, y));
               reefShapes[sh.cls].add(compose(x, 0, y, sh.rot * Math.PI / 2, 1, 0.6 + hash2(x, y, 3) * 0.3, 1), c.setHex(0x7a9898).multiplyScalar(0.97));
               _corners.length = 0;
-              innerCorners(x, y, (ax, ay) => w.getGround(ax, ay, z) === Ground.Void, _corners);
+              innerCorners(x, y, inRing, _corners);
               for (const k of _corners) reefFillets!.add(compose(k.x, 0, k.y, k.rot, 1, 0.6, 1), c);
             } else if (reef) reefRock.add(compose(x, 0, y, hash2(x, y, 5) * 0.3, 1.02, 0.55 + hash2(x, y, 3) * 0.45, 1.02), c.setHex(hash2(x, y, 6) < 0.15 ? 0x9a6a5a : 0x7a9898).multiplyScalar(0.8 + hash2(x, y, 4) * 0.35));
             // floors not yet rolled out to the solid-rock look keep the old plain rock blocks
@@ -612,6 +614,7 @@ export class WorldView {
     const cliffMats = PAINTED ? [0, 1, 2, 3].map((look) => rockMat((col, o) => fv.m(col, o), { look })) : [];
     const paintCliffs = cliffMats.flatMap((m) => ROCK_CLASSES.map((_m, ci) => B(rockGeo('cliff', ci), m)));
     const cliffFillets = cliffMats.map((m) => B(filletGeo('cliff'), m));
+    let cliffLookAt: ((x: number, y: number) => RockLook) | null = null;
     const stakes = B(geo(new THREE.BoxGeometry(1, 2.0, 0.35), 1.0), M(0xffffff, objTex.stakes()));
     const stakeTips = B(geo(new THREE.ConeGeometry(0.12, 0.35, 4), 2.15), M(0x6a4a2c), true, 'small');
     const stoneWalls = B(geo(new THREE.BoxGeometry(1, 1.9, 1), 0.95), brick);
@@ -790,7 +793,7 @@ export class WorldView {
           }
           case Obj.Cliff:
             if (PAINTED) {
-              const look = cliffLook(w, x, y, z);
+              const look = (cliffLookAt ??= cliffLooks(w, z, (ax, ay) => w.getObj(ax, ay, z) === Obj.Cliff))(x, y);
               const sh = rockShape(openSides((ax, ay) => w.getObj(ax, ay, z) !== Obj.Cliff, x, y));
               paintCliffs[look * ROCK_CLASSES.length + sh.cls].add(compose(x, 0, y, sh.rot * Math.PI / 2, 1, 1, 1), c.setHex(ROCK_TINT[look]), ti);
               _corners.length = 0;

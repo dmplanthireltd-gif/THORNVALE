@@ -30,9 +30,7 @@ export const ROCK_TINT: Record<number, number> = {
   0: 0x8c7a66, 1: 0x7c8894, 2: 0xb48e5c, 3: 0x4c423e, 4: 0x5e5a56, 5: 0x5e6248, 6: 0x6a8a88,
 };
 
-/** The look of a cliff from the ground around it. */
-export function cliffLook(world: WorldMap, x: number, y: number, z: number): RockLook {
-  const c = [0, 0, 0, 0];
+function lookVotes(world: WorldMap, x: number, y: number, z: number, c: number[]): void {
   for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
     const g = world.getGround(x + dx, y + dy, z);
     if (g === Ground.Snow || g === Ground.Ice) c[1]++;
@@ -41,9 +39,62 @@ export function cliffLook(world: WorldMap, x: number, y: number, z: number): Roc
     else if (g === Ground.Swamp) c[0] += 0.5;
     else if (g !== Ground.Void && g !== Ground.Water && g !== Ground.DeepWater) c[0]++;
   }
+}
+function bestLook(c: number[]): RockLook {
   let best = 0;
   for (let i = 1; i < 4; i++) if (c[i] > c[best]) best = i;
   return best as RockLook;
+}
+
+/** The look of a cliff from the ground around it. */
+export function cliffLook(world: WorldMap, x: number, y: number, z: number): RockLook {
+  const c = [0, 0, 0, 0];
+  lookVotes(world, x, y, z, c);
+  return bestLook(c);
+}
+
+/**
+ * One look per cliff mass (painted style, owner 2026-10-23 "no square against square"):
+ * a mass changes look only along a run of at least ~12 tiles — the votes of the ground
+ * round each cliff tile are summed over its connected mass within a 12-tile window, so a
+ * frosted block never sits as a square inside a mossy cliff. Returns a lookup by tile.
+ */
+export function cliffLooks(world: WorldMap, z: number, isCliff: (x: number, y: number) => boolean): (x: number, y: number) => RockLook {
+  const W = world.width;
+  const cache = new Map<number, RockLook>();
+  const votes = new Map<number, number[]>();
+  const vote = (x: number, y: number) => {
+    const k = y * W + x;
+    let v = votes.get(k);
+    if (!v) { v = [0, 0, 0, 0]; lookVotes(world, x, y, z, v); votes.set(k, v); }
+    return v;
+  };
+  const R = 6;
+  return (x: number, y: number) => {
+    const k = y * W + x;
+    const hit = cache.get(k);
+    if (hit !== undefined) return hit;
+    // flood the mass from this tile, inside the window
+    const c = [0, 0, 0, 0];
+    const seen = new Set<number>([k]);
+    const q = [x, y];
+    for (let h = 0; h < q.length; h += 2) {
+      const cx = q[h], cy = q[h + 1];
+      const v = vote(cx, cy);
+      for (let i = 0; i < 4; i++) c[i] += v[i];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (Math.abs(nx - x) > R || Math.abs(ny - y) > R) continue;
+        const nk = ny * W + nx;
+        if (seen.has(nk) || !isCliff(nx, ny)) continue;
+        seen.add(nk);
+        q.push(nx, ny);
+      }
+    }
+    const look = bestLook(c);
+    cache.set(k, look);
+    return look;
+  };
 }
 
 // ------------------------------------------------------------------ geometry
