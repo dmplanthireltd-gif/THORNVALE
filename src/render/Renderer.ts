@@ -34,6 +34,8 @@ import { Obj, WorldMap, type EnemyKind } from '../game/world/WorldMap';
 import { WeatherView, type WeatherQuality } from './weather/WeatherView';
 import { TrapView } from './weather/trapView';
 import { FpsWatch, GRAPHICS, storeGraphics, storedGraphics, type GraphicsQuality } from './graphics';
+import { PAINTED } from './style';
+import { markOutline, markOutlineTree, PaintPass } from './PaintPass';
 
 export type PickResult =
   | { kind: 'enemy' | 'npc' | 'player'; id: number }
@@ -64,6 +66,8 @@ export class Renderer {
   readonly worldView: WorldView;
   private effects: Effects;
   private pixel = new PixelPass();
+  /** Painted style (style.ts): full-resolution buffer + outline/vignette pass instead of the pixel pass. */
+  private paint: PaintPass | null = PAINTED ? new PaintPass() : null;
   private views = new Map<number, CreatureView>();
   private bagMeshes = new Map<number, THREE.Group>();
   private sun: THREE.DirectionalLight;
@@ -107,7 +111,8 @@ export class Renderer {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(1);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // painted style: soft shadow edges
+    this.renderer.shadowMap.type = PAINTED ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -132,6 +137,16 @@ export class Renderer {
 
     const p = this.me;
     this.cam = new CameraController(p.x, p.y);
+    if (PAINTED) {
+      // warmer, softer daylight (updateLighting keeps these per floor)
+      this.sky.setHex(0x3a5a70);
+      (this.scene.background as THREE.Color).copy(this.sky);
+      this.hemi.color.setHex(0xffeedc);
+      this.hemi.groundColor.setHex(0x5a4e36);
+      this.sun.color.setHex(0xffe2b8);
+      this.sun.shadow.radius = 3;
+      this.torch.color.setHex(0xffc488);
+    }
     this.worldView = new WorldView(ctl.game.world, this.scene, (x, y, z) => ctl.game.stumpOrigin(x, y, z));
     this.worldView.isRuneField = (x, y, z) => this.ctl.game.fieldAt(x, y, z) !== null;
     this.effects = new Effects(this.scene);
@@ -159,7 +174,7 @@ export class Renderer {
    */
   private precompiled = '';
   private precompile(): void {
-    const mode = this.cam.pixelMode ? 'pixel' : 'screen';
+    const mode = PAINTED ? 'paint' : this.cam.pixelMode ? 'pixel' : 'screen';
     if (this.precompiled === mode) return;
     this.precompiled = mode;
     const cast = this.sun.castShadow;
@@ -168,7 +183,7 @@ export class Renderer {
     // canopies and roofs (transparent cel materials), with and without textures, vertex colours, instancing
     const probes = this.shaderProbes();
     this.scene.add(probes);
-    const compile = () => (this.cam.pixelMode ? this.pixel.compile(this.renderer, this.scene, this.cam.camera) : this.renderer.compile(this.scene, this.cam.camera));
+    const compile = () => (this.paint ? this.paint.compile(this.renderer, this.scene, this.cam.camera) : this.cam.pixelMode ? this.pixel.compile(this.renderer, this.scene, this.cam.camera) : this.renderer.compile(this.scene, this.cam.camera));
     try {
       // above ground (sun shadows), below ground (none) and on the sea floor (none, with fog)
       this.scene.fog = null;
@@ -243,6 +258,17 @@ export class Renderer {
       me.receiveShadow = true;
       me.position.set(f.x, -5, f.z);
       g.add(me);
+      // painted style: the outlined (creature) variant of every opaque probe
+      if (PAINTED && !transparent) {
+        const mo = m.clone();
+        markOutline(mo);
+        const me2 = inst ? new THREE.InstancedMesh(geo, mo, 1) : new THREE.Mesh(geo, mo);
+        if (inst) { (me2 as THREE.InstancedMesh).setMatrixAt(0, new THREE.Matrix4()); (me2 as THREE.InstancedMesh).setColorAt(0, new THREE.Color(1, 1, 1)); }
+        me2.castShadow = true;
+        me2.receiveShadow = true;
+        me2.position.set(f.x, -5, f.z);
+        g.add(me2);
+      }
     }
     return g;
   }
@@ -280,8 +306,9 @@ export class Renderer {
       for (const L of lights) L.layers.enable(W);
       cam.layers.set(W);
       for (const [, g] of floors) g.visible = true;
-      this.renderer.setRenderTarget(this.cam.pixelMode ? rt : null);
-      if (!this.cam.pixelMode) { this.renderer.setScissorTest(true); this.renderer.setScissor(0, 0, 1, 1); }
+      const offscreen = this.cam.pixelMode || !!this.paint;
+      this.renderer.setRenderTarget(offscreen ? rt : null);
+      if (!offscreen) { this.renderer.setScissorTest(true); this.renderer.setScissor(0, 0, 1, 1); }
       for (const st of states) {
         this.sun.castShadow = st.cast;
         this.scene.fog = st.fog;
@@ -301,7 +328,7 @@ export class Renderer {
     } catch {
       /* warming up is only an optimisation */
     }
-    if (!this.cam.pixelMode) this.renderer.setScissorTest(false);
+    if (!this.cam.pixelMode && !this.paint) this.renderer.setScissorTest(false);
     this.renderer.setRenderTarget(null);
     for (const L of lights) L.layers.disable(W);
     cam.layers.mask = camLayers;
@@ -329,7 +356,7 @@ export class Renderer {
     this.worldView.setGraphics(g);
     this.weather.particleShare = g.particles;
     this.cam.setZoomOutCut(g.zoomOutCut);
-    if (!this.cam.pixelMode) {
+    if (!this.cam.pixelMode || this.paint) {
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, g.maxPixelRatio));
       this.resize();
     }
@@ -356,7 +383,7 @@ export class Renderer {
 
   setPixelMode(on: boolean): void {
     this.cam.setPixelMode(on);
-    this.renderer.setPixelRatio(on ? 1 : Math.min(window.devicePixelRatio, GRAPHICS[this.graphics].maxPixelRatio));
+    this.renderer.setPixelRatio(on && !this.paint ? 1 : Math.min(window.devicePixelRatio, GRAPHICS[this.graphics].maxPixelRatio));
     this.resize();
   }
 
@@ -366,6 +393,37 @@ export class Renderer {
     this.renderer.setSize(w, h);
     this.cam.resize(w, h);
     this.overlay.resize(w, h);
+  }
+
+  private smoothTimer = 0;
+  private smoothSeen = new WeakSet<THREE.Texture>();
+  /**
+   * Painted style: textures made for the pixel look (nearest filtering) are switched to
+   * smooth filtering. Runs at load and then every couple of seconds for new things
+   * (effects, item piles, creatures); each texture is touched once.
+   */
+  private smoothTextures(dt: number): void {
+    this.smoothTimer -= dt;
+    if (this.smoothTimer > 0) return;
+    this.smoothTimer = 2;
+    const fix = (t: THREE.Texture | null | undefined) => {
+      if (!t || this.smoothSeen.has(t)) return;
+      const img = t.image as HTMLImageElement | undefined;
+      if (img && 'complete' in img && !img.complete) return; // an icon still loading: next sweep
+      this.smoothSeen.add(t);
+      if (t.magFilter !== THREE.NearestFilter && t.minFilter !== THREE.NearestFilter) return;
+      t.magFilter = THREE.LinearFilter;
+      t.minFilter = THREE.LinearFilter;
+      t.needsUpdate = true;
+    };
+    this.scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (!m) return;
+      for (const mm of Array.isArray(m) ? m : [m]) {
+        const a = mm as THREE.MeshToonMaterial;
+        fix(a.map); fix(a.emissiveMap); fix(a.alphaMap);
+      }
+    });
   }
 
   // ------------------------------------------------------------------ creature views
@@ -414,6 +472,7 @@ export class Renderer {
       const rig = this.buildRig(c);
       // fewer draw calls per character, same look (models/rigMerge.ts)
       mergeRig(rig);
+      if (PAINTED) markOutlineTree(rig.root);
       v = new CreatureView(c, rig, this.scene);
       this.views.set(c.id, v);
     }
@@ -907,6 +966,7 @@ export class Renderer {
         if (v && v.rig.type === 'biped' && !(v.creature instanceof Player && v.creature.illusion)) {
           this.gearUp(v.rig, e.id);
           mergeRig(v.rig);
+          if (PAINTED) markOutlineTree(v.rig.root);
           v.setCastShadow(true, true);
         }
         break;
@@ -1097,9 +1157,11 @@ export class Renderer {
     const under = pz < 0;
     (this.scene.background as THREE.Color).copy(under ? this.dark : this.sky);
     // below ground a dim, warm-grey ambient keeps rock and floor readable beyond your light
-    this.baseHemi = this.hemi.intensity = under ? 0.3 : 1.15;
-    this.hemi.color.setHex(under ? 0x9a948c : 0xcfe4ff);
-    this.baseSun = this.sun.intensity = under ? 0.25 : 2.3;
+    // (painted style: warmer daylight, darker caves so the light pools glow)
+    this.baseHemi = this.hemi.intensity = under ? (PAINTED ? 0.26 : 0.3) : PAINTED ? 1.3 : 1.15;
+    this.hemi.color.setHex(under ? (PAINTED ? 0x8c8070 : 0x9a948c) : PAINTED ? 0xffeedc : 0xcfe4ff);
+    this.baseSun = this.sun.intensity = under ? (PAINTED ? 0.15 : 0.25) : PAINTED ? 2.1 : 2.3;
+    if (this.paint) this.paint.vignette = under ? 0.62 : 0.3;
     this.sun.castShadow = !under && GRAPHICS[this.graphics].shadows;
   }
 
@@ -1247,8 +1309,8 @@ export class Renderer {
     const s = g.session(this.ctl.pid);
     const ringLight = s?.inventory.equipment.ring ? itemDef(s.inventory.equipment.ring.id).bonus?.light ?? 0 : 0;
     const light = (pz < 0 ? 2.5 : 0) + spellLight(p.buffs) + ringLight;
-    this.torch.intensity = light > 0 ? (pz < 0 ? 5 + light * 1.4 : 1.5) : 0;
-    this.torch.distance = 3 + light * 1.8;
+    this.torch.intensity = (light > 0 ? (pz < 0 ? 5 + light * 1.4 : 1.5) : 0) * (PAINTED ? 0.8 : 1);
+    this.torch.distance = (3 + light * 1.8) * (PAINTED && pz < 0 ? 1.3 : 1);
     this.torch.position.set(vp.x, 2.2, vp.y + 0.3);
     // under the sea: blue light, fog, light shafts and bubbles (sea/underwater.ts)
     const breathers: Breather[] = [];
@@ -1284,7 +1346,12 @@ export class Renderer {
     this.overlay.update(dt);
     // the first frame (and the first after switching the pixel look) compiles every shader the world uses
     this.precompile();
-    if (this.cam.pixelMode) {
+    if (this.paint) {
+      this.smoothTextures(dt);
+      const pr = this.renderer.getPixelRatio();
+      this.paint.setSize(this.container.clientWidth * pr, this.container.clientHeight * pr, Math.max(2, pr * 1.6));
+      this.paint.render(this.renderer, this.scene, this.cam.camera);
+    } else if (this.cam.pixelMode) {
       const a = this.cam.artSize();
       if (this.renderer.getPixelRatio() !== 1) this.renderer.setPixelRatio(1);
       this.pixel.setSize(a.w, a.h);

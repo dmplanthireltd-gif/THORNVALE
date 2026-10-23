@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PAINTED } from '../style';
 
 /**
  * Tiny helpers for building procedural low-poly models.
@@ -10,6 +11,18 @@ export type Mat = THREE.MeshToonMaterial;
 let gradient: THREE.DataTexture | null = null;
 export function toonGradient(): THREE.DataTexture {
   if (gradient) return gradient;
+  if (PAINTED) {
+    // painted style (style.ts): a soft, smooth light ramp instead of three hard bands
+    const ramp = [78, 96, 120, 146, 172, 198, 222, 240, 252, 255];
+    const d = new Uint8Array(ramp.length * 4);
+    ramp.forEach((v, i) => d.set([v, v, v, 255], i * 4));
+    gradient = new THREE.DataTexture(d, ramp.length, 1, THREE.RGBAFormat);
+    gradient.minFilter = THREE.LinearFilter;
+    gradient.magFilter = THREE.LinearFilter;
+    gradient.generateMipmaps = false;
+    gradient.needsUpdate = true;
+    return gradient;
+  }
   const steps = new Uint8Array([90, 90, 90, 255, 175, 175, 175, 255, 255, 255, 255, 255]);
   gradient = new THREE.DataTexture(steps, 3, 1, THREE.RGBAFormat);
   gradient.minFilter = THREE.NearestFilter;

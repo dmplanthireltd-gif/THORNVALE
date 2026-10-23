@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PAINTED } from './style';
 import { hash2 } from '../game/core/rng';
 import { Ground, Obj, SOLID_OBJ, type WorldMap } from '../game/world/WorldMap';
 import type { Mat } from './models/parts';
@@ -239,8 +240,10 @@ void main() {
   vec3 base = uPal[0];
   if (st == 1) base = uPal[1]; else if (st == 2) base = uPal[2]; else if (st == 3) base = uPal[3]; else if (st == 4) base = uPal[4]; else if (st == 5) base = uPal[5];
   vec2 q = vWorld.xz;
-  // pixel-art friendly: quantise to the 32-px art grid
+  // pixel-art friendly: quantise to the 32-px art grid (not in the painted style: smooth)
+  #ifndef PAINTED
   q = floor(q * 16.0) / 16.0;
+  #endif
   float n = vn(q * 1.7) * 0.55 + vn(q * 4.1) * 0.3 + vn(q * 9.3) * 0.15;
   // boulders: a lumpy height field, lit from the upper left (normal from its slope)
   float e = 0.12;
@@ -254,7 +257,11 @@ void main() {
   // cracks
   float cr = abs(vn(q * 2.3 + 3.1) - 0.5);
   float crack = 1.0 - smoothstep(0.015, 0.05, cr);
+  #ifdef PAINTED
+  col *= 1.0 - crack * 0.22;
+  #else
   col *= 1.0 - crack * 0.55;
+  #endif
   if (st == 4) {
     // crypt: rough-hewn blocks
     vec2 b = fract(vec2(q.x * 1.0 + floor(q.y * 2.0) * 0.5, q.y * 2.0));
@@ -274,6 +281,10 @@ void main() {
     float seam = crack * (0.6 + 0.4 * sin(uTime * 1.7 + q.x * 0.7 + q.y * 0.5));
     col += vec3(1.0, 0.32, 0.06) * seam * 0.9;
   }
+  #ifdef PAINTED
+  // painted style: the rock mass stays dark and recedes, so the lit cave floor reads first
+  col *= 0.42;
+  #endif
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -349,6 +360,7 @@ export function buildCaveRock(world: WorldMap, z: number, M: (color: number, opt
     },
     vertexShader: ROCK_TOP_VERT,
     fragmentShader: ROCK_TOP_FRAG,
+    defines: PAINTED ? { PAINTED: '' } : {},
   });
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(W, H), top);
   plane.rotation.x = -Math.PI / 2;

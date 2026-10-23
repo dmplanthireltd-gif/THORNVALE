@@ -13,6 +13,9 @@ import { groundTex, objTex } from './textures';
 import type { GraphicsLevel } from './graphics';
 import { StaticMerger } from './staticMerge';
 import { applyWind, WIND_BUSH, WIND_CROP, WIND_GRASS, WIND_PALM, WIND_TREE } from './weather/wind';
+import { PAINTED } from './style';
+import { groundIdTexture, paintsGround, usePaintedGround } from './paintGround';
+import { paintedProps } from './paintProps';
 
 /** Vertical distance between floors in world units. */
 export const FLOOR_H = 3.4;
@@ -67,7 +70,8 @@ function groundAtlas(g: Ground): THREE.Texture | null {
     for (let v = 0; v < VARIANTS; v++) ctx.drawImage(make(v).image as HTMLCanvasElement, v * w, 0);
     const t = new THREE.CanvasTexture(c);
     t.magFilter = first.magFilter;
-    t.minFilter = first.minFilter;
+    // painted style: smooth, but no mipmaps (the shader wraps inside each column; mip levels would seam there)
+    t.minFilter = PAINTED ? THREE.LinearFilter : first.minFilter;
     t.generateMipmaps = false;
     t.colorSpace = first.colorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -372,7 +376,18 @@ export class WorldView {
     const batches = new Map<string, Batch>();
     const matFor = new Map<string, Mat>();
     // one batch per ground kind: its three texture variants sit side by side in one atlas (one draw call per chunk, not three)
+    // painted style: every painted ground kind of the floor is one batch with one material (paintGround.ts)
+    let painted: Batch | null = null;
     const getBatch = (g: Ground) => {
+      if (PAINTED && paintsGround(g)) {
+        if (!painted) {
+          const pm = fv.m(0xffffff);
+          usePaintedGround(pm, groundIdTexture(w, z), w);
+          painted = new Batch(tileGeo, pm, false);
+          batches.set('painted', painted);
+        }
+        return painted;
+      }
       const key = `${g}`;
       let b = batches.get(key);
       if (!b) {
@@ -419,7 +434,8 @@ export class WorldView {
         }
         if (z === 0 && g === Ground.DeepWater && !this.nearLand(x, y)) continue; // the open sea is the backdrop plane
         const v = Math.floor(hash2(x, y, 17) * 3);
-        const shade = 0.92 + hash2(x, y) * 0.1;
+        // painted style: no per-tile brightness (it would show the tile grid); the shader varies colour across the land
+        const shade = PAINTED && paintsGround(g) ? 1 : 0.92 + hash2(x, y) * 0.1;
         const water = g === Ground.Water || g === Ground.DeepWater || g === Ground.Lava;
         const raised = g === Ground.Stone || g === Ground.Wood || g === Ground.Marble ? 0.02 : 0;
         getBatch(g).add(compose(x, water ? -0.33 : -0.15 + raised, y), c.setScalar(shade), -1, v);
@@ -505,17 +521,17 @@ export class WorldView {
     const oreRock = B(new THREE.DodecahedronGeometry(0.44, 0), M(0xffffff, objTex.rock()));
     const oreVein = B(new THREE.OctahedronGeometry(0.1, 0), M(0xffffff, null, 0x161210), false);
     const rubbleTiles: number[] = [];
-    const canopyLow = B(new THREE.IcosahedronGeometry(0.72, 0), leafMat);
-    const canopyHigh = B(new THREE.IcosahedronGeometry(0.5, 0), leafMat);
-    const pine1 = B(new THREE.ConeGeometry(0.78, 1.25, 7), leafMat);
-    const pine2 = B(new THREE.ConeGeometry(0.58, 1.05, 7), leafMat);
-    const pine3 = B(new THREE.ConeGeometry(0.36, 0.85, 7), leafMat);
-    const jungle1 = B(new THREE.IcosahedronGeometry(0.85, 0), leafMat);
+    const canopyLow = B(PAINTED ? paintedProps.canopyLow() : new THREE.IcosahedronGeometry(0.72, 0), leafMat);
+    const canopyHigh = B(PAINTED ? paintedProps.canopyHigh() : new THREE.IcosahedronGeometry(0.5, 0), leafMat);
+    const pine1 = B(PAINTED ? paintedProps.pine(0.78, 1.25, 1) : new THREE.ConeGeometry(0.78, 1.25, 7), leafMat);
+    const pine2 = B(PAINTED ? paintedProps.pine(0.58, 1.05, 2) : new THREE.ConeGeometry(0.58, 1.05, 7), leafMat);
+    const pine3 = B(PAINTED ? paintedProps.pine(0.36, 0.85, 3) : new THREE.ConeGeometry(0.36, 0.85, 7), leafMat);
+    const jungle1 = B(PAINTED ? paintedProps.jungle() : new THREE.IcosahedronGeometry(0.85, 0), leafMat);
     const palmTrunk = B(geo(new THREE.CylinderGeometry(0.07, 0.12, 2.2, 5), 1.1), palmMat);
     const frond = B(geo(new THREE.BoxGeometry(0.22, 0.05, 1.0), 0), leafMat);
     const deadBranch = B(new THREE.CylinderGeometry(0.04, 0.07, 0.8, 5), M(0x5a5048), true, 'small');
-    const rocks = B(new THREE.DodecahedronGeometry(0.42, 0), M(0xffffff, objTex.rock()));
-    const bushes = B(new THREE.IcosahedronGeometry(0.42, 0), bushMat);
+    const rocks = B(PAINTED ? paintedProps.rock() : new THREE.DodecahedronGeometry(0.42, 0), M(0xffffff, objTex.rock()));
+    const bushes = B(PAINTED ? paintedProps.bush() : new THREE.IcosahedronGeometry(0.42, 0), bushMat);
     const ferns = B(geo(new THREE.ConeGeometry(0.32, 0.4, 5), 0.2), bushMat, false);
     const berry = B(new THREE.IcosahedronGeometry(0.06, 0), plainMat, true, 'decor');
     const flowers = B(new THREE.IcosahedronGeometry(0.065, 0), flowerMat, false);
@@ -550,7 +566,7 @@ export class WorldView {
     const pillars = B(geo(new THREE.CylinderGeometry(0.28, 0.32, 2.1, 8), 1.05), M(0xd8d2c4, objTex.rock()));
     const counters = B(geo(new THREE.BoxGeometry(1, 0.85, 0.7), 0.42), M(0x7a5634, objTex.logs()));
     const altars = B(geo(new THREE.BoxGeometry(1, 0.8, 0.8), 0.4), M(0xbab2a4, objTex.rock()));
-    const stalag = B(geo(new THREE.ConeGeometry(0.3, 1.4, 6), 0.7), M(0x7a7068, objTex.rock()));
+    const stalag = B(PAINTED ? paintedProps.stalagmite() : geo(new THREE.ConeGeometry(0.3, 1.4, 6), 0.7), M(0x7a7068, objTex.rock()));
     const bones = B(new THREE.BoxGeometry(0.4, 0.05, 0.06), M(0xe8e0c6), false);
     const skulls = B(new THREE.IcosahedronGeometry(0.09, 0), M(0xe8e0c6), false);
     const fireMat = M(0xff8a2a, null, 0xff5a10);
@@ -1374,8 +1390,9 @@ export class WorldView {
       if (!s) { L.intensity = 0; continue; }
       L.color.setHex(s.color);
       L.position.set(s.x, s.h, s.y);
-      L.distance = 4.5 + s.power * 2.5;
-      L.intensity = s.power * (3.2 + Math.sin(this.time * (8 + i) + s.x) * 0.5 + Math.sin(this.time * (19 + i * 3) + s.y) * 0.35);
+      // painted style: wider, stronger warm pools of light around fires and torches
+      L.distance = (4.5 + s.power * 2.5) * (PAINTED ? 1.35 : 1);
+      L.intensity = s.power * (PAINTED ? 1.6 : 1) * (3.2 + Math.sin(this.time * (8 + i) + s.x) * 0.5 + Math.sin(this.time * (19 + i * 3) + s.y) * 0.35);
     }
   }
 
