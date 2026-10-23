@@ -12,6 +12,7 @@ import { NPCS } from '../game/npc/npcs';
 import { Npc } from '../game/npc/Npc';
 import { Player, spellLight } from '../game/player/Player';
 import { CreatureView } from './CreatureView';
+import { seeThrough } from './seeThrough';
 import { blockReaction, defensiveGuard } from './anim/blockFx';
 import { Effects, type FieldKind } from './Effects';
 import { applyGear } from './models/humanoid';
@@ -1253,6 +1254,8 @@ export class Renderer {
       const corpse = c instanceof Enemy ? c.corpseTimer > 0 : true;
       if (!c.dead) view.rig.root.visible = true;
       if (c === p) view.block.guard = defensiveGuard(p);
+      // a monster that hides the local player on screen turns see-through (seeThrough.ts)
+      if (c instanceof Enemy) seeThrough(view, this.views.get(p.id), this.cam.camera, c.z === pz);
       view.update(dt, corpse);
       const rp = view.rig.root.position;
       view.setCastShadow(rp.x >= sx0 && rp.x <= sx1 && rp.z >= sz0 && rp.z <= sz1);

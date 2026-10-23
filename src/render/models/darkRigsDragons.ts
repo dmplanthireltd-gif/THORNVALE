@@ -1,6 +1,7 @@
 import type { EnemyKind } from '../../game/world/WorldMap';
 import type { QuadRig, Rig } from './rigs';
 import { C, hitbox, Kit, quadRig, type Mesher, type V3 } from './darkRigsCore';
+import { PAINTED } from '../style';
 
 /**
  * Dark models, batch (h): the dragons — the green dragon, the crimson dragon
@@ -26,17 +27,22 @@ interface DragonLook {
 }
 
 function wing(m: Mesher, s: number, S: number, o: DragonLook): void {
+  // half-folded: swept back along the body and lifted, so the wings stay over the dragon's own
+  // tiles instead of spreading over its neighbours' (owner 2026-10-23: "much too big")
+  m.push([0, 0, 0], [0, s * 0.62, s * 0.28]);
   // drawn in the XY plane, then laid nearly flat (outline +Y → forward +Z), tilted up a little
   m.push([0, 0, 0], [Math.PI / 2 - 0.25, 0, 0]);
   const P = (x: number, y: number): V3 => [s * x * S, y * S, 0];
   const outline: [number, number][] = [[0, 0.12], [0.36, 0.3], [0.9, 0.42], [1.25, 0.3], [1.0, 0.06], [1.18, -0.2], [0.88, -0.24], [0.84, -0.56], [0.6, -0.4], [0.44, -0.66], [0.3, -0.4], [0.12, -0.42], [0, -0.3]];
-  m.poly(outline.map(([x, y]) => [s * x * S, y * S] as [number, number]), o.membrane, [0, 0, 0], { grit: 0.3, blood: 0.03 });
-  // a torn hole in the membrane, the arm and finger bones
-  m.poly([[s * 0.5 * S, -0.1 * S], [s * 0.6 * S, -0.04 * S], [s * 0.62 * S, -0.16 * S]], 0x0a0806, [0, 0, 0.004], { flat: true });
+  // painted style: a curved, billowing membrane between the finger bones (classic: flat)
+  m.membrane(outline.map(([x, y]) => [s * x * S, y * S] as [number, number]), o.membrane, [0, 0, 0], { grit: 0.3, blood: 0.03, d: 'membrane' }, 0.1, 0.035, 4);
+  // a torn hole in the membrane (classic), the arm and finger bones
+  if (!PAINTED) m.poly([[s * 0.5 * S, -0.1 * S], [s * 0.6 * S, -0.04 * S], [s * 0.62 * S, -0.16 * S]], 0x0a0806, [0, 0, 0.004], { flat: true });
   m.seg(P(0, 0.05), P(0.36, 0.3), 0.07, 0.055, o.scale);
   m.seg(P(0.36, 0.3), P(0.9, 0.42), 0.05, 0.035, o.scaleD);
   for (const t of [[1.25, 0.3], [1.18, -0.2], [0.84, -0.56], [0.44, -0.66]] as const) m.seg(P(0.9, 0.42), P(t[0], t[1]), 0.03, 0.01, o.horn);
   m.spike(P(0.9, 0.42), [s * 0.4, 1, 0.5], 0.18, 0.035, o.hornTip); // thumb claw
+  m.pop();
   m.pop();
 }
 
@@ -114,7 +120,8 @@ function dragon(K: Kit, o: DragonLook): QuadRig {
   const tail = K.limb('tail', [0, 0.5 * z, -0.66 * z], (m) => {
     m.ao = 0.2;
     m.push([0, 0, 0], [0, 0, 0], [z, z, z]);
-    const pts: V3[] = [[0, 0, 0], [0.04, -0.08, -0.32], [0.14, -0.18, -0.62], [0.3, -0.24, -0.88], [0.48, -0.26, -1.06]];
+    // sweeps back and curls round to the side (a shorter footprint than a straight tail)
+    const pts: V3[] = [[0, 0, 0], [0.04, -0.08, -0.3], [0.16, -0.18, -0.54], [0.36, -0.24, -0.66], [0.56, -0.26, -0.6]];
     m.tube(pts, [0.18, 0.13, 0.09, 0.06, 0.035], o.scale, { grit: 0.22 }, 7);
     for (let i = 0; i < 4; i++) {
       const a = pts[i];
@@ -122,12 +129,12 @@ function dragon(K: Kit, o: DragonLook): QuadRig {
       m.spike([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 0.1 - i * 0.02, (a[2] + b[2]) / 2], [0, 1, -0.6], 0.1 - i * 0.015, 0.03, i % 2 ? o.scaleD : o.hornTip);
     }
     // a barbed spade at the tip
-    m.poly([[0, 0.0], [0.12, -0.08], [0.0, -0.3], [-0.12, -0.08]], o.scaleD, [0.48, -0.26, -1.06], { r: [-Math.PI / 2, 0, -0.5], grit: 0.3 }, 0.03);
+    m.poly([[0, 0.0], [0.12, -0.08], [0.0, -0.3], [-0.12, -0.08]], o.scaleD, [0.56, -0.26, -0.6], { r: [-Math.PI / 2, 0, -2.0], grit: 0.3 }, 0.03);
     m.pop();
   });
 
   const wings = [-1, 1].map((s) => {
-    const w = K.limb(s < 0 ? 'wingR' : 'wingL', [s * 0.24 * z, 0.82 * z, 0.08 * z], (m) => wing(m, s, 1.05 * z, o));
+    const w = K.limb(s < 0 ? 'wingR' : 'wingL', [s * 0.24 * z, 0.82 * z, 0.08 * z], (m) => wing(m, s, 0.68 * z, o));
     return w;
   });
   return quadRig(K, { body, head, legs, tail, wings }, hitbox(1.3 * z, 1.4 * z, 1.8 * z), 1.4 * z);

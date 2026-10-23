@@ -272,7 +272,7 @@ function lizardHead(o: { crest: number; helm?: (m: Mesher) => void }) {
     m.eyes(0.065, 0.05, 0.115, 0.05, 0.022, 0.25);
     // a frilled crest down the back of the skull
     for (let i = 0; i < 5; i++) m.spike([0, 0.1 - i * 0.03, 0.02 - i * 0.06], [0, 1, -0.6], 0.14 - i * 0.015, 0.03, i % 2 ? o.crest : LZ_D, { grit: 0.2 }, 3);
-    for (const s of [-1, 1]) m.poly([[0, 0], [0.1, 0.06], [0.14, -0.04], [0.08, -0.12]], o.crest, [s * 0.1, -0.02, -0.04], { r: [0, s * 1.2, 0] }); // gill frills
+    for (const s of [-1, 1]) m.membrane([[0, 0], [0.1, 0.06], [0.14, -0.04], [0.08, -0.12]], o.crest, [s * 0.1, -0.02, -0.04], { r: [0, s * 1.2, 0] }); // gill frills
     o.helm?.(m);
     m.pop();
   };

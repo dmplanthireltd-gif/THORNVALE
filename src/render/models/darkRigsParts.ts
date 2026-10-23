@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { BipedRig } from './rigs';
 import { bipedRig, C, hitbox, Kit, Mesher, type PartOpt, type V3 } from './darkRigsCore';
+import { PAINTED } from '../style';
 
 /**
  * Reusable pieces for the dark monster models: a generic humanoid assembler
@@ -143,7 +144,9 @@ export function pauldron(m: Mesher, side: number, at: V3, size: number, c1: numb
 
 /** A belt with a buckle at the front. */
 export function belt(m: Mesher, w: number, d: number, y: number, color: number = C.LEATHER, buckle: number = C.IRON_L, skull = false): void {
-  m.box(w, 0.08, d, color, [0, y, 0], { grit: 0.2 });
+  // painted style: an oval band round the waist (a box belt drew a hard rectangle from above)
+  if (PAINTED) m.cyl(0.5, 0.5, 0.08, color, [0, y, 0], { s: [w * 1.04, 1, d * 1.08], grit: 0.2 }, 16);
+  else m.box(w, 0.08, d, color, [0, y, 0], { grit: 0.2 });
   if (skull) {
     m.sph(0.055, C.BONE, [0, y + 0.01, d / 2 + 0.02], { flat: true });
     m.box(0.05, 0.02, 0.02, C.SOCKET, [0, y + 0.015, d / 2 + 0.07], { flat: true });

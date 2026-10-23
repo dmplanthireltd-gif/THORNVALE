@@ -360,7 +360,7 @@ function darkDemon(): BipedRig {
   const armR = K.limb('armR', [-0.6, 1.46, 0.12], arm(-1));
 
   const wings = [-1, 1].map((s) => {
-    const w = K.limb(s < 0 ? 'wingR' : 'wingL', [s * 0.18, 1.48, -0.26], (m) => batWing(m, s, 1.2, MEMBRANE, DEM_SKIN_D, HORN));
+    const w = K.limb(s < 0 ? 'wingR' : 'wingL', [s * 0.18, 1.48, -0.26], (m) => batWing(m, s, 0.74, MEMBRANE, DEM_SKIN_D, HORN));
     w.rotation.y = s * 0.3;
     return w;
   });
@@ -371,7 +371,7 @@ function darkDemon(): BipedRig {
 export function batWing(m: Mesher, s: number, S: number, membrane: number, arm: number, bone: number): void {
   const P = (x: number, y: number): V3 => [s * x * S, y * S, 0];
   const outline: [number, number][] = [[0, 0.05], [0.42, 0.4], [1.05, 0.72], [0.86, 0.38], [1.12, 0.14], [0.84, -0.04], [0.92, -0.38], [0.62, -0.26], [0.52, -0.58], [0.4, -0.36], [0.22, -0.46], [0.12, -0.24], [0, -0.22]];
-  m.poly(outline.map(([x, y]) => [s * x * S, y * S] as [number, number]), membrane, [0, 0, 0], { grit: 0.25 });
+  m.membrane(outline.map(([x, y]) => [s * x * S, y * S] as [number, number]), membrane, [0, 0, 0], { grit: 0.25, d: 'membrane' }, 0.1, 0.035, 4);
   m.seg(P(0, 0), P(0.42, 0.4), 0.05, 0.04, arm);
   for (const t of [[1.05, 0.72], [1.12, 0.14], [0.92, -0.38], [0.52, -0.58]] as const) m.seg(P(0.42, 0.4), P(t[0], t[1]), 0.03, 0.012, bone);
   m.spike(P(0.42, 0.4), [s * 0.2, 1, 0.3], 0.14, 0.03, bone);

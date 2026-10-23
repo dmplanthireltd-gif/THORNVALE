@@ -5,6 +5,25 @@ import { C, Mesher, type V3 } from './darkRigsCore';
 import { toonGradient, type Mat } from './parts';
 
 /**
+ * A weathered boulder: a lumpy, smooth-shaded rounded rock (painted style; the old faceted
+ * dodecahedrons read as blocks). The lumps hash from the position, so shared corners stay closed.
+ */
+function boulder(r: number): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(r, 1);
+  const P = g.attributes.position;
+  const N = g.attributes.normal;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < P.count; i++) {
+    v.fromBufferAttribute(P, i);
+    const h = Math.sin(v.x * 91.7 / r + v.y * 47.3 / r + v.z * 13.9 / r) * 43758.5453;
+    const k = 0.86 + 0.22 * (h - Math.floor(h));
+    N.setXYZ(i, v.x / r, v.y / r, v.z / r);
+    P.setXYZ(i, v.x * k, v.y * k * 0.92, v.z * k);
+  }
+  return g;
+}
+
+/**
  * Painted style (render/style.ts) — grim bosses (owner 2026-10-23: "grim, brutal,
  * detailed, for older players"). Every dungeon boss, world boss, raid boss, the
  * sea boss and the Gravesilk Colossus gets its own trophies on top of its dark base
@@ -546,10 +565,12 @@ const RECIPES: Partial<Record<EnemyKind, Recipe>> = {
     parts: {
       head: (m, b, g) => {
         const y = b.cy + b.h * 0.15;
-        m.cyl(b.w * 0.34, b.w * 0.32, 0.08, OBSIDIAN, [0, y, b.cz], { grit: 0.2 }, 10);
+        // an open circlet (a solid disc this wide read as a brown plate over the head from above)
+        const cr = Math.min(0.17, b.w * 0.3);
+        m.ring(cr, 0.03, OBSIDIAN, [0, y, b.cz], { grit: 0.2 }, Math.PI * 2, 14);
         for (let i = 0; i < 7; i++) {
           const a = (i / 7) * Math.PI * 2;
-          const p: V3 = [Math.sin(a) * b.w * 0.33, y + 0.03, b.cz + Math.cos(a) * b.w * 0.33];
+          const p: V3 = [Math.sin(a) * cr, y + 0.03, b.cz + Math.cos(a) * cr];
           m.spike(p, [Math.sin(a) * 0.3, 1, Math.cos(a) * 0.3], i % 2 ? 0.18 : 0.28, 0.035, OBSIDIAN, {}, 4);
           if (i % 2 === 0) g.sph(0.025, 0xffffff, [p[0], p[1] + 0.03, p[2] + 0.02], { glow: true }, 0);
         }
@@ -581,7 +602,7 @@ const RECIPES: Partial<Record<EnemyKind, Recipe>> = {
         for (let i = 0; i < 7; i++) {
           const p: V3 = [between(-0.5, 0.5), b.y1 - between(0.0, 0.35), b.z0 + between(0.05, 0.25)];
           const r = between(0.12, 0.22);
-          m.add(new THREE.DodecahedronGeometry(r, 0), ROCK, p, { r: [rnd() * 3, rnd() * 3, rnd() * 3], s: [1, 0.8, 1], grit: 0.35 });
+          m.add(boulder(r), ROCK, p, { r: [rnd() * 3, rnd() * 3, rnd() * 3], s: [1, 0.8, 1], grit: 0.35 });
           m.sph(r * 0.8, MOSS, [p[0], p[1] + r * 0.55, p[2]], { s: [1.1, 0.35, 1.1], grit: 0.3 }, 1);
           if (i % 2 === 0) m.cone(0.07, 0.24, 0x24341a, [p[0] + 0.03, p[1] + r + 0.1, p[2]], {}, 5);
         }
@@ -591,7 +612,7 @@ const RECIPES: Partial<Record<EnemyKind, Recipe>> = {
         impaled(m, [0.2, b.cy + 0.2, b.z0 + 0.05], [0.4, 0.5, -1], 0.6);
       },
       head: (m, b) => {
-        for (const s of [-1, 1]) m.add(new THREE.DodecahedronGeometry(0.12, 0), ROCK, [s * b.w * 0.42, b.y1 - 0.05, b.cz - 0.05], { r: [1, 2, 0.5], s: [1, 1.4, 1], grit: 0.4 });
+        for (const s of [-1, 1]) m.add(boulder(0.12), ROCK, [s * b.w * 0.42, b.y1 - 0.05, b.cz - 0.05], { r: [1, 2, 0.5], s: [1, 1.4, 1], grit: 0.4 });
         m.sph(0.14, MOSS, [0, b.y1 - 0.02, b.cz - 0.08], { s: [1.4, 0.35, 1], grit: 0.3 }, 1);
       },
       armL: (m, b) => manacle(m, [b.cx, b.y0 + 0.2, b.cz], 0.15, 3),

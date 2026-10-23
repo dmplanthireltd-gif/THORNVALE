@@ -170,7 +170,7 @@ function finHead(o: FinOpt, extra?: (m: Mesher) => void) {
     }
     // gill slits and a spined crest fin along the skull
     for (const s of [-1, 1]) for (let i = 0; i < 3; i++) m.box(0.008, 0.07, 0.03, DF_D, [s * 0.17, -0.03, -0.03 - i * 0.04], { flat: true });
-    m.poly([[0, 0], [0.08, 0.18], [0.16, 0.14], [0.26, 0.16], [0.34, 0.04], [0.3, -0.02]], o.crest ?? FIN, [0, 0.1, 0.1], { r: [0, Math.PI / 2, 0], grit: 0.3 });
+    m.membrane([[0, 0], [0.08, 0.18], [0.16, 0.14], [0.26, 0.16], [0.34, 0.04], [0.3, -0.02]], o.crest ?? FIN, [0, 0.1, 0.1], { r: [0, Math.PI / 2, 0], grit: 0.3 });
     for (let i = 0; i < 4; i++) m.spike([0, 0.12, 0.08 - i * 0.08], [0, 1, -0.4], 0.16 - i * 0.02, 0.01, DF_D, { flat: true }, 3);
     // drooping barbels at the chin
     for (const s of [-1, 1]) m.horn([[s * 0.08, -0.09, 0.15], [s * 0.1, -0.16, 0.18], [s * 0.09, -0.25, 0.14]], 0.012, DF_D, DF_L);
@@ -187,7 +187,7 @@ function finTorso(o: { wear?: (m: Mesher) => void; hunch?: number }) {
     // scale rows on the flanks
     for (let r = 0; r < 5; r++) for (const s of [-1, 1]) m.box(0.03, 0.05, 0.22, r % 2 ? DF_D : DF_L, [s * 0.215, 0.1 + r * 0.1, 0], { grit: 0.3 });
     // a dorsal fin down the spine, torn and spined
-    m.poly([[0, 0], [0.12, 0.2], [0.3, 0.26], [0.42, 0.18], [0.52, 0.22], [0.6, 0.0]], FIN, [0, 0.6, -0.12], { r: [0, Math.PI / 2, -1.5], grit: 0.3 });
+    m.membrane([[0, 0], [0.12, 0.2], [0.3, 0.26], [0.42, 0.18], [0.52, 0.22], [0.6, 0.0]], FIN, [0, 0.6, -0.12], { r: [0, Math.PI / 2, -1.5], grit: 0.3 });
     for (let i = 0; i < 5; i++) m.spike([0, 0.58 - i * 0.11, -0.15], [0, 0.3, -1], 0.18, 0.012, DF_D, { flat: true }, 3);
     // a short fish tail behind
     m.horn([[0, 0.05, -0.12], [0, -0.06, -0.3], [0, -0.14, -0.42]], 0.07, DF, DF_D);
@@ -354,7 +354,7 @@ function darkEel(): QuadRig {
     m.tube([[0, 0.5, 0.36], [0, 0.48, 0.14], [0, 0.42, -0.08], [0, 0.34, -0.24]], [0.12, 0.13, 0.12, 0.11], SK, { grit: 0.22 });
     m.sph(0.1, BELLY2, [0, 0.4, 0.12], { s: [1, 0.6, 2.4] });
     spots(m, [0, 0.5, 0.34], [0, 0.36, -0.22], 5, 0.11);
-    m.poly([[0, 0], [0.2, 0.1], [0.42, 0.08], [0.6, 0.0]], FIN2, [0, 0.6, 0.3], { r: [0, Math.PI / 2, -0.1], grit: 0.3 });
+    m.membrane([[0, 0], [0.2, 0.1], [0.42, 0.08], [0.6, 0.0]], FIN2, [0, 0.6, 0.3], { r: [0, Math.PI / 2, -0.1], grit: 0.3 });
   });
   const head = K.limb('head', [0, 0.52, 0.42], (m) => {
     m.ao = 0.08;
@@ -379,7 +379,7 @@ function darkEel(): QuadRig {
     m.tube(pts, [0.11, 0.1, 0.085, 0.07, 0.05, 0.03], SK, { grit: 0.22 });
     for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i], b = pts[i + 1];
-      m.poly([[0, 0], [0.12, 0.09], [0.28, 0.07], [0.3, 0]], FIN2, [a[0], a[1] + 0.06, a[2]], { r: [0, Math.atan2(-(b[0] - a[0]), -(b[2] - a[2])) + Math.PI / 2, 0], grit: 0.3 });
+      m.membrane([[0, 0], [0.12, 0.09], [0.28, 0.07], [0.3, 0]], FIN2, [a[0], a[1] + 0.06, a[2]], { r: [0, Math.atan2(-(b[0] - a[0]), -(b[2] - a[2])) + Math.PI / 2, 0], grit: 0.3 });
       spots(m, a, b, 2, 0.08 - i * 0.012);
     }
     m.poly([[0, 0], [-0.1, -0.16], [0.1, -0.16]], FIN2, [0.06, -0.2, -1.34], { r: [0.3, Math.PI / 2, 0] });
