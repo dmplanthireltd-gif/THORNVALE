@@ -18,6 +18,12 @@ export const TANNING: Array<{ hide: string; out: string; qty: number; level: num
   { hide: 'bear_hide', out: 'leather', qty: 2, level: 10, xp: 22 },
   { hide: 'winter_wolf_fur', out: 'tanned_fur', qty: 1, level: 15, xp: 20 },
   { hide: 'polar_bear_fur', out: 'tanned_fur', qty: 2, level: 30, xp: 40 },
+  // hunter catches (trades/hunter.ts)
+  { hide: 'hare_pelt', out: 'leather', qty: 1, level: 5, xp: 12 },
+  { hide: 'ferret_pelt', out: 'tanned_fur', qty: 1, level: 18, xp: 22 },
+  { hide: 'skink_hide', out: 'leather', qty: 2, level: 25, xp: 28 },
+  { hide: 'stoat_fur', out: 'tanned_fur', qty: 2, level: 35, xp: 45 },
+  { hide: 'marten_pelt', out: 'tanned_fur', qty: 3, level: 50, xp: 70 },
 ];
 
 /** Needle and thread: [output, level, xp, materials…, thread]. */

@@ -6,6 +6,7 @@
  *   tsx scripts/content-test.ts
  */
 declare const process: { exit(code: number): never };
+import { PREY } from '../src/game/trades/hunter';
 import { BufferedIntent, Game, type Session } from '../src/game/Game';
 import { Enemy } from '../src/game/enemies/Enemy';
 import { ENEMIES } from '../src/game/enemies/enemyDefs';
@@ -948,8 +949,9 @@ console.log('Fletching, crafting, cooking and firemaking');
   const sold = new Set(Object.values(NPCS).flatMap((n) => (n.sells ?? []).map((e) => e.id)));
   const dropped = new Set(Object.values(ENEMIES).flatMap((e) => e.loot.map((l) => l.id)));
   const made = new Set(RECIPES.flatMap((r) => [r.output.id, ...(r.fail ? [r.fail.id] : [])]));
-  const sourceless = NEW.filter((id) => !(sold.has(id) || dropped.has(id) || made.has(id) || RAW_FISH_ITEMS.includes(id)));
-  check(sourceless.length === 0, `every new item has a source (shop, loot, fishing or a recipe)${sourceless.length ? ` (${sourceless.join(' ')})` : ''}`);
+  const caught = new Set(PREY.flatMap((p) => p.loot.map((l) => l.id)));
+  const sourceless = NEW.filter((id) => !(sold.has(id) || dropped.has(id) || made.has(id) || caught.has(id) || RAW_FISH_ITEMS.includes(id)));
+  check(sourceless.length === 0, `every new item has a source (shop, loot, fishing, hunting or a recipe)${sourceless.length ? ` (${sourceless.join(' ')})` : ''}`);
   const useless = NEW.filter((id) => {
     const d = ITEMS[id];
     if (!d) return false;

@@ -1,6 +1,8 @@
 import type { Controller } from '../client/Controller';
 import { STAMINA_MAX } from '../game/trades/agility';
 import { getLang, t } from '../i18n/i18n';
+import { trName } from '../i18n/gameText';
+import { TASK_BY_ID } from '../game/trades/slayer';
 import { button, el } from './dom';
 import './trades.css';
 
@@ -15,6 +17,7 @@ export class TradesUi {
   private fill: HTMLElement | null = null;
   private text: HTMLElement | null = null;
   private runBtn: HTMLButtonElement | null = null;
+  private task: HTMLElement | null = null;
   private key = '';
   private timer = 0;
 
@@ -29,7 +32,9 @@ export class TradesUi {
     if (!this.strip || !this.strip.isConnected) this.mount();
     if (!this.strip || !this.fill || !this.text || !this.runBtn) return;
     const st = Math.max(0, Math.floor(s.trades.stamina));
-    const key = `${getLang()}|${st}|${s.trades.run ? 1 : 0}`;
+    const sl = s.trades.slayer;
+    const def = sl ? TASK_BY_ID[sl.task] : null;
+    const key = `${getLang()}|${st}|${s.trades.run ? 1 : 0}|${sl ? `${sl.task}:${sl.left}:${sl.total}` : ''}|${s.trades.points}`;
     if (key === this.key) return;
     this.key = key;
     this.fill.style.width = `${Math.round((st / STAMINA_MAX) * 100)}%`;
@@ -38,6 +43,13 @@ export class TradesUi {
     this.runBtn.classList.toggle('on', s.trades.run);
     this.runBtn.title = s.trades.run ? t('You run: every step is quicker and uses stamina. Click to walk.') : t('You walk. Click to run: quicker steps that use stamina. Agility makes it last longer.');
     this.strip.title = t('Stamina: used by running, comes back while you walk or rest. A higher agility level gives more and faster stamina.');
+    if (this.task) {
+      this.task.hidden = !sl || !def;
+      if (sl && def) {
+        this.task.textContent = t('Slayer task: {done}/{total} {what}', { done: sl.total - sl.left, total: sl.total, what: trName(def.name) });
+        this.task.title = t('{points} slayer points. Any slayer master gives you a new task when this one is done.', { points: s.trades.points });
+      }
+    }
   }
 
   private mount(): void {
@@ -51,6 +63,8 @@ export class TradesUi {
       const s = this.ctl.game.session(this.ctl.pid);
       if (s) this.ctl.send({ c: 'run', on: !s.trades.run });
     }, 'btn small run-btn');
+    this.task = el('div', 'slayer-task', this.strip.parentElement);
+    this.task.hidden = true;
     this.key = '';
   }
 }

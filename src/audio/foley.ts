@@ -68,6 +68,9 @@ const BODIES: Record<string, Body> = {
   lantern_jelly: B('critter', 'cloth', 'small'), blight_jelly: B('critter', 'cloth', 'small'), ironshell_crab: B('insect', 'chitin', 'large'),
   deepfin_raider: B('reptile', 'scale', 'medium'), deepfin_harpooner: B('reptile', 'scale', 'medium'), deepfin_tidecaller: B('reptile', 'scale', 'medium'),
   gloom_eel: B('snake', 'scale', 'large'), boss_drowned_tyrant: B('demon', 'scale', 'huge'),
+  // slayer monsters (enemies/slayerDefs.ts)
+  gloomcrawler: B('insect', 'chitin', 'large'), wailing_shade: B('ghoul', 'cloth', 'medium'), cinder_wraith: B('flame', 'fire', 'large'),
+  marrow_gargoyle: B('golem', 'stone', 'huge'), abyssal_horror: B('demon', 'scale', 'huge'),
 };
 
 export function bodyOf(kind: string): Body {

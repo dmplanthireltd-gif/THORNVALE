@@ -126,6 +126,8 @@ export const ITEM_LOOK: Record<string, Partial<LookSpec>> = {
   darkstone_helm: { helm: 'horned' },
   dwarven_helmet: { helm: 'med', horns: true },
   winged_helmet: { m: MAT.steel, t: MAT.silver, helm: 'winged' },
+  slayer_helm: { m: MAT.gunmetal, t: MAT.crimson, gem: 0xff3a2a, helm: 'full', spikes: true },
+  hush_cowl: { m: MAT.darkleather, t: MAT.leather, helm: 'hood' },
   orc_warhelm: { m: MAT.gunmetal, t: MAT.bone, helm: 'horned', horns: true, spikes: true },
   frost_circlet: { helm: 'circlet' },
   elven_circlet: { helm: 'circlet' },

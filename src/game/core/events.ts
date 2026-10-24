@@ -58,6 +58,10 @@ export type GameEvent =
   | { type: 'thieving'; id: number; x: number; y: number; z: number; got: boolean }
   /** A pick at a patch of wild herbs; `got` = a herb came away. */
   | { type: 'herbs'; id: number; x: number; y: number; z: number; got: boolean }
+  /** Work on a farm patch (trades/farming.ts): planting, compost or a harvest. */
+  | { type: 'farm'; id: number; x: number; y: number; z: number; op: 'plant' | 'compost' | 'harvest' }
+  /** A hunter's trap (trades/hunter.ts): set, taken back, caught something, sprung empty, emptied. */
+  | { type: 'hunt'; id: number; x: number; y: number; z: number; op: 'set' | 'take' | 'caught' | 'broken' | 'collect' }
   /** A player sprang a jungle trap (world/traps.ts): `i` = trap index, `id` = the player. */
   | { type: 'trap'; kind: 'vines' | 'flower'; i: number; x: number; y: number; z: number; id: number }
   /** The station window (smithing etc.) opened, closed or changed. */

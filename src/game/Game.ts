@@ -2476,6 +2476,11 @@ export class Game implements AIContext {
       amount -= manaShield;
     }
     if (target instanceof Player && target.god) amount = 0;
+    // slayer monsters only take damage from slayers of their level; a slayer helm adds a little on task
+    if (target instanceof Enemy && source instanceof Player && amount > 0) {
+      const ss = this.sessions.get(source.id);
+      if (ss) amount = this.skillSys.damageTo(ss, target.enemyKind, amount);
+    }
     this.events.emit({ type: 'damage', targetId: target.id, sourceId: source.id, amount, result: roll.result, element, manaShield: manaShield || undefined });
     if (target instanceof Player) target.sinceCombat = 0;
     if (source instanceof Player) source.sinceCombat = 0;
@@ -2549,6 +2554,8 @@ export class Game implements AIContext {
         this.grantExp(s, exp, e.id, why);
       }
       if (e.enemyKind === 'rat') this.tutorialNote(pid, 'rat');
+      // slayer tasks (trades/slayer.ts): every damager on that task counts the kill
+      this.skillSys.onKill(s, e.enemyKind, e.maxHp);
       if (e.def.boss && recordBossKill(s.bossKills, e.enemyKind)) this.bossDeed(s, e.enemyKind);
       const changed = s.quests.onKill(e.enemyKind);
       for (const q of changed) {
@@ -3845,7 +3852,7 @@ export class Game implements AIContext {
       case 'trade': action = has('page:trade')?.action; break;
       case 'bank': case 'balance': action = has('page:bank')?.action; break;
       case 'spells': action = has('page:spells')?.action; break;
-      case 'work': action = (starts('turnin:') ?? starts('page:offer:') ?? starts('progress:'))?.action; break;
+      case 'work': action = (starts('turnin:') ?? starts('page:offer:') ?? starts('progress:') ?? starts('trades:task') ?? starts('trades:progress'))?.action; break;
       case 'yes': action = (starts('accept:') ?? starts('turnin:'))?.action; break;
       case 'no': case 'back': action = view.page === 'root' ? undefined : 'page:root'; break;
       case 'deposit': action = view.page === 'bank' ? has('deposit:all')?.action : has('page:bank')?.action; break;

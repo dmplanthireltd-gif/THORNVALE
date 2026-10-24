@@ -316,6 +316,9 @@ const defs: ItemDef[] = [
   def({ id: 'iron_helmet', name: 'Iron Helmet', kind: 'helmet', armor: 3, level: 8, weight: 30, value: 90 }),
   def({ id: 'fur_cap', name: 'Fur Cap', kind: 'helmet', armor: 1, weight: 12, value: 25, bonus: { resist: { ice: 3 } } }),
   def({ id: 'dwarven_helmet', name: 'Dwarven Helmet', kind: 'helmet', armor: 4, level: 15, weight: 42, value: 320, rarity: 'uncommon' }),
+  // slayer gear (trades/slayer.ts): the helm is a slayer reward, the cowl is sold by the seasoned slayer master
+  def({ id: 'slayer_helm', name: 'Slayer Helm', kind: 'helmet', armor: 6, level: 25, weight: 38, value: 1500, rarity: 'rare', note: 'Worn while on a slayer task: 8% more damage to the monsters of your task.' }),
+  def({ id: 'hush_cowl', name: 'Hush Cowl', kind: 'helmet', armor: 2, level: 30, weight: 12, value: 800, rarity: 'uncommon', note: 'Thick wool that muffles every sound. With it on, a slayer can hurt the wailing shades.' }),
   def({ id: 'winged_helmet', name: 'Winged Helmet', kind: 'helmet', armor: 4, level: 22, vocations: FIGHTERS, weight: 34, value: 500, rarity: 'uncommon', bonus: { speed: 3 } }),
   def({ id: 'frost_circlet', name: 'Rimeweave Circlet', kind: 'helmet', armor: 2, level: 40, vocations: MAGES, weight: 9, value: 2200, rarity: 'rare', bonus: { mana: 60, magic: 3, resist: { ice: 4 } } }),
   def({ id: 'frost_helm', name: 'Frostforged Helm', kind: 'helmet', armor: 6, level: 50, vocations: FIGHTERS, weight: 52, value: 3200, rarity: 'rare', bonus: { resist: { ice: 6 } } }),

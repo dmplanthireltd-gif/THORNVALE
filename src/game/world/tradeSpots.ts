@@ -6,6 +6,8 @@ import {
 } from '../trades/layout';
 import { STALLS } from '../trades/thieving';
 import { TRADE_NPCS } from '../trades/tradeNpcs';
+import { HUNT_REGIONS, PREY_BY_ID } from '../trades/hunter';
+import { SLAYER_REQ, type SlayerKind } from '../trades/slayer';
 import { TOWNS } from './townList';
 import { Ground, Obj, SOLID_OBJ, STRUCTURE_OBJ, UNWALKABLE_GROUND, type Region, type WorldMap } from './WorldMap';
 
@@ -388,6 +390,115 @@ function placeHerbs(m: WorldMap, l: TradeLayout, used: Set<number>, rng: Rng): v
   }
 }
 
+// ================================================================== farming
+
+/** Farms with patches anyone may use: [region, allotments, herb patches]. */
+const FARMS: Array<[string, number, number]> = [
+  ["Miller's Farm", 3, 2], ['Millbrook Fields', 4, 2], ['Westmarch Fields', 2, 1], ['Eastfold', 2, 1], ['Highmoor Downs', 2, 1], ['Glimmer Vale', 2, 1],
+  ['Valdrheim Outskirts', 2, 1], ['Corvane Grove', 2, 1], ['Briar Hills', 2, 1], ['Saltmere Shore', 2, 1], ['Fernwick Isle', 1, 1], ['Palmreach Jungle', 1, 2],
+];
+const FARM_GROUND = new Set<number>([Ground.Crop, Ground.Dirt, Ground.Grass, Ground.DarkGrass, Ground.Jungle, Ground.Snow, Ground.Sand]);
+
+function placeFarms(m: WorldMap, l: TradeLayout, used: Set<number>, rng: Rng): void {
+  for (const [name, allot, herb] of FARMS) {
+    const r = regionNamed(m, name);
+    if (!r || r.z0 > 0 || r.z1 < 0) continue;
+    const want: Array<'allotment' | 'herb'> = [...Array(allot).fill('allotment'), ...Array(herb).fill('herb')];
+    // one plot per farm: the patches in a little row, two tiles apart, near the region's middle (crops ground first)
+    const cand: Array<[number, number, number]> = [];
+    const cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
+    for (let y = r.y0 + 1; y < r.y1; y++) for (let x = r.x0 + 1; x < r.x1; x++) {
+      const g = m.getGround(x, y, 0);
+      if (!FARM_GROUND.has(g)) continue;
+      cand.push([x, y, (g === Ground.Crop ? -50 : 0) + Math.hypot(x - cx, y - cy) + rng.next() * 6]);
+    }
+    cand.sort((a, b) => a[2] - b[2]);
+    let done = 0;
+    for (const [x0, y0] of cand) {
+      if (done >= want.length) break;
+      for (const [x, y] of [[x0, y0], [x0 + 2, y0], [x0 + 4, y0], [x0, y0 + 2], [x0 + 2, y0 + 2], [x0 + 4, y0 + 2]]) {
+        if (done >= want.length) break;
+        if (onPlaza(m, x, y, 0) || m.isSafe(x, y, 0) || !canPlaceSolid(m, x, y, 0, used)) continue;
+        if (l.patches.some((q) => Math.abs(q.x - x) <= 1 && Math.abs(q.y - y) <= 1)) continue;
+        if (done > 0 && !l.patches.some((q) => q.area === name && Math.abs(q.x - x) <= 6 && Math.abs(q.y - y) <= 6)) continue;
+        l.patches.push({ id: l.patches.length, x, y, z: 0, kind: want[done], area: name });
+        m.setObj(x, y, Obj.FarmPatch, 0);
+        used.add(tileKey(x, y, 0));
+        done++;
+      }
+    }
+    const first = l.patches.find((q) => q.area === name);
+    if (first) l.spots.push({ skill: 'farming', x: first.x, y: first.y, z: 0, label: `Farm patches · ${name}` });
+  }
+}
+
+// ================================================================== hunter
+
+function placeHunting(m: WorldMap, l: TradeLayout, used: Set<number>, rng: Rng): void {
+  for (const [name, prey] of HUNT_REGIONS) {
+    const r = regionNamed(m, name);
+    if (!r || r.z0 > 0 || r.z1 < 0) continue;
+    const kinds = [...new Set(prey.map((id) => PREY_BY_ID[id].spot))];
+    let grounds = 0;
+    for (let tries = 0; tries < 300 && grounds < 2; tries++) {
+      const cx = r.x0 + Math.floor(rng.next() * (r.x1 - r.x0 + 1));
+      const cy = r.y0 + Math.floor(rng.next() * (r.y1 - r.y0 + 1));
+      if (!isOpen(m, cx, cy, 0) || m.isSafe(cx, cy, 0) || !WILD.has(m.getGround(cx, cy, 0))) continue;
+      if (l.hunts.some((h) => Math.abs(h.x - cx) < 14 && Math.abs(h.y - cy) < 14)) continue;
+      let put = 0;
+      for (const [x, y] of spiral(cx, cy, 4)) {
+        if (put >= 3) break;
+        if ((x + y) % 2 !== 0 || m.isSafe(x, y, 0) || !WILD.has(m.getGround(x, y, 0)) || !canPlaceSolid(m, x, y, 0, used)) continue;
+        if (l.hunts.some((h) => Math.abs(h.x - x) <= 1 && Math.abs(h.y - y) <= 1)) continue;
+        const kind = kinds[put % kinds.length];
+        l.hunts.push({ id: l.hunts.length, x, y, z: 0, kind, prey: prey.filter((id) => PREY_BY_ID[id].spot === kind), area: name });
+        m.setObj(x, y, kind === 'burrow' ? Obj.Burrow : Obj.BirdNest, 0);
+        used.add(tileKey(x, y, 0));
+        put++;
+      }
+      if (put) {
+        grounds++;
+        const lv = Math.min(...prey.map((id) => PREY_BY_ID[id].level));
+        l.spots.push({ skill: 'hunter', x: cx, y: cy, z: 0, label: `Hunting ground · ${name} · hunter ${lv}` });
+      }
+    }
+  }
+}
+
+// ================================================================== slayer monsters
+
+/** Where the slayer monsters live: [kind, region, floor, how many]. */
+const SLAYER_LAIRS: Array<[SlayerKind, string, number, number]> = [
+  ['gloomcrawler', 'Fernwick Cave', -1, 6], ['gloomcrawler', 'Hollow Crypt', -1, 6],
+  ['wailing_shade', 'Westmarch Catacombs', -1, 7], ['wailing_shade', 'The Crypt', -1, 6],
+  ['cinder_wraith', 'Burning Catacombs', -2, 7], ['cinder_wraith', 'Ember Forge', -1, 5],
+  ['marrow_gargoyle', 'Bonecrag', -1, 5], ['marrow_gargoyle', 'Crystal Depths', -2, 5],
+  ['abyssal_horror', 'Abyssal Halls', -3, 5],
+];
+
+function placeSlayerLairs(m: WorldMap, l: TradeLayout, rng: Rng): void {
+  for (const [kind, name, z, count] of SLAYER_LAIRS) {
+    const r = m.regions.find((q) => q.name === name && q.z0 <= z && q.z1 >= z);
+    if (!r || !m.floors.has(z)) continue;
+    const cand: Array<[number, number, number]> = [];
+    for (let y = r.y0; y <= r.y1; y++) for (let x = r.x0; x <= r.x1; x++) if (isOpen(m, x, y, z) && !m.isSafe(x, y, z)) cand.push([x, y, rng.next()]);
+    cand.sort((a, b) => a[2] - b[2]);
+    let n = 0;
+    for (const [x, y] of cand) {
+      if (n >= count) break;
+      if (m.spawns.some((sp) => sp.z === z && Math.abs(sp.x - x) < 4 && Math.abs(sp.y - y) < 4)) continue;
+      m.spawns.push({ kind, x, y, z });
+      n++;
+    }
+    const first = m.spawns.find((sp) => sp.kind === kind && sp.z === z && sp.x >= r.x0 && sp.x <= r.x1 && sp.y >= r.y0 && sp.y <= r.y1);
+    if (first) l.spots.push({ skill: 'slayer', x: first.x, y: first.y, z, label: `${SLAYER_NAMES[kind]} · ${name} · slayer ${SLAYER_REQ[kind].level}` });
+  }
+}
+
+const SLAYER_NAMES: Record<SlayerKind, string> = {
+  gloomcrawler: 'Gloomcrawlers', wailing_shade: 'Wailing shades', cinder_wraith: 'Cinder wraiths', marrow_gargoyle: 'Marrow gargoyles', abyssal_horror: 'Abyssal horrors',
+};
+
 // ================================================================== map spots
 
 function addSpots(l: TradeLayout): void {
@@ -417,12 +528,18 @@ export function buildTradeSpots(m: WorldMap): void {
   T('obstacles');
   // keep the shortcuts' ends and handles clear of everything else
   for (const o of l.obstacles) for (let i = 0; i <= o.len + 1; i++) used.add(tileKey(o.ax + o.dx * i, o.ay + o.dy * i, o.z));
+  // nothing of ours on a monster's spawn tile (a burrow there would leave it standing in a solid)
+  for (const sp of m.spawns) used.add(tileKey(sp.x, sp.y, sp.z));
   placeTownFolk(m, l, used);
   T('town folk');
   placeBoxes(m, l, used, rng);
   T('boxes');
   placeHerbs(m, l, used, rng);
   T('herbs');
+  placeFarms(m, l, used, rng);
+  placeHunting(m, l, used, rng);
+  placeSlayerLairs(m, l, rng);
+  T('farms, hunting, slayer');
   addSpots(l);
   indexTradeLayout(l);
   m.trades = l;

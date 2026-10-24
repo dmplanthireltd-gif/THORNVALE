@@ -4,6 +4,7 @@ import { hash2 } from '../../game/core/rng';
 import { HERB_BY_ID } from '../../game/trades/herblore';
 import { obstaclePath, type Obstacle } from '../../game/trades/layout';
 import { STALLS } from '../../game/trades/thieving';
+import { PLANTS } from '../../game/trades/farming';
 import { currentActivity } from '../../game/gathering/activity';
 import { Obj } from '../../game/world/WorldMap';
 import { Player } from '../../game/player/Player';
@@ -120,23 +121,29 @@ export class TradeView {
   private nextOwner = 1;
 
   constructor(scene: THREE.Scene, private readonly game: Game) {
+    this.scene = scene;
     const l = game.world.trades;
     if (!l) return;
     for (const o of l.obstacles) this.obstacle(o);
     l.stalls.forEach((s) => this.stall(s.x, s.y, s.z, STALLS[s.kind].awning, s.kind));
     l.boxes.forEach((b) => this.box(b.x, b.y, b.z));
     l.herbs.forEach((h) => this.herb(h.x, h.y, h.z, HERB_BY_ID[h.herb]?.color ?? '#6a9a3a'));
-    for (const [key, part] of this.parts) {
-      const z = Number(key.split('|')[0]);
-      let g = this.floors.get(z);
-      if (!g) {
-        g = new THREE.Group();
-        g.name = `trades:${z}`;
-        this.floors.set(z, g);
-        scene.add(g);
-      }
-      part.build(g);
+    l.patches.forEach((q) => this.patch(q.x, q.y, q.z, q.kind));
+    l.hunts.forEach((h) => this.huntSpot(h.x, h.y, h.z, h.kind));
+    for (const [key, part] of this.parts) part.build(this.floorGroup(Number(key.split('|')[0])));
+  }
+
+  private scene: THREE.Scene | null = null;
+
+  private floorGroup(z: number): THREE.Group {
+    let g = this.floors.get(z);
+    if (!g) {
+      g = new THREE.Group();
+      g.name = `trades:${z}`;
+      this.floors.set(z, g);
+      this.scene?.add(g);
     }
+    return g;
   }
 
   private part(z: number, name: string, make: () => [THREE.BufferGeometry, THREE.Material, boolean?]): Part {
@@ -168,6 +175,13 @@ export class TradeView {
     leaf: new THREE.ConeGeometry(0.07, 0.36, 4).translate(0, 0.18, 0),
     bloom: new THREE.IcosahedronGeometry(0.055, 0),
     stub: new THREE.CylinderGeometry(0.02, 0.03, 0.08, 4).translate(0, 0.04, 0),
+    soil: new THREE.BoxGeometry(0.9, 0.12, 0.9).translate(0, 0.06, 0),
+    furrow: new THREE.BoxGeometry(0.8, 0.05, 0.1).translate(0, 0.14, 0),
+    plank: new THREE.BoxGeometry(1, 0.16, 0.08).translate(0, 0.08, 0),
+    mound: new THREE.IcosahedronGeometry(0.36, 1).scale(1, 0.45, 1),
+    hole: new THREE.CircleGeometry(0.14, 10).rotateX(-Math.PI / 2),
+    bush: new THREE.IcosahedronGeometry(0.4, 1).scale(1, 0.8, 1),
+    nest: new THREE.TorusGeometry(0.13, 0.05, 5, 10).rotateX(Math.PI / 2),
   };
 
   private static mats = new Map<string, THREE.Material>();
@@ -305,6 +319,132 @@ export class TradeView {
     this.watched.push({ x, y, z, full, empty, fullObj: Obj.WildHerbs, last: -1 });
   }
 
+  private patch(x: number, y: number, z: number, kind: string): void {
+    const G = TradeView.geo, M = TradeView.m;
+    const owner = this.nextOwner++;
+    this.part(z, 'soil', () => [G.soil, M('soil', 0x4a3220)]).add(owner, compose(x, 0, y));
+    const fur = this.part(z, 'furrow', () => [G.furrow, M('soil2', 0x5e4028)]);
+    for (const k of [-0.25, 0, 0.25]) fur.add(owner, compose(x, 0, y + k));
+    const plank = this.part(z, 'plank', () => [G.plank, M('wood', 0x8a6a46)]);
+    for (const [dx, dy, r] of [[0, -0.48, 0], [0, 0.48, 0], [-0.48, 0, Math.PI / 2], [0.48, 0, Math.PI / 2]] as const) plank.add(owner, compose(x + dx, 0, y + dy, r), kind === 'herb' ? 0x6a8a4a : 0x8a6a46);
+  }
+
+  private huntSpot(x: number, y: number, z: number, kind: string): void {
+    const G = TradeView.geo, M = TradeView.m;
+    const owner = this.nextOwner++;
+    if (kind === 'burrow') {
+      this.part(z, 'mound', () => [G.mound, M('earth', 0x6a5236)]).add(owner, compose(x, 0, y, hash2(x, y, 3) * 6));
+      this.part(z, 'hole', () => [G.hole, M('hole', 0x0c0806), false]).add(owner, compose(x + 0.16, 0.12, y + 0.18));
+    } else {
+      this.part(z, 'bush', () => [G.bush, M('leaf2', 0x3e6a2c)]).add(owner, compose(x, 0.32, y, hash2(x, y, 5) * 6), hash2(x, y, 9) < 0.5 ? 0x3e6a2c : 0x4a7a32);
+      this.part(z, 'nest', () => [G.nest, M('twig', 0x8a6a3a), false]).add(owner, compose(x, 0.62, y));
+    }
+  }
+
+  // ---------------------------------------------------------------- your own crops and traps (per player, rebuilt when they change)
+
+  private crops = new Map<number, { key: string; g: THREE.Group }>();
+  private trapsShown = new Map<number, { key: string; g: THREE.Group }>();
+  private ownTimer = 0;
+
+  private updateOwn(): void {
+    const g = this.game;
+    const s = g.session(g.localId);
+    const l = g.world.trades;
+    if (!s || !l) return;
+    const farm = new Map(g.skillSys.farmView(s).map((e) => [e[0], e]));
+    for (const [id, c] of [...this.crops]) if (!farm.has(id)) { c.g.removeFromParent(); this.crops.delete(id); }
+    for (const [id, e] of farm) {
+      const patch = l.patches[id];
+      if (!patch) continue;
+      const key = e.join(',');
+      const have = this.crops.get(id);
+      if (have?.key === key) continue;
+      have?.g.removeFromParent();
+      const grp = this.buildCrop(patch.x, patch.y, e[1], e[2]);
+      this.floorGroup(patch.z).add(grp);
+      this.crops.set(id, { key, g: grp });
+    }
+    const traps = new Map(g.skillSys.trapView(s).map((e) => [e[0], e]));
+    for (const [id, c] of [...this.trapsShown]) if (!traps.has(id)) { c.g.removeFromParent(); this.trapsShown.delete(id); }
+    for (const [id, e] of traps) {
+      const spot = l.hunts[id];
+      if (!spot) continue;
+      const key = e.join(',');
+      const have = this.trapsShown.get(id);
+      if (have?.key === key) continue;
+      have?.g.removeFromParent();
+      const grp = this.buildTrap(spot.x, spot.y, spot.kind, e[1]);
+      this.floorGroup(spot.z).add(grp);
+      this.trapsShown.set(id, { key, g: grp });
+    }
+  }
+
+  private static cropMats = new Map<number, THREE.Material>();
+  private static cm(c: number): THREE.Material {
+    let m = TradeView.cropMats.get(c);
+    if (!m) TradeView.cropMats.set(c, (m = mat(c)));
+    return m;
+  }
+
+  /** A crop on a patch: small sprouts, then leaves, then fruit (stage 0–3). */
+  private buildCrop(x: number, y: number, seedIndex: number, stage: number): THREE.Group {
+    const d = PLANTS[seedIndex];
+    const grp = new THREE.Group();
+    const leaf = TradeView.cm(d?.leaf ?? 0x4a8a2a);
+    const fruit = TradeView.cm(d?.fruit ?? 0xe0402a);
+    const h = [0.12, 0.24, 0.36, 0.42][stage] ?? 0.2;
+    const herb = d?.patch === 'herb';
+    for (let i = 0; i < 6; i++) {
+      const ox = ((i % 3) - 1) * 0.26, oz = (Math.floor(i / 3) - 0.5) * 0.4;
+      const cone = new THREE.Mesh(TradeView.geo.leaf, leaf);
+      cone.position.set(x + ox, 0.12, y + oz);
+      cone.scale.set(herb ? 1.6 : 1.2, h / 0.36 * (herb ? 0.9 : 1), herb ? 1.6 : 1.2);
+      cone.rotation.set(hash2(x, y, i) * 0.4 - 0.2, hash2(x, y, i + 7) * 6, 0);
+      cone.castShadow = true;
+      grp.add(cone);
+      if (stage === 3) {
+        const f = new THREE.Mesh(TradeView.geo.bloom, fruit);
+        f.position.set(x + ox + 0.05, 0.12 + h * (herb ? 1 : 0.5), y + oz);
+        f.scale.setScalar(herb ? 0.9 : 1.5);
+        grp.add(f);
+      }
+    }
+    return grp;
+  }
+
+  /** Your own trap: a wooden box by a burrow or a looped snare in a bush; a catch shows its fur or feathers. */
+  private buildTrap(x: number, y: number, kind: string, state: number): THREE.Group {
+    const grp = new THREE.Group();
+    const wood = TradeView.cm(0x8a6a3a);
+    if (kind === 'burrow') {
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.42), wood);
+      box.position.set(x - 0.28, 0.12, y + 0.3);
+      box.rotation.y = 0.4;
+      if (state === 2) box.rotation.z = 0.5;
+      box.castShadow = true;
+      grp.add(box);
+      if (state === 1) {
+        const tuft = new THREE.Mesh(TradeView.geo.bloom, TradeView.cm(0xa89070));
+        tuft.position.set(x - 0.28, 0.27, y + 0.3);
+        tuft.scale.set(2.2, 1.2, 2.2);
+        grp.add(tuft);
+      }
+    } else {
+      const loop = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.015, 4, 12), TradeView.cm(0xd8c090));
+      loop.position.set(x + 0.1, 0.72, y + 0.1);
+      loop.rotation.x = state === 2 ? 0.3 : Math.PI / 2;
+      grp.add(loop);
+      if (state === 1) {
+        const bird = new THREE.Mesh(TradeView.geo.bloom, TradeView.cm(0xc8a050));
+        bird.position.set(x + 0.1, 0.72, y + 0.1);
+        bird.scale.set(1.6, 1.3, 2.2);
+        grp.add(bird);
+      }
+    }
+    return grp;
+  }
+
   // ---------------------------------------------------------------- per frame
 
   /** Floors: only the player's own is drawn, at its height; restocked things are shown again. */
@@ -313,6 +453,11 @@ export class TradeView {
       const off = z === pz ? floorOffset(z) : null;
       g.visible = off !== null;
       if (off !== null) g.position.y = off;
+    }
+    this.ownTimer -= dt;
+    if (this.ownTimer <= 0) {
+      this.ownTimer = 0.4;
+      this.updateOwn();
     }
     this.timer -= dt;
     if (this.timer > 0) return;

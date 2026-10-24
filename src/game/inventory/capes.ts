@@ -99,6 +99,9 @@ export const CAPES: CapeDef[] = [
   skill('windstride_cape', 'Windstride Cape', 'agility', 'agility_master', '#4a7aa8', 'Light as a breath of wind. It never snags on a branch.'),
   skill('apothecary_cape', "Apothecary's Cape", 'herblore', 'herb_master', '#3a6a3a', 'Its pockets smell of a hundred herbs at once.'),
   skill('shadowpurse_cape', 'Shadowpurse Cape', 'thieving', 'thief_master', '#2a2630', 'Somehow, nobody ever remembers seeing it.'),
+  skill('tillers_cape', "Tiller's Cape", 'farming', 'farm_master', '#6a8a2a', 'There is always a little soil in its hem, and it smells of rain.'),
+  skill('trappers_cape', "Trapper's Cape", 'hunter', 'hunt_master', '#7a5a32', 'Patched with the pelts of a hundred careful catches.'),
+  skill('banewarden_cape', "Banewarden's Cape", 'slayer', 'slayer_vesna', '#4a1214', 'Each stitch marks a task done. There are a great many stitches.'),
   // --- mastery ---------------------------------------------------------------------------------
   {
     id: 'grandmaster_mantle', name: "Grandmaster's Mantle", kind: 'mastery', seller: 'elias', price: MASTERY_CAPE_PRICE, value: 25000, rarity: 'legendary', tint: '#e8c040',
@@ -188,7 +191,7 @@ function seasonOpen(c: CapeDef, now: number): boolean {
 const SKILL_LABEL: Record<CapeSkill, string> = {
   fist: 'fist fighting', club: 'club fighting', sword: 'sword fighting', axe: 'axe fighting', distance: 'distance fighting', shielding: 'shielding', magic: 'magic level',
   woodcutting: 'woodcutting', fishing: 'fishing', mining: 'mining', smithing: 'blacksmithing', fletching: 'fletching', crafting: 'crafting', cooking: 'cooking', firemaking: 'firemaking',
-  agility: 'agility', herblore: 'herblore', thieving: 'thieving',
+  agility: 'agility', herblore: 'herblore', thieving: 'thieving', slayer: 'slayer', farming: 'farming', hunter: 'hunter',
 };
 
 /**

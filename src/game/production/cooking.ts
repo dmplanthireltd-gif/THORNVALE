@@ -26,6 +26,8 @@ export const FOODS: FoodDef[] = [
   { raw: 'raw_salmon', cooked: 'salmon', level: 30, xp: 90 },
   { raw: 'raw_ice_fish', cooked: 'ice_fish', level: 40, xp: 115 },
   { raw: 'raw_swordfish', cooked: 'swordfish', level: 50, xp: 140 },
+  // hunter (trades/hunter.ts): birds from snares
+  { raw: 'raw_bird', cooked: 'roast_bird', level: 12, xp: 45 },
 ];
 
 export const RAW_FOOD_ITEMS = FOODS.map((f) => f.raw);
@@ -41,7 +43,7 @@ export const BURN = {
 
 export const COOKING_RECIPES: Recipe[] = (['campfire', 'stove'] as const).flatMap((station) =>
   FOODS.map((f): Recipe => ({
-    id: `cook:${station}:${f.cooked}`, skill: 'cooking', station, group: f.raw.includes('meat') || f.raw.includes('ham') ? 'Meat' : 'Fish',
+    id: `cook:${station}:${f.cooked}`, skill: 'cooking', station, group: f.raw.includes('meat') || f.raw.includes('ham') || f.raw.includes('bird') ? 'Meat' : 'Fish',
     level: f.level, xp: f.xp, inputs: [{ id: f.raw, qty: 1 }], output: { id: f.cooked, qty: 1 }, success: BURN[station], fail: { id: BURNT_FOOD, qty: 1 },
   })),
 );

@@ -885,6 +885,25 @@ export const BOSS_LOOK: Partial<Record<EnemyKind, BossLook>> = {
   boss_drowned_tyrant: { base: 'deepfin_raider', tint: 0x1a4a5a, amt: 0.35, crown: 0xd8443a, aura: 0x4ad8e8, glow: 0x061a20 },
 };
 
+/** Slayer monsters (enemies/slayerDefs.ts): a tinted, faintly glowing cousin of an existing monster (no crown, no ring). */
+export const SLAYER_LOOK: Partial<Record<EnemyKind, { base: EnemyKind; tint: number; amt: number; glow?: number }>> = {
+  gloomcrawler: { base: 'crystal_spider', tint: 0x3a2a5a, amt: 0.55, glow: 0x100820 },
+  wailing_shade: { base: 'ghoul', tint: 0xa8c4e0, amt: 0.6, glow: 0x18283a },
+  cinder_wraith: { base: 'fire_elemental', tint: 0x2a1a14, amt: 0.55, glow: 0x3a0e00 },
+  marrow_gargoyle: { base: 'ice_golem', tint: 0xc8bca0, amt: 0.65 },
+  abyssal_horror: { base: 'demon', tint: 0x1a3a2a, amt: 0.5, glow: 0x0a2010 },
+};
+
+function buildSlayerVariant(look: { base: EnemyKind; tint: number; amt: number; glow?: number }): Rig {
+  const rig = buildEnemy(look.base);
+  const tint = new THREE.Color(look.tint);
+  for (const m of rig.materials) {
+    m.color.lerp(tint, look.amt);
+    if (look.glow) m.emissive.add(new THREE.Color(look.glow));
+  }
+  return rig;
+}
+
 function buildBoss(kind: EnemyKind, look: BossLook): Rig {
   const rig = buildEnemy(look.base);
   const tint = new THREE.Color(look.tint);
@@ -940,6 +959,8 @@ export function buildEnemy(kind: EnemyKind): Rig {
   }
   const boss = BOSS_LOOK[kind];
   if (boss) return buildBoss(kind, boss);
+  const sv = SLAYER_LOOK[kind];
+  if (sv) return buildSlayerVariant(sv);
   switch (kind) {
     case 'rat': return buildRat();
     case 'wolf': return buildWolf();
@@ -991,5 +1012,7 @@ export const ENEMY_SCALE: Record<EnemyKind, number> = {
   // the Sunken Reach (darkRigsSea.ts)
   lantern_jelly: 1.15, blight_jelly: 1.15, ironshell_crab: 1.35, deepfin_raider: 1.36, deepfin_harpooner: 1.34, deepfin_tidecaller: 1.32, gloom_eel: 1.45,
   boss_drowned_tyrant: 1.75,
+  // slayer monsters
+  gloomcrawler: 1.3, wailing_shade: 1.32, cinder_wraith: 1.4, marrow_gargoyle: 1.42, abyssal_horror: 1.45,
 };
 

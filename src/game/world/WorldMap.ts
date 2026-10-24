@@ -3,6 +3,7 @@ import type { DepotHall } from './depotHalls';
 import type { SpawnPlaza } from './spawnPlaza';
 import type { SeaKind, SeaLayout } from './sea';
 import { cloneTradeLayout, type TradeLayout } from '../trades/layout';
+import type { SlayerKind } from '../trades/slayer';
 
 /** Ground layer — what the tile floor is made of. */
 export enum Ground {
@@ -221,7 +222,9 @@ export type EnemyKind =
   | 'wb_mountain' | 'wb_storm_serpent' | 'wb_blight_mother'
   | 'raid_tusk_warlord' | 'raid_grave_warden' | 'raid_frost_jarl' | 'raid_swarm_queen'
   // the Sunken Reach under the sea south of Millbrook (world/sea.ts)
-  | SeaKind;
+  | SeaKind
+  // slayer monsters (trades/slayer.ts, enemies/slayerDefs.ts): only slayers can hurt them
+  | SlayerKind;
 
 export interface Region {
   name: string;

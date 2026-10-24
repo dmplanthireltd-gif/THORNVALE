@@ -22,6 +22,10 @@ import { recipeById } from '../src/game/production/recipes';
 import { runAdminCommand } from '../src/game/admin';
 import { Obj } from '../src/game/world/WorldMap';
 import { npcKeyword } from '../src/game/npc/keywords';
+import { PLANTS } from '../src/game/trades/farming';
+import { TASK_BY_ID } from '../src/game/trades/slayer';
+
+const PLANTS_OK = () => PLANTS.every((d) => !!ITEMS[d.seed] && !!ITEMS[d.produce] && d.minutes > 0);
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -37,7 +41,7 @@ function withRandom<T>(v: number, fn: () => T): T {
   Math.random = () => v;
   try { return fn(); } finally { Math.random = realRandom; }
 }
-const setLevel = (s: Session, id: 'agility' | 'herblore' | 'thieving' | 'fletching', lvl: number) => { s.gathering[id] = gatherXpForLevel(lvl); };
+const setLevel = (s: Session, id: 'agility' | 'herblore' | 'thieving' | 'fletching' | 'slayer' | 'farming' | 'hunter', lvl: number) => { s.gathering[id] = gatherXpForLevel(lvl); };
 const run = (g: Game, seconds: number) => { for (let t = 0; t < seconds; t += 0.05) g.update(0.05); };
 
 // ---------------------------------------------------------------- save migration
@@ -75,12 +79,12 @@ check(lay.stalls.every((s) => g.world.getObj(s.x, s.y, s.z) === Obj.TradeStall) 
 
 // ---------------------------------------------------------------- registry, capes, shops
 console.log('skills, capes and shops');
-for (const id of ['agility', 'herblore', 'thieving'] as const) {
+for (const id of ['agility', 'herblore', 'thieving', 'slayer', 'farming', 'hunter'] as const) {
   const d = NONCOMBAT_SKILLS.find((x) => x.id === id);
   check(!!d && !!ITEMS[d.icon], `${id} is in the Skills panel with an icon`);
 }
 check(NONCOMBAT_SKILLS.find((d) => d.id === 'agility')?.kind === 'adventure' && NONCOMBAT_SKILLS.find((d) => d.id === 'herblore')?.kind === 'production', 'agility and thieving are adventure skills, herblore a production skill');
-for (const [cape, skill, seller] of [['windstride_cape', 'agility', 'agility_master'], ['apothecary_cape', 'herblore', 'herb_master'], ['shadowpurse_cape', 'thieving', 'thief_master']] as const) {
+for (const [cape, skill, seller] of [['windstride_cape', 'agility', 'agility_master'], ['apothecary_cape', 'herblore', 'herb_master'], ['shadowpurse_cape', 'thieving', 'thief_master'], ['tillers_cape', 'farming', 'farm_master'], ['trappers_cape', 'hunter', 'hunt_master'], ['banewarden_cape', 'slayer', 'slayer_vesna']] as const) {
   const c = CAPE_BY_ID[cape];
   check(c?.skill === skill && c.level === 99 && NPCS[seller]?.sells?.some((e) => e.id === cape), `${cape} asks for ${skill} 99 and is sold by its master`);
 }
@@ -266,13 +270,162 @@ for (const id of ['fletch:bolt', 'fletch:piercing_bolt', 'fletch:frost_bolt', 'f
   check(s.inventory.count('bolt') === b0 + 10, 'shafts and arrowheads make ten bolts');
 }
 
+// ---------------------------------------------------------------- farming
+console.log('farming');
+{
+  let clock = Date.UTC(2026, 9, 24, 12);
+  const fg = new Game({ now: () => clock });
+  const fl = fg.world.trades!;
+  check(fl.patches.filter((q) => q.kind === 'allotment').length >= 10 && fl.patches.filter((q) => q.kind === 'herb').length >= 8, `farm patches stand on farms (${fl.patches.length})`);
+  const s = fg.addPlayer('Farmer', { intent: new BufferedIntent() });
+  const p = s.player;
+  const patch = fl.patches.find((q) => q.kind === 'allotment')!;
+  const [ax, ay] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1]].map(([dx, dy]) => [patch.x + dx, patch.y + dy]).find(([x, y]) => fg.world.isWalkable(x, y, 0) && !fg.isOccupied(x, y, 0))!;
+  p.placeAt(ax, ay, 0);
+  s.inventory.add('potato_seed', 2);
+  fg.skillSys.useTile(s, patch.x, patch.y, patch.z);
+  check(!s.trades.work, 'planting needs a trowel');
+  s.inventory.add('trowel', 1);
+  fg.skillSys.useTile(s, patch.x, patch.y, patch.z);
+  check(s.trades.work?.kind === 'farm' && currentActivity(fg, p.id)?.kind === 'farm', 'with a trowel you kneel and plant (shown to others)');
+  run(fg, 2.5);
+  check(!!s.trades.farm[String(patch.id)] && s.inventory.count('potato_seed') === 1 && s.gathering.farming > 0, 'the seed is planted and gives farming experience');
+  s.inventory.add('compost', 1);
+  fg.skillSys.useTile(s, patch.x, patch.y, patch.z);
+  run(fg, 2.5);
+  check(s.trades.farm[String(patch.id)]?.c === 1 && !s.inventory.has('compost'), 'compost goes on a growing patch');
+  fg.skillSys.useTile(s, patch.x, patch.y, patch.z);
+  check(!s.trades.work, 'a growing patch only tells you how long is left');
+  // it keeps growing through a logout and a server restart: the planting time is in the save
+  const save = fg.serialize(p.id);
+  check(!!(save.trades as { farm?: Record<string, unknown> })?.farm?.[String(patch.id)], 'the patch is in the save');
+  clock += 11 * 60_000;
+  const fg2 = new Game({ now: () => clock });
+  const s2 = fg2.addPlayer('Farmer', { intent: new BufferedIntent() });
+  fg2.applySave(s2.player.id, save);
+  check(fg2.skillSys.farmView(s2).some((e) => e[0] === patch.id && e[2] === 3), 'after the restart, eleven minutes later, the potatoes are ripe');
+  s2.player.placeAt(ax, ay, 0);
+  const pot = s2.inventory.count('potato');
+  fg2.skillSys.useTile(s2, patch.x, patch.y, patch.z);
+  run(fg2, 2.5);
+  check(s2.inventory.count('potato') >= pot + 5 && !s2.trades.farm[String(patch.id)], 'harvesting gives potatoes (more with compost) and frees the patch');
+  s2.inventory.add('potato_seed', 1);
+  s2.inventory.add('trowel', 1);
+  fg2.skillSys.useTile(s2, patch.x, patch.y, patch.z);
+  run(fg2, 2.5);
+  runAdminCommand(fg2, s2, '/grow');
+  check(fg2.skillSys.farmView(s2).some((e) => e[0] === patch.id && e[2] === 3), '/grow ripens what you planted at once (game masters)');
+  const herbPatch = fl.patches.find((q) => q.kind === 'herb')!;
+  s2.inventory.add('starbloom_seed', 1);
+  const [hx, hy] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1]].map(([dx, dy]) => [herbPatch.x + dx, herbPatch.y + dy]).find(([x, y]) => fg2.world.isWalkable(x, y, 0) && !fg2.isOccupied(x, y, 0))!;
+  s2.player.placeAt(hx, hy, 0);
+  fg2.skillSys.useTile(s2, herbPatch.x, herbPatch.y, herbPatch.z);
+  check(!s2.trades.work, 'a herb seed above your farming level cannot be planted');
+  check(PLANTS_OK(), 'every seed has a plant with a produce item that exists');
+  // the own client sees its patches (snapshot tw.fp)
+  const mirror = new Game({ simulate: false });
+  const me = mirror.addPlayer('Farmer', { id: s.player.id, starter: false });
+  mirror.localId = me.player.id;
+  const snap = buildSnapshot(fg, s);
+  if (snap.t === 'snap') applySnapshot(mirror, snap);
+  check(mirror.skillSys.farmView(me).length === 1, 'the own client learns its farm patches');
+}
+
+// ---------------------------------------------------------------- hunter
+console.log('hunter');
+{
+  const s = g.addPlayer('Trapper', { intent: new BufferedIntent() });
+  const p = s.player;
+  p.ignoredByMonsters = true;
+  check(lay.hunts.some((h) => h.kind === 'burrow') && lay.hunts.some((h) => h.kind === 'nest'), `hunting grounds have burrows and nesting bushes (${lay.hunts.length})`);
+  const spot = lay.hunts.find((h) => h.kind === 'nest' && h.prey.includes('finch'))!;
+  const [ax, ay] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1]].map(([dx, dy]) => [spot.x + dx, spot.y + dy]).find(([x, y]) => g.world.isWalkable(x, y, 0) && !g.isOccupied(x, y, 0))!;
+  p.placeAt(ax, ay, 0);
+  g.skillSys.useTile(s, spot.x, spot.y, spot.z);
+  check(!s.trades.work, 'a nesting bush needs a bird snare');
+  s.inventory.add('bird_snare', 1);
+  g.skillSys.useTile(s, spot.x, spot.y, spot.z);
+  check(s.trades.work?.kind === 'trap', 'setting a snare takes a moment');
+  run(g, 2.5);
+  check(s.trades.traps.length === 1 && s.trades.traps[0].state === 'set' && s.inventory.count('bird_snare') === 1, 'the snare is set (and never used up)');
+  for (let i = 0; i < 80 && s.trades.traps[0]?.state === 'set'; i++) withRandom(0.01, () => g.skillSys.updateSession(s, 4.1));
+  check(s.trades.traps[0]?.state === 'broken' || s.trades.traps[0]?.state === 'caught', 'a set trap catches something or is sprung empty');
+  s.trades.traps[0].state = 'caught';
+  s.trades.traps[0].prey = 'finch';
+  const f0 = s.inventory.count('feather');
+  g.skillSys.useTile(s, spot.x, spot.y, spot.z);
+  run(g, 2.5);
+  check(s.inventory.count('feather') > f0 && s.gathering.hunter > 0 && s.trades.traps.length === 0, 'collecting a catch gives feathers and hunter experience');
+  s.inventory.add('bird_snare', 1);
+  g.skillSys.useTile(s, spot.x, spot.y, spot.z);
+  run(g, 2.5);
+  p.placeAt(p.x + 40, p.y, 0);
+  g.skillSys.updateSession(s, 0.1);
+  check(s.trades.traps.length === 0, 'a trap you walk far away from collapses back into your pack');
+  check(recipeById('cook:stove:roast_bird')?.inputs[0].id === 'raw_bird' && !!recipeById('tan:hare_pelt'), 'birds can be roasted and pelts tanned');
+  s.inventory.add('pet_morsel', 1);
+  s.inventory.add('pet_fox', 1);
+  g.useItem(p.id, 'pet_fox');
+  const xp0 = Object.values(s.pets.xp).reduce((a, b) => a + (b ?? 0), 0);
+  g.useItem(p.id, 'pet_morsel');
+  check(Object.values(s.pets.xp).reduce((a, b) => a + (b ?? 0), 0) > xp0, 'a pet morsel teaches the pet that is out');
+}
+
+// ---------------------------------------------------------------- slayer
+console.log('slayer');
+{
+  const s = g.addPlayer('Slayer', { intent: new BufferedIntent() });
+  const p = s.player;
+  const vesna = g.npcs.find((n) => n.key === 'slayer_vesna')!;
+  check(!!vesna && NPCS.slayer_vesna.slayer === 1, 'Vesna, the first slayer master, stands in Thornvale');
+  const [vx, vy] = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [vesna.x + dx, vesna.y + dy]).find(([x, y]) => g.world.isWalkable(x, y, vesna.z) && !g.isOccupied(x, y, vesna.z))!;
+  p.placeAt(vx, vy, vesna.z);
+  g.commandTalk(p.id, vesna.id);
+  g.update(0.05);
+  const opts = g.dialogueView(s)?.options.map((o) => o.action) ?? [];
+  check(opts.includes('trades:task') && opts.includes('trades:rewards'), 'a slayer master offers tasks and rewards');
+  g.dialogueAction(p.id, 'trades:task');
+  const task = s.trades.slayer;
+  check(!!task && task.left > 0 && task.left === task.total, `a task is given (${task?.left} ${task?.task})`);
+  const def = TASK_BY_ID[task!.task];
+  const enemy = g.enemies.find((e) => def.kinds.includes(e.enemyKind))!;
+  const xp0 = s.gathering.slayer;
+  g.skillSys.onKill(s, enemy.enemyKind, enemy.maxHp);
+  check(s.trades.slayer!.left === task!.total - 1 && s.gathering.slayer > xp0, 'a kill on task counts down and gives slayer experience');
+  g.skillSys.onKill(s, 'demon', 6000);
+  check(s.trades.slayer!.left === task!.total - 1, 'a kill off task does not count');
+  for (let i = 0; i < 100 && s.trades.slayer; i++) g.skillSys.onKill(s, enemy.enemyKind, enemy.maxHp);
+  check(!s.trades.slayer && s.trades.points === 3 && s.trades.streak === 1, 'finishing a task gives slayer points');
+  const save = g.serialize(p.id);
+  const back = g.addPlayer('Slayer2', { intent: new BufferedIntent() });
+  g.applySave(back.player.id, save);
+  check(back.trades.points === 3 && back.trades.streak === 1, 'slayer points and the streak are saved');
+  // slayer monsters
+  const kinds = ['gloomcrawler', 'wailing_shade', 'cinder_wraith', 'marrow_gargoyle', 'abyssal_horror'];
+  for (const k of kinds) check(g.enemies.some((e) => e.enemyKind === k), `${k} lives in the world`);
+  check(g.skillSys.damageTo(s, 'gloomcrawler', 50) === 0, 'below slayer 10 a gloomcrawler takes no damage');
+  setLevel(s, 'slayer' as never, 10);
+  check(g.skillSys.damageTo(s, 'gloomcrawler', 50) === 50, 'at slayer 10 it does');
+  setLevel(s, 'slayer' as never, 40);
+  check(g.skillSys.damageTo(s, 'wailing_shade', 50) === 0, 'a wailing shade also needs a hush cowl');
+  s.inventory.equipment.head = { id: 'hush_cowl', qty: 1 };
+  check(g.skillSys.damageTo(s, 'wailing_shade', 50) === 50, 'with the hush cowl on, it can be hurt');
+  s.trades.slayer = { task: 'wolves', master: 'slayer_vesna', left: 5, total: 5 };
+  s.inventory.equipment.head = { id: 'slayer_helm', qty: 1 };
+  check(g.skillSys.damageTo(s, 'wolf', 100) === 108 && g.skillSys.damageTo(s, 'rat', 100) === 100, 'a slayer helm adds 8% against the monsters of your task only');
+  s.trades.points = 300;
+  g.dialogueAction(p.id, 'trades:rewards');
+  g.dialogueAction(p.id, 'trades:buy:helm');
+  check(s.trades.points === 50 && s.inventory.count('slayer_helm') === 1, 'slayer points buy a slayer helm');
+}
+
 // ---------------------------------------------------------------- test commands, network view
 console.log('test commands and the network');
 {
   const s = g.addPlayer('Gamemaster', { intent: new BufferedIntent() });
   s.admin = true;
   runAdminCommand(g, s, '/maxskills');
-  check(['agility', 'herblore', 'thieving'].every((k) => g.skillLevel(s, k as 'agility') === 99), '/maxskills raises the new skills to 99 too');
+  check(['agility', 'herblore', 'thieving', 'slayer', 'farming', 'hunter'].every((k) => g.skillLevel(s, k as 'agility') === 99), '/maxskills raises the new skills to 99 too');
   runAdminCommand(g, s, '/skill thieving 40');
   check(g.skillLevel(s, 'thieving') === 40, '/skill works for the new skills');
   const mirror = new Game({ simulate: false });

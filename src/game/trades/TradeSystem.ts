@@ -9,6 +9,13 @@ import { Obj } from '../world/WorldMap';
 import { OBSTACLE_KINDS, crossFailChance, RUN_STEP_FACTOR, runDrain, STAMINA_MAX, staminaRegen } from './agility';
 import { HERB_BY_ID, HERB_DEPLETE, HERB_REGROW, PICK_INTERVAL, pickChance, VIGOUR_POTION, VIGOUR_STAMINA } from './herblore';
 import { obstaclePath, tileKey, type Obstacle, type TradeLayout, type TradeTile } from './layout';
+import { COMPOST, COMPOST_BONUS, FARM_TIME, minutesLeft, parseFarm, PLANT_BY_SEED, SEED_ORDER, stage, TROWEL, type PatchState } from './farming';
+import { catchChance, maxTraps, PREY_BY_ID, preyFor, TRAP_FAIL, TRAP_LEASH, TRAP_ROLL, TRAP_TIME, trapFor } from './hunter';
+import {
+  MASTER_BY_NPC, SLAYER_HELM, SLAYER_HELM_BONUS, SLAYER_REQ, SLAYER_REWARDS, slayerXp, TASK_BY_ID, taskPoints, tasksFor,
+  type SlayerKind, type SlayerTask,
+} from './slayer';
+import { HERBS } from './herblore';
 import {
   BOX_RESTOCK, boxLoot, LOCK_TIME, lockChance, LOCKPICK, LOCKPICK_BREAK, MARK_TIERS, PICKPOCKET_TIME, pickpocketChance, rollEach, rollFirst,
   STALL_TIME, stallChance, STALLS,
@@ -23,13 +30,18 @@ import {
 
 /** Something a player is working on for a few seconds (one try, or a loop for herbs). */
 export interface TradeWork {
-  kind: 'pickpocket' | 'steal' | 'lockpick' | 'herbs';
+  kind: 'pickpocket' | 'steal' | 'lockpick' | 'herbs' | 'farm' | 'trap';
   x: number;
   y: number;
   z: number;
   timer: number;
   /** Pickpocketing: the NPC. */
   npc?: number;
+  /** Farming / hunter: what is being done and to which patch or spot. */
+  op?: 'plant' | 'compost' | 'harvest' | 'set' | 'collect' | 'reset';
+  ref?: number;
+  /** Planting: the seed. */
+  seed?: string;
 }
 
 /** An agility crossing in progress. */
@@ -44,7 +56,19 @@ export interface Crossing {
   wait: number;
 }
 
-/** Per character (Session.trades). `run`, the slayer task and farm patches are saved; the rest is not. */
+/** A hunter's trap in the world (never saved: the trap item stays in the pack the whole time). */
+export interface HuntTrap {
+  spot: number;
+  state: 'set' | 'caught' | 'broken';
+  /** Seconds to the next catch roll. */
+  roll: number;
+  prey: string | null;
+}
+
+/**
+ * Per character (Session.trades). Saved: `run`, the farm patches, the slayer task, points and streak.
+ * Not saved: stamina, crossings, work, traps. Unknown saved fields are kept as they were (`extra`).
+ */
 export interface TradeState {
   stamina: number;
   run: boolean;
@@ -52,12 +76,39 @@ export interface TradeState {
   cross: Crossing | null;
   /** Walking to the end of a shortcut to cross it. */
   goCross: { ob: number; fromA: boolean } | null;
-  /** Saved blocks of later skills, kept as they were read (slayer, farm). */
+  /** Farm patches planted (patch id → seed, wall-clock planting time, compost). */
+  farm: Record<string, PatchState>;
+  slayer: SlayerTask | null;
+  points: number;
+  /** Slayer tasks finished in a row (bonus points every 10th and 50th). */
+  streak: number;
+  traps: HuntTrap[];
+  /** Online mirror: farm patches as the server last told (id, seed index, stage 0–3, composted). */
+  netFarm: Array<[number, number, number, number]>;
+  /** Online mirror: traps as the server last told (spot, 0 set / 1 caught / 2 broken). */
+  netTraps: Array<[number, number]>;
+  /** Which page of a slayer master's dialogue is open (rewards), per NPC. */
+  page: { npc: number; page: 'rewards' } | null;
+  /** Saved fields of later updates, kept as they were read. */
   extra: Record<string, unknown>;
 }
 
 export function emptyTrades(): TradeState {
-  return { stamina: STAMINA_MAX, run: false, work: null, cross: null, goCross: null, extra: {} };
+  return {
+    stamina: STAMINA_MAX, run: false, work: null, cross: null, goCross: null, farm: {}, slayer: null, points: 0, streak: 0, traps: [],
+    netFarm: [], netTraps: [], page: null, extra: {},
+  };
+}
+
+const KNOWN_KEYS = new Set(['run', 'farm', 'slayer', 'points', 'streak']);
+
+function parseTask(raw: unknown): SlayerTask | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.task !== 'string' || !TASK_BY_ID[r.task] || typeof r.master !== 'string') return null;
+  const total = Math.max(1, Math.floor(Number(r.total) || 1));
+  const left = Math.max(0, Math.min(total, Math.floor(Number(r.left) || 0)));
+  return { task: r.task, master: r.master, left, total };
 }
 
 /** Reads a save's `trades` block (anything unreadable becomes the default; unknown fields are kept). */
@@ -66,12 +117,19 @@ export function parseTrades(raw: unknown): TradeState {
   if (!raw || typeof raw !== 'object') return t;
   const r = raw as Record<string, unknown>;
   t.run = r.run === true;
-  for (const [k, v] of Object.entries(r)) if (k !== 'run') t.extra[k] = v;
+  t.farm = parseFarm(r.farm);
+  t.slayer = parseTask(r.slayer);
+  t.points = Math.max(0, Math.floor(Number(r.points) || 0));
+  t.streak = Math.max(0, Math.floor(Number(r.streak) || 0));
+  for (const [k, v] of Object.entries(r)) if (!KNOWN_KEYS.has(k)) t.extra[k] = v;
   return t;
 }
 
 export function saveTrades(t: TradeState): Record<string, unknown> {
-  return { ...JSON.parse(JSON.stringify(t.extra)), run: t.run };
+  return {
+    ...JSON.parse(JSON.stringify(t.extra)), run: t.run, farm: JSON.parse(JSON.stringify(t.farm)),
+    slayer: t.slayer ? { ...t.slayer } : null, points: t.points, streak: t.streak,
+  };
 }
 
 /** What the own client is told (snapshot `tw`; only when changed). */
@@ -80,16 +138,29 @@ export interface TradeView {
   st: number;
   /** Running switched on. */
   rn: 0 | 1;
-}
-
-export function tradeView(t: TradeState): TradeView {
-  return { st: Math.floor(t.stamina), rn: t.run ? 1 : 0 };
+  /** Farm patches: [patch id, seed index (SEED_ORDER), stage 0–3, composted 0/1]. */
+  fp?: Array<[number, number, number, number]>;
+  /** Traps: [spot id, 0 set / 1 caught / 2 broken]. */
+  tp?: Array<[number, number]>;
+  /** Slayer: [task id or '', left, total, points, streak]. */
+  sl?: [string, number, number, number, number];
 }
 
 export function applyTradeView(t: TradeState, v: TradeView): void {
   if (typeof v.st === 'number') t.stamina = Math.max(0, Math.min(STAMINA_MAX, v.st));
   t.run = v.rn === 1;
+  if (Array.isArray(v.fp)) t.netFarm = v.fp.filter((e) => Array.isArray(e) && e.length >= 4).map((e) => [e[0], e[1], e[2], e[3]]);
+  if (Array.isArray(v.tp)) t.netTraps = v.tp.filter((e) => Array.isArray(e) && e.length >= 2).map((e) => [e[0], e[1]]);
+  if (Array.isArray(v.sl)) {
+    const [task, left, total, points, streak] = v.sl;
+    t.slayer = task && TASK_BY_ID[task] ? { task, master: '', left, total } : null;
+    t.points = points;
+    t.streak = streak;
+  }
 }
+
+/** Pet experience a pet morsel gives (before the pet's share). */
+export const PET_MORSEL_EXP = 6000;
 
 /** Objects that hold something only for a while (stalls, boxes, herbs, flotsam) → what stands there meanwhile. */
 export const TRADE_EMPTY: Partial<Record<Obj, Obj>> = {
@@ -115,7 +186,7 @@ export class TradeSystem {
     return this.layout?.obstacles[i] ?? null;
   }
 
-  private level(s: Session, id: 'agility' | 'herblore' | 'thieving'): number {
+  private level(s: Session, id: 'agility' | 'herblore' | 'thieving' | 'farming' | 'hunter' | 'slayer'): number {
     return this.game.skillLevel(s, id);
   }
 
@@ -138,6 +209,7 @@ export class TradeSystem {
     else if (t.goCross) this.updateGoCross(s);
     this.checkPendingPocket(s);
     if (t.work) this.updateWork(s, dt);
+    if (t.traps.length) this.updateTraps(s, dt);
   }
 
   // ================================================================ movement: running, crossings
@@ -289,6 +361,7 @@ export class TradeSystem {
       case 'stall': return o === Obj.TradeStall || o === Obj.TradeStallEmpty;
       case 'box': return o === Obj.StrongBox || o === Obj.StrongBoxOpen;
       case 'herb': return o === Obj.WildHerbs && !!s;
+      case 'patch': case 'hunt': return true;
       default: return null;
     }
   }
@@ -312,6 +385,8 @@ export class TradeSystem {
       case 'herb':
         if (o !== Obj.WildHerbs) return false;
         return this.startWork(s, 'herbs', x, y, z);
+      case 'patch': this.usePatch(s, tt.i); return true;
+      case 'hunt': this.useHuntSpot(s, tt.i); return true;
       default: return false;
     }
   }
@@ -377,6 +452,8 @@ export class TradeSystem {
       case 'steal': s.trades.work = null; return this.finishSteal(s, w);
       case 'lockpick': s.trades.work = null; return this.finishLock(s, w);
       case 'herbs': w.timer += PICK_INTERVAL; return this.pickHerb(s, w);
+      case 'farm': s.trades.work = null; return this.finishFarm(s, w);
+      case 'trap': s.trades.work = null; return this.finishTrap(s, w);
     }
   }
 
@@ -559,7 +636,329 @@ export class TradeSystem {
       return true;
     }
     if (d.tool === 'lockpick') { this.game.msg(s.id, 'Use a strongbox to pick its lock. You will find them in bandit camps and old ruins.', 'info'); return true; }
+    if (d.id === 'pet_morsel') {
+      if (!s.pets.active) { this.game.msg(s.id, 'Call your pet first, then give it the morsel.', 'warn'); return true; }
+      s.inventory.removeFromSlot(slot, 1);
+      this.game.petSys.onExp(s, PET_MORSEL_EXP);
+      this.game.msg(s.id, 'Your pet gobbles the morsel down happily.', 'info');
+      this.game.events.emit({ type: 'inventoryChanged', to: s.id });
+      return true;
+    }
+    if (d.tool === 'trowel' || d.id === COMPOST || PLANT_BY_SEED[d.id]) { this.game.msg(s.id, 'Use a farm patch to plant your seeds (with a trowel in your pack) or to put compost on what grows there.', 'info'); return true; }
+    if (d.tool === 'trap') { this.game.msg(s.id, d.id === 'box_trap' ? 'Use a burrow to set a box trap beside it.' : 'Use a nesting bush to set a bird snare in it.', 'info'); return true; }
     return false;
+  }
+
+  // ================================================================ farming
+
+  private patchName(kind: string): string {
+    return kind === 'herb' ? 'herb patch' : 'allotment';
+  }
+
+  /** Using a farm patch: plant, compost, check or harvest your own crop on it. */
+  private usePatch(s: Session, i: number): void {
+    const l = this.layout!;
+    const patch = l.patches[i];
+    const t = s.trades;
+    const now = this.game.now();
+    const st = t.farm[String(i)];
+    if (!st) {
+      const lvl = this.level(s, 'farming');
+      const seeds = s.inventory.slots.filter((x, k) => x && k < s.inventory.size() && PLANT_BY_SEED[x.id]?.patch === patch.kind).map((x) => PLANT_BY_SEED[x!.id]);
+      if (!seeds.length) return this.game.msg(s.id, patch.kind === 'herb' ? 'This herb patch is empty. Plant a herb seed here with a trowel.' : 'This allotment is empty. Plant vegetable seeds here with a trowel.', 'info');
+      const seed = seeds.find((d) => d.level <= lvl);
+      if (!seed) return this.game.msg(s.id, `You need farming level ${Math.min(...seeds.map((d) => d.level))} to plant those seeds.`, 'warn');
+      if (!s.inventory.has(TROWEL)) return this.game.msg(s.id, 'You need a gardening trowel to plant. Farmers and seed sellers have them.', 'warn');
+      this.startFieldWork(s, 'farm', patch.x, patch.y, patch.z, 'plant', i, seed.seed);
+      return;
+    }
+    const d = PLANT_BY_SEED[st.s]!;
+    if (stage(st, now) === 3) return this.startFieldWork(s, 'farm', patch.x, patch.y, patch.z, 'harvest', i);
+    if (!st.c && s.inventory.has(COMPOST)) return this.startFieldWork(s, 'farm', patch.x, patch.y, patch.z, 'compost', i);
+    const left = minutesLeft(st, now);
+    this.game.msg(s.id, d.patch === 'herb' ? `Your herb is growing (${d.name.toLowerCase()}). Ready in about ${left} minutes.` : `Your crop is growing (${d.name.toLowerCase()}). Ready in about ${left} minutes.`, 'info');
+  }
+
+  private startFieldWork(s: Session, kind: 'farm' | 'trap', x: number, y: number, z: number, op: TradeWork['op'], ref: number, seed?: string): void {
+    const p = s.player;
+    this.game.stopAllWork(s);
+    p.targetId = null;
+    p.faceTowards(x, y);
+    s.trades.work = { kind, x, y, z, timer: kind === 'farm' ? FARM_TIME : TRAP_TIME, op, ref, seed };
+  }
+
+  private finishFarm(s: Session, w: TradeWork): void {
+    const l = this.layout!;
+    const i = w.ref!;
+    const patch = l.patches[i];
+    const t = s.trades;
+    const key = String(i);
+    const p = s.player;
+    const now = this.game.now();
+    if (w.op === 'plant') {
+      const d = PLANT_BY_SEED[w.seed ?? ''];
+      if (!d || t.farm[key] || !s.inventory.has(d.seed)) return;
+      s.inventory.removeById(d.seed, 1);
+      t.farm[key] = { s: d.seed, t: now };
+      s.wantsSave = true;
+      this.game.events.emit({ type: 'inventoryChanged', to: s.id });
+      this.game.events.emit({ type: 'farm', id: p.id, x: patch.x, y: patch.y, z: patch.z, op: 'plant' });
+      this.game.msg(s.id, `You plant ${d.name.toLowerCase()} in the ${this.patchName(patch.kind)}. Ripe in about ${d.minutes} minutes, even while you are away.`, 'info');
+      this.game.gainSkill(s, 'farming', d.plantXp, p.id);
+      return;
+    }
+    const st = t.farm[key];
+    if (!st) return;
+    const d = PLANT_BY_SEED[st.s]!;
+    if (w.op === 'compost') {
+      if (st.c || !s.inventory.has(COMPOST)) return;
+      s.inventory.removeById(COMPOST, 1);
+      st.c = 1;
+      s.wantsSave = true;
+      this.game.events.emit({ type: 'inventoryChanged', to: s.id });
+      this.game.events.emit({ type: 'farm', id: p.id, x: patch.x, y: patch.y, z: patch.z, op: 'compost' });
+      this.game.msg(s.id, `You spread compost over your ${d.name.toLowerCase()}. The harvest will be bigger.`, 'info');
+      this.game.gainSkill(s, 'farming', Math.round(d.plantXp / 2), p.id);
+      return;
+    }
+    if (w.op === 'harvest' && stage(st, now) === 3) {
+      const n = d.yield[0] + Math.floor(Math.random() * (d.yield[1] - d.yield[0] + 1)) + (st.c ? COMPOST_BONUS : 0);
+      delete t.farm[key];
+      s.wantsSave = true;
+      const got = this.give(s, [{ id: d.produce, qty: n }]);
+      this.game.events.emit({ type: 'farm', id: p.id, x: patch.x, y: patch.y, z: patch.z, op: 'harvest' });
+      this.game.msg(s.id, `You harvest ${got.join(', ')}.`, 'loot');
+      this.game.gainSkill(s, 'farming', d.harvestXp * n, p.id);
+    }
+  }
+
+  /** Own farm patches for the view: [patch id, seed index, stage, composted]. */
+  farmView(s: Session): Array<[number, number, number, number]> {
+    if (!this.game.simulate) return s.trades.netFarm;
+    const now = this.game.now();
+    return Object.entries(s.trades.farm).map(([k, st]) => [Number(k), SEED_ORDER.indexOf(st.s), stage(st, now), st.c ? 1 : 0]);
+  }
+
+  // ================================================================ hunter
+
+  private useHuntSpot(s: Session, i: number): void {
+    const l = this.layout!;
+    const spot = l.hunts[i];
+    const t = s.trades;
+    const mine = t.traps.find((x) => x.spot === i);
+    if (mine) {
+      if (mine.state === 'caught') return this.startFieldWork(s, 'trap', spot.x, spot.y, spot.z, 'collect', i);
+      if (mine.state === 'broken') return this.startFieldWork(s, 'trap', spot.x, spot.y, spot.z, 'reset', i);
+      t.traps = t.traps.filter((x) => x !== mine);
+      this.game.events.emit({ type: 'hunt', id: s.player.id, x: spot.x, y: spot.y, z: spot.z, op: 'take' });
+      return this.game.msg(s.id, 'You take your trap back.', 'info');
+    }
+    const lvl = this.level(s, 'hunter');
+    const lowest = Math.min(...spot.prey.map((id) => PREY_BY_ID[id]?.level ?? 99));
+    if (lvl < lowest) return this.game.msg(s.id, `Nothing here would walk into a trap of yours yet. You need hunter level ${lowest}.`, 'warn');
+    const item = trapFor(spot.kind);
+    const carried = s.inventory.count(item);
+    const laid = t.traps.filter((x) => l.hunts[x.spot]?.kind === spot.kind).length;
+    if (carried <= laid) return this.game.msg(s.id, carried ? 'All your traps of that kind are set already.' : spot.kind === 'burrow' ? 'You need a box trap to set here. Huntmaster Ketta in Briarwatch sells them.' : 'You need a bird snare to set here. Huntmaster Ketta in Briarwatch sells them.', 'warn');
+    if (t.traps.length >= maxTraps(lvl)) return this.game.msg(s.id, `You can only look after ${maxTraps(lvl)} traps at your hunter level.`, 'warn');
+    this.startFieldWork(s, 'trap', spot.x, spot.y, spot.z, 'set', i);
+  }
+
+  private finishTrap(s: Session, w: TradeWork): void {
+    const l = this.layout!;
+    const i = w.ref!;
+    const spot = l.hunts[i];
+    const t = s.trades;
+    const p = s.player;
+    const mine = t.traps.find((x) => x.spot === i);
+    if (w.op === 'set') {
+      if (mine) return;
+      t.traps.push({ spot: i, state: 'set', roll: TRAP_ROLL, prey: null });
+      this.game.events.emit({ type: 'hunt', id: p.id, x: spot.x, y: spot.y, z: spot.z, op: 'set' });
+      this.game.msg(s.id, spot.kind === 'burrow' ? 'You set a box trap beside the burrow. Step back and wait.' : 'You set a snare in the nesting bush. Step back and wait.', 'info');
+      this.game.gainSkill(s, 'hunter', 2, p.id);
+      return;
+    }
+    if (!mine) return;
+    if (w.op === 'reset') {
+      mine.state = 'set';
+      mine.roll = TRAP_ROLL;
+      this.game.events.emit({ type: 'hunt', id: p.id, x: spot.x, y: spot.y, z: spot.z, op: 'set' });
+      this.game.msg(s.id, 'You set the trap again.', 'info');
+      return;
+    }
+    if (w.op === 'collect' && mine.state === 'caught') {
+      const prey = PREY_BY_ID[mine.prey ?? ''];
+      t.traps = t.traps.filter((x) => x !== mine);
+      if (!prey) return;
+      const got = this.give(s, rollEach(prey.loot));
+      this.game.events.emit({ type: 'hunt', id: p.id, x: spot.x, y: spot.y, z: spot.z, op: 'collect' });
+      this.game.msg(s.id, `You take the ${prey.name} out of the trap: ${got.join(', ') || 'nothing worth keeping'}.`, 'loot');
+      this.game.gainSkill(s, 'hunter', prey.xp, p.id);
+    }
+  }
+
+  /** Set traps may catch something every few seconds; traps you walk away from collapse. */
+  private updateTraps(s: Session, dt: number): void {
+    const l = this.layout;
+    if (!l) return;
+    const p = s.player;
+    const t = s.trades;
+    const lvl = this.level(s, 'hunter');
+    for (const tr of [...t.traps]) {
+      const spot = l.hunts[tr.spot];
+      if (!spot) { t.traps = t.traps.filter((x) => x !== tr); continue; }
+      if (spot.z !== p.z || chebyshev(spot.x, spot.y, p.x, p.y) > TRAP_LEASH) {
+        t.traps = t.traps.filter((x) => x !== tr);
+        this.game.msg(s.id, 'You leave a trap behind and it collapses. You gather it up as you go.', 'info');
+        continue;
+      }
+      if (tr.state !== 'set') continue;
+      tr.roll -= dt;
+      if (tr.roll > 0) continue;
+      tr.roll += TRAP_ROLL;
+      const prey = preyFor(spot.prey, lvl, Math.random());
+      if (!prey) continue;
+      if (Math.random() < TRAP_FAIL) {
+        tr.state = 'broken';
+        this.game.events.emit({ type: 'hunt', id: p.id, x: spot.x, y: spot.y, z: spot.z, op: 'broken' });
+        this.game.msg(s.id, 'One of your traps has been sprung empty. Set it again.', 'info');
+      } else if (Math.random() < catchChance(lvl, prey)) {
+        tr.state = 'caught';
+        tr.prey = prey.id;
+        this.game.events.emit({ type: 'hunt', id: p.id, x: spot.x, y: spot.y, z: spot.z, op: 'caught' });
+        this.game.msg(s.id, `Something is in one of your traps: ${prey.name}!`, 'loot');
+      }
+    }
+  }
+
+  /** Own traps for the view: [spot id, 0 set / 1 caught / 2 broken]. */
+  trapView(s: Session): Array<[number, number]> {
+    if (!this.game.simulate) return s.trades.netTraps;
+    return s.trades.traps.map((x) => [x.spot, x.state === 'set' ? 0 : x.state === 'caught' ? 1 : 2]);
+  }
+
+  // ================================================================ slayer
+
+  /** A monster died: everyone who hurt it and has it on their task counts it (Game.killEnemy, per damager). */
+  onKill(s: Session, kind: string, maxHp: number): void {
+    const t = s.trades;
+    const task = t.slayer ? TASK_BY_ID[t.slayer.task] : null;
+    if (!t.slayer || !task || !task.kinds.includes(kind as never) || t.slayer.left <= 0) return;
+    t.slayer.left--;
+    this.game.gainSkill(s, 'slayer', slayerXp(maxHp), s.player.id);
+    if (t.slayer.left > 0) {
+      if (t.slayer.left % 10 === 0 || t.slayer.left <= 3) this.game.msg(s.id, `Slayer task: ${t.slayer.left} ${task.name} left.`, 'quest');
+      return;
+    }
+    const m = MASTER_BY_NPC[t.slayer.master];
+    t.streak++;
+    const pts = taskPoints(m?.points ?? 3, t.streak);
+    t.points += pts;
+    t.slayer = null;
+    s.wantsSave = true;
+    this.game.msg(s.id, `Slayer task complete! You earn ${pts} slayer points (${t.points} in all, ${t.streak} tasks in a row). Any slayer master has a new task for you.`, 'quest');
+  }
+
+  /**
+   * Damage a player deals to a monster, after the slayer rules: a slayer monster takes nothing from
+   * someone below its slayer level (or, for the shades, without a hush cowl); a worn slayer helm adds
+   * a little against the monsters of your task.
+   */
+  damageTo(s: Session, kind: string, amount: number): number {
+    const req = SLAYER_REQ[kind as SlayerKind];
+    if (req) {
+      const ok = this.level(s, 'slayer') >= req.level && (!req.item || s.inventory.equipped('head') === req.item);
+      if (!ok) {
+        const now = this.game.time;
+        if ((this.warned.get(s.id) ?? -99) < now - 6) {
+          this.warned.set(s.id, now);
+          this.game.msg(s.id, req.why, 'warn');
+        }
+        return 0;
+      }
+    }
+    const t = s.trades;
+    if (amount > 0 && t.slayer && s.inventory.equipped('head') === SLAYER_HELM && TASK_BY_ID[t.slayer.task]?.kinds.includes(kind as never)) {
+      return Math.round(amount * (1 + SLAYER_HELM_BONUS));
+    }
+    return amount;
+  }
+
+  /** Last time each player was told a slayer monster shrugs their blows off (game seconds). */
+  private warned = new Map<number, number>();
+
+  private slayerOptions(s: Session, npcId: number, npcKey: string): DialogueOption[] {
+    const m = MASTER_BY_NPC[npcKey];
+    if (!m) return [];
+    const t = s.trades;
+    if (t.page?.npc === npcId && t.page.page === 'rewards') {
+      const out: DialogueOption[] = SLAYER_REWARDS.map((r) => ({
+        label: `${r.label} — ${r.cost} points`, action: `trades:buy:${r.id}`, disabled: t.points < r.cost || (r.id === 'skip' && !t.slayer),
+      }));
+      out.push({ label: 'Back.', action: 'trades:back' });
+      return out;
+    }
+    const out: DialogueOption[] = [];
+    if (t.slayer) out.push({ label: 'How is my task going?', action: 'trades:progress' });
+    else out.push({ label: 'I need a slayer task.', action: 'trades:task' });
+    out.push({ label: `Slayer rewards (${t.points} points).`, action: 'trades:rewards' });
+    return out;
+  }
+
+  private slayerAction(s: Session, args: string[]): string | null {
+    const d = s.dialogue!;
+    const m = MASTER_BY_NPC[d.npcKey];
+    if (!m) return null;
+    const t = s.trades;
+    const p = s.player;
+    const lvl = this.level(s, 'slayer');
+    switch (args[0]) {
+      case 'task': {
+        if (t.slayer) return null;
+        if (p.level < m.minLevel) return `You are not ready for my work yet. Come back at level ${m.minLevel}.`;
+        if (lvl < m.minSlayer) return `My tasks are for seasoned slayers. Come back with slayer level ${m.minSlayer}.`;
+        const living = new Set(this.game.enemies.map((e) => e.enemyKind));
+        const list = tasksFor(m, p.level, lvl, (k) => living.has(k));
+        if (!list.length) return 'I have nothing for you right now.';
+        const task = list[Math.floor(Math.random() * list.length)];
+        const n = task.count[0] + Math.floor(Math.random() * (task.count[1] - task.count[0] + 1));
+        t.slayer = { task: task.id, master: m.npc, left: n, total: n };
+        s.wantsSave = true;
+        this.game.msg(s.id, `New slayer task: slay ${n} ${task.name}.`, 'quest');
+        return `Your task: slay ${n} ${task.name}. Any slayer master will give you the next one when you are done.`;
+      }
+      case 'progress': {
+        const task = t.slayer ? TASK_BY_ID[t.slayer.task] : null;
+        return task && t.slayer ? `You still have ${t.slayer.left} of ${t.slayer.total} ${task.name} to slay.` : null;
+      }
+      case 'rewards':
+        t.page = { npc: d.npcId, page: 'rewards' };
+        return `You have ${t.points} slayer points. What will it be?`;
+      case 'back':
+        t.page = null;
+        return 'Anything else?';
+      case 'buy': {
+        const r = SLAYER_REWARDS.find((x) => x.id === args[1]);
+        if (!r || t.points < r.cost) return 'You do not have enough points for that.';
+        if (r.id === 'skip') {
+          if (!t.slayer) return null;
+          t.slayer = null;
+        } else if (r.id === 'seeds') {
+          const lvlF = this.level(s, 'farming');
+          const ok = HERBS.filter((h) => h.level <= Math.max(14, lvlF + 10));
+          const list = Array.from({ length: 6 }, () => ({ id: `${ok[Math.floor(Math.random() * ok.length)].id}_seed`, qty: 1 }));
+          this.give(s, list);
+        } else if (r.item) {
+          if (s.inventory.freeSlots() < 1 && !s.inventory.canFit(r.item, r.qty ?? 1)) return 'Make some room in your backpack first.';
+          this.give(s, [{ id: r.item, qty: r.qty ?? 1 }]);
+        }
+        t.points -= r.cost;
+        s.wantsSave = true;
+        return r.id === 'skip' ? 'Done. Ask me for a new task whenever you like.' : 'There you are. Use it well.';
+      }
+    }
+    return null;
   }
 
   // ================================================================ dialogue
@@ -574,6 +973,7 @@ export class TradeSystem {
       const tier = MARK_TIERS[n.thieve];
       out.push({ label: `(Pick their pocket — thieving ${tier.level})`, action: 'trades:pocket', disabled: this.level(s, 'thieving') < tier.level });
     }
+    if (n.slayer && s.dialogue) out.push(...this.slayerOptions(s, s.dialogue.npcId, npcKey));
     return out;
   }
 
@@ -582,10 +982,12 @@ export class TradeSystem {
     const d = s.dialogue;
     if (!d) return null;
     const n = NPCS[d.npcKey];
+    if (args[0] !== 'buy' && args[0] !== 'rewards') s.trades.page = null;
     switch (args[0]) {
       case 'advice': return n?.advice ?? null;
       case 'pocket': this.pickpocket(s, d.npcId); return null;
     }
+    if (n?.slayer) return this.slayerAction(s, args);
     return null;
   }
 
@@ -593,7 +995,14 @@ export class TradeSystem {
 
   /** The own client's view (snapshot `tw`). */
   view(s: Session): TradeView {
-    return tradeView(s.trades);
+    const t = s.trades;
+    const v: TradeView = { st: Math.floor(Math.max(0, t.stamina)), rn: t.run ? 1 : 0 };
+    const fp = this.farmView(s);
+    if (fp.length) v.fp = fp;
+    const tp = this.trapView(s);
+    if (tp.length) v.tp = tp;
+    if (t.slayer || t.points || t.streak) v.sl = [t.slayer?.task ?? '', t.slayer?.left ?? 0, t.slayer?.total ?? 0, t.points, t.streak];
+    return v;
   }
 
   /** What the player is doing, for the animations of every client (gathering/activity.ts). */
@@ -609,6 +1018,8 @@ export class TradeSystem {
         const n = this.game.npcs.find((x) => x.id === w.npc);
         return { kind: 'pickpocket', x: n?.x ?? w.x, y: n?.y ?? w.y, tool: null };
       }
+      if (w.kind === 'farm') return { kind: 'farm', x: w.x, y: w.y, tool: w.op === 'plant' ? TROWEL : null };
+      if (w.kind === 'trap') return { kind: 'trap', x: w.x, y: w.y, tool: null };
       return { kind: w.kind === 'herbs' ? 'herbs' : w.kind, x: w.x, y: w.y, tool: w.kind === 'lockpick' ? LOCKPICK : null };
     }
     return null;

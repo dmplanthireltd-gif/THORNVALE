@@ -16,6 +16,7 @@ import { TUTORIAL_LAST, tutorialStep } from './tutorial/tutorial';
 import { Climate, WEATHER_NAMES, weatherKindByName } from './world/weather';
 import { CAPE_IDS, DUNGEON_BOSS_KINDS, WORLD_BOSS_KINDS } from './inventory/capes';
 import { PET_DEFS, PET_MAX_LEVEL, petXpForLevel } from './pets/petDefs';
+import { PLANT_BY_SEED } from './trades/farming';
 
 /**
  * Test / game-master commands, typed in chat with a leading "/".
@@ -44,6 +45,7 @@ export const ADMIN_HELP = [
   '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing, fletching, crafting, cooking, firemaking, herblore, agility, thieving); also /fishing N, /mining N, /smithing N, /fletching N, /crafting N, /cooking N, /firemaking N',
   '/maxskills [N] — every fighting skill and magic to N (default 100) and every trade to 99, so all skill capes can be worn',
   '/capes — get every cape and count every boss as slain (deed capes); /pets — get all 8 pet items; /petlevel N — every pet to level N (1–10)',
+  '/grow — every crop and herb you have planted is ripe now (farming)',
   '/premium N — give yourself N days of premium for this session (0 = none; game masters only, never saved)',
   '/founder wayfarer|warden|legend|none [number] — try a founder pack\'s looks for this session (game masters only, never saved)',
 ];
@@ -366,6 +368,19 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       for (const d of PET_DEFS) missed += s.inventory.add(d.item, 1);
       invChanged();
       say(`You get ${PET_DEFS.length - missed} pet items${missed ? ` (${missed} did not fit)` : ''}. Use one to call the pet; /petlevel 10 makes them all level 10.`, 'loot');
+      return;
+    }
+    case 'grow': {
+      const now = game.now();
+      let n = 0;
+      for (const st of Object.values(s.trades.farm)) {
+        const d = PLANT_BY_SEED[st.s];
+        if (!d) continue;
+        st.t = Math.min(st.t, now - d.minutes * 60_000 - 1000);
+        n++;
+      }
+      s.wantsSave = true;
+      say(n ? `${n} patches of yours are ripe now.` : 'You have nothing planted.');
       return;
     }
     case 'petlevel': {
