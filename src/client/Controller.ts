@@ -299,6 +299,7 @@ export class NetController implements Controller {
   setHeld(dx: number, dy: number): void {
     if (dx === this.held.dx && dy === this.held.dy) return;
     this.held = { dx, dy };
+    this.game.setPredictDir(dx, dy);
     this.raw({ t: 'intent', dx, dy });
   }
 

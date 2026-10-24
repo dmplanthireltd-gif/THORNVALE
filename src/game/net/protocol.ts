@@ -201,6 +201,10 @@ export type ServerMessage =
   | { t: 'ev'; e: GameEvent }
   | { t: 'error'; text: string };
 
+/** Seconds a predicted local step waits for the server before snapping back to the server's tile. */
+export const PREDICT_GRACE = 1;
+/** After this many seconds, a snapshot showing the player standing still on the old tile means the server refused the step. */
+export const PREDICT_REJECT = 0.15;
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
 // ------------------------------------------------------------------ server side
@@ -491,6 +495,20 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     }
     if (!cr && c.k === 'e' && c.ek && c.ek in ENEMIES) cr = game.addMirrorEnemy(c.id, c.ek as EnemyKind, c.x, c.y, c.z);
     if (!cr) continue;
+    // the local player's predicted step (Game.predictLocalStep): keep it while the server catches up
+    const pred = c.id === game.localId ? game.predicted : null;
+    if (pred) {
+      if (c.z === pred.z && c.x === pred.x && c.y === pred.y) {
+        game.predicted = null;
+        if (cr.moving && c.md) cr.moveDur = c.md;
+      } else if (c.z === pred.z && c.x === pred.fx && c.y === pred.fy && pred.age < PREDICT_GRACE && !(c.mt >= 1 && pred.age > PREDICT_REJECT)) {
+        // this snapshot left the server before it took the step: ignore its position and facing
+        cr.hp = c.hp;
+        cr.maxHp = c.mhp;
+        cr.dead = c.d === 1;
+        continue;
+      } else game.predicted = null;
+    }
     const floorChanged = cr.z !== c.z;
     if (cr.x !== c.x || cr.y !== c.y || floorChanged) {
       cr.fromX = floorChanged ? c.x : c.fx;

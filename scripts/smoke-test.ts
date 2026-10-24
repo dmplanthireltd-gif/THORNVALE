@@ -2094,14 +2094,92 @@ console.log("Tutorial: Wayfarer's Isle (save v11)");
 console.log('Walking speed grows with level');
 {
   const { g, s } = solo('knight');
-  const t1 = s.player.baseStep;
-  s.player.level = 100;
+  const at = (lvl: number) => { s.player.level = lvl; g.refreshStats(s); return s.player.baseStep; };
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.006;
+  const t1 = at(1), t20 = at(20), t50 = at(50), t100 = at(100), t200 = at(200), t300 = at(300), t500 = at(500);
+  check(near(t1, 0.4) && near(t50, 0.33) && near(t100, 0.3) && near(t200, 0.27) && near(t300, 0.25) && t500 === 0.25,
+    `seconds per tile: level 1 ${t1.toFixed(3)}, 20 ${t20.toFixed(3)}, 50 ${t50.toFixed(3)}, 100 ${t100.toFixed(3)}, 200 ${t200.toFixed(3)}, 300 ${t300.toFixed(3)}, 500 ${t500.toFixed(3)} (Tibia-like pace, never under 0.25)`);
+  check(t1 > t20 && t20 > t50 && t50 > t100 && t100 > t200 && t200 > t300, 'every level band walks a little faster than the one before');
+  at(1);
+  s.player.buffs.haste = 10;
   g.refreshStats(s);
-  const t100 = s.player.baseStep;
-  s.player.level = 500;
-  g.refreshStats(s);
-  const t500 = s.player.baseStep;
-  check(t1 > 0.5 && t100 < 0.4 && t100 > 0.35 && t500 >= 0.25, `level 1 takes ${t1.toFixed(2)} s per tile, level 100 ${t100.toFixed(2)} s, level 500 ${t500.toFixed(2)} s (never under 0.25)`);
+  check(s.player.stepTime < s.player.baseStep * 0.8, 'haste still speeds up a level 1 character');
+}
+
+console.log('Holding a walk key glides tile to tile');
+{
+  // straight open strip on the surface, away from towns
+  const findStrip = (g: Game, pid: number, len: number) => {
+    const w = g.world;
+    for (let y = 20; y < w.height - 20; y++) for (let x = 20; x < w.width - len - 20; x++) {
+      let ok = !w.isSafe(x, y, 0);
+      for (let i = 0; i <= len && ok; i++) if (!w.isWalkable(x + i, y, 0) || w.linkAt(x + i, y, 0) || g.isOccupied(x + i, y, 0, pid, true) || (i > 0 && !w.canStep(x + i - 1, y, 0, 1, 0))) ok = false;
+      if (ok) return { x, y };
+    }
+    return null;
+  };
+  // offline: the simulation chains steps, so 10 s of holding → seconds / step tiles, no gaps
+  {
+    const { g, s, intent } = solo('knight');
+    const at = findStrip(g, s.id, 45)!;
+    g.teleport(s.player, at.x, at.y, 0);
+    s.player.buffs.haste = 0; g.refreshStats(s);
+    intent.dir = { dx: 1, dy: 0 };
+    let still = 0;
+    let last = s.player.visualPos().x;
+    for (let t = 0; t < 10; t += 1 / 60) {
+      g.update(1 / 60);
+      const v = s.player.visualPos().x;
+      if (t > 0.1 && v === last) still++;
+      last = v;
+    }
+    const tiles = s.player.x - at.x;
+    check(Math.abs(tiles - 10 / s.player.stepTime) <= 1 && still === 0, `offline: ${tiles} tiles in 10 s at ${s.player.stepTime.toFixed(3)} s/tile, ${still} frames standing still`);
+  }
+  // online: the mirror predicts the next step instead of waiting for the server's snapshot
+  {
+    const srv = new Game();
+    const intent = new BufferedIntent();
+    const a = srv.addPlayer('Glider', { intent, vocation: 'knight' });
+    const at = findStrip(srv, a.id, 45)!;
+    srv.teleport(a.player, at.x, at.y, 0);
+    const mirror = new Game({ simulate: false });
+    mirror.localId = a.id;
+    type Snap = Extract<ReturnType<typeof buildSnapshot>, { t: 'snap' }>;
+    const inFlight: { at: number; m: Snap }[] = [];
+    const run = (secs: number, t0: number, onFrame?: (t: number) => void) => {
+      let tS = t0, t = t0, still = 0, back = 0;
+      let last = mirror.getPlayer(a.id)?.visualPos().x ?? at.x;
+      for (; t < t0 + secs; t += 1 / 60) {
+        while (tS + 0.05 <= t) {
+          srv.update(0.05); tS += 0.05;
+          // 70 ms latency with ±25 ms jitter, in order
+          const arr = Math.max(inFlight.length ? inFlight[inFlight.length - 1].at : 0, tS + 0.07 + (Math.random() * 2 - 1) * 0.025);
+          inFlight.push({ at: arr, m: JSON.parse(JSON.stringify(buildSnapshot(srv, a))) as Snap });
+        }
+        while (inFlight.length && inFlight[0].at <= t) applySnapshot(mirror, inFlight.shift()!.m);
+        mirror.update(1 / 60);
+        onFrame?.(t);
+        const mp = mirror.getPlayer(a.id);
+        if (mp) {
+          const v = mp.visualPos().x;
+          if (t > t0 + 1 && v === last && intent.dir.dx) still++;
+          if (v < last - 1e-9) back++;
+          last = v;
+        }
+      }
+      return { t, still, back };
+    };
+    intent.dir = { dx: 1, dy: 0 };
+    mirror.setPredictDir(1, 0);
+    const r = run(8, 0);
+    check(r.still === 0 && r.back === 0, `online: the mirror never stops between tiles while the key is held (${r.still} still frames, ${r.back} backward)`);
+    // the server refuses a step the client predicted (rooted on the server only): the mirror snaps back to the server's tile
+    srv.session(a.id)!.player.buffs.rooted = 30;
+    run(2, r.t);
+    const mp = mirror.getPlayer(a.id)!;
+    check(mp.x === a.player.x && mp.y === a.player.y && mirror.predicted === null, `a refused predicted step snaps back to the server's tile (mirror ${mp.x},${mp.y} server ${a.player.x},${a.player.y})`);
+  }
 }
 
 console.log('Fletching, crafting, cooking and firemaking');

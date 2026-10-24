@@ -134,7 +134,7 @@ export class Player extends Creature {
   /** Production in progress at a station (furnace, anvil): recipe, how many are left, seconds to the next. Not saved. */
   craft: { recipe: string; left: number; timer: number; x: number; y: number; z: number; stepping?: boolean } | null = null;
   // derived from vocation, level and gear (refreshed by the game)
-  baseStep = 0.545;
+  baseStep = 0.4;
   hpRegen = 0;
   manaRegen = 0;
 

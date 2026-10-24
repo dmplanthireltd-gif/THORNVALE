@@ -66,6 +66,25 @@ export interface MoveIntent {
   takeQueued(): { dx: number; dy: number } | null;
 }
 
+/** Seconds per tile at a level, before speed bonuses: straight lines between these [level, seconds] points, flat after the last. */
+/** Online mirror: a new walk direction is predicted only once it has been held this long (seconds). */
+const PREDICT_TURN_WAIT = 0.3;
+
+export const WALK_CURVE: ReadonlyArray<readonly [number, number]> = [[1, 0.4], [50, 0.33], [100, 0.3], [200, 0.27], [300, 0.25]];
+
+export function walkStepForLevel(level: number): number {
+  const c = WALK_CURVE;
+  if (level <= c[0][0]) return c[0][1];
+  for (let i = 1; i < c.length; i++) {
+    const [l1, s1] = c[i];
+    if (level <= l1) {
+      const [l0, s0] = c[i - 1];
+      return s0 + (s1 - s0) * (level - l0) / (l1 - l0);
+    }
+  }
+  return c[c.length - 1][1];
+}
+
 /** Intent fed from data (network or tests). */
 export class BufferedIntent implements MoveIntent {
   dir = { dx: 0, dy: 0 };
@@ -379,6 +398,12 @@ export class Game implements AIContext {
   private marketTimer = 0;
   time = 0;
   localId: number | null = null;
+  /** Online mirror: the direction the local player holds down (client-side step prediction, see predictLocalStep). */
+  predictDir: { dx: number; dy: number } = { dx: 0, dy: 0 };
+  /** Seconds since predictDir last changed. */
+  predictDirAge = 0;
+  /** Online mirror: the local player's predicted step the server has not confirmed yet (age in seconds). */
+  predicted: { fx: number; fy: number; x: number; y: number; z: number; age: number } | null = null;
   readonly parties: Party[] = [];
   /** Online mirror: the local player's party as last sent by the server. */
   netParty: PartyView | null = null;
@@ -527,10 +552,9 @@ export class Game implements AIContext {
     p.maxHp = voc.baseHp + (p.level - 1) * voc.hpPerLevel + hp;
     p.maxMana = voc.baseMana + (p.level - 1) * voc.manaPerLevel + mana;
     p.capacity = voc.baseCap + (p.level - 1) * voc.capPerLevel;
-    // classic speed curve: speed 220 at level 1, +2 per level; a tile takes 120/speed seconds
-    // (level 1 ≈ 0.55 s, level 20 ≈ 0.46 s, level 100 ≈ 0.29 s, level 500 ≈ 0.10 s)
-    // speed 220 + (level − 1); never faster than 4 tiles a second before haste (owner: high levels walked too fast)
-    p.baseStep = Math.min(0.6, Math.max(0.25, 120 / (220 + (p.level - 1))));
+    // walking speed (owner 2026-10-24: Tibia-like tile-by-tile pace, low levels were too slow):
+    // seconds per tile from WALK_CURVE (level 1 0.40, 50 0.33, 100 0.30, 200 0.27, 300+ 0.25); boots, haste, rings divide it
+    p.baseStep = walkStepForLevel(p.level);
     p.stepTime = p.baseStep * 100 / (100 + speed);
     // caught in a web (dread weavers): every step takes longer until it tears loose
     if (p.webbed > 0) p.stepTime *= WEB_SLOW;
@@ -801,6 +825,39 @@ export class Game implements AIContext {
     return dt - remain;
   }
 
+  /**
+   * Online mirror only: while a walk key is held, the local player starts its next step the moment
+   * the last one ends, instead of standing still until the server's snapshot with the next tile
+   * arrives (that wait, 0–50 ms + network jitter, made every tile stutter). Only one unconfirmed
+   * step at a time; applySnapshot confirms it or snaps back. Never onto stairs, holes or ladders.
+   */
+  private predictLocalStep(p: Player, left: number, lastDx: number, lastDy: number): void {
+    const { dx, dy } = this.predictDir;
+    if ((!dx && !dy) || this.predicted || p.dead || p.buffs.rooted > 0 || p.webbed > 0) return;
+    // a fresh turn may not have reached the server before it chose this step: let the server lead
+    if ((dx !== lastDx || dy !== lastDy) && this.predictDirAge < PREDICT_TURN_WAIT) return;
+    if (this.world.linkAt(p.x, p.y, p.z)) return;
+    const ok = (sx: number, sy: number) => (sx || sy) && this.world.canStep(p.x, p.y, p.z, sx, sy)
+      && !this.isOccupied(p.x + sx, p.y + sy, p.z, p.id, true) && !this.world.linkAt(p.x + sx, p.y + sy, p.z);
+    let sx = dx, sy = dy;
+    if (!ok(sx, sy)) {
+      if (dx && dy && ok(dx, 0)) sy = 0;
+      else if (dx && dy && ok(0, dy)) sx = 0;
+      else return;
+    }
+    this.predicted = { fx: p.x, fy: p.y, x: p.x + sx, y: p.y + sy, z: p.z, age: 0 };
+    p.beginStep(sx, sy);
+    p.moveDur *= snowStepFactor(this.world, this.weather.at(p.x, p.y), p.x, p.y, p.z);
+    this.advanceStep(p, left);
+  }
+
+  /** Online mirror: the held walk direction changed (NetController.setHeld). */
+  setPredictDir(dx: number, dy: number): void {
+    if (dx === this.predictDir.dx && dy === this.predictDir.dy) return;
+    this.predictDir = { dx, dy };
+    this.predictDirAge = 0;
+  }
+
   /** Instantly moves a player to another tile (stairs, ladders, ships). */
   teleport(p: Player, x: number, y: number, z: number): void {
     const t = this.freeTileNear(x, y, z);
@@ -823,7 +880,13 @@ export class Game implements AIContext {
   update(dt: number): void {
     this.time += dt;
     if (!this.simulate) {
-      for (const c of this.creatures()) this.advanceStep(c, dt);
+      if (this.predicted) this.predicted.age += dt;
+      this.predictDirAge += dt;
+      for (const c of this.creatures()) {
+        const was = c.moving, sdx = c.x - c.fromX, sdy = c.y - c.fromY;
+        const left = this.advanceStep(c, dt);
+        if (was && !c.moving && c.id === this.localId && c instanceof Player) this.predictLocalStep(c, left, sdx, sdy);
+      }
       for (const e of this.enemies) if (e.dead) e.corpseTimer -= dt;
       return;
     }
