@@ -18,7 +18,7 @@ import { Effects, type FieldKind } from './Effects';
 import { applyGear } from './models/humanoid';
 import { buildPlayerRig } from './models/playerModel';
 import { mat, toonGradient } from './models/parts';
-import { mergeRig } from './models/rigMerge';
+import { mergeRig, skinRig } from './models/rigMerge';
 import { detailAtlas, paintRig } from './models/grimDetail';
 import { GRIM_NPCS } from './models/grimNpcs';
 import { CAMERA_TILT_DEG, CameraController } from './CameraController';
@@ -486,7 +486,8 @@ export class Renderer {
       const rig = this.buildRig(c);
       // fewer draw calls per character, same look (models/rigMerge.ts)
       mergeRig(rig);
-      if (PAINTED) markOutlineTree(rig.root);
+      // painted style: the whole character as one skinned mesh per look (models/rigMerge.ts skinRig)
+      if (PAINTED) { skinRig(rig); markOutlineTree(rig.root); }
       v = new CreatureView(c, rig, this.scene);
       this.views.set(c.id, v);
     }

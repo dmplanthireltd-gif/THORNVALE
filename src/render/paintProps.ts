@@ -116,6 +116,48 @@ function pineLayer(r: number, h: number, seed: number): THREE.BufferGeometry {
   return g;
 }
 
+/**
+ * Joins the pieces of one tree crown into a single geometry (fewer draw calls: a pine's
+ * three layers or an oak's two lumps drawn as one instance instead of one per batch).
+ * Each piece = [geometry, its placement relative to the tree's base, brightness]; the
+ * brightness becomes a vertex colour (the material multiplies it with the instance colour,
+ * as the separate batches did with their brighter instance colours). Uvs stay each
+ * piece's own, so the leaf texture lands exactly as before.
+ */
+export function joinCrown(parts: Array<[THREE.BufferGeometry, THREE.Matrix4, number]>): THREE.BufferGeometry {
+  const placed = parts.map(([g, m]) => g.clone().applyMatrix4(m));
+  let nv = 0, ni = 0;
+  for (const g of placed) { nv += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; }
+  const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), col = new Float32Array(nv * 3);
+  const idx = new Uint32Array(ni);
+  let ov = 0, oi = 0;
+  placed.forEach((g, k) => {
+    const n = g.attributes.position.count;
+    pos.set(g.attributes.position.array as Float32Array, ov * 3);
+    nrm.set(g.attributes.normal.array as Float32Array, ov * 3);
+    if (g.attributes.uv) uv.set(g.attributes.uv.array as Float32Array, ov * 2);
+    col.fill(parts[k][2], ov * 3, (ov + n) * 3);
+    if (g.index) for (let i = 0; i < g.index.count; i++) idx[oi++] = g.index.getX(i) + ov;
+    else for (let i = 0; i < n; i++) idx[oi++] = ov + i;
+    ov += n;
+    g.dispose();
+  });
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  out.computeBoundingSphere();
+  return out;
+}
+
+/** Adds a white vertex colour to a geometry drawn with a vertex-coloured material. */
+export function withWhite<T extends THREE.BufferGeometry>(g: T): T {
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3));
+  return g;
+}
+
 export const paintedProps = {
   /** Broad-leaf crown, low part (classic: icosahedron r 0.72). */
   canopyLow: () => cluster(0.5, [[0, 0, 0, 1.15], [0.55, -0.1, 0.25, 0.8], [-0.5, -0.05, 0.3, 0.78], [0.1, 0.05, -0.55, 0.82], [-0.25, 0.45, -0.1, 0.7]], 1, 0.16, 1.3),

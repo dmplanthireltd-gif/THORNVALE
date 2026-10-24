@@ -619,6 +619,7 @@ select.text-input { flex: 1; }
 
 .settings-win { width: min(380px, calc(100vw - 24px)); }
 .set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; }
+.set-row .set-note { font-size: 11px; color: var(--gold, #c9a24a); }
 .set-row .vol-slider { flex: 1; min-width: 120px; width: auto; }
 .settings-win { width: min(440px, calc(100vw - 24px)); }
 /* sound mix: name · percent · slider, one row per kind of sound */

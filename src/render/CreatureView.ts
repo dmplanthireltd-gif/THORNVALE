@@ -335,6 +335,8 @@ export class CreatureView {
     this.rig.root.traverse((o) => {
       const me = o as THREE.Mesh;
       if (!me.isMesh) return;
+      // skinned characters (rigMerge.ts skinRig) own a bone texture
+      if ((me as THREE.SkinnedMesh).isSkinnedMesh) (me as THREE.SkinnedMesh).skeleton.dispose();
       if (!me.geometry.userData.shared) me.geometry.dispose(); // dark models share geometry between instances
       if (me.userData.sharedMaterial) return;
       const mm = me.material;

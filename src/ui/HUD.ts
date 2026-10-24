@@ -23,6 +23,7 @@ import { hpColor } from '../render/Overlay';
 import { makeBottomResizable, makePanelsMovable, resetPanelLayout } from './panels';
 import type { Renderer } from '../render/Renderer';
 import { GRAPHICS_NAMES } from '../render/graphics';
+import { RENDER_STYLE, storedStyle, storeStyle, type RenderStyle } from '../render/style';
 import { button, el, fmtGold, paintSlot } from './dom';
 import { itemIcon, spellIcon } from './icons';
 import { SFX_CATS, type Sfx } from '../audio/Sfx';
@@ -469,6 +470,22 @@ export class HUD {
       gb.textContent = gLabel(next);
     }, 'btn');
     gb.title = t('Graphics: High (the full look), Medium (softer shadows, small props cast none) or Low (no shadows, no grass tufts, half the weather, a little less zoom-out) — for slower computers');
+    // look: Painted (default) / Classic (render/style.ts) — saved in this browser, used from the next load
+    const styleName: Record<RenderStyle, string> = { painted: k('Painted'), classic: k('Classic') };
+    let lookPick = storedStyle();
+    const lookLabel = () => t('Look: {style}', { style: t(styleName[lookPick]) });
+    const lookNote = el('span', 'set-note', disp);
+    const showLookNote = () => { lookNote.textContent = lookPick !== RENDER_STYLE ? t('Takes effect after reload') : ''; };
+    const lb2 = button(disp, lookLabel(), () => {
+      lookPick = lookPick === 'painted' ? 'classic' : 'painted';
+      storeStyle(lookPick);
+      lb2.textContent = lookLabel();
+      showLookNote();
+    }, 'btn');
+    lb2.title = t('Look of the world: Painted (hand-painted, the default) or Classic (the pixel look). Takes effect after reload');
+    disp.insertBefore(lb2, lookNote);
+    showLookNote();
+    this.relabelers.push(() => { lb2.textContent = lookLabel(); lb2.title = t('Look of the world: Painted (hand-painted, the default) or Classic (the pixel look). Takes effect after reload'); showLookNote(); });
     this.relabelers.push(() => { wb.textContent = wLabel(this.renderer.weatherQuality); gb.textContent = gLabel(this.renderer.graphics); this.pixelBtn.textContent = t(this.renderer.cam.pixelMode ? 'Pixels: on' : 'Pixels: off'); });
     const slider = (parent: HTMLElement, value: number, title: string, set: (v: number) => void, max = 100) => {
       const s = el('input', 'vol-slider', parent);

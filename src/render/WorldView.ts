@@ -22,7 +22,7 @@ const _corners: Array<{ x: number; y: number; rot: number }> = [];
 function openSides(open: (x: number, y: number) => boolean, x: number, y: number): number {
   return (open(x, y - 1) ? SIDE_N : 0) | (open(x + 1, y) ? SIDE_E : 0) | (open(x, y + 1) ? SIDE_S : 0) | (open(x - 1, y) ? SIDE_W : 0);
 }
-import { paintedProps } from './paintProps';
+import { joinCrown, paintedProps, withWhite } from './paintProps';
 import { PaintMesher } from './paint/paintMesh';
 import { PaintBuildings, paintedRoof } from './paint/buildings';
 import { PaintProps } from './paint/props';
@@ -311,6 +311,16 @@ function paintedWheat(): THREE.BufferGeometry {
   return joinGeometries([stalk, ear, beard, leaf1, leaf2]);
 }
 
+/** A box without its bottom face (BoxGeometry face order: +x, −x, +y, −y, +z, −z). */
+function noBottom(g: THREE.BoxGeometry): THREE.BufferGeometry {
+  const ix = g.index!;
+  const keep: number[] = [];
+  for (let i = 0; i < ix.count; i++) if (i < 18 || i >= 24) keep.push(ix.getX(i));
+  g.setIndex(keep);
+  g.clearGroups();
+  return g;
+}
+
 function geo<T extends THREE.BufferGeometry>(g: T, ty = 0): T {
   if (ty) g.translate(0, ty, 0);
   return g;
@@ -403,6 +413,9 @@ export class WorldView {
     const w = this.world;
     const z = fv.z;
     const tileGeo = new THREE.BoxGeometry(1, 0.3, 1);
+    // painted style: the painted ground's tiles leave out the bottom face (never seen from the
+    // camera above; one sixth fewer ground triangles)
+    const paintTileGeo = PAINTED ? noBottom(new THREE.BoxGeometry(1, 0.3, 1)) : tileGeo;
     const batches = new Map<string, Batch>();
     const matFor = new Map<string, Mat>();
     // one batch per ground kind: its three texture variants sit side by side in one atlas (one draw call per chunk, not three)
@@ -414,7 +427,7 @@ export class WorldView {
           const pm = fv.m(0xffffff);
           usePaintedGround(pm, paintedGroundData(w, z), w, z < 0 ? 0.5 : 0.45);
           fv.paintMat = pm;
-          painted = new Batch(tileGeo, pm, false);
+          painted = new Batch(paintTileGeo, pm, false);
           batches.set('painted', painted);
         }
         return painted;
@@ -578,7 +591,19 @@ export class WorldView {
     const pine3 = B(PAINTED ? paintedProps.pine(0.36, 0.85, 3) : new THREE.ConeGeometry(0.36, 0.85, 7), leafMat);
     const jungle1 = B(PAINTED ? paintedProps.jungle() : new THREE.IcosahedronGeometry(0.85, 0), leafMat);
     const palmTrunk = B(geo(new THREE.CylinderGeometry(0.07, 0.12, 2.2, 5), 1.1), palmMat);
-    const frond = B(geo(new THREE.BoxGeometry(0.22, 0.05, 1.0), 0), leafMat);
+    const frond = B(PAINTED ? withWhite(new THREE.BoxGeometry(0.22, 0.05, 1.0)) : geo(new THREE.BoxGeometry(0.22, 0.05, 1.0), 0), leafMat);
+    // painted style: each tree's crown is ONE geometry placed at the tree's base (an oak's two
+    // lumps, a pine's three layers, a jungle crown + top): one draw call per chunk instead of 2–3,
+    // same shapes, sizes, colours and wind (the tier brightness is a vertex colour)
+    let oakCrown: Batch | null = null, pineCrown: Batch | null = null, jungleCrown: Batch | null = null;
+    if (PAINTED) {
+      leafMat.vertexColors = true;
+      const at = (x: number, y: number, z: number, sx = 1, sy = 1, sz = 1) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(sx, sy, sz));
+      const low = canopyLow.geo, high = canopyHigh.geo;
+      oakCrown = B(joinCrown([[low, at(0, 1.55, 0, 1, 0.9, 1), 1], [high, at(0.12, 2.1, -0.08), 1.12]]), leafMat);
+      pineCrown = B(joinCrown([[pine1.geo, at(0, 1.15, 0), 1], [pine2.geo, at(0, 1.8, 0), 1.08], [pine3.geo, at(0, 2.4, 0), 1.16]]), leafMat);
+      jungleCrown = B(joinCrown([[jungle1.geo, at(0, 2.0, 0, 1.1, 0.75, 1.1), 1], [high, at(-0.2, 2.5, 0.1, 1.2, 0.9, 1.2), 1.15]]), leafMat);
+    }
     const deadBranch = B(new THREE.CylinderGeometry(0.04, 0.07, 0.8, 5), M(0x5a5048), true, 'small');
     const rocks = B(PAINTED ? paintedProps.rock() : new THREE.DodecahedronGeometry(0.42, 0), M(0xffffff, objTex.rock()));
     const bushes = B(PAINTED ? paintedProps.bush() : new THREE.IcosahedronGeometry(0.42, 0), bushMat);
@@ -672,6 +697,7 @@ export class WorldView {
             const s = 0.9 + h * 0.35;
             treeTrunks.add(compose(x, 0, y, rot, s, s, s), 0xffffff, ti);
             c.setHex(leafColors[Math.floor(hash2(x, y, 9) * 4)]);
+            if (oakCrown) { oakCrown.add(compose(x, 0, y, rot, s, s, s), c, ti); break; }
             canopyLow.add(compose(x, 1.55 * s, y, rot, s, s * 0.9, s), c, ti);
             canopyHigh.add(compose(x + 0.12, 2.1 * s, y - 0.08, rot, s, s, s), c.clone().multiplyScalar(1.12), ti);
             break;
@@ -680,6 +706,7 @@ export class WorldView {
             const s = 0.85 + h * 0.4;
             treeTrunks.add(compose(x, 0, y, rot, s * 0.8, s * 0.8, s * 0.8), 0xffffff, ti);
             c.setHex(pineColors[Math.floor(hash2(x, y, 9) * 4)]);
+            if (pineCrown) { pineCrown.add(compose(x, 0, y, rot, s, s, s), c, ti); break; }
             pine1.add(compose(x, 1.15 * s, y, rot, s, s, s), c, ti);
             pine2.add(compose(x, 1.8 * s, y, rot, s, s, s), c.clone().multiplyScalar(1.08), ti);
             pine3.add(compose(x, 2.4 * s, y, rot, s, s, s), c.clone().multiplyScalar(1.16), ti);
@@ -688,6 +715,7 @@ export class WorldView {
           case Obj.JungleTree: {
             const s = 1.0 + h * 0.4;
             treeTrunks.add(compose(x, 0, y, rot, s * 1.2, s * 1.3, s * 1.2), 0xffffff, ti);
+            if (jungleCrown) { jungleCrown.add(compose(x, 0, y, rot, s, s, s), c.setHex(0x2f6a26).multiplyScalar(0.9 + h * 0.3), ti); break; }
             jungle1.add(compose(x, 2.0 * s, y, rot, s * 1.1, s * 0.75, s * 1.1), c.setHex(0x2f6a26).multiplyScalar(0.9 + h * 0.3), ti);
             canopyHigh.add(compose(x - 0.2, 2.5 * s, y + 0.1, rot, s * 1.2, s * 0.9, s * 1.2), c.clone().multiplyScalar(1.15), ti);
             break;
@@ -954,7 +982,7 @@ export class WorldView {
       b.build(fv.group, L);
       if (L.meshes.length) fv.trunkLayers.push(L);
     }
-    const fadeBatches: Array<[Batch, number]> = [[canopyLow, 0x4a8a38], [canopyHigh, 0x4a8a38], [pine1, 0x2f5e34], [pine2, 0x2f5e34], [pine3, 0x2f5e34], [jungle1, 0x2f6a26], [frond, 0x4a9a3a], [cliffs, 0x6a6058], ...[...paintCliffs, ...cliffFillets].map((b) => [b, 0x6a6058] as [Batch, number])];
+    const fadeBatches: Array<[Batch, number]> = [[canopyLow, 0x4a8a38], [canopyHigh, 0x4a8a38], [pine1, 0x2f5e34], [pine2, 0x2f5e34], [pine3, 0x2f5e34], [jungle1, 0x2f6a26], ...(oakCrown && pineCrown && jungleCrown ? [[oakCrown, 0x4a8a38], [pineCrown, 0x2f5e34], [jungleCrown, 0x2f6a26]] as Array<[Batch, number]> : []), [frond, 0x4a9a3a], [cliffs, 0x6a6058], ...[...paintCliffs, ...cliffFillets].map((b) => [b, 0x6a6058] as [Batch, number])];
     for (const [b, proxyColor] of fadeBatches) {
       const proxyMat = new THREE.MeshToonMaterial({ color: proxyColor, gradientMap: toonGradient(), transparent: true, opacity: 0.25, depthWrite: false });
       const L: FadeLayer = { ...newLayer(), proxyMat };

@@ -435,29 +435,23 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   animTex.push({ t: sTex, vx: 0, vy: 0.9 });
   const fallMat = new THREE.MeshBasicMaterial({ color: pz.style === 5 ? 0x9ac0bc : 0xdcefff, map: sTex, transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide });
 
+  // every basin, curtain and stream of a plaza shares one material: they are baked into one
+  // mesh per material at the end (fewer draw calls, same look; performance rules BIBLE §6)
+  const waterParts: THREE.BufferGeometry[] = [];
+  const fallParts: THREE.BufferGeometry[] = [];
   const water = (geo: THREE.BufferGeometry, x: number, y: number, z: number, sx = 1, sz = 1) => {
-    const me = new THREE.Mesh(geo, waterMat);
-    me.position.set(x, y, z);
-    me.scale.set(sx, 1, sz);
-    me.receiveShadow = true;
-    group.add(me);
+    waterParts.push(geo.applyMatrix4(new THREE.Matrix4().makeScale(sx, 1, sz).setPosition(x, y, z)));
   };
   const disc = (r: number, x: number, y: number, z: number, seg = 20, sx = 1, sz = 1) => water(new THREE.CircleGeometry(r, seg).rotateX(-Math.PI / 2), x, y, z, sx, sz);
   /** A ring of falling water from one bowl rim down to the level below. */
   const curtain = (r: number, top: number, bottom: number, x: number, z: number, seg = 16, r2 = r) => {
-    const g = new THREE.CylinderGeometry(r, r2, top - bottom, seg, 1, true);
-    const me = new THREE.Mesh(g, fallMat);
-    me.position.set(x, (top + bottom) / 2, z);
-    me.renderOrder = 2;
-    group.add(me);
+    fallParts.push(new THREE.CylinderGeometry(r, r2, top - bottom, seg, 1, true).translate(x, (top + bottom) / 2, z));
   };
   /** An arcing jet of water from a to b, peaking `lift` above the higher end. */
   const stream = (a: V3, b: V3, lift: number, radius = 0.045) => {
     const mid = new THREE.Vector3((a[0] + b[0]) / 2, Math.max(a[1], b[1]) + lift, (a[2] + b[2]) / 2);
     const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(...a), mid, new THREE.Vector3(...b));
-    const me = new THREE.Mesh(new THREE.TubeGeometry(curve, 10, radius, 5), fallMat);
-    me.renderOrder = 2;
-    group.add(me);
+    fallParts.push(new THREE.TubeGeometry(curve, 10, radius, 5));
   };
 
   const emitters: Emitter[] = [];
@@ -1337,9 +1331,18 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   if (fumes) group.add(fumes.mesh);
   // shafts of holy light over the spawn point
   const beamMat = new THREE.MeshBasicMaterial({ color: 0xffe6a0, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
-  for (const b of beams) {
-    const me = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 4.5, 16, 1, true), beamMat);
-    me.position.set(b.x, 2.25, b.z);
+  if (waterParts.length) {
+    const me = new THREE.Mesh(joinParts(waterParts), waterMat);
+    me.receiveShadow = true;
+    group.add(me);
+  }
+  if (fallParts.length) {
+    const me = new THREE.Mesh(joinParts(fallParts), fallMat);
+    me.renderOrder = 2;
+    group.add(me);
+  }
+  if (beams.length) {
+    const me = new THREE.Mesh(joinParts(beams.map((b) => new THREE.CylinderGeometry(0.42, 0.5, 4.5, 16, 1, true).translate(b.x, 2.25, b.z))), beamMat);
     me.renderOrder = 3;
     group.add(me);
   }
@@ -1384,4 +1387,30 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
       }
     },
   };
+}
+
+/** Joins already-placed indexed geometries (position, normal, uv) into one. */
+function joinParts(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  let nv = 0, ni = 0;
+  for (const g of list) { nv += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; }
+  const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), uv = new Float32Array(nv * 2);
+  const idx = new Uint32Array(ni);
+  let ov = 0, oi = 0;
+  for (const g of list) {
+    const n = g.attributes.position.count;
+    pos.set(g.attributes.position.array as Float32Array, ov * 3);
+    nrm.set(g.attributes.normal.array as Float32Array, ov * 3);
+    if (g.attributes.uv) uv.set(g.attributes.uv.array as Float32Array, ov * 2);
+    if (g.index) for (let i = 0; i < g.index.count; i++) idx[oi++] = g.index.getX(i) + ov;
+    else for (let i = 0; i < n; i++) idx[oi++] = ov + i;
+    ov += n;
+    g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  out.computeBoundingSphere();
+  return out;
 }
