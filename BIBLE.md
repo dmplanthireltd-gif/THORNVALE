@@ -755,3 +755,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-25 | — | Dead Locks: graphics pass (light shafts, dust motes, wall/floor grime, explosion shockwave + flash + smoke), Chill Grenade (X), round-complete and second boss voice lines. Game + `BUNKER_SONGS` only | — | — |
 | 2026-10-25 | — | Dead Locks leaderboard table `b47_scores` applied to the live DB (RLS on, no policies: server-only). Banter, Insta-Kill and game-start voice lines (`vo-miseh/hungry/nuhave/insta/start.mp3`). | — | — |
 | 2026-10-25 | — | Dead Locks graphics pass 2: contact shadows under props and walls, glossy puddles, teal/warm colour grade. Game file only | — | — |
+| 2026-10-25 | — | Dead Locks music: owner's tracks (`games/bunker47-music-calm.mp3` "Bunker Echoes", `-music-fight.mp3` "Zombie Horde", `-music-fight2.mp3` "Advancing Horde") crossfade by intensity; upgraded built-in riddim is the fallback. Game + `BUNKER_SONGS` only | — | — |

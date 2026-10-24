@@ -47,6 +47,10 @@ export const BUNKER_SONGS: Record<string, string> = {
   'vo-nuhave.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-nuhave.mp3')),
   'vo-insta.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-insta.mp3')),
   'vo-start.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-start.mp3')),
+  // background music (optional: the game falls back to its built-in riddim when these are missing)
+  'music-calm.mp3': resolve(join(HERE, '..', 'games', 'bunker47-music-calm.mp3')),
+  'music-fight.mp3': resolve(join(HERE, '..', 'games', 'bunker47-music-fight.mp3')),
+  'music-fight2.mp3': resolve(join(HERE, '..', 'games', 'bunker47-music-fight2.mp3')),
   'vo-perk-bulwark.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-bulwark.mp3')),
   'vo-perk-fleet.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-fleet.mp3')),
   'vo-perk-rapid.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-rapid.mp3')),

@@ -2523,22 +2523,77 @@ function musInit() {
   if (MUS.bus || !A.ctx) return; const c = A.ctx;
   MUS.bus = c.createGain(); MUS.bus.gain.value = 0; MUS.filt = c.createBiquadFilter(); MUS.filt.type = 'lowpass'; MUS.filt.frequency.value = 5000;
   MUS.bus.connect(MUS.filt); MUS.filt.connect(A.master); const w = c.createGain(); w.gain.value = 0.22; MUS.filt.connect(w); w.connect(A.rev);
-  // tape echo: dotted eighth, filtered feedback
-  MUS.dIn = c.createGain(); MUS.dIn.gain.value = 1; const d = c.createDelay(2); d.delayTime.value = MSTEP * 3; const fb = c.createGain(); fb.gain.value = 0.48; const df = c.createBiquadFilter(); df.type = 'bandpass'; df.frequency.value = 1400; df.Q.value = 0.7;
+  // tape echo: dotted eighth, filtered feedback with a little wobble
+  MUS.dIn = c.createGain(); MUS.dIn.gain.value = 1; const d = c.createDelay(2); d.delayTime.value = MSTEP * 3; const fb = c.createGain(); fb.gain.value = 0.5; const df = c.createBiquadFilter(); df.type = 'bandpass'; df.frequency.value = 1300; df.Q.value = 0.7;
+  const wob = c.createOscillator(), wg = c.createGain(); wob.frequency.value = 0.35; wg.gain.value = 0.0025; wob.connect(wg); wg.connect(d.delayTime); wob.start();
   MUS.dIn.connect(d); d.connect(df); df.connect(fb); fb.connect(d); const dOut = c.createGain(); dOut.gain.value = 0.55; df.connect(dOut); dOut.connect(MUS.filt);
+  // bass: its own saturated lowpass channel so it sits deep and warm
+  MUS.bass = c.createBiquadFilter(); MUS.bass.type = 'lowpass'; MUS.bass.frequency.value = 420; MUS.bass.Q.value = 0.9;
+  const sat = c.createWaveShaper(), cv = new Float32Array(1024); for (let i = 0; i < 1024; i++) { const x = i / 511.5 - 1; cv[i] = Math.tanh(x * 2.2) / Math.tanh(2.2); } sat.curve = cv; MUS.bass.connect(sat); sat.connect(MUS.bus);
   MUS.t = c.currentTime + 0.1;
+  musSamples();
+  musTracksInit();
+}
+// pre-rendered drum hits (much punchier than live oscillators)
+async function musSamples() {
+  if (MUS.smp) return; MUS.smp = {};
+  const R = async (dur, fn) => { const oc = new OfflineAudioContext(1, Math.ceil(44100 * dur), 44100); fn(oc); return oc.startRendering(); };
+  const noise = oc => { const b = oc.createBuffer(1, oc.length, 44100), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; const s = oc.createBufferSource(); s.buffer = b; return s; };
+  try {
+    MUS.smp.kick = await R(0.5, oc => { const o = oc.createOscillator(), g = oc.createGain(); o.frequency.setValueAtTime(140, 0); o.frequency.exponentialRampToValueAtTime(44, 0.18); g.gain.setValueAtTime(1, 0); g.gain.exponentialRampToValueAtTime(0.001, 0.45); o.connect(g); g.connect(oc.destination); o.start(); const n = noise(oc), f = oc.createBiquadFilter(), ng = oc.createGain(); f.type = 'lowpass'; f.frequency.value = 3000; ng.gain.setValueAtTime(0.5, 0); ng.gain.exponentialRampToValueAtTime(0.001, 0.012); n.connect(f); f.connect(ng); ng.connect(oc.destination); n.start(); });
+    MUS.smp.rim = await R(0.25, oc => { const n = noise(oc), f = oc.createBiquadFilter(), g = oc.createGain(); f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 5; g.gain.setValueAtTime(1.6, 0); g.gain.exponentialRampToValueAtTime(0.001, 0.07); n.connect(f); f.connect(g); g.connect(oc.destination); n.start(); const o = oc.createOscillator(), og = oc.createGain(); o.type = 'triangle'; o.frequency.value = 830; og.gain.setValueAtTime(0.5, 0); og.gain.exponentialRampToValueAtTime(0.001, 0.06); o.connect(og); og.connect(oc.destination); o.start(); });
+    MUS.smp.snare = await R(0.35, oc => { const n = noise(oc), f = oc.createBiquadFilter(), g = oc.createGain(); f.type = 'bandpass'; f.frequency.value = 2200; f.Q.value = 0.7; g.gain.setValueAtTime(0.9, 0); g.gain.exponentialRampToValueAtTime(0.001, 0.22); n.connect(f); f.connect(g); g.connect(oc.destination); n.start(); const o = oc.createOscillator(), og = oc.createGain(); o.frequency.setValueAtTime(220, 0); o.frequency.exponentialRampToValueAtTime(160, 0.1); og.gain.setValueAtTime(0.6, 0); og.gain.exponentialRampToValueAtTime(0.001, 0.12); o.connect(og); og.connect(oc.destination); o.start(); });
+    MUS.smp.hat = await R(0.06, oc => { const n = noise(oc), f = oc.createBiquadFilter(), g = oc.createGain(); f.type = 'highpass'; f.frequency.value = 7500; g.gain.setValueAtTime(0.6, 0); g.gain.exponentialRampToValueAtTime(0.001, 0.045); n.connect(f); f.connect(g); g.connect(oc.destination); n.start(); });
+    MUS.smp.ohat = await R(0.3, oc => { const n = noise(oc), f = oc.createBiquadFilter(), g = oc.createGain(); f.type = 'highpass'; f.frequency.value = 6500; g.gain.setValueAtTime(0.5, 0); g.gain.exponentialRampToValueAtTime(0.001, 0.26); n.connect(f); f.connect(g); g.connect(oc.destination); n.start(); });
+  } catch (e) { MUS.smp = null; }
+}
+function hit(name, t, a, dest) { const b = MUS.smp && MUS.smp[name]; if (!b) return false; const s = A.ctx.createBufferSource(), g = A.ctx.createGain(); s.buffer = b; g.gain.value = a; s.connect(g); g.connect(dest || MUS.bus); s.start(t); return true; }
+// the owner's music tracks (website): music-calm.mp3 between rounds / when quiet, music-fight.mp3 when it gets heavy
+function musTracksInit() {
+  if (MUS.tr || !/^https?:$/.test(location.protocol)) return; MUS.tr = {};
+  for (const k of ['calm', 'fight']) {
+    // the fight slot is a little playlist that alternates between the owner's two horde tracks
+    const list = k === 'fight' ? ['music-fight.mp3', 'music-fight2.mp3'] : ['music-calm.mp3'];
+    const el = new Audio(); el.loop = list.length === 1; el.preload = 'auto'; el.src = list[0]; let li = 0;
+    if (list.length > 1) { el.addEventListener('ended', () => { li = (li + 1) % list.length; el.src = list[li]; const pr = el.play(); if (pr && pr.catch) pr.catch(() => {}); }); el.addEventListener('error', () => { if (li === 0 && el.src.endsWith(list[0])) return; li = 0; el.src = list[0]; }); }
+    try { const src = A.ctx.createMediaElementSource(el), g = A.ctx.createGain(); g.gain.value = 0; src.connect(g); g.connect(MUS.filt); MUS.trWait = MUS.trWait || {}; MUS.trWait[k] = { el, g }; } catch (e) { continue; }
+    const ok = () => { if (MUS.trWait && MUS.trWait[k]) MUS.tr[k] = MUS.trWait[k]; };
+    el.addEventListener('loadeddata', ok, { once: true }); el.addEventListener('canplay', ok, { once: true });
+    el.addEventListener('error', () => { delete MUS.tr[k]; }, { once: true });
+    el.load();
+  }
 }
 function musicTick() {
   if (!A.ctx) return; musInit(); const c = A.ctx;
   let tgt = 0.1;
   if (APP.screen === 'play') { tgt = V.phase === 'play' ? 0.28 + Math.min(0.45, zv.size / 18 * 0.45) + Math.min(0.25, V.round / 25 * 0.25) : 0.14; if (P.down) tgt = Math.min(tgt, 0.3); }
   else if (APP.screen === 'over') tgt = 0.05;
-  else if (APP.screen === 'menu' || APP.screen === 'wait') tgt = 0.4;
+  else if (APP.screen === 'menu' || APP.screen === 'wait' || APP.screen === 'custom') tgt = 0.4;
   MUS.int = lerp(MUS.int, tgt, 0.015);
   MUS.bus.gain.setTargetAtTime((APP.paused ? 0.35 : 1) * MUS.vol * 0.6, c.currentTime, 0.6);
   MUS.filt.frequency.setTargetAtTime(P.down && APP.screen === 'play' ? 600 : 1600 + MUS.int * 6500, c.currentTime, 0.4);
+  // real tracks take over from the live riddim when they are loaded
+  const T = MUS.tr, useTr = T && (T.calm || T.fight);
+  if (useTr) {
+    const both = T.calm && T.fight, f = both ? Math.min(1, Math.max(0, (MUS.int - 0.45) / 0.3)) : T.fight ? 1 : 0, v = MUS.vol * (APP.paused ? 0.35 : 1) * (APP.screen === 'over' ? 0.4 : 1);
+    for (const [k, w] of [['calm', 1 - f], ['fight', f]]) { const q = T[k]; if (!q) continue; q.g.gain.setTargetAtTime(v * w * 0.9, c.currentTime, 0.8); if (q.el.paused && v > 0.001) { const pr = q.el.play(); if (pr && pr.catch) pr.catch(() => {}); } }
+    return;
+  }
   if (MUS.t < c.currentTime) MUS.t = c.currentTime + 0.05;
   while (MUS.t < c.currentTime + 0.25) { musStep(MUS.step++, MUS.t); MUS.t += MSTEP; }
+}
+// written melodica phrases (A minor), as [16th step, MIDI note, length in steps]; one phrase per bar, 4-bar cycle
+const MELO = [
+  [[0, 76, 3], [3, 74, 1], [4, 72, 2], [6, 69, 4], [12, 72, 2], [14, 74, 2]],
+  [[0, 69, 6], [8, 72, 2], [10, 74, 2], [12, 76, 4]],
+  [[2, 79, 2], [4, 76, 2], [6, 74, 2], [8, 72, 3], [11, 74, 1], [12, 72, 2], [14, 69, 2]],
+  [[0, 71, 4], [4, 72, 2], [6, 71, 2], [8, 68, 6]]
+];
+function melodica(dest, t, m, dur, a) {
+  const c = A.ctx, f = mfq(m), o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain(), lp = c.createBiquadFilter(), vib = c.createOscillator(), vg = c.createGain();
+  o.type = 'square'; o2.type = 'sawtooth'; o.frequency.value = f; o2.frequency.value = f * 1.004; vib.frequency.value = 5.2; vg.gain.value = f * 0.006; vib.connect(vg); vg.connect(o.frequency); vg.connect(o2.frequency);
+  lp.type = 'lowpass'; lp.frequency.value = 2200; lp.Q.value = 1.2; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(a, t + 0.05); g.gain.setValueAtTime(a, t + dur * 0.8); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.12);
+  o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(dest); o.start(t); o2.start(t); vib.start(t); o.stop(t + dur + 0.15); o2.stop(t + dur + 0.15); vib.stop(t + dur + 0.15);
 }
 // a short organ/skank chord: three detuned squares through a bright bandpass, very short
 function skank(dest, t, ch, a, up) { for (const m of ch) { osc(dest, t, 0.11, 'square', mfq(m + (up || 0)), 0, a, 0.004); osc(dest, t, 0.11, 'square', mfq(m + (up || 0)) * 1.006, 0, a * 0.6, 0.004); } }
@@ -2546,23 +2601,27 @@ function dubSiren(dest, t, a) { const c = A.ctx, o = c.createOscillator(), g = c
 function musStep(n, t) {
   if (MUS.vol <= 0.001) return;
   const d = MUS.bus, e = MUS.dIn || d, I = MUS.int, bar = Math.floor(n / 16), st = n % 16, ch = MPROG[bar % 4], k = lo => Math.min(1, Math.max(0, (I - lo) * 3));
-  const swing = st % 2 === 1 ? MSTEP * 0.18 : 0, T = t + swing;
-  // organ bubble: the classic shuffle on the "and"s, always there underneath
-  if (st % 4 === 2) skank(d, T, ch.map(m => m - 12), 0.008);
-  // bass: deep sine + a little grit, the riff moves with the chord
-  if (I > 0.15) for (const [bs, iv] of MBASS) if (bs === st) { const f = mfq(ch[0] - 24 + iv); osc(d, T, MSTEP * (bs === 8 ? 2.6 : 1.8), 'sine', f, 0, 0.16 * k(0.15), 0.01); osc(d, T, MSTEP * 1.4, 'triangle', f * 2, 0, 0.025 * k(0.15), 0.01); }
-  // one-drop: kick + rim on beat three; at higher intensity a steppers kick on every beat
-  if (I > 0.3 && (st === 8 || (I > 0.75 && st % 4 === 0))) { osc(d, T, 0.3, 'sine', 110, 42, 0.5 * k(0.3)); if (st === 8) { nz(d, T, 0.05, 'bandpass', 2400, 3, 0.22 * k(0.3), 0.001); osc(e, T, 0.04, 'triangle', 820, 600, 0.05 * k(0.3)); } }
-  // skank: chords on the offbeats (2 and 4), sent into the echo
-  if (I > 0.42 && (st === 4 || st === 12)) { skank(d, T, ch, 0.016 * k(0.42), 12); skank(e, T, ch, 0.01 * k(0.42), 12); }
-  // hats: shuffled eighths, open on the last one of the bar
-  if (I > 0.55 && st % 2 === 0) nz(d, T, st === 14 ? 0.12 : 0.03, 'highpass', 8000, 1, (st % 4 === 2 ? 0.05 : 0.025) * k(0.55), 0.001);
-  // horns: a two-note stab every other bar at high intensity
-  if (I > 0.7 && bar % 2 === 1 && (st === 6 || st === 7)) { const m = ch[st === 6 ? 2 : 1] + 12; osc(e, T, 0.22, 'sawtooth', mfq(m), 0, 0.03 * k(0.7), 0.01); osc(d, T, 0.22, 'sawtooth', mfq(m + 7), 0, 0.018 * k(0.7), 0.01); }
+  const swing = st % 2 === 1 ? MSTEP * 0.2 : 0, T = t + swing, steppers = I > 0.72;
+  // organ bubble: low chord stabs on the "and"s with a little Leslie wobble, always there underneath
+  if (st % 4 === 2) { skank(d, T, ch.map(m => m - 12), 0.009); }
+  // bass: warm saturated sine + octave, a riff that walks with the chords
+  if (I > 0.12) for (const [bs, iv] of MBASS) if (bs === st) { const f = mfq(ch[0] - 24 + iv), L = MSTEP * (bs === 8 ? 2.8 : 1.9); osc(MUS.bass || d, T, L, 'sine', f, 0, 0.5 * k(0.12), 0.012); osc(MUS.bass || d, T, L * 0.7, 'triangle', f * 2, 0, 0.08 * k(0.12), 0.01); }
+  // drums: one-drop (kick + rim on 3), steppers when it is wild (kick every beat, snare on 3)
+  if (I > 0.28) {
+    if (st === 8 || (steppers && st % 4 === 0)) hit('kick', T, 0.9 * k(0.28)) || osc(d, T, 0.3, 'sine', 110, 42, 0.5 * k(0.28));
+    if (st === 8) { hit('rim', T, 0.45 * k(0.28)); hit('rim', T, 0.18 * k(0.28), e); if (steppers) hit('snare', T, 0.35); }
+    if (bar % 4 === 3 && st >= 13 && I > 0.5) hit('rim', T, 0.25 + (st - 13) * 0.08, e);   // little fill into the next phrase
+  }
+  // skank: guitar/organ chops on 2 and 4, thrown into the echo
+  if (I > 0.38 && (st === 4 || st === 12)) { skank(d, T, ch, 0.018 * k(0.38), 12); skank(e, T, ch, 0.011 * k(0.38), 12); }
+  // hats: shuffled 8ths, open hat at the end of the bar
+  if (I > 0.5 && st % 2 === 0) { if (st === 14) hit('ohat', T, 0.3 * k(0.5)); else hit('hat', T, (st % 4 === 2 ? 0.45 : 0.25) * k(0.5)); }
+  // horns: a two-note stab every other bar when it heats up
+  if (I > 0.66 && bar % 2 === 1 && (st === 6 || st === 7)) { const m = ch[st === 6 ? 2 : 1] + 12; osc(e, T, 0.22, 'sawtooth', mfq(m), 0, 0.03 * k(0.66), 0.01); osc(d, T, 0.22, 'sawtooth', mfq(m + 7), 0, 0.02 * k(0.66), 0.01); }
   // dub siren every 8 bars when it is wild
   if (I > 0.82 && bar % 8 === 7 && st === 0) dubSiren(d, T, 0.03);
-  // melodica: lazy minor-pentatonic phrases when it is calm, echoed
-  if (I < 0.5 && (st === 0 || st === 3 || st === 6 || st === 10) && Math.random() < 0.45) { const sc = [69, 72, 74, 76, 79, 81], m = sc[(Math.random() * sc.length) | 0]; osc(e, T, 0.5, 'square', mfq(m), 0, 0.012, 0.03); osc(d, T, 0.5, 'triangle', mfq(m) * 1.003, 0, 0.02, 0.03); }
+  // melodica: the written tune when it is calm-to-medium, every other 4-bar cycle, echoed
+  if (I < 0.62 && Math.floor(bar / 4) % 2 === 0) for (const [ms, m, len] of MELO[bar % 4]) if (ms === st) { const a = 0.022 * (1 - Math.max(0, I - 0.4) * 3); melodica(d, T, m, len * MSTEP, a); melodica(e, T, m, len * MSTEP, a * 0.5); }
 }
 const fwd = new THREE.Vector3();
 function listen() {
