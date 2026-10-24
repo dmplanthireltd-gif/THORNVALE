@@ -258,14 +258,14 @@ const defs: ItemDef[] = [
   W('heavy_crossbow', 'Heavy Crossbow', 'crossbow', 6, 0, 40, 1800, 52, { twoHanded: true, range: 6, ammoType: 'bolt', vocations: PALADIN, rarity: 'uncommon' }),
   W('frostbite_crossbow', 'Frostbite Crossbow', 'crossbow', 8, 0, 55, 4200, 48, { twoHanded: true, range: 6, ammoType: 'bolt', vocations: PALADIN, rarity: 'rare', bonus: { resist: { ice: 5 } } }),
   W('dragonbane_crossbow', 'Dragonbane Crossbow', 'crossbow', 10, 0, 80, 12000, 50, { twoHanded: true, range: 7, ammoType: 'bolt', vocations: PALADIN, rarity: 'legendary', bonus: { resist: { fire: 5 } } }),
-  // throwing weapons (the stack in your hand is used up)
-  W('spear', 'Spear', 'throwing', 25, 0, 1, 3, 20, { range: 4 }),
+  // throwing weapons: picked up again after a throw, only rarely broken (breakChance per throw, default 0.1)
+  W('spear', 'Spear', 'throwing', 25, 0, 1, 3, 20, { range: 4, breakChance: 0.05 }),
   W('throwing_star', 'Throwing Star', 'throwing', 28, 0, 15, 4, 2, { range: 4 }),
-  W('royal_spear', 'Royal Spear', 'throwing', 30, 0, 20, 6, 20, { range: 4, breakChance: 0.7 }),
-  W('enchanted_spear', 'Runebound Spear', 'throwing', 34, 0, 30, 18, 20, { range: 5, vocations: PALADIN, breakChance: 0.3, rarity: 'uncommon', note: 'Its runes keep it whole: it is rarely lost when thrown.' }),
+  W('royal_spear', 'Royal Spear', 'throwing', 30, 0, 20, 6, 20, { range: 4, breakChance: 0.03 }),
+  W('enchanted_spear', 'Runebound Spear', 'throwing', 34, 0, 30, 18, 20, { range: 5, vocations: PALADIN, breakChance: 0.01, rarity: 'uncommon', note: 'Its runes keep it whole: it almost never breaks.' }),
   W('viper_star', 'Viper Star', 'throwing', 30, 0, 20, 8, 2, { range: 4, element: 'earth', elementDamage: 8, rarity: 'uncommon' }),
   W('shadow_star', 'Shadow Star', 'throwing', 42, 0, 45, 25, 2, { range: 4, vocations: PALADIN, rarity: 'rare' }),
-  W('royal_javelin', 'Royal Javelin', 'throwing', 36, 0, 30, 10, 15, { range: 5, vocations: PALADIN, rarity: 'uncommon' }),
+  W('royal_javelin', 'Royal Javelin', 'throwing', 36, 0, 30, 10, 15, { range: 5, breakChance: 0.03, vocations: PALADIN, rarity: 'uncommon' }),
   // wands (sorcerer) and rods (druid)
   W('wand_of_sparks', 'Wand of Sparks', 'wand', 0, 0, 7, 100, 23, { vocations: SORC, range: 4, element: 'energy', magicDamage: [18, 32], manaPerShot: 2 }),
   W('wand_of_embers', 'Wand of Embers', 'wand', 0, 0, 19, 500, 23, { vocations: SORC, range: 4, element: 'fire', magicDamage: [22, 36], manaPerShot: 4, rarity: 'uncommon' }),

@@ -204,7 +204,7 @@ export const SPELLS: Record<SpellId, SpellDef> = {
   exevo_lanca: {
     id: 'exevo_lanca', name: 'Runebind Spear', words: 'exevo lanca', kind: 'conjure', group: 'support', mana: 300, level: 45, vocations: ['paladin'],
     cooldown: 2, conjure: { item: 'enchanted_spear', qty: 1, from: 'spear' }, price: 2000,
-    description: 'Binds runes into a spear from your backpack: a runebound spear is rarely lost when thrown.',
+    description: 'Binds runes into a spear from your backpack: a runebound spear almost never breaks.',
   },
   // --- spells update: attack ---------------------------------------------------------
   exori_mort: {

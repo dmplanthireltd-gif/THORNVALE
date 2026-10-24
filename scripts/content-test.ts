@@ -338,18 +338,19 @@ console.log('Spells');
   park(g, p2.s, at2);
   const target = dummy(g, 'polar_bear', { x: at2.x + 2, y: at2.y, z: 0 });
   const throwN = (id: string) => {
-    p2.s.inventory.equipment.weapon = { id, qty: 100 };
+    p2.s.inventory.equipment.weapon = { id, qty: 2000 };
     p2.s.inventory.equipment.shield = null;
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 2000; i++) {
       target.dead = false;
       target.hp = 1e9;
       (g as unknown as { distanceAttack(s: Session, t: Enemy, d: number): void }).distanceAttack(p2.s, target, 2);
     }
-    return 100 - (p2.s.inventory.equipment.weapon?.qty ?? 0);
+    return 2000 - (p2.s.inventory.equipment.weapon?.qty ?? 0);
   };
   const lostSpear = throwN('spear');
   const lostRune = throwN('enchanted_spear');
-  check(lostRune < lostSpear, `runebound spears are lost less often (${lostRune} vs ${lostSpear} of 100)`);
+  check(lostRune < lostSpear, `runebound spears are lost less often (${lostRune} vs ${lostSpear} of 2000)`);
+  check(lostSpear > 40 && lostSpear < 170, `spears rarely break, like the classic game (${lostSpear} of 2000, ~5%)`);
 }
 
 // ---------------------------------------------------------------- spells update (classic spell list)

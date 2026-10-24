@@ -2146,8 +2146,8 @@ export class Game implements AIContext {
       effect = w.id.endsWith('_star') ? 'star' : 'spear';
       element = wd.element;
       elementDamage = wd.elementDamage ?? 0;
-      // throwing weapons are used up (most land somewhere you cannot reach)
-      if (Math.random() < (wd.breakChance ?? 0.85)) {
+      // throwing weapons come back to hand (picked up again); only rarely one breaks
+      if (Math.random() < (wd.breakChance ?? 0.1)) {
         w.qty -= 1;
         if (w.qty <= 0) inv.equipment.weapon = null;
         this.events.emit({ type: 'inventoryChanged', to: s.id });
