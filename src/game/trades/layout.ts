@@ -113,8 +113,12 @@ export interface MapSpot {
   x: number;
   y: number;
   z: number;
-  /** Short label for the map tooltip ("Balance log · agility 20"). */
-  label: string;
+  /** What is there ("Balance log", "Mine", "Captain Maren Tallow"); the map translates it as a name. */
+  what: string;
+  /** Where (a region, town or harbour name), if the spot is not just "here". */
+  place?: string;
+  /** The skill level it asks for ("20", "1–35"); none = any level. */
+  level?: string;
 }
 
 /** What one tile holds for the trade rules (fast lookup by tile). */

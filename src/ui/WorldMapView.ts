@@ -5,6 +5,7 @@ import { button, el } from './dom';
 import type { Minimap } from './Minimap';
 import { t } from '../i18n/i18n';
 import { trName, trText } from '../i18n/gameText';
+import { buildSpotLegend, drawSpots, spotFilter, spotLabel, spotNear } from './mapSpots';
 
 const MAX_ZOOM = 20;
 
@@ -40,10 +41,15 @@ export class WorldMapView {
     button(tools, '▼', () => this.setFloor(this.z - 1), 'btn small');
     button(tools, t('My position'), () => this.centerOnMe(true), 'btn small');
     button(tools, t('Whole world'), () => this.fit(), 'btn small');
+    const spotsBtn = button(tools, t('Training spots'), () => { legend.hidden = !legend.hidden; spotsBtn.classList.toggle('on', !legend.hidden); }, 'btn small');
     button(tools, '✕', () => this.close(), 'btn tiny');
     const body = el('div', 'wm-body', this.root);
     this.canvas = el('canvas', 'wm-canvas', body);
     this.ctx = this.canvas.getContext('2d');
+    // the training-spot legend (ui/mapSpots.ts), opened with its button
+    const legend = buildSpotLegend(body);
+    legend.hidden = true;
+    spotFilter.onChange(() => this.draw());
     this.info = el('div', 'wm-info', this.root);
 
     this.canvas.addEventListener('wheel', (e) => {
@@ -182,7 +188,8 @@ export class WorldMapView {
       return;
     }
     const r = g.world.regionAt(h.x, h.y, this.z);
-    this.info.textContent = `${h.x}, ${h.y}, ${t('floor {z}', { z: String(this.z) })}${r ? ` — ${trName(r.name)}${r.level && r.level !== '—' ? ` (${t('level {n}', { n: r.level })})` : ''}${r.safe ? ` · ${t('protection zone')}` : ''}` : ''}`;
+    const spot = spotNear(g, this.z, h.x + 0.5, h.y + 0.5, Math.max(1.5, 10 / this.scale));
+    this.info.textContent = spot ? spotLabel(spot) : `${h.x}, ${h.y}, ${t('floor {z}', { z: String(this.z) })}${r ? ` — ${trName(r.name)}${r.level && r.level !== '—' ? ` (${t('level {n}', { n: r.level })})` : ''}${r.safe ? ` · ${t('protection zone')}` : ''}` : ''}`;
   }
 
   update(dt: number): void {
@@ -236,6 +243,9 @@ export class WorldMapView {
         ctx.fillText('✚', t.x, t.y);
       }
     }
+
+    // training spots (ui/mapSpots.ts)
+    drawSpots(ctx, g, this.z, (x, y) => this.screenOf(x + 0.5, y + 0.5), Math.max(11, Math.min(22, s * 1.6)));
 
     // NPCs and players
     const dot = (x: number, y: number, color: string, r: number) => {

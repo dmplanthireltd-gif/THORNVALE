@@ -533,6 +533,19 @@ console.log('sailing');
   check(!!NPCS.shipwright?.sells?.some((e) => e.id === 'skiff_deed') && !!CAPE_BY_ID.tidewalker_cape, 'Captain Maren Tallow sells boats; the Tidewalker\'s Cape is sailing\'s');
 }
 
+// ---------------------------------------------------------------- training spots on the maps
+console.log('training spots on the maps');
+{
+  const spots = lay.spots;
+  const missing = NONCOMBAT_SKILLS.filter((d) => !spots.some((sp) => sp.skill === d.id)).map((d) => d.id);
+  check(missing.length === 0, `every skill has spots on the maps (${spots.length}${missing.length ? `; none for ${missing.join(' ')}` : ''})`);
+  check(spots.every((sp) => g.world.inBounds(sp.x, sp.y) && g.world.floors.has(sp.z) && !!sp.what && NONCOMBAT_SKILLS.some((d) => d.id === sp.skill)), 'every spot is on the map, says what is there and belongs to a skill');
+  const mine = spots.find((sp) => sp.skill === 'mining' && sp.what === 'Mine');
+  check(!!mine && /^\d+(–\d+)?$/.test(mine.level ?? ''), 'mines show their ore levels');
+  check(spots.some((sp) => sp.skill === 'fishing' && sp.place === 'Thornvale Harbour') && spots.some((sp) => sp.skill === 'smithing') && spots.some((sp) => sp.skill === 'woodcutting'), 'fishing piers, smithies and forests are marked');
+  check(spots.some((sp) => sp.skill === 'sailing' && sp.what === 'Captain Maren Tallow') && spots.some((sp) => sp.skill === 'agility' && sp.what === 'Ysolt Quickstep'), 'every skill master is marked');
+}
+
 // ---------------------------------------------------------------- test commands, network view
 console.log('test commands and the network');
 {

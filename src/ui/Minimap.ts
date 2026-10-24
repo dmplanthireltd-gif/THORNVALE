@@ -1,6 +1,7 @@
 import type { Controller } from '../client/Controller';
 import { Ground, Obj, WorldMap } from '../game/world/WorldMap';
 import { t } from '../i18n/i18n';
+import { drawSpots } from './mapSpots';
 
 export const GROUND_RGB: Record<number, string> = {
   [Ground.Grass]: '#3f8a2e', [Ground.Path]: '#a08a62', [Ground.Stone]: '#8a8a88', [Ground.Wood]: '#7a5530', [Ground.Water]: '#2f6ab0',
@@ -135,6 +136,8 @@ export class Minimap {
       ctx.fillStyle = color;
       ctx.fillRect((x - ox) * PX + (PX - size) / 2, (y - oy) * PX + (PX - size) / 2, size, size);
     };
+    // training spots of every skill (ui/mapSpots.ts; the world map's legend chooses which)
+    drawSpots(ctx, g, p.z, (x, y) => ({ x: (x - ox) * PX + PX / 2, y: (y - oy) * PX + PX / 2 }), Math.min(12, 7 + PX));
     for (const n of g.npcs) if (n.z === p.z) dot(n.x, n.y, '#6fc8ff');
     for (const e of g.enemies) if (e.z === p.z && !e.dead && Math.abs(e.x - p.x) < 10 && Math.abs(e.y - p.y) < 8) dot(e.x, e.y, '#ff3a2a', Math.max(2, PX));
     for (const o of g.players()) if (o.z === p.z && o !== p) dot(o.x, o.y, '#ffffff');

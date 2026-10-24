@@ -7,6 +7,9 @@ import type { Table } from '../i18n';
  */
 
 export const TRADE_UI: Table = {
+  "Training spots": ["Miejsca treningu", "Locais de treino"],
+  "Show on the maps": ["Pokazuj na mapach", "Mostrar nos mapas"],
+  "None": ["Żadne", "Nenhum"],
   "Slayer task: {done}/{total} {what}": ["Zadanie łowcy: {done}/{total} ({what})", "Tarefa de caça: {done}/{total} {what}"],
   "{points} slayer points. Any slayer master gives you a new task when this one is done.": ["Punkty łowcy: {points}. Każdy mistrz łowców da ci nowe zadanie, gdy skończysz to.", "{points} pontos de caçador. Qualquer mestre caçador lhe dá uma nova tarefa quando esta terminar."],
   "Adventure": ["Przygoda", "Aventura"],
@@ -19,6 +22,25 @@ export const TRADE_UI: Table = {
 };
 
 export const TRADE_NAMES: Table = {
+  // stage 4: training spots on the maps
+  "Woodland": ["Las liściasty", "Bosque"],
+  "Pine forest": ["Las sosnowy", "Pinhal"],
+  "Palm grove": ["Gaj palmowy", "Palmeiral"],
+  "Teak forest": ["Las tekowy", "Floresta de teca"],
+  "Mine": ["Kopalnia", "Mina"],
+  "Smithy": ["Kuźnia", "Ferraria"],
+  "Stove": ["Piec kuchenny", "Fogão"],
+  "Tanning rack": ["Rama garbarska", "Estrado de curtume"],
+  "Fishing": ["Wędkarstwo", "Pesca"],
+  "Farm patches": ["Grządki", "Canteiros"],
+  "Hunting ground": ["Teren łowiecki", "Área de caça"],
+  "Market stalls": ["Stragany", "Barracas do mercado"],
+  "Strongboxes": ["Skrzynie", "Cofres"],
+  "Moorings": ["Pale cumownicze", "Amarrações"],
+  "Balance log": ["Kłoda do balansowania", "Tronco de equilíbrio"],
+  "Climbing rocks": ["Skały do wspinaczki", "Rochas de escalada"],
+  "Swim": ["Przepłynięcie", "Travessia a nado"],
+  "Narrow crack": ["Wąska szczelina", "Fenda estreita"],
   // stage 3: sailing
   "Sailing": ["Żeglarstwo", "Navegação"],
   "Tidewalker's Cape": ["Peleryna Wędrowca Fal", "Capa do Andarilho das Marés"],

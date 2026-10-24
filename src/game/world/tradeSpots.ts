@@ -9,6 +9,7 @@ import { TRADE_NPCS } from '../trades/tradeNpcs';
 import { HUNT_REGIONS, PREY_BY_ID } from '../trades/hunter';
 import { SLAYER_REQ, type SlayerKind } from '../trades/slayer';
 import { seaLevel } from '../trades/sailing';
+import { addSkillSpots } from './skillSpots';
 import { TOWNS } from './townList';
 import { Ground, Obj, SOLID_OBJ, STRUCTURE_OBJ, UNWALKABLE_GROUND, type Region, type WorldMap } from './WorldMap';
 
@@ -384,7 +385,7 @@ function placeHerbs(m: WorldMap, l: TradeLayout, used: Set<number>, rng: Rng): v
         }
         if (put) {
           made++;
-          l.spots.push({ skill: 'herblore', x: cx, y: cy, z: 0, label: `${h.name} · herblore ${h.level}` });
+          l.spots.push({ skill: 'herblore', x: cx, y: cy, z: 0, what: h.name, place: m.regionAt(cx, cy, 0)?.name, level: String(h.level) });
         }
       }
     }
@@ -429,7 +430,7 @@ function placeFarms(m: WorldMap, l: TradeLayout, used: Set<number>, rng: Rng): v
       }
     }
     const first = l.patches.find((q) => q.area === name);
-    if (first) l.spots.push({ skill: 'farming', x: first.x, y: first.y, z: 0, label: `Farm patches · ${name}` });
+    if (first) l.spots.push({ skill: 'farming', x: first.x, y: first.y, z: 0, what: 'Farm patches', place: name });
   }
 }
 
@@ -460,7 +461,7 @@ function placeHunting(m: WorldMap, l: TradeLayout, used: Set<number>, rng: Rng):
       if (put) {
         grounds++;
         const lv = Math.min(...prey.map((id) => PREY_BY_ID[id].level));
-        l.spots.push({ skill: 'hunter', x: cx, y: cy, z: 0, label: `Hunting ground · ${name} · hunter ${lv}` });
+        l.spots.push({ skill: 'hunter', x: cx, y: cy, z: 0, what: 'Hunting ground', place: name, level: String(lv) });
       }
     }
   }
@@ -492,7 +493,7 @@ function placeSlayerLairs(m: WorldMap, l: TradeLayout, rng: Rng): void {
       n++;
     }
     const first = m.spawns.find((sp) => sp.kind === kind && sp.z === z && sp.x >= r.x0 && sp.x <= r.x1 && sp.y >= r.y0 && sp.y <= r.y1);
-    if (first) l.spots.push({ skill: 'slayer', x: first.x, y: first.y, z, label: `${SLAYER_NAMES[kind]} · ${name} · slayer ${SLAYER_REQ[kind].level}` });
+    if (first) l.spots.push({ skill: 'slayer', x: first.x, y: first.y, z, what: SLAYER_NAMES[kind], place: name, level: String(SLAYER_REQ[kind].level) });
   }
 }
 
@@ -606,9 +607,9 @@ function placeFlotsam(m: WorldMap, l: TradeLayout, sea: Int32Array, rng: Rng): v
 
 // ================================================================== map spots
 
-function addSpots(l: TradeLayout): void {
+function addSpots(m: WorldMap, l: TradeLayout): void {
   const names: Record<ObstacleKind, string> = { balance: 'Balance log', climb: 'Climbing rocks', swim: 'Swim', squeeze: 'Narrow crack' };
-  for (const o of l.obstacles) l.spots.push({ skill: 'agility', x: o.ax + o.dx * Math.floor((o.len + 1) / 2), y: o.ay + o.dy * Math.floor((o.len + 1) / 2), z: o.z, label: `${names[o.kind]} · agility ${o.level}` });
+  for (const o of l.obstacles) l.spots.push({ skill: 'agility', x: o.ax + o.dx * Math.floor((o.len + 1) / 2), y: o.ay + o.dy * Math.floor((o.len + 1) / 2), z: o.z, what: names[o.kind], place: m.regionAt(o.ax, o.ay, o.z)?.name, level: String(o.level) });
   const towns = new Map<string, { x: number; y: number; z: number; lo: number; hi: number }>();
   for (const s of l.stalls) {
     const lv = STALLS[s.kind].level;
@@ -616,15 +617,15 @@ function addSpots(l: TradeLayout): void {
     if (!t) towns.set(s.town, { x: s.x, y: s.y, z: s.z, lo: lv, hi: lv });
     else { t.lo = Math.min(t.lo, lv); t.hi = Math.max(t.hi, lv); }
   }
-  for (const [town, t] of towns) l.spots.push({ skill: 'thieving', x: t.x, y: t.y, z: t.z, label: `Market stalls of ${town} · thieving ${t.lo === t.hi ? t.lo : `${t.lo}–${t.hi}`}` });
+  for (const [town, t] of towns) l.spots.push({ skill: 'thieving', x: t.x, y: t.y, z: t.z, what: 'Market stalls', place: town, level: t.lo === t.hi ? String(t.lo) : `${t.lo}–${t.hi}` });
   const areas = new Map<string, { x: number; y: number; z: number; level: number }>();
   for (const b of l.boxes) if (!areas.has(b.area)) areas.set(b.area, { x: b.x, y: b.y, z: b.z, level: b.level });
-  for (const [area, a] of areas) l.spots.push({ skill: 'thieving', x: a.x, y: a.y, z: a.z, label: `Strongboxes · ${area} · thieving ${a.level}` });
+  for (const [area, a] of areas) l.spots.push({ skill: 'thieving', x: a.x, y: a.y, z: a.z, what: 'Strongboxes', place: area, level: String(a.level) });
   const docks = new Set<string>();
   for (const mo of l.moorings) {
     if (docks.has(mo.name)) continue;
     docks.add(mo.name);
-    l.spots.push({ skill: 'sailing', x: mo.dockX, y: mo.dockY, z: mo.z, label: `Moorings · ${mo.name} · sailing` });
+    l.spots.push({ skill: 'sailing', x: mo.dockX, y: mo.dockY, z: mo.z, what: 'Moorings', place: mo.name });
   }
 }
 
@@ -655,7 +656,9 @@ export function buildTradeSpots(m: WorldMap): void {
   placeMoorings(m, l, used, sea);
   placeFlotsam(m, l, sea, rng);
   T('moorings, wreckage');
-  addSpots(l);
+  addSpots(m, l);
+  addSkillSpots(m, l);
+  T('map spots');
   indexTradeLayout(l);
   m.trades = l;
 }
