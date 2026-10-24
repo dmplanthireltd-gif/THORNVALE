@@ -50,6 +50,10 @@ export const BUNKER_SONGS: Record<string, string> = {
   'vo-perk-steady.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-steady.mp3')),
   'vo-perk-blast.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-blast.mp3')),
   'vo-perk-echo.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-echo.mp3')),
+  'vo-perk-dropbass.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-dropbass.mp3')),
+  'vo-perk-vibes.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-vibes.mp3')),
+  'vo-perk-slap.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-slap.mp3')),
+  'vo-revive-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-revive-1.mp3')),
   'vo-mate-down.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-mate-down.mp3')),
 };
 
