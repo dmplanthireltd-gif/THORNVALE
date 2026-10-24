@@ -33,7 +33,7 @@ import {
   FOUNDER_SALE_FROM, FOUNDER_SALE_UNTIL, LAUNCH_AT, LEGEND_CAP, NO_PERKS, PREMIUM_RESERVED_SHARE, PRODUCTS, type AccountPerks,
 } from '../src/game/premium/premium';
 import { WsConnection } from './ws';
-import { acceptBunker, BUNKER_FILE, BUNKER_PATH, BUNKER_WS, bunkerReady, handleBunkerApi } from './bunker';
+import { acceptBunker, BUNKER_FILE, BUNKER_PATH, BUNKER_SONGS, BUNKER_WS, bunkerReady, handleBunkerApi } from './bunker';
 import { stagesFromEnv, stagesTable } from '../src/game/progression/stages';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -867,6 +867,12 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
     if (!bunkerReady()) return void res.writeHead(404).end('Not found');
     res.setHeader('x-robots-tag', 'noindex, nofollow');
     return sendFile(res, BUNKER_FILE, 200);
+  }
+  if (url.pathname.startsWith(BUNKER_PATH) && Object.prototype.hasOwnProperty.call(BUNKER_SONGS, url.pathname.slice(BUNKER_PATH.length))) {
+    const file = BUNKER_SONGS[url.pathname.slice(BUNKER_PATH.length)];
+    if (!existsSync(file)) return void res.writeHead(404).end('Not found');
+    res.setHeader('x-robots-tag', 'noindex, nofollow');
+    return sendFile(res, file, 200, req.headers.range);
   }
   // The game lives under /play/ (Vite base '/play/'); /play without the slash is redirected so the
   // page's relative URLs and email sign-in links (built from location.pathname) all resolve under /play/.

@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Bunker 47</title>
+<title>Dead Locks</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik+Wet+Paint&family=Special+Elite&family=Oswald:wght@400;500;600&display=swap">
 <style>
@@ -13,6 +13,9 @@
   --blood: #a5231b;
   --brass: #d6a64a;
   --mist: #9aa59f;
+  --r-red: #c8261c;
+  --r-gold: #e8b420;
+  --r-green: #2e8b3e;
   --f-title: "Rubik Wet Paint", Impact, "Arial Black", sans-serif;
   --f-type: "Special Elite", "Courier New", Courier, monospace;
   --f-num: "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
@@ -32,6 +35,9 @@ button { font: inherit; }
     var(--paper);
   padding: 30px 30px 26px; box-shadow: 0 30px 90px rgba(0,0,0,.65), inset 0 0 60px rgba(120,90,40,.25); transform: rotate(-.5deg); display: grid; gap: 14px; }
 .dossier::after { content: ""; position: absolute; right: 22px; top: 18px; width: 64px; height: 64px; border-radius: 50%; border: 3px double rgba(165,35,27,.55); transform: rotate(12deg); }
+.tri { display: grid; grid-template-columns: repeat(3, 1fr); height: 7px; width: min(320px, 70%); margin-top: -4px; transform: rotate(-.5deg); }
+.tri i:nth-child(1) { background: var(--r-red); } .tri i:nth-child(2) { background: var(--r-gold); } .tri i:nth-child(3) { background: var(--r-green); }
+.dossier::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: linear-gradient(90deg, var(--r-red) 0 33.3%, var(--r-gold) 33.3% 66.6%, var(--r-green) 66.6%); }
 .stamp { justify-self: start; border: 2px solid var(--blood); color: var(--blood); padding: 2px 10px; transform: rotate(-2.5deg); letter-spacing: .14em; text-transform: uppercase; font-size: 12px; }
 .dossier h1 { font-family: var(--f-title); font-weight: 400; color: var(--blood); font-size: clamp(58px, 15vw, 104px); line-height: .88; margin: 0; letter-spacing: .01em; text-wrap: balance; }
 .dossier h2 { font-family: var(--f-title); font-weight: 400; color: var(--blood); font-size: clamp(38px, 10vw, 60px); line-height: .95; margin: 0; }
@@ -133,6 +139,18 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
 .hitm.head::before, .hitm.head::after { background: var(--brass); width: 3px; }
 .markers { position: absolute; inset: 0; }
 .dossier.wide { max-width: 680px; }
+.screen.side { background: linear-gradient(90deg, rgba(5,7,6,.9) 0 40%, rgba(5,7,6,0) 75%); justify-items: start; padding-left: max(28px, 4vw); }
+.screen.side .dossier { max-width: 420px; }
+@media (max-width: 760px) { .screen.side { background: linear-gradient(0deg, rgba(5,7,6,.95) 0 55%, rgba(5,7,6,0) 85%); align-items: end; justify-items: center; padding-left: 16px; } }
+.clist { display: grid; gap: 12px; }
+.crow { display: grid; gap: 6px; }
+.cpick { display: grid; grid-template-columns: 38px 1fr 38px; align-items: center; border: 2px solid var(--type); }
+.cpick button { height: 36px; background: var(--type); color: var(--paper); border: 0; font-size: 22px; cursor: pointer; }
+.cpick button:hover { background: var(--blood); }
+.cpick b { text-align: center; font-family: var(--f-num); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; font-size: 15px; }
+.sw { display: flex; gap: 6px; flex-wrap: wrap; }
+.sw i { width: 26px; height: 26px; cursor: pointer; box-shadow: inset 0 0 0 2px rgba(0,0,0,.35); }
+.sw i.on { outline: 3px solid var(--blood); outline-offset: 2px; }
 .tabs { display: flex; gap: 0; border-bottom: 2px solid var(--type); flex-wrap: wrap; }
 .tabs button { background: none; border: 0; padding: 8px 14px; font-family: var(--f-num); font-size: 14px; letter-spacing: .16em; text-transform: uppercase; color: #5b4e36; cursor: pointer; }
 .tabs button.on { background: var(--type); color: var(--paper); }
@@ -234,7 +252,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
 @media (prefers-reduced-motion: reduce) { .banner, .round, .pop { transition: none; animation: none; } }
 </style>
 
-<canvas id="c" aria-label="Bunker 47 game view"></canvas>
+<canvas id="c" aria-label="Dead Locks game view"></canvas>
 <div id="loading">Building the bunker…</div>
 
 <div class="hud" id="hud" hidden>
@@ -252,7 +270,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
   <div class="prompt" id="prompt"></div>
   <div class="fxchips" id="fxchips"></div>
   <div class="markers" id="markers"></div>
-  <div class="bossbar" id="bossbar" hidden><span>The Brute</span><div class="pbar"><i id="bossFill"></i></div></div>
+  <div class="bossbar" id="bossbar" hidden><span>Deadlock</span><div class="pbar"><i id="bossFill"></i></div></div>
   <div class="banner" id="banner"><div class="big" id="bBig"></div><div class="sub" id="bSub"></div></div>
   <div class="downed" id="downed" hidden><b>Down</b><span id="downTxt"></span><div class="pbar"><i id="bleedBar"></i></div></div>
   <div class="revbar" id="revbar" hidden><span id="revTxt">Reviving</span><div class="pbar"><i id="revFill"></i></div></div>
@@ -272,9 +290,10 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
 
 <div class="screen" id="menu" hidden>
   <div class="dossier">
-    <div class="stamp">Field report · Night of the 47th</div>
-    <h1>Bunker 47</h1>
-    <p>The garrison went silent three nights ago. Now they are walking again. Hold the barracks, board up the windows, buy your way deeper into the bunker, and see how many rounds you last.</p>
+    <div class="stamp">Sound system · Bunker 47 · last dance</div>
+    <h1>Dead Locks</h1>
+    <div class="tri" aria-hidden="true"><i></i><i></i><i></i></div>
+    <p>Somebody left the sound system running down in Bunker 47, and the bass woke the whole garrison. Now they won't stop moving. Hold the barracks, board up the windows, buy your way deeper, and keep the riddim going as long as you last.</p>
     <div class="field"><label class="lbl" for="nameIn">Your name</label><input type="text" id="nameIn" maxlength="16" autocomplete="off"></div>
     <div class="row"><button class="btn red" id="soloBtn">Play solo</button><button class="btn" id="hostBtn" disabled>Host co-op</button></div>
     <div class="row"><input type="text" id="codeIn" placeholder="Game code" maxlength="4" autocomplete="off" aria-label="Game code"><button class="btn ghost" id="joinBtn" disabled>Join game</button></div>
@@ -295,7 +314,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
       </div>
       <p style="margin-top:10px">Every hit earns points; kills and headshots earn more. Spend them on wall weapons, the glowing crate's random weapon, tonics from the cabinets, and the steel doors that open new rooms. Clear the stairway in the Generator Hall to reach the Officers' Quarters upstairs, where the Upgrade Forge turns any weapon into something far nastier. Go down in co-op and a teammate has 30 seconds to revive you.</p>
     </details>
-    <div class="row"><button class="btn ghost" id="optBtn">Options</button><button class="btn ghost" id="soldierBtn">Customise soldier</button></div>
+    <div class="row"><button class="btn ghost" id="optBtn">Options</button><button class="btn ghost" id="soldierBtn">Customise character</button></div>
   </div>
 </div>
 
@@ -311,6 +330,15 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
 </div>
 
 <div class="note-card" id="note" hidden></div>
+<div class="screen side" id="custom" hidden>
+  <div class="dossier">
+    <div class="stamp">Wardrobe</div>
+    <h2>Your look</h2>
+    <p class="note">Teammates see this look in co-op. Your character turns slowly so you can check every side.</p>
+    <div id="custList" class="clist"></div>
+    <div class="row"><button class="btn red" id="custDone">Done</button><button class="btn ghost" id="custRand">Surprise me</button></div>
+  </div>
+</div>
 <div class="screen" id="opts" hidden>
   <div class="dossier wide">
     <div class="stamp">Field manual</div>
@@ -393,7 +421,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
 
 <div class="screen" id="over" hidden>
   <div class="dossier">
-    <div class="stamp">Bunker overrun</div>
+    <div class="stamp">The music stopped</div>
     <h2 id="overTitle">You survived 0 rounds</h2>
     <table class="stats" id="overStats"></table>
     <div class="row"><button class="btn red" id="againBtn">Play again</button><button class="btn ghost" id="menuBtn">Back to menu</button></div>
@@ -1062,15 +1090,21 @@ function perkMachine(k, x, z, ry) {
 function perkJingle(k, pos, vol = 1) {
   if (!A.ctx || !PERK_TUNE[k]) return; const c = A.ctx, T0 = c.currentTime + 0.05, tune = PERK_TUNE[k], b = 60 / tune.bpm, out = bus(pos, 0.35, vol * 0.9);
   const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = pos ? 2600 : 4200; lp.connect(out);
-  let t = T0;
+  // tape echo for the jingle
+  const dl = c.createDelay(1); dl.delayTime.value = b * 0.75; const fb = c.createGain(); fb.gain.value = 0.42; const df = c.createBiquadFilter(); df.type = 'bandpass'; df.frequency.value = 1500; dl.connect(df); df.connect(fb); fb.connect(dl); df.connect(lp);
+  let t = T0; const root = tune.n[0][0] - 24, beats = tune.n.reduce((a, q) => a + q[1], 0);
+  for (let i = 0; i < Math.ceil(beats); i++) {
+    const tb = T0 + i * b; osc(lp, tb, b * 0.8, 'sine', mfq(root + (i % 4 === 2 ? 7 : i % 4 === 3 ? 5 : 0)), 0, 0.2, 0.01);            // bass on the beat
+    const sk = [root + 24, root + 27, root + 31]; for (const m of sk) { osc(lp, tb + b / 2, 0.1, 'square', mfq(m), 0, 0.018, 0.004); osc(dl, tb + b / 2, 0.1, 'square', mfq(m), 0, 0.012, 0.004); } // skank on the offbeat
+    if (i % 2 === 1) { nz(lp, tb, 0.05, 'bandpass', 2400, 3, 0.12, 0.001); osc(lp, tb, 0.25, 'sine', 110, 45, 0.3); }                          // one-drop
+  }
   for (const [m, d] of tune.n) {
     const f = mfq(m), dur = d * b;
-    osc(lp, t, dur * 0.95 + 0.08, tune.wave, f, 0, tune.wave === 'sine' ? 0.18 : 0.07, 0.008);
-    osc(lp, t, dur * 0.9 + 0.3, 'sine', f * 2, 0, 0.05, 0.004);           // bell overtone
-    osc(lp, t, dur * 0.9, 'triangle', f / 2, 0, 0.06, 0.01);               // low organ
+    osc(lp, t, dur * 0.9 + 0.06, 'square', f, 0, 0.035, 0.02); osc(dl, t, dur * 0.9, 'square', f, 0, 0.02, 0.02);   // melodica lead, echoed
+    osc(lp, t, dur * 0.9 + 0.06, 'triangle', f * 1.004, 0, 0.06, 0.02);
     t += dur;
   }
-  osc(lp, t, 1.2, 'sine', mfq(tune.n[tune.n.length - 1][0] + 12), 0, 0.06, 0.01);
+  osc(dl, t, 1.2, 'square', mfq(tune.n[tune.n.length - 1][0] + 12), 0, 0.03, 0.01);
   nz(lp, T0, t - T0 + 0.6, 'bandpass', 3000, 0.6, 0.006, 0.002);           // old-gramophone hiss
 }
 function perkMachinesUpdate(dt) {
@@ -1711,7 +1745,8 @@ function zGeo() {
     belt: new THREE.CylinderGeometry(0.168, 0.168, 0.05, 16), pouch: new THREE.BoxGeometry(0.07, 0.06, 0.035), button: new THREE.SphereGeometry(0.009, 6, 5),
     collar: new THREE.TorusGeometry(0.07, 0.02, 6, 14), strip: new THREE.PlaneGeometry(0.06, 0.16), rib: new THREE.TorusGeometry(0.06, 0.007, 5, 12, Math.PI * 0.85),
     cavity: new THREE.SphereGeometry(0.085, 10, 8), wound: new THREE.SphereGeometry(0.035, 8, 6), stump: new THREE.SphereGeometry(0.05, 8, 6),
-    helm: new THREE.SphereGeometry(0.148, 16, 8, 0, TAU, 0, Math.PI * 0.52), brim: new THREE.CylinderGeometry(0.17, 0.19, 0.02, 18), hair: new THREE.SphereGeometry(0.116, 12, 8, 0, TAU, 0, Math.PI * 0.42)
+    helm: new THREE.SphereGeometry(0.148, 16, 8, 0, TAU, 0, Math.PI * 0.52), brim: new THREE.CylinderGeometry(0.17, 0.19, 0.02, 18), hair: new THREE.SphereGeometry(0.116, 12, 8, 0, TAU, 0, Math.PI * 0.42),
+    bucket: new THREE.CylinderGeometry(0.115, 0.135, 0.1, 18), bucketBrim: new THREE.CylinderGeometry(0.135, 0.2, 0.05, 20, 1, true), capTop: new THREE.SphereGeometry(0.128, 16, 8, 0, TAU, 0, Math.PI * 0.5), capPeak: new THREE.BoxGeometry(0.17, 0.012, 0.11), beanie: new THREE.SphereGeometry(0.13, 16, 10, 0, TAU, 0, Math.PI * 0.58), beanieRim: new THREE.TorusGeometry(0.118, 0.022, 6, 18)
   });
   return ZG;
 }
@@ -1771,9 +1806,13 @@ function zombieModel(o) {
   }
   add(G.nose, S, head, 0, 0.09, 0.105, 1, 1, 0.7, Math.PI / 2 + 0.3);
   if (!o.clean) for (let i = 0; i < 6; i++) if (r() < 0.85) add(G.tooth, bone, head, -0.03 + i * 0.012, 0.045, 0.088);
-  if (o.helmet) { add(G.helm, o.helm, head, 0, 0.13, 0, 1, 1, 1, -0.08); add(G.brim, o.helm, head, 0, 0.14, -0.005, 1, 1, 1, -0.08); }
-  else if (r() < 0.7) add(G.hair, ZM.hair, head, 0, 0.11, -0.01, 0.97, 1.05, 1.03, -0.2);
-  if (o.clean) for (const sx of [-1, 1]) add(G.strip, M.leather, head, sx * 0.1, 0.06, 0.02, 0.2, 0.7, 1, 0, sx * Math.PI / 2, 0); // chin strap
+  const hat = o.hat || (o.helmet ? 'helmet' : null), hm = o.hatMat || o.helm;
+  if (hat === 'helmet') { add(G.helm, o.helm, head, 0, 0.13, 0, 1, 1, 1, -0.08); add(G.brim, o.helm, head, 0, 0.14, -0.005, 1, 1, 1, -0.08); }
+  else if (hat === 'bucket') { add(G.bucket, hm, head, 0, 0.2, -0.005, 1, 1, 1, -0.08); add(G.bucketBrim, hm, head, 0, 0.14, -0.005, 1, 1, 1, -0.08); }
+  else if (hat === 'cap') { add(G.capTop, hm, head, 0, 0.13, -0.005, 1, 0.85, 1.02, -0.1); add(G.capPeak, hm, head, 0, 0.14, 0.13, 1, 1, 1, -0.12); }
+  else if (hat === 'beanie') { add(G.beanie, hm, head, 0, 0.115, -0.005, 1, 1.05, 1, -0.12); add(G.beanieRim, hm, head, 0, 0.13, -0.005, 1, 1, 1, Math.PI / 2 - 0.12); }
+  else if (o.hair !== false && (o.hair || r() < 0.7)) add(G.hair, o.hairMat || ZM.hair, head, 0, 0.11, -0.01, 0.97, 1.05, 1.03, -0.2);
+  if (o.clean && hat === 'helmet') for (const sx of [-1, 1]) add(G.strip, M.leather, head, sx * 0.1, 0.06, 0.02, 0.2, 0.7, 1, 0, sx * Math.PI / 2, 0); // chin strap
   const jaw = piv(head, 0, 0.06, 0.01);
   if (!o.noJaw) { add(G.jaw, S, jaw, 0, -0.022, 0.035); if (!o.clean) for (let i = 0; i < 5; i++) if (r() < 0.8) add(G.tooth, bone, jaw, -0.024 + i * 0.012, -0.002, 0.075); }
   else add(G.wound, gore, head, 0, 0.04, 0.05, 1.3, 0.6, 1);
@@ -2170,7 +2209,7 @@ const SND = {
   buy() { playB('buy', null, 0.8, 0.2) || SYN.buy(); },
   deny() { playB('deny', null, 0.8, 0.1) || SYN.deny(); },
   perk() { playB('perk', null, 0.9, 0.2) || SYN.buy(); },
-  roundStart() { playB('rstart', null, 0.9, 0.6) || SYN.roundStart(); },
+  roundStart() { playB('rstart', null, 0.9, 0.6) || SYN.roundStart(); if (A.ctx && MUS.bus) dubSiren(MUS.bus, A.ctx.currentTime + 0.4, 0.05); },
   roundEnd() { playB('rend', null, 0.9, 0.6) || SYN.roundEnd(); },
   power() { playB('power', null, 0.9, 0.4) || SYN.power(); },
   boom(pos) { playB('boom', pos, 1.1, 0.6) || SYN.boom(pos); },
@@ -2197,40 +2236,58 @@ const SND = {
   forge(pos) { playB('forge', pos, 0.9, 0.5) || SYN.forge(pos); }
 };
 // ---------------------------------------------------------------------
-// gameplay music: played live and adaptive. A dark minor loop (Am · F · Dm · E) at 84 bpm; layers join as the
-// round heats up (pad → bass pulse → kick → snare → hats → string stabs), a sparse music-box line when it is calm,
-// muffled when you are down.
+// gameplay music: a live, adaptive dub riddim (76 bpm one-drop in A minor: Am · Dm · Am · Em).
+// Calm: organ bubble + melodica. As the round heats up: bass → one-drop kick and rim → offbeat skank chords
+// → hi-hats → horn stabs → dub sirens. Everything feeds a dotted-eighth tape echo. Muffled when you are down.
 // ---------------------------------------------------------------------
-const MUS = { on: true, vol: Math.min(1, Math.max(0, OPT.music)), t: 0, step: 0, int: 0, bus: null, filt: null };
-const MSTEP = 60 / 84 / 4, MPROG = [[57, 60, 64], [53, 57, 60], [50, 53, 57], [52, 56, 59]], mfq = n => 440 * Math.pow(2, (n - 69) / 12);
+const MUS = { on: true, vol: Math.min(1, Math.max(0, OPT.music)), t: 0, step: 0, int: 0, bus: null, filt: null, dly: null };
+const MSTEP = 60 / 76 / 4, MPROG = [[57, 60, 64], [50, 53, 57], [57, 60, 64], [52, 55, 59]], mfq = n => 440 * Math.pow(2, (n - 69) / 12);
+// bass riff per bar, as [16th step, semitones above the chord root] (root an octave under)
+const MBASS = [[0, 0], [3, 0], [6, 7], [8, 12], [10, 10], [12, 7], [14, 3]];
 function musInit() {
   if (MUS.bus || !A.ctx) return; const c = A.ctx;
   MUS.bus = c.createGain(); MUS.bus.gain.value = 0; MUS.filt = c.createBiquadFilter(); MUS.filt.type = 'lowpass'; MUS.filt.frequency.value = 5000;
-  MUS.bus.connect(MUS.filt); MUS.filt.connect(A.master); const w = c.createGain(); w.gain.value = 0.3; MUS.filt.connect(w); w.connect(A.rev);
+  MUS.bus.connect(MUS.filt); MUS.filt.connect(A.master); const w = c.createGain(); w.gain.value = 0.22; MUS.filt.connect(w); w.connect(A.rev);
+  // tape echo: dotted eighth, filtered feedback
+  MUS.dIn = c.createGain(); MUS.dIn.gain.value = 1; const d = c.createDelay(2); d.delayTime.value = MSTEP * 3; const fb = c.createGain(); fb.gain.value = 0.48; const df = c.createBiquadFilter(); df.type = 'bandpass'; df.frequency.value = 1400; df.Q.value = 0.7;
+  MUS.dIn.connect(d); d.connect(df); df.connect(fb); fb.connect(d); const dOut = c.createGain(); dOut.gain.value = 0.55; df.connect(dOut); dOut.connect(MUS.filt);
   MUS.t = c.currentTime + 0.1;
 }
 function musicTick() {
   if (!A.ctx) return; musInit(); const c = A.ctx;
   let tgt = 0.1;
-  if (APP.screen === 'play') { tgt = V.phase === 'play' ? 0.28 + Math.min(0.45, zv.size / 18 * 0.45) + Math.min(0.25, V.round / 25 * 0.25) : 0.12; if (P.down) tgt = Math.min(tgt, 0.3); }
+  if (APP.screen === 'play') { tgt = V.phase === 'play' ? 0.28 + Math.min(0.45, zv.size / 18 * 0.45) + Math.min(0.25, V.round / 25 * 0.25) : 0.14; if (P.down) tgt = Math.min(tgt, 0.3); }
   else if (APP.screen === 'over') tgt = 0.05;
+  else if (APP.screen === 'menu' || APP.screen === 'wait') tgt = 0.4;
   MUS.int = lerp(MUS.int, tgt, 0.015);
   MUS.bus.gain.setTargetAtTime((APP.paused ? 0.35 : 1) * MUS.vol * 0.6, c.currentTime, 0.6);
-  MUS.filt.frequency.setTargetAtTime(P.down && APP.screen === 'play' ? 650 : 1800 + MUS.int * 7000, c.currentTime, 0.4);
+  MUS.filt.frequency.setTargetAtTime(P.down && APP.screen === 'play' ? 600 : 1600 + MUS.int * 6500, c.currentTime, 0.4);
   if (MUS.t < c.currentTime) MUS.t = c.currentTime + 0.05;
   while (MUS.t < c.currentTime + 0.25) { musStep(MUS.step++, MUS.t); MUS.t += MSTEP; }
 }
+// a short organ/skank chord: three detuned squares through a bright bandpass, very short
+function skank(dest, t, ch, a, up) { for (const m of ch) { osc(dest, t, 0.11, 'square', mfq(m + (up || 0)), 0, a, 0.004); osc(dest, t, 0.11, 'square', mfq(m + (up || 0)) * 1.006, 0, a * 0.6, 0.004); } }
+function dubSiren(dest, t, a) { const c = A.ctx, o = c.createOscillator(), g = c.createGain(), l = c.createOscillator(), lg = c.createGain(); o.type = 'square'; o.frequency.value = 520; l.frequency.setValueAtTime(3, t); l.frequency.linearRampToValueAtTime(9, t + 1.6); lg.gain.value = 260; l.connect(lg); lg.connect(o.frequency); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(a, t + 0.05); g.gain.setValueAtTime(a, t + 1.4); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.9); o.connect(g); g.connect(dest); if (MUS.dIn) g.connect(MUS.dIn); o.start(t); l.start(t); o.stop(t + 2); l.stop(t + 2); }
 function musStep(n, t) {
   if (MUS.vol <= 0.001) return;
-  const d = MUS.bus, I = MUS.int, bar = Math.floor(n / 16), st = n % 16, ch = MPROG[bar % 4], k = (lo) => Math.min(1, Math.max(0, (I - lo) * 3));
-  if (st === 0) for (const m of ch) { osc(d, t, MSTEP * 16 + 0.4, 'sawtooth', mfq(m - 12), 0, 0.016 + I * 0.01, 0.7); osc(d, t, MSTEP * 16 + 0.4, 'triangle', mfq(m), 0, 0.018, 0.9); }
-  if (I > 0.22 && st % 2 === 0) { const root = ch[0] - 24; osc(d, t, MSTEP * 1.7, 'sawtooth', mfq(root + (st === 14 && bar % 2 ? 7 : 0)), 0, 0.055 * k(0.22)); osc(d, t, MSTEP * 1.7, 'sine', mfq(root), 0, 0.08 * k(0.22)); }
-  if (I > 0.36 && (st === 0 || st === 8 || (I > 0.7 && st === 10))) osc(d, t, 0.26, 'sine', 125, 38, 0.55 * k(0.36));
-  if (I > 0.5 && (st === 4 || st === 12)) { nz(d, t, 0.16, 'bandpass', 1900, 0.8, 0.2 * k(0.5), 0.001); osc(d, t, 0.08, 'triangle', 220, 140, 0.12 * k(0.5)); }
-  if (I > 0.62 && st % 2 === 1) nz(d, t, 0.035, 'highpass', 7500, 1, (st % 4 === 3 ? 0.07 : 0.04) * k(0.62), 0.001);
-  if (I > 0.8 && bar % 4 === 3 && st >= 12) osc(d, t, 0.2, 'sine', 190 - (st - 12) * 28, 70, 0.35);
-  if (I > 0.72 && st === 0 && bar % 2 === 0) { osc(d, t, MSTEP * 7, 'sawtooth', mfq(ch[2] + 12), mfq(ch[2] + 12) * 1.03, 0.02 * k(0.72), 0.25); osc(d, t, MSTEP * 7, 'sawtooth', mfq(ch[0] + 12) * 1.004, 0, 0.018 * k(0.72), 0.25); }
-  if (I < 0.45 && (st === 0 || st === 6 || st === 10) && Math.random() < 0.55) { const sc = [69, 72, 74, 76, 79, 81], m = sc[(Math.random() * sc.length) | 0]; osc(d, t, 1.4, 'sine', mfq(m + 12), 0, 0.045); osc(d, t, 0.7, 'sine', mfq(m + 24) * 1.003, 0, 0.012); }
+  const d = MUS.bus, e = MUS.dIn || d, I = MUS.int, bar = Math.floor(n / 16), st = n % 16, ch = MPROG[bar % 4], k = lo => Math.min(1, Math.max(0, (I - lo) * 3));
+  const swing = st % 2 === 1 ? MSTEP * 0.18 : 0, T = t + swing;
+  // organ bubble: the classic shuffle on the "and"s, always there underneath
+  if (st % 4 === 2) skank(d, T, ch.map(m => m - 12), 0.008);
+  // bass: deep sine + a little grit, the riff moves with the chord
+  if (I > 0.15) for (const [bs, iv] of MBASS) if (bs === st) { const f = mfq(ch[0] - 24 + iv); osc(d, T, MSTEP * (bs === 8 ? 2.6 : 1.8), 'sine', f, 0, 0.16 * k(0.15), 0.01); osc(d, T, MSTEP * 1.4, 'triangle', f * 2, 0, 0.025 * k(0.15), 0.01); }
+  // one-drop: kick + rim on beat three; at higher intensity a steppers kick on every beat
+  if (I > 0.3 && (st === 8 || (I > 0.75 && st % 4 === 0))) { osc(d, T, 0.3, 'sine', 110, 42, 0.5 * k(0.3)); if (st === 8) { nz(d, T, 0.05, 'bandpass', 2400, 3, 0.22 * k(0.3), 0.001); osc(e, T, 0.04, 'triangle', 820, 600, 0.05 * k(0.3)); } }
+  // skank: chords on the offbeats (2 and 4), sent into the echo
+  if (I > 0.42 && (st === 4 || st === 12)) { skank(d, T, ch, 0.016 * k(0.42), 12); skank(e, T, ch, 0.01 * k(0.42), 12); }
+  // hats: shuffled eighths, open on the last one of the bar
+  if (I > 0.55 && st % 2 === 0) nz(d, T, st === 14 ? 0.12 : 0.03, 'highpass', 8000, 1, (st % 4 === 2 ? 0.05 : 0.025) * k(0.55), 0.001);
+  // horns: a two-note stab every other bar at high intensity
+  if (I > 0.7 && bar % 2 === 1 && (st === 6 || st === 7)) { const m = ch[st === 6 ? 2 : 1] + 12; osc(e, T, 0.22, 'sawtooth', mfq(m), 0, 0.03 * k(0.7), 0.01); osc(d, T, 0.22, 'sawtooth', mfq(m + 7), 0, 0.018 * k(0.7), 0.01); }
+  // dub siren every 8 bars when it is wild
+  if (I > 0.82 && bar % 8 === 7 && st === 0) dubSiren(d, T, 0.03);
+  // melodica: lazy minor-pentatonic phrases when it is calm, echoed
+  if (I < 0.5 && (st === 0 || st === 3 || st === 6 || st === 10) && Math.random() < 0.45) { const sc = [69, 72, 74, 76, 79, 81], m = sc[(Math.random() * sc.length) | 0]; osc(e, T, 0.5, 'square', mfq(m), 0, 0.012, 0.03); osc(d, T, 0.5, 'triangle', mfq(m) * 1.003, 0, 0.02, 0.03); }
 }
 const fwd = new THREE.Vector3();
 function listen() {
@@ -2959,8 +3016,8 @@ function handleEvent(e) {
   }
   else if (t === 'o') { gameOver(e[2]); }
   else if (t === 'sy') storyEvent(e);
-  else if (t === 'bs') { if (e[2] === 1) { banner('The Brute is coming', 'Kill it before it reaches you', 3400); SND.alarm(); setTimeout(() => SND.roar(null), 900); } else { banner('The Brute is enraged', '', 2000); SND.roar(null); } }
-  else if (t === 'bd') { banner('The Brute is dead', e[2] === myPeer ? '+1000 points' : peerName(e[2]) + ' got the kill', 3000, true); if (e[2] === myPeer) addPts(1000); SND.power(); }
+  else if (t === 'bs') { if (e[2] === 1) { banner('Deadlock is coming', 'Kill him before the track ends you', 3400); SND.alarm(); setTimeout(() => SND.roar(null), 900); if (!(SONG_EL.radio && !SONG_EL.radio.paused)) { MUS.vol = 0; playSong('deadlock', () => { MUS.vol = OPT.music; }); } } else { banner('Deadlock is enraged', '', 2000); SND.roar(null); } }
+  else if (t === 'bd') { banner('Deadlock is dead', e[2] === myPeer ? '+1000 points' : peerName(e[2]) + ' got the kill', 3000, true); if (e[2] === myPeer) addPts(1000); SND.power(); stopSong('deadlock', true); setTimeout(() => { MUS.vol = OPT.music; }, 2100); }
   else if (t === 'sl') {
     const p = new THREE.Vector3(e[3] / 10, e[4] / 10, e[5] / 10), v = zv.get(e[2]); if (v) v.slamT = 0.7;
     setTimeout(() => {
@@ -2991,7 +3048,7 @@ function resetLocalPlayer() {
   Object.assign(P, { x: (Math.random() - 0.5) * 3, y: 0, z: 2.5 + Math.random(), vy: 0, yaw: 0, pitch: 0, hp: 100, maxHp: 100, regenT: 0, down: false, dead: false, bleed: 0, revT: 0, selfRev: 0, qrBuys: 0, eyeH: 1.62, rollT: 0, pts: 500, kills: 0, heads: 0, downs: 0, revives: 0, perks: {}, slots: [], cur: 0, gren: 2, fireT: 0, relT: 0, swapT: 0, knifeT: 0, ads: 0, reviving: null, repairPts: 0, shake: 0, dmgFx: 0 });
   give('pistol');
   for (const L of Object.values(BOX.models)) L.visible = false; BOX.state = 'idle';
-  for (const R of RADIOS) { R.on = false; R.dm.color.setRGB(0.25, 0.18, 0.08); } if (songEl) { try { songEl.pause(); } catch (e) {} }
+  for (const R of RADIOS) { R.on = false; R.dm.color.setRGB(0.25, 0.18, 0.08); } stopSong('radio'); stopSong('deadlock'); MUS.vol = OPT.music;
   STORY.shown = -1; $('note').hidden = true;
   forgeReset();
   for (const q of projs) scene.remove(q.m); projs.length = 0;
@@ -3003,7 +3060,7 @@ function addPts(n) {
 }
 const dmgDirs = [];
 function hurt(a, sx, sz) {
-  if (P.down || P.dead || APP.screen !== 'play') return;
+  if (P.down || P.dead || APP.screen !== 'play' || APP.paused || holdName()) return; // nothing can hurt you while the game is paused
   P.hp -= a; P.regenT = 4; P.dmgFx = 1; P.shake = Math.max(P.shake, 0.18); SND.hurt();
   if (sx != null && isFinite(sx)) { dmgDirs.push({ x: sx, z: sz, t: 1.2 }); if (dmgDirs.length > 4) dmgDirs.shift(); }
   if (P.hp <= 0) goDown();
@@ -3263,6 +3320,24 @@ function benchBuy(a) {
 }
 // song easter egg: tune all three radios. The song file sits next to the page (website) as song.mp3.
 let songEl = null;
+// the owner's songs: a file next to the page first (website), then Suno's CDN, then silence + a sting
+const SONGS = { radio: { file: 'song.mp3', id: '39f598d4-f768-4b27-917e-d33c7f5f692f' }, deadlock: { file: 'deadlock.mp3', id: '1f4a7e77-eb8c-46e3-9023-8c913c6cf57a' } };
+const SONG_EL = {};
+function songSources(k) { const S = SONGS[k]; return [S.file, 'https://cdn1.suno.ai/' + S.id + '.mp3', 'https://cdn2.suno.ai/' + S.id + '.mp3']; }
+function playSong(k, onFail, onEnd) {
+  const list = songSources(k); let i = 0;
+  const el = SONG_EL[k] || (SONG_EL[k] = new Audio()); el.loop = k === 'deadlock'; el.preload = 'auto';
+  el.volume = clamp((k === 'deadlock' ? 0.7 : 0.85) * OPT.master, 0, 1);
+  const tryNext = () => {
+    if (i >= list.length) { if (onFail) onFail(); return; }
+    el.src = list[i++]; el.onerror = tryNext; el.onended = onEnd || null;
+    try { el.currentTime = 0; } catch (e) {}
+    const pr = el.play(); if (pr && pr.catch) pr.catch(err => { if (err && err.name === 'NotAllowedError') { if (onFail) onFail(); } else tryNext(); });
+  };
+  tryNext(); return el;
+}
+function stopSong(k, fade) { const el = SONG_EL[k]; if (!el || el.paused) return; if (!fade) { el.pause(); return; } const v0 = el.volume; let n = 0; const iv = setInterval(() => { n++; el.volume = Math.max(0, v0 * (1 - n / 20)); if (n >= 20) { clearInterval(iv); el.pause(); el.volume = v0; } }, 100); }
+let musDuck = 0;
 function tuneRadio(i) {
   const R = RADIOS[i]; if (!R || R.on) return;
   R.on = true; R.dm.color.setRGB(0.4, 2.6, 0.6); playB('radio', { x: R.x, y: R.y + 0.2, z: R.z }, 0.9, 0.3);
@@ -3270,11 +3345,8 @@ function tuneRadio(i) {
   if (n < 3) { banner(n + ' / 3', 'Something is playing far away…', 1800, true); return; }
   banner('♪', 'The bunker remembers', 3000, true);
   try {
-    if (!songEl) { songEl = new Audio('song.mp3'); songEl.loop = false; songEl.volume = 0.85; } songEl.volume = clamp(0.85 * OPT.master, 0, 1);
-    const prev = MUS.vol; MUS.vol = 0; songEl.currentTime = 0;
-    const back = () => { MUS.vol = OPT.music; };
-    songEl.onended = back; songEl.onerror = () => { back(); playB('box', null, 0.9, 0.6); };
-    const pr = songEl.play(); if (pr && pr.catch) pr.catch(() => { back(); playB('box', null, 0.9, 0.6); });
+    MUS.vol = 0; const back = () => { MUS.vol = OPT.music; };
+    songEl = playSong('radio', () => { back(); playB('box', null, 0.9, 0.6); }, back);
   } catch (e) { playB('box', null, 0.9, 0.6); }
 }
 function perkCost(k) { const pk = PERKS[k]; return pk.solo && nPlayers() === 1 ? pk.solo : pk.cost; }
@@ -3547,17 +3619,63 @@ function avatarGun(av, key, pap, at) {
   if (k === 'panzer') g.position.y = 0.12;
   av.aim.add(g); av.gun = g; av.fl = null;
 }
+// ---------- character customisation ----------
+const LOOK_OUTFIT = [['Olive drab', 0x7e7a50], ['Sound crew black', 0x26262a], ['Selecta red', 0x9c2a22], ['Gold', 0xb38a2a], ['Yard green', 0x2f6b38], ['Denim', 0x3e5878], ['Khaki', 0xa08b62], ['Camo grey', 0x5d625a]];
+const LOOK_HAT = [['Helmet', 'helmet'], ['Bucket hat', 'bucket'], ['Cap', 'cap'], ['Beanie', 'beanie'], ['Bare head', 'none']];
+const LOOK_HATC = [['Matching', -1], ['Black', 0x1d1d1f], ['Red', 0xb8261c], ['Gold', 0xd8a520], ['Green', 0x2e8b3e], ['White', 0xd8d4c8]];
+const LOOK_SKIN = [['Tone 1', 0xf0c9a8], ['Tone 2', 0xd6a27c], ['Tone 3', 0xb07a52], ['Tone 4', 0x7f5236], ['Tone 5', 0x4e3121]];
+const LOOK_GEAR = [['Field pack', 1], ['Light', 0]];
+const LOOK_KEYS = [['Outfit', LOOK_OUTFIT, 'o'], ['Headwear', LOOK_HAT, 'h'], ['Headwear colour', LOOK_HATC, 'hc'], ['Skin tone', LOOK_SKIN, 's'], ['Gear', LOOK_GEAR, 'g']];
+const LOOK = Object.assign({ o: 0, h: 0, hc: 0, s: 1, g: 0 }, (() => { try { return JSON.parse(store.get('b47look', '{}')) || {}; } catch (e) { return {}; } })());
+const lookStr = L => [L.o, L.h, L.hc, L.s, L.g].map(v => v | 0).join('.');
+function lookParse(v) { const a = String(v || '').split('.').map(x => x | 0); return { o: clamp(a[0] || 0, 0, LOOK_OUTFIT.length - 1), h: clamp(a[1] || 0, 0, LOOK_HAT.length - 1), hc: clamp(a[2] || 0, 0, LOOK_HATC.length - 1), s: clamp(a[3] == null ? 1 : a[3], 0, LOOK_SKIN.length - 1), g: clamp(a[4] || 0, 0, 1) }; }
+const LMC = new Map();
+function lookMat(kind, hex) {
+  const key = kind + hex; if (LMC.has(key)) return LMC.get(key);
+  const m = kind === 'cloth' ? mat(TEX.cloth, { color: hex }) : kind === 'metal' ? mat(TEX.metal, { color: hex, metalness: 0.35 }) : new THREE.MeshStandardMaterial({ color: hex, roughness: 0.62 });
+  LMC.set(key, m); return m;
+}
+function lookModel(L, seed) {
+  const oc = LOOK_OUTFIT[L.o][1], hat = LOOK_HAT[L.h][1], hcv = LOOK_HATC[L.hc][1];
+  const hatHex = hcv < 0 ? (hat === 'helmet' ? 0x5e6b47 : new THREE.Color(oc).multiplyScalar(0.8).getHex()) : hcv;
+  const cloth = lookMat('cloth', oc);
+  return zombieModel({ r: rngf(seed), clean: true, pack: !!LOOK_GEAR[L.g][1], cloth, clothTorn: cloth, skin: lookMat('skin', LOOK_SKIN[L.s][1]), eyes: PM.eyes, helm: lookMat('metal', hatHex), hatMat: hat === 'helmet' ? lookMat('metal', hatHex) : lookMat('cloth', hatHex), hat: hat === 'none' ? null : hat, hair: hat === 'none', scale: 1 });
+}
+function applyLookLocal() {
+  // first-person arms follow the outfit and skin
+  if (PM.sleeve) PM.sleeve.color.setHex(new THREE.Color(LOOK_OUTFIT[LOOK.o][1]).multiplyScalar(0.88).getHex());
+  if (PM.skin) PM.skin.color.setHex(LOOK_SKIN[LOOK.s][1]);
+}
+const CUST = { model: null, key: '', spin: 0 };
+function custOpen() { hideScreens(); APP.screen = 'custom'; $('custom').hidden = false; custRender(); }
+function custClose() { $('custom').hidden = true; if (CUST.model) { scene.remove(CUST.model.root); CUST.model = null; CUST.key = ''; } showMenu(); }
+function custRender() {
+  $('custList').innerHTML = LOOK_KEYS.map(([lab, list, k]) => '<div class="crow"><span class="lbl">' + lab + '</span><div class="cpick"><button data-k="' + k + '" data-d="-1" aria-label="Previous ' + lab + '">‹</button><b>' + list[LOOK[k]][0] + '</b><button data-k="' + k + '" data-d="1" aria-label="Next ' + lab + '">›</button></div>' + (k === 'o' || k === 'hc' || k === 's' ? '<div class="sw">' + list.map((q, i) => '<i data-k="' + k + '" data-i="' + i + '" class="' + (i === LOOK[k] ? 'on' : '') + '" style="background:' + (q[1] < 0 ? 'linear-gradient(135deg,#888 50%,#444 50%)' : '#' + new THREE.Color(q[1]).getHexString()) + '" title="' + q[0] + '"></i>').join('') + '</div>' : '') + '</div>').join('');
+}
+function custSet(k, v) { const list = LOOK_KEYS.find(q => q[2] === k)[1]; LOOK[k] = (v + list.length) % list.length; store.set('b47look', JSON.stringify(LOOK)); applyLookLocal(); custRender(); setLobbyPresence(); }
+const CUSTP = { x: 1.2, z: 0.6 };
+function custFrame(dt) {
+  const key = lookStr(LOOK);
+  if (CUST.key !== key) { if (CUST.model) scene.remove(CUST.model.root); CUST.model = lookModel(LOOK, 1234); CUST.model.root.position.set(CUSTP.x, PY, CUSTP.z); scene.add(CUST.model.root); CUST.key = key; }
+  CUST.spin += dt * 0.6; const h = CUST.model; h.root.rotation.y = Math.sin(CUST.spin) * 0.7 + 0.3;
+  animHuman(h, 0, 0, 'player', 0, 0); h.torso.rotation.x = 0.02 + Math.sin(T.now * 1.6) * 0.01;
+  h.aR.rotation.set(0.05, 0, 0.08); h.eR.rotation.x = -0.1; h.aL.rotation.set(0.05, 0, -0.08); h.eL.rotation.x = -0.1;
+  const narrow = innerWidth < 760;
+  camera.position.set(CUSTP.x - (narrow ? 0 : 1.15), narrow ? 0.85 : 1.15, CUSTP.z + 3.7); camera.rotation.set(narrow ? 0.08 : -0.02, 0, 0); if (camera.fov !== 50) { camera.fov = 50; camera.updateProjectionMatrix(); }
+}
 function avatarFor(id) {
   const p = peers.get(id); if (!p) return null;
+  const lk = p.pres && typeof p.pres.lk === 'string' ? p.pres.lk : '0.0.0.1.0';
+  if (p.av && p.av.lk !== lk) { scene.remove(p.av.h.root); p.av = null; }
   if (!p.av) {
     let hs = 7; for (const ch of String(id)) hs = (hs * 31 + ch.charCodeAt(0)) >>> 0;
-    const h = zombieModel({ r: rngf(hs), clean: true, pack: true, cloth: PM.cloth, clothTorn: PM.cloth, skin: PM.skin, eyes: PM.eyes, helm: PM.helm, helmet: true, scale: 1 });
+    const h = lookModel(lookParse(lk), hs);
     const aim = new THREE.Group(); aim.position.set(0, 0.4, 0); h.torso.add(aim);
     const gun = new THREE.Group();
     const lab = textSprite([''], { scale: 0.22, size: 60, w: 512, h: 96 }); lab.position.y = 2.15; h.root.add(lab);
     const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: reviveIconTex(), transparent: true, depthTest: false, depthWrite: false, toneMapped: false })); icon.renderOrder = 10; icon.position.y = 1.35; icon.visible = false; h.root.add(icon);
     scene.add(h.root);
-    p.av = { h, lab, icon, aim, x: 0, z: 0, y: 0, yaw: 0, spd: 0, ph: 0, lx: 0, lz: 0, name: null, dn: -1, flashT: 0, gun, gunKey: null, dA: 0, rA: 0 };
+    p.av = { lk, h, lab, icon, aim, x: 0, z: 0, y: 0, yaw: 0, spd: 0, ph: 0, lx: 0, lz: 0, name: null, dn: -1, flashT: 0, gun, gunKey: null, dA: 0, rA: 0 };
   }
   return p.av;
 }
@@ -3754,7 +3872,7 @@ let presT = 0;
 function myPresence() {
   const s = curSlot();
   const o = {
-    n: myName, c: myColor, ph: APP.screen === 'play' || APP.screen === 'over' ? 'play' : 'wait', ig: APP.screen === 'play' ? 1 : 0,
+    n: myName, c: myColor, lk: lookStr(LOOK), ph: APP.screen === 'play' || APP.screen === 'over' ? 'play' : 'wait', ig: APP.screen === 'play' ? 1 : 0,
     p: [r2(P.x), r2(P.y), r2(P.z), r2(P.yaw), r2(P.pitch)], hp: Math.round(P.hp), dn: P.dead ? 2 : P.down ? 1 : 0,
     w: s ? WKEYS.indexOf(s.k) : 0, sh: P.shotN, pts: P.pts, k: P.kills, hs: P.heads, ds: P.downs, rvs: P.revives, rv: P.reviving || null, qr: P.perks.revive ? 1 : 0, bl: P.down ? Math.ceil(P.bleed) : 0, pp: s && s.pap ? 1 : 0, at: s && s.att ? Object.keys(s.att).sort().join(',') : '',
     hits: Q.hits, rp: Q.rep, pk: Q.pick, sa: Q.sa, pz: APP.pauseReq ? 1 : 0, dr: localDoors, gx: Q.gx, host: isHost ? 1 : 0, s: null
@@ -3856,7 +3974,7 @@ async function lbSubmit(round) {
     LB_ROWS = j.rows || []; lbRender('overLbTable', j.rows || [], j.rank);
   } catch (e) { $('overLbTitle').textContent = 'Could not save your score this time'; }
 }
-function hideScreens() { ['menu', 'waiting', 'pause', 'over', 'opts', 'lbScreen'].forEach(id => { $(id).hidden = true; }); }
+function hideScreens() { ['menu', 'waiting', 'pause', 'over', 'opts', 'lbScreen', 'custom'].forEach(id => { $(id).hidden = true; }); }
 function showMenu() { hideScreens(); APP.screen = 'menu'; $('menu').hidden = false; lbLoad(); $('hud').hidden = true; $('touch').hidden = true; for (const v of Array.from(zv.values())) zRemove(v); G.phase = 'idle'; V.round = 0; V.drops = []; closeDoors(); WINS.forEach(w => { w.count = 6; }); try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {} }
 function beginPlay() {
   hideScreens(); APP.screen = 'play'; APP.paused = false;
@@ -4041,6 +4159,9 @@ for (const [id, k] of OPT_CHK) $(id).addEventListener('change', () => { OPT[k] =
 $('oSens').addEventListener('input', () => { sens = parseFloat($('oSens').value) || 1; store.set('b47s', String(sens)); optSync(); });
 $('oQual').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (!b) return; quality = b.dataset.v; store.set('b47q', quality); OPT.shadows = quality !== 'low'; OPT.scale = quality === 'low' ? 0.85 : 1; saveOpt(); applyQuality(); });
 $('oCross').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (!b) return; OPT.cross = b.dataset.v; saveOpt(); applyQuality(); });
+$('soldierBtn').addEventListener('click', custOpen); $('custDone').addEventListener('click', custClose);
+$('custRand').addEventListener('click', () => { for (const [, list, k] of LOOK_KEYS) LOOK[k] = (Math.random() * list.length) | 0; custSet('o', LOOK.o); });
+$('custList').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (!b) return; if (b.dataset.d) custSet(b.dataset.k, LOOK[b.dataset.k] + (+b.dataset.d)); else custSet(b.dataset.k, +b.dataset.i); });
 $('lbBtn2').addEventListener('click', () => openLb('pause')); $('lbBtn').addEventListener('click', () => openLb('menu'));
 $('lbBack').addEventListener('click', () => { $('lbScreen').hidden = true; $(lbFrom === 'pause' ? 'pause' : 'menu').hidden = false; });
 $('lbTabs').addEventListener('click', e => { const b = e.target.closest('button[data-t]'); if (!b) return; lbTab = b.dataset.t; openLb(lbFrom); });
@@ -4058,6 +4179,7 @@ PN = new Parts(1600, false); PA = new Parts(700, true);
 buildMap();
 navBuild();
 buildViewmodel();
+applyLookLocal();
 vmSet('pistol');
 buildBank().catch(() => {});
 makeGunEnv();
@@ -4075,6 +4197,7 @@ function frame() {
     playerUpdate(dt);
     if (isHost) hostStep(dt);
     vmUpdate(dt);
+  } else if (APP.screen === 'custom') { custFrame(dt); VM.root.visible = false;
   } else if (APP.screen === 'menu' || APP.screen === 'wait' || APP.screen === 'loading') {
     const a = T.now * 0.05; camera.position.set(-2 + Math.sin(a) * 1.5, 1.7, 3.6); camera.rotation.set(-0.05 + Math.sin(a * 1.7) * 0.03, -0.9 + Math.sin(a) * 0.25, 0); if (camera.fov !== 72) { camera.fov = 72; camera.updateProjectionMatrix(); }
     VM.root.visible = false;
@@ -4090,7 +4213,7 @@ function frame() {
 }
 requestAnimationFrame(frame);
 // keep the host simulation alive at a slower rate if this tab is in the background
-setInterval(() => { if (document.hidden && isHost && APP.mode !== 'solo' && APP.screen === 'play') { const dt = 0.25; hostStep(dt); presT = 0; netTick(0.06); } }, 250);
+setInterval(() => { if (document.hidden && isHost && APP.mode !== 'solo' && APP.screen === 'play' && !holdName()) { const dt = 0.25; hostStep(dt); presT = 0; netTick(0.06); } }, 250);
 
 // co-op connection: Claude's room inside Claude, otherwise the website's own relay (/b47ws)
 function wsRoom() {
