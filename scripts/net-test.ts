@@ -81,6 +81,36 @@ async function main(): Promise<void> {
   check(a.trade() === null && b.trade() === null, 'trade closed on both clients');
   check(b.game.session(b.pid)!.inventory.count(item) === before + qty, `partner received ${item} ×${qty}`);
   check(bp.vocation === 'sorcerer', 'vocation chosen at login');
+
+  // splitting stacks (the "How many?" box): the server moves only the amount asked for and refuses wrong amounts
+  a.send({ c: 'say', text: '/item spear 10' });
+  await pump([a, b], 0.6);
+  const ai = () => a.game.session(a.pid)!.inventory;
+  const sp = ai().slots.findIndex((s, i) => i < ai().size() && s?.id === 'spear' && s.qty >= 10);
+  const free = ai().slots.findIndex((s, i) => i < ai().size() && !s);
+  check(sp >= 0 && free >= 0, 'test item: a stack of spears and a free slot');
+  if (sp >= 0 && free >= 0) {
+    const n0 = ai().slots[sp]!.qty;
+    const all0 = ai().count('spear');
+    a.send({ c: 'moveSlot', from: sp, to: free, qty: 4 });
+    await pump([a, b], 0.6);
+    check(ai().slots[sp]?.qty === n0 - 4 && ai().slots[free]?.qty === 4, `split 4 of ${n0} spears into an empty slot over the network`);
+    for (const q of [0, -2, n0, 1.5]) a.send({ c: 'moveSlot', from: sp, to: free, qty: q });
+    await pump([a, b], 0.6);
+    check(ai().slots[sp]?.qty === n0 - 4 && ai().slots[free]?.qty === 4, 'the server refuses qty 0, negative, too large and fractions');
+    a.send({ c: 'moveSlot', from: free, to: sp, qty: 1 });
+    await pump([a, b], 0.6);
+    check(ai().slots[sp]?.qty === n0 - 3 && ai().slots[free]?.qty === 3, 'part of a stack merges into the same item');
+    const bSpears = b.game.session(b.pid)!.inventory.count('spear');
+    a.send({ c: 'tradeItem', id: b.pid, slot: sp, qty: 2 });
+    await pump([a, b], 0.6);
+    check(b.trade()?.theirs.items.length === 1 && b.trade()?.theirs.items[0]?.id === 'spear' && b.trade()?.theirs.items[0]?.qty === 2, 'a partial stack offered in a trade shows as exactly 2');
+    b.send({ c: 'tradeAccept' });
+    a.send({ c: 'tradeAccept' });
+    await pump([a, b], 0.8);
+    check(b.game.session(b.pid)!.inventory.count('spear') === bSpears + 2 && ai().count('spear') === all0 - 2, 'only the 2 spears changed hands');
+  }
+
   let rejected = '';
   try {
     const bad = await NetController.connect({ url, name: `Ben ${tag}`, password: 'wrong-pass', vocation: 'knight', appearance: DEFAULT_APPEARANCE });

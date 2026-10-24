@@ -365,6 +365,11 @@ const MARKET_RANGE = 2;
  * to the outside world through `events`, and accepts commands per player.
  * The same class runs single-player in the browser and multiplayer on the server.
  */
+/** A chosen amount of a stack: a whole number from 1 to the stack's size. */
+function validQty(n: number, max: number): boolean {
+  return Number.isInteger(n) && n >= 1 && n <= max;
+}
+
 export class Game implements AIContext {
   readonly events = new EventBus();
   readonly world: WorldMap;
@@ -3991,7 +3996,8 @@ export class Game implements AIContext {
       stack = inv.equipment[from] ?? null;
     }
     if (!stack) return;
-    const n = Math.max(1, Math.min(stack.qty, Math.floor(qty ?? stack.qty)));
+    const n = qty ?? stack.qty;
+    if (!validQty(n, stack.qty)) return;
     const thrown: ItemStack = { id: stack.id, qty: n };
     if (typeof from === 'number') inv.removeFromSlot(from, n);
     else {
@@ -4030,7 +4036,8 @@ export class Game implements AIContext {
     if (!this.world.lineOfSight(p.x, p.y, x, y, p.z) && !(onTop && chebyshev(p.x, p.y, x, y) <= 1)) return this.msg(pid, 'You cannot throw there.', 'warn');
     const top = b.items[b.items.length - 1];
     if (!top) return;
-    const n = Math.max(1, Math.min(top.qty, Math.floor(qty ?? top.qty)));
+    const n = qty ?? top.qty;
+    if (!validQty(n, top.qty)) return;
     top.qty -= n;
     if (top.qty <= 0) b.items.pop();
     if (b.corpse) this.events.emit({ type: 'bagChanged', bagId: b.id });
@@ -4043,8 +4050,12 @@ export class Game implements AIContext {
     p.faceTowards(x, y);
   }
 
-  /** Moves or swaps two backpack slots; equal stackable items merge. */
-  moveSlot(pid: number, from: number, to: number): void {
+  /**
+   * Moves or swaps two backpack slots; equal stackable items merge. With `qty` (part of a stack, the
+   * "How many?" box) only that many move: into an empty slot, or onto the same item. Amounts outside
+   * 1…stack are refused, nothing changes.
+   */
+  moveSlot(pid: number, from: number, to: number, qty?: number): void {
     const s = this.sessions.get(pid);
     if (!s || from === to) return;
     const inv = s.inventory;
@@ -4054,6 +4065,19 @@ export class Game implements AIContext {
     if (!a) return;
     const b = inv.slots[to];
     const d = itemDef(a.id);
+    if (qty !== undefined && !validQty(qty, a.qty)) return;
+    if (qty !== undefined && qty < a.qty) {
+      if (!b) {
+        inv.slots[to] = { id: a.id, qty };
+        a.qty -= qty;
+      } else if (b.id === a.id && d.stackable && b.qty < d.maxStack) {
+        const move = Math.min(qty, d.maxStack - b.qty);
+        b.qty += move;
+        a.qty -= move;
+      } else return this.msg(pid, 'There is not enough room.', 'warn');
+      this.events.emit({ type: 'inventoryChanged', to: pid });
+      return;
+    }
     if (b && b.id === a.id && d.stackable && b.qty < d.maxStack) {
       const move = Math.min(a.qty, d.maxStack - b.qty);
       b.qty += move;
@@ -4603,10 +4627,51 @@ export class Game implements AIContext {
     p.chase = chase;
   }
 
-  /** Puts a backpack item on the table for another player, opening the trade first if needed. */
-  offerItemTo(pid: number, otherId: number, slot: number): void {
+  /**
+   * Splits `qty` off a backpack stack into the first empty slot and returns that slot (the slot itself
+   * when the whole stack is meant); -1 when the amount is wrong or there is no free slot.
+   */
+  private splitOff(s: Session, slot: number, qty: number): number {
+    const inv = s.inventory;
+    const st = slot >= 0 && slot < inv.size() ? inv.slots[slot] : null;
+    if (!st || !validQty(qty, st.qty)) return -1;
+    if (qty === st.qty) return slot;
+    const free = inv.slots.findIndex((x, i) => i < inv.size() && !x);
+    if (free < 0) {
+      this.msg(s.id, 'You need a free slot to split that stack.', 'warn');
+      return -1;
+    }
+    inv.slots[free] = { id: st.id, qty };
+    st.qty -= qty;
+    this.events.emit({ type: 'inventoryChanged', to: s.id });
+    return free;
+  }
+
+  /**
+   * Adds a backpack item (or `qty` of a stack) to your side of the open trade: gold raises the gold
+   * you offer, part of any other stack is split into a free slot first.
+   */
+  addToTrade(pid: number, slot: number, qty?: number): void {
     const s = this.sessions.get(pid);
-    if (!s || !s.inventory.slots[slot]) return;
+    const t = this.tradeOf(pid);
+    const st = s?.inventory.slots[slot];
+    if (!s || !t || !st || slot < 0 || slot >= s.inventory.size()) return;
+    const n = qty ?? st.qty;
+    if (!validQty(n, st.qty)) return;
+    const mine = t.offers[pid];
+    if (st.id === 'gold') return this.setTradeOffer(pid, mine.slots, mine.gold + n);
+    if (mine.slots.includes(slot)) return;
+    const at = this.splitOff(s, slot, n);
+    if (at < 0) return;
+    this.setTradeOffer(pid, [...mine.slots, at], mine.gold);
+  }
+
+  /** Puts a backpack item on the table for another player, opening the trade first if needed. */
+  offerItemTo(pid: number, otherId: number, slot: number, qty?: number): void {
+    const s = this.sessions.get(pid);
+    const st = s?.inventory.slots[slot];
+    if (!s || !st) return;
+    if (qty !== undefined && !validQty(qty, st.qty)) return;
     let t = this.tradeOf(pid);
     if (t && t.a !== otherId && t.b !== otherId) return this.msg(pid, 'You are already trading with someone else.', 'warn');
     if (!t) {
@@ -4614,9 +4679,7 @@ export class Game implements AIContext {
       t = this.tradeOf(pid);
       if (!t) return;
     }
-    const mine = t.offers[pid];
-    if (mine.slots.includes(slot)) return;
-    this.setTradeOffer(pid, [...mine.slots, slot], mine.gold);
+    this.addToTrade(pid, slot, qty);
   }
 
   /** Sets what you offer: backpack slot indices plus an amount of gold. Resets both acceptances. */

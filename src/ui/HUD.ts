@@ -20,7 +20,7 @@ import { Obj } from '../game/world/WorldMap';
 import { QUESTS } from '../game/quests/quests';
 import { TUTORIAL_LAST, tutorialStep } from '../game/tutorial/tutorial';
 import { hpColor } from '../render/Overlay';
-import { makeBottomResizable, makePanelsMovable, resetPanelLayout } from './panels';
+import { Layout, type MiniWin, type Preset, type WinId } from './layout';
 import type { Renderer } from '../render/Renderer';
 import { GRAPHICS_NAMES } from '../render/graphics';
 import { RENDER_STYLE, storedStyle, storeStyle, type RenderStyle } from '../render/style';
@@ -28,8 +28,6 @@ import { button, el, fmtGold, paintSlot } from './dom';
 import { itemIcon, spellIcon } from './icons';
 import { SFX_CATS, type Sfx } from '../audio/Sfx';
 
-/** HUD layout presets: "Two flanks" (design 2c) or "Full view" (design 3c). */
-type HudLayout = 'flanks' | 'full';
 import type { Music } from '../audio/Music';
 import { Minimap } from './Minimap';
 import { WorldMapView } from './WorldMapView';
@@ -56,6 +54,12 @@ const EQUIP_LAYOUT: Array<{ slot: EquipSlot; ph: string; name: string }> = [
   { slot: 'weapon', ph: 'iron_sword', name: k('Weapon') }, { slot: 'armor', ph: 'chain_armor', name: k('Armour') }, { slot: 'shield', ph: 'wooden_shield', name: k('Shield / off-hand') },
   { slot: 'ring', ph: 'ring_of_vigor', name: k('Ring') }, { slot: 'legs', ph: 'chain_legs', name: k('Legs') }, { slot: 'ammo', ph: 'arrow', name: k('Ammunition') },
   { slot: 'cape', ph: 'thornvale_cape', name: k('Cape') }, { slot: 'feet', ph: 'leather_boots', name: k('Boots') }, { slot: null as unknown as EquipSlot, ph: '', name: '' },
+];
+
+/** Every side window, in the order the Windows menu lists them. */
+const WIN_NAMES: Array<[WinId, string]> = [
+  ['map', k('Map')], ['status', k('Status')], ['combat', k('Combat')], ['equipment', k('Equipment')], ['pockets', k('Pockets')], ['backpack', k('Backpack')],
+  ['skills', k('Skills')], ['battle', k('Battle')], ['party', k('Party')], ['friends', k('Friends')], ['quests', k('Quest Log')],
 ];
 
 interface Bar {
@@ -98,11 +102,11 @@ export class HUD {
   /** Big centred banner for server-wide announcements (world bosses, raids). */
   private announceEl!: HTMLDivElement;
   private announceTimer = 0;
-  private floorEl!: HTMLDivElement;
+  private floorEl!: HTMLSpanElement;
   private statsEl!: HTMLDivElement;
   private equipEls = new Map<EquipSlot, HTMLDivElement>();
   private bagGrid!: HTMLDivElement;
-  private bagTitle!: HTMLDivElement;
+  private bagTitle!: HTMLElement;
   private pocketGrid!: HTMLDivElement;
   private slotEls: HTMLDivElement[] = [];
   private targetEl!: HTMLDivElement;
@@ -120,8 +124,6 @@ export class HUD {
   private toastTimer = 0;
   private menuEl!: HTMLDivElement;
   private minimap!: Minimap;
-  private colA!: HTMLDivElement;
-  private colB!: HTMLDivElement;
   private bottom!: HTMLDivElement;
   private battleEl!: HTMLDivElement;
   private partyEl!: HTMLDivElement;
@@ -149,14 +151,11 @@ export class HUD {
   private lvlBadge!: HTMLDivElement;
   /** Labels that show a state ("Sound: on") and must be rebuilt in a new language. */
   private relabelers: Array<() => void> = [];
-  /** Current layout preset (remembered in this browser). */
-  private layout: HudLayout = (() => {
-    try { return localStorage.getItem('thornvale.hudLayout') === 'full' ? 'full' : 'flanks'; } catch { return 'flanks'; }
-  })();
-  /** Full-view docks (top-left, top-right, bottom-left, bottom-centre, bottom-right). */
-  private docks: Record<'tl' | 'tr' | 'bl' | 'bc' | 'br', HTMLDivElement> | null = null;
-  /** Where each panel came from, so switching back to "Two flanks" puts everything exactly back. */
-  private moved: Array<[HTMLElement, HTMLElement, Node | null]> = [];
+  /** Windows, columns, bars and the chat frame (ui/layout.ts), remembered in this browser. */
+  private ui!: Layout;
+  private lockBtn!: HTMLButtonElement;
+  /** The party window opens by itself when you join a party. */
+  private inParty = false;
   private topLoc!: HTMLSpanElement;
   private disconnectEl!: HTMLDivElement;
   /** Tutorial objective bar (Wayfarer's Isle): step, hint, direction to the target, skip button. */
@@ -164,21 +163,23 @@ export class HUD {
 
   constructor(private readonly ctl: Controller, private readonly renderer: Renderer, container: HTMLElement, private readonly sfx: Sfx, private readonly music?: Music) {
     this.root = el('div', 'hud', container);
-    // "two flanks" layout: a slim title strip on top, character/combat/skills/battle on the left,
-    // map/menu/equipment/inventory on the right, the game view in the middle with action bar and chat below
+    // classic layout (owner request 2026-10-24): title strip on top, the game view on the left/centre,
+    // one or two columns of mini-windows on the right (optional left column), chat under the view,
+    // action bars and the health/mana bar docked round the view or floating over it (ui/layout.ts)
     this.buildTopbar();
-    const left = el('div', 'flank flank-left', this.root);
-    const side = el('div', 'flank sidebar', this.root);
-    this.colA = el('div', 'side-col', left);
-    this.colB = el('div', 'side-col', side);
     this.bottom = el('div', 'bottom', this.root);
-    this.buildSidebar();
-    makePanelsMovable(side, [this.colA, this.colB], () => {});
+    const ctrl = el('div', 'panel toolbar ctrl-bar');
+    this.ui = new Layout(this.root, this.bottom, ctrl);
+    this.buildSidebar(ctrl);
     this.buildHotbar();
     this.buildConsole();
-    makeBottomResizable(this.root, this.bottom, this.bottom.querySelector('.hotbar') as HTMLElement);
-    if (this.layout === 'full') this.setLayout('full');
     this.buildWindows();
+    this.ui.onVisible = (id, shown) => this.winVisible(id, shown);
+    this.ui.onChange = () => this.relabelLayout();
+    this.ui.apply();
+    this.wins.friends.open = this.ui.isOpen('friends');
+    this.wins.quests.open = this.ui.isOpen('quests');
+    this.relabelLayout();
     this.buildTutorial();
     this.worldMap = new WorldMapView(this.root, this.ctl, this.minimap);
     this.regionEl = el('div', 'region-banner', this.root);
@@ -292,6 +293,16 @@ export class HUD {
       case 'tutorialChanged':
         if (e.to === me) this.renderTutorial();
         break;
+      // teleport runes: a channel bar while you stand still (game/magic/teleport.ts)
+      case 'teleportCast':
+        if (e.id === me) this.castStart(t('Teleporting to {place}', { place: trName(e.dest) }), e.dur);
+        break;
+      case 'teleportCancel':
+        if (e.id === me) this.castEnd(t('Teleport broken off'), false);
+        break;
+      case 'teleportDone':
+        if (e.id === me) this.castEnd(t('Arrived: {place}', { place: trName(e.dest) }), true);
+        break;
       case 'gameLoaded':
         if (e.to !== me) break;
         this.renderTutorial();
@@ -316,20 +327,26 @@ export class HUD {
     return { fill, text, last: '' };
   }
 
+  /** Status window (name, level, experience, capacity, buffs, pet) and the movable health/mana bar. */
   private buildStatus(): void {
-    const panel = el('div', 'panel status', this.colA);
+    const w = this.ui.addWindow('status', t('Status'), 'panel status', t('Your character. Drag the title bar to move this window, click it to fold.'));
+    const panel = w.body;
     const head = el('div', 'status-head', panel);
     this.lvlBadge = el('div', 'lvl-badge', head);
     this.lvlBadge.title = t('Level');
     const who = el('div', 'status-who', head);
     this.nameEl = el('span', 'char-name', who);
     this.levelEl = el('span', 'char-level', who);
-    this.hp = this.makeBar(panel, 'hp', t('HP'));
-    this.mp = this.makeBar(panel, 'mp', t('MP'));
     this.xp = this.makeBar(panel, 'xp', t('XP'));
     const foot = el('div', 'status-foot', panel);
     this.capEl = el('div', 'cap', foot);
     this.buffsEl = el('div', 'buffs', foot);
+
+    // health and mana: their own bar, docked over the game view by default (drag it anywhere)
+    const vit = el('div', 'vitals');
+    this.hp = this.makeBar(vit, 'hp', t('HP'));
+    this.mp = this.makeBar(vit, 'mp', t('MP'));
+    this.ui.addBar('vitals', vit, t('Health and mana'));
 
     this.targetEl = el('div', 'panel target', this.root);
     const tr = el('div', 'target-row', this.targetEl);
@@ -358,6 +375,9 @@ export class HUD {
     el('span', 'tb-sep', top);
     this.topLoc = el('span', 'tb-loc', top);
     el('span', 'tb-fill', top);
+    // phones: the side columns sit in a drawer behind this button
+    const pb = button(top, t('Panels'), () => this.ui.toggleDrawer(), 'btn tiny tb-panels');
+    pb.title = t('Show or hide the windows (map, equipment, backpack, skills…)');
     const mode = el('span', `tb-mode ${this.ctl.online ? 'online' : 'offline'}`, top);
     el('span', 'tb-dot', mode);
     const label = el('span', '', mode, t(this.ctl.online ? 'Online' : 'Offline'));
@@ -379,49 +399,35 @@ export class HUD {
     }
   }
 
-  /** Settings window: display, sound and test tools that used to crowd the side bar. */
-  /**
-   * Switches between the layout presets. "Full view" moves the existing panels (same elements,
-   * same behaviour) into five floating docks over a full-screen game view; "Two flanks" puts every
-   * panel back exactly where it was.
-   */
-  setLayout(mode: HudLayout): void {
-    if (!this.docks) {
-      const d = (k: string) => el('div', `dock dock-${k}`, this.root);
-      this.docks = { tl: d('tl'), tr: d('tr'), bl: d('bl'), bc: d('bc'), br: d('br') };
-    }
-    const docks = this.docks;
-    // always start from "Two flanks" so the moves can be undone in reverse order
-    for (let i = this.moved.length - 1; i >= 0; i--) {
-      const [node, parent, next] = this.moved[i];
-      parent.insertBefore(node, next && next.parentNode === parent ? next : null);
-    }
-    this.moved = [];
-    if (mode === 'full') {
-      const move = (sel: string, dock: HTMLElement) => {
-        const node = this.root.querySelector(sel) as HTMLElement | null;
-        if (!node || !node.parentElement) return;
-        this.moved.push([node, node.parentElement, node.nextSibling]);
-        dock.appendChild(node);
-      };
-      move('.panel.status', docks.tl);
-      move('.panel.skills', docks.tl);
-      move('.panel.minimap-panel', docks.tr);
-      move('.panel.battle', docks.tr);
-      move('.panel.party', docks.tr);
-      move('.panel.console', docks.bl);
-      move('.panel.toolbar', docks.bc);
-      move('.hotbar', docks.bc);
-      move('.panel.fight-modes', docks.bc);
-      move('.panel.equipment', docks.br);
-      move('.panel.inventory', docks.br);
-      move('.hover-line', docks.br);
-    }
-    this.layout = mode;
-    document.documentElement.classList.toggle('layout-full', mode === 'full');
-    try { localStorage.setItem('thornvale.hudLayout', mode); } catch { /* storage off */ }
-    // the game view changed size
-    window.dispatchEvent(new Event('resize'));
+  /** A window was shown, folded or closed: windows that draw their content only while open catch up. */
+  private winVisible(id: WinId, shown: boolean): void {
+    if (id === 'friends') { this.wins.friends.open = shown; this.renderFriends(); }
+    if (id === 'quests') { this.wins.quests.open = shown; if (shown) this.renderQuests(); }
+    if (id === 'skills' && shown) this.skillsKey = '';
+    if (id === 'party' && shown) this.partyKey = '';
+  }
+
+  /** Labels that show the layout's state (lock, columns, preset) — after every layout change and language switch. */
+  private layoutLabels: Array<() => void> = [];
+  private relabelLayout(): void {
+    const st = this.ui.state;
+    this.lockBtn.textContent = t(st.locked ? 'Unlock layout' : 'Lock layout');
+    this.lockBtn.classList.toggle('on', st.locked);
+    this.lockBtn.title = t(st.locked ? 'The layout is locked: windows and bars stay where they are. Click to move them again.' : 'Lock the layout so windows and bars cannot be moved by accident');
+    for (const f of this.layoutLabels) f();
+  }
+
+  /** "Windows" menu: show or hide every window, the extra columns, lock and reset. */
+  private windowsMenu(anchor: HTMLElement): void {
+    const r = anchor.getBoundingClientRect();
+    const mark = (on: boolean, label: string) => `${on ? '◆' : '◇'}  ${label}`;
+    const st = this.ui.state;
+    const items: MenuItem[] = WIN_NAMES.map(([id, name]) => ({ label: mark(this.ui.isShown(id), t(name)), run: () => this.ui.setClosed(id, this.ui.isShown(id)) }));
+    items.push({ label: mark(st.right2, t('Second right column')), run: () => this.ui.setColumn('right2', !st.right2) });
+    items.push({ label: mark(st.left, t('Left column')), run: () => this.ui.setColumn('left', !st.left) });
+    items.push({ label: t(st.locked ? 'Unlock layout' : 'Lock layout'), run: () => this.ui.setLocked(!st.locked) });
+    items.push({ label: t('Reset layout'), run: () => this.ui.reset() });
+    this.showMenu(items, r.left, r.bottom + 2);
   }
 
   private buildSettings(): void {
@@ -430,20 +436,34 @@ export class HUD {
       el('div', 'panel-title', b, t(title));
       return el('div', 'set-row', b);
     };
-    // layout presets: "Two flanks" (side columns) or "Full view" (game fills the screen, floating docks)
+    // layout presets: "Classic" (view left, window columns right — the default), "Two flanks", "Full view";
+    // then the extra columns, the lock and Reset layout (ui/layout.ts)
     const lay = sec('Layout');
-    const lb: Array<[HTMLButtonElement, HudLayout]> = [];
-    const layBtn = (label: string, mode: HudLayout, tip: string) => {
-      const x = button(lay, t(label), () => {
-        this.setLayout(mode);
-        for (const [bb, m] of lb) bb.classList.toggle('on', m === this.layout);
-      }, 'btn');
+    const lb: Array<[HTMLButtonElement, Preset]> = [];
+    const layBtn = (label: string, mode: Preset, tip: string) => {
+      const x = button(lay, t(label), () => this.ui.applyPreset(mode), 'btn');
       x.title = t(tip);
       lb.push([x, mode]);
     };
+    layBtn('Classic', 'classic', 'The game view on the left, windows in one or two columns on the right, like the classic client');
     layBtn('Two flanks', 'flanks', 'Character and combat on the left, map and inventory on the right, the game view in the middle');
-    layBtn('Full view', 'full', 'The game view fills the screen; panels float in its corners');
-    for (const [bb, m] of lb) bb.classList.toggle('on', m === this.layout);
+    layBtn('Full view', 'full', 'The game view fills the screen; windows float over its sides');
+    const lay2 = el('div', 'set-row', b);
+    const col2 = button(lay2, '', () => this.ui.setColumn('right2', !this.ui.state.right2), 'btn');
+    const colL = button(lay2, '', () => this.ui.setColumn('left', !this.ui.state.left), 'btn');
+    const lockS = button(lay2, '', () => this.ui.setLocked(!this.ui.state.locked), 'btn');
+    button(lay2, t('Reset layout'), () => this.ui.reset(), 'btn').title = t('Every window and bar back to where it starts');
+    el('p', 'hint', b, t('Drag a window by its title bar to move it, click the title to fold it, drag its bottom edge to resize it. Drag an action bar or the health bar by its grip to any edge of the game view, or anywhere over it.'));
+    this.layoutLabels.push(() => {
+      const st = this.ui.state;
+      for (const [bb, m] of lb) bb.classList.toggle('on', m === st.preset);
+      col2.textContent = t(st.right2 ? 'Second column: on' : 'Second column: off');
+      col2.classList.toggle('on', st.right2);
+      colL.textContent = t(st.left ? 'Left column: on' : 'Left column: off');
+      colL.classList.toggle('on', st.left);
+      lockS.textContent = t(st.locked ? 'Layout: locked' : 'Layout: unlocked');
+      lockS.classList.toggle('on', st.locked);
+    });
 
     // language: EN / PL / PT-BR (remembered in this browser); game messages follow at once
     const langRow = sec('Language');
@@ -537,20 +557,28 @@ export class HUD {
     const game = sec('Game');
     if (!this.ctl.online) button(game, t('Save now'), () => this.saveNow(), 'btn');
     button(game, t('Test console (`)'), () => { this.closeWin('settings'); this.toggleWin('dev'); }, 'btn');
-    button(game, t('Reset layout'), () => resetPanelLayout(), 'btn');
     button(game, t('Full screen'), () => {
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
       else void document.documentElement.requestFullscreen().catch(() => this.log(t('Your browser refused full screen.'), 'warn'));
     }, 'btn');
   }
 
-  private buildSidebar(): void {
-    const col = this.colA;
+  private buildSidebar(tools: HTMLDivElement): void {
+    // control bar on top of the right column (always there): the menu, the Windows list and the lock
+    button(tools, t('Spells'), () => this.toggleWin('spells'), 'btn tool');
+    button(tools, t('Quests'), () => this.toggleWin('quests'), 'btn tool');
+    this.friendsBtn = button(tools, t('Friends'), () => this.toggleWin('friends'), 'btn tool');
+    button(tools, t('Appearance'), () => this.toggleWin('appearance'), 'btn tool');
+    button(tools, t('Help'), () => this.toggleWin('help'), 'btn tool');
+    button(tools, t('Settings'), () => this.toggleWin('settings'), 'btn tool');
+    const winBtn = button(tools, `${t('Windows')} ▾`, () => this.windowsMenu(winBtn), 'btn tool half');
+    winBtn.title = t('Show or hide windows, the extra columns, lock or reset the layout');
+    this.lockBtn = button(tools, '', () => this.ui.setLocked(!this.ui.state.locked), 'btn tool half');
+
     this.buildStatus();
 
     // classic combat controls: stance (attack / balanced / defence), chase / stand, and PvP secure mode
-    const fight = el('div', 'panel fight-modes', col);
-    el('div', 'panel-title', fight, t('Combat'));
+    const fight = this.ui.addWindow('combat', t('Combat'), 'fight-modes').body;
     const fgrid = el('div', 'fm-grid', fight);
     let mode: FightMode = 'balanced';
     let chase = true;
@@ -580,28 +608,16 @@ export class HUD {
     this.pvpBtn.hidden = true;
     apply();
 
-    // right flank: map, menu, equipment, inventory
-    const right = this.colB;
-    const mp = el('div', 'panel minimap-panel', right);
-    const mt = el('div', 'panel-title map-title', mp);
-    el('span', '', mt, t('Map'));
-    this.floorEl = el('div', 'floor-ind', mt);
-    this.minimap = new Minimap(mp, this.ctl);
-    button(mp, t('World map (M)'), () => this.toggleWorldMap(), 'btn small wm-open');
-
-    const tools = el('div', 'panel toolbar', right);
-    button(tools, t('Spells'), () => this.toggleWin('spells'), 'btn tool');
-    button(tools, t('Quests'), () => this.toggleWin('quests'), 'btn tool');
-    this.friendsBtn = button(tools, t('Friends'), () => { this.toggleWin('friends'); this.renderFriends(); }, 'btn tool');
-    button(tools, t('Appearance'), () => this.toggleWin('appearance'), 'btn tool');
-    button(tools, t('Help'), () => this.toggleWin('help'), 'btn tool');
-    button(tools, t('Settings'), () => this.toggleWin('settings'), 'btn tool');
+    // map: minimap (wheel zoom, right-drag pan, double-click centre) and the world map
+    const mw = this.ui.addWindow('map', t('Map'), 'minimap-panel');
+    this.floorEl = el('span', 'floor-ind', mw.extra);
+    this.minimap = new Minimap(mw.body, this.ctl);
+    button(mw.body, t('World map (M)'), () => this.toggleWorldMap(), 'btn small wm-open');
     this.buildSettings();
     // running slowly on High for a while: suggest a lower graphics setting once (never switch by itself)
     this.renderer.onSlow = () => this.log(t('The game is running slowly here. Settings → Display → Graphics: Medium or Low can make it smoother.'), 'info');
 
-    const eqp = el('div', 'panel equipment', right);
-    el('div', 'panel-title', eqp, t('Equipment'));
+    const eqp = this.ui.addWindow('equipment', t('Equipment'), 'equipment').body;
     const grid = el('div', 'equip-grid', eqp);
     for (const e of EQUIP_LAYOUT) {
       if (!e.slot) {
@@ -620,47 +636,26 @@ export class HUD {
     }
     this.statsEl = el('div', 'stats', eqp);
 
-    // classic skills window: every skill with a thin bar to the next level; click the title to fold
-    const sk = el('div', 'panel skills', col);
-    const st = el('div', 'panel-title skills-title', sk, t('Skills'));
-    st.title = t('Click to fold or unfold. Skills rise by using them: fight with a weapon, block with a shield, spend mana, chop trees, fish.');
-    this.skillsEl = el('div', 'skills-list', sk);
-    try {
-      if (localStorage.getItem('thornvale.skillsFolded') === '1') sk.classList.add('folded');
-    } catch { /* storage off */ }
-    st.addEventListener('click', () => {
-      sk.classList.toggle('folded');
-      try { localStorage.setItem('thornvale.skillsFolded', sk.classList.contains('folded') ? '1' : '0'); } catch { /* storage off */ }
-    });
+    // classic skills window: every skill with a thin bar to the next level
+    const sk = this.ui.addWindow('skills', t('Skills'), 'skills', t('Click to fold or unfold. Skills rise by using them: fight with a weapon, block with a shield, spend mana, chop trees, fish.'));
+    this.skillsEl = el('div', 'skills-list', sk.body);
 
-    const battle = el('div', 'panel battle', this.colA);
-    const bt = el('div', 'panel-title battle-title', battle, t('Battle'));
-    bt.title = t('Click to fold or unfold. Drag the bottom edge of the list to make it taller or shorter.');
-    this.battleEl = el('div', 'battle-list', battle);
-    try {
-      const h = localStorage.getItem('thornvale.battleHeight');
-      if (h) this.battleEl.style.height = h;
-      if (localStorage.getItem('thornvale.battleFolded') === '1') battle.classList.add('folded');
-    } catch { /* storage off */ }
-    bt.addEventListener('click', () => {
-      battle.classList.toggle('folded');
-      try { localStorage.setItem('thornvale.battleFolded', battle.classList.contains('folded') ? '1' : '0'); } catch { /* storage off */ }
-    });
-    new ResizeObserver(() => {
-      if (battle.classList.contains('folded') || !this.battleEl.style.height) return;
-      try { localStorage.setItem('thornvale.battleHeight', this.battleEl.style.height); } catch { /* storage off */ }
-    }).observe(this.battleEl);
+    const battle = this.ui.addWindow('battle', t('Battle'), 'battle', t('Click to fold or unfold. Drag the bottom edge of the window to make it taller or shorter.'));
+    this.battleEl = el('div', 'battle-list', battle.body);
+    const emptyText = () => { this.battleEl.dataset.empty = t('Nobody around.'); };
+    emptyText();
+    this.relabelers.push(emptyText);
 
-    // party: members with health, shared experience switch
-    this.partyEl = el('div', 'panel party', this.colA);
-    this.partyEl.hidden = true;
+    // party: members with health, shared experience switch (opens by itself when you join a party)
+    this.partyEl = this.ui.addWindow('party', t('Party'), 'party').body;
 
-    const inv = el('div', 'panel inventory', this.colB);
-    el('div', 'panel-title', inv, t('Pockets'));
-    this.pocketGrid = el('div', 'bag-grid', inv);
-    this.bagTitle = el('div', 'panel-title', inv, t('Backpack'));
-    this.bagGrid = el('div', 'bag-grid', inv);
-    this.statusLine = el('div', 'hover-line', this.colB);
+    // pockets and the backpack: two containers, like stacked bags in the classic client
+    this.pocketGrid = el('div', 'bag-grid', this.ui.addWindow('pockets', t('Pockets'), 'inventory').body);
+    const bag: MiniWin = this.ui.addWindow('backpack', t('Backpack'), 'inventory');
+    this.bagTitle = bag.title;
+    this.bagGrid = el('div', 'bag-grid', bag.body);
+    // what the mouse is over: a quiet line at the bottom of the game view
+    this.statusLine = el('div', 'hover-line', this.root);
   }
 
   private slotEl(i: number): HTMLDivElement {
@@ -736,6 +731,13 @@ export class HUD {
     const under = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
     if (!under) return;
     const src = d.src;
+    // a stack asks "How many?" (Ctrl held: the whole stack, no question); `send` gets undefined for all of it
+    const have = this.dragQty(src);
+    const dragId = this.dragItemId(src);
+    const amount = (send: (qty: number | undefined) => void) => {
+      if (d.ctrl || e.ctrlKey || have <= 1 || !dragId) return send(undefined);
+      this.askQty(dragId, have, e.clientX, e.clientY, (n) => send(n >= have ? undefined : n));
+    };
     const invSlot = under.closest('[data-inv]') as HTMLElement | null;
     const eqSlot = under.closest('.slot.equip') as HTMLElement | null;
     const hot = under.closest('.hot-slot') as HTMLElement | null;
@@ -745,7 +747,7 @@ export class HUD {
       const cid = Number(target.dataset.cid);
       if (id && itemDef(id).rune) return this.runeOn(cid, src.index);
       // any other item dropped on a player offers it in a trade
-      if (target.classList.contains('k-player')) this.ctl.send({ c: 'tradeItem', id: cid, slot: src.index });
+      if (target.classList.contains('k-player')) amount((qty) => this.ctl.send({ c: 'tradeItem', id: cid, slot: src.index, qty }));
       return;
     }
     // dropped onto the pet window: the tortoise carries it (ui/petsUi.ts)
@@ -753,12 +755,18 @@ export class HUD {
     // dropped into the open trade window: add to your offer
     if (src.kind === 'inv' && under.closest('.trade-win')) {
       const t = this.ctl.trade();
-      if (t && !t.mine.slots.includes(src.index)) this.ctl.send({ c: 'tradeOffer', slots: [...t.mine.slots, src.index], gold: t.mine.gold });
+      if (t && !t.mine.slots.includes(src.index)) amount((qty) => this.ctl.send({ c: 'tradeAdd', slot: src.index, qty }));
       return;
     }
     if (invSlot) {
       const to = Number(invSlot.dataset.inv);
-      if (src.kind === 'inv') this.ctl.send({ c: 'moveSlot', from: src.index, to });
+      if (src.kind === 'inv') {
+        if (to === src.index) return;
+        // part of a stack goes to an empty slot or onto the same item; onto anything else the two swap
+        const there = this.s.inventory.slots[to];
+        if (there && there.id !== dragId) return this.ctl.send({ c: 'moveSlot', from: src.index, to });
+        amount((qty) => this.ctl.send({ c: 'moveSlot', from: src.index, to, qty }));
+      }
       else if (src.kind === 'eq') this.ctl.send({ c: 'unequip', slot: src.slot });
       else this.ctl.send({ c: 'pickup', id: src.id });
       return;
@@ -787,20 +795,107 @@ export class HUD {
       if (src.kind === 'inv') {
         const other = this.ctl.game.players().find((o) => o.id !== this.ctl.pid && !o.dead && o.z === this.s.player.z && Math.round(o.x) === t.x && Math.round(o.y) === t.y);
         if (other) {
-          this.ctl.send({ c: 'tradeItem', id: other.id, slot: src.index });
+          amount((qty) => this.ctl.send({ c: 'tradeItem', id: other.id, slot: src.index, qty }));
           return;
         }
       }
-      if (src.kind === 'bag') {
-        this.ctl.send({ c: 'moveBag', id: src.id, x: t.x, y: t.y, qty: d.ctrl ? 1 : undefined });
-        this.renderer.showClickMarker(t.x, t.y);
-        return;
-      }
-      this.ctl.send({ c: 'throw', from: src.kind === 'inv' ? src.index : src.slot, x: t.x, y: t.y, qty: d.ctrl ? 1 : undefined });
       this.renderer.showClickMarker(t.x, t.y);
+      if (src.kind === 'bag') return amount((qty) => this.ctl.send({ c: 'moveBag', id: src.id, x: t.x, y: t.y, qty }));
+      amount((qty) => this.ctl.send({ c: 'throw', from: src.kind === 'inv' ? src.index : src.slot, x: t.x, y: t.y, qty }));
       return;
     }
-    if (src.kind === 'bag' && under.closest('.flank')) this.ctl.send({ c: 'pickup', id: src.id });
+    // a ground item dropped on the side windows: pick it up
+    if (src.kind === 'bag' && under.closest('.mw-col, .mw-drawer')) this.ctl.send({ c: 'pickup', id: src.id });
+  }
+
+  /** How many items the dragged thing holds (a whole stack, or the top item of a ground pile). */
+  private dragQty(src: DragSrc): number {
+    if (src.kind === 'inv') return this.s.inventory.slots[src.index]?.qty ?? 0;
+    if (src.kind === 'eq') return this.s.inventory.equipment[src.slot]?.qty ?? 0;
+    const bag = this.ctl.game.bags.find((b) => b.id === src.id);
+    return bag?.items[bag.items.length - 1]?.qty ?? 0;
+  }
+
+  // ---------------------------------------------------------------- "How many?" (splitting stacks)
+
+  private qtyPop: { root: HTMLDivElement; cancel: () => void } | null = null;
+
+  /**
+   * The classic "How many?" box: slider + number, quick 1 / half / all, Enter confirms, Esc cancels.
+   * Starts at the whole stack. `done` gets a whole number from 1 to `max`.
+   */
+  askQty(itemId: string, max: number, x: number, y: number, done: (n: number) => void): void {
+    this.qtyPop?.cancel();
+    const root = el('div', 'panel qty-pop', this.root);
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-label', t('How many?'));
+    const head = el('div', 'qty-head', root);
+    const img = el('img', 'qty-icon', head);
+    img.src = itemIcon(itemId);
+    img.alt = '';
+    const tx = el('div', 'qty-text', head);
+    el('div', 'qty-title', tx, t('How many?'));
+    el('div', 'qty-name', tx, `${trName(itemDef(itemId).name)} · ${t('{n} in the stack', { n: fmtNum(max) })}`);
+    const row = el('div', 'qty-row', root);
+    const slider = el('input', 'vol-slider qty-slider', row);
+    slider.type = 'range';
+    slider.min = '1';
+    slider.max = String(max);
+    slider.setAttribute('aria-label', t('Amount'));
+    const field = el('input', 'num-input qty-field', row);
+    field.type = 'number';
+    field.min = '1';
+    field.max = String(max);
+    field.setAttribute('aria-label', t('Amount'));
+    let n = max;
+    const set = (v: number) => {
+      n = Math.max(1, Math.min(max, Math.round(Number.isFinite(v) ? v : max)));
+      slider.value = String(n);
+      if (Number(field.value) !== n) field.value = String(n);
+    };
+    slider.addEventListener('input', () => set(Number(slider.value)));
+    field.addEventListener('input', () => { if (field.value !== '') set(Number(field.value)); });
+    const quick = el('div', 'qty-quick', root);
+    button(quick, '1', () => set(1), 'btn small');
+    button(quick, t('Half'), () => set(Math.max(1, Math.floor(max / 2))), 'btn small');
+    button(quick, t('All'), () => set(max), 'btn small');
+    const acts = el('div', 'qty-actions', root);
+    const close = () => {
+      root.remove();
+      window.removeEventListener('mousedown', outside, true);
+      if (this.qtyPop?.root === root) this.qtyPop = null;
+    };
+    const ok = () => { set(Number(field.value || n)); close(); done(n); };
+    const cancel = () => close();
+    button(acts, t('Move'), ok, 'btn on qty-ok').title = t('Enter');
+    button(acts, t('Cancel'), cancel, 'btn').title = t('Esc');
+    el('div', 'qty-hint', root, t('Tip: hold Ctrl while dragging to move the whole stack without asking.'));
+    const outside = (ev: MouseEvent) => { if (!root.contains(ev.target as Node)) cancel(); };
+    window.addEventListener('mousedown', outside, true);
+    root.addEventListener('keydown', (ev) => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); ok(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+    });
+    root.addEventListener('keyup', (ev) => ev.stopPropagation());
+    set(max);
+    this.qtyPop = { root, cancel };
+    // beside the drop point, kept on screen
+    const r = root.getBoundingClientRect();
+    root.style.left = `${Math.max(4, Math.min(window.innerWidth - r.width - 4, x - r.width / 2))}px`;
+    root.style.top = `${Math.max(4, Math.min(window.innerHeight - r.height - 4, y - r.height - 14))}px`;
+    field.focus();
+    field.select();
+  }
+
+  /** Right-click → "Split stack…": that many into the first empty slot. */
+  private splitStack(i: number, x: number, y: number): void {
+    const st = this.s.inventory.slots[i];
+    if (!st || st.qty < 2) return;
+    const inv = this.s.inventory;
+    const free = inv.slots.findIndex((v, j) => j < inv.size() && !v);
+    if (free < 0) return this.log(trText('You need a free slot to split that stack.'), 'warn');
+    this.askQty(st.id, st.qty - 1, x, y, (n) => this.ctl.send({ c: 'moveSlot', from: i, to: free, qty: n }));
   }
 
   private useInventorySlot(i: number): void {
@@ -901,6 +996,7 @@ export class HUD {
         run: () => this.ctl.send({ c: 'tradeOffer', slots: offered ? tv.mine.slots.filter((x) => x !== i) : [...tv.mine.slots, i], gold: tv.mine.gold }),
       });
     }
+    if (st.qty > 1) items.push({ label: t('Split stack…'), run: () => this.splitStack(i, x, y) });
     items.push({ label: t('Look'), run: () => this.log(`${t('You see {item}.', { item: `${trName(d.name)}${st.qty > 1 ? ` (${fmtNum(st.qty)})` : ''}` })} ${describeItemL(d)}${d.note ? ` ${trText(d.note)}` : ''}`, 'info') });
     items.push({ label: t('Drop'), run: () => this.ctl.send({ c: 'drop', slot: i }) });
     this.showMenu(items, x, y);
@@ -1036,7 +1132,9 @@ export class HUD {
   }
 
   private buildHotbar(): void {
-    const outer = el('div', 'hotbar', this.bottom);
+    // two movable action bars (ui/layout.ts): F1–F12 with the shared cooldowns, and Ctrl+1 … Ctrl+0
+    const outer = el('div', 'hotbar hb1');
+    const outer2 = el('div', 'hotbar hb2');
     // shared cooldowns, so you can see when you may cast or drink again
     const strip = el('div', 'cd-strip', outer);
     const groups: Array<[CooldownGroup, string]> = [['attack', k('Attack')], ['heal', k('Healing')], ['support', k('Support')], ['potion', k('Potions')]];
@@ -1050,7 +1148,7 @@ export class HUD {
       this.cdBars.set(g, { item, fill, secs });
     }
     const bar = el('div', 'hot-row', outer);
-    const bar2 = el('div', 'hot-row hot-row-ctrl', outer);
+    const bar2 = el('div', 'hot-row hot-row-ctrl', outer2);
     bar2.title = t('Ctrl+1 … Ctrl+0 (or Alt+1 … Alt+0). In full screen your browser lets the game have Ctrl+number.');
     for (let i = 0; i < HOTBAR_SIZE; i++) {
       const btn = el('button', 'hot-slot', i < 12 ? bar : bar2);
@@ -1083,6 +1181,8 @@ export class HUD {
       });
       this.hotbarEls.push({ btn, icon, count, cd, secs });
     }
+    this.ui.addBar('hotbar1', outer, t('Action bar (F1–F12)'));
+    this.ui.addBar('hotbar2', outer2, t('Second action bar (Ctrl+1 … Ctrl+0)'));
   }
 
   private beginAssign(entry: HotbarEntry): void {
@@ -1252,7 +1352,7 @@ export class HUD {
     const c = el('div', 'panel console', this.bottom);
     const tabs = el('div', 'log-tabs', c);
     const tabBtns: HTMLButtonElement[] = [];
-    for (const [id, label] of [['default', k('Default')], ['server', k('Server Log')], ['loot', k('Loot')]] as const) {
+    for (const [id, label] of [['default', k('Default')], ['chat', k('Chat')], ['server', k('Server Log')], ['loot', k('Loot')]] as const) {
       const b = button(tabs, t(label), () => {
         this.logEl.className = `log tab-${id}`;
         tabBtns.forEach((x) => x.classList.toggle('on', x === b));
@@ -1329,6 +1429,12 @@ export class HUD {
     return w;
   }
 
+  /** Friends and the quest log are side windows (they live in the columns, like the classic VIP list). */
+  private makeSideWin(key: 'friends' | 'quests', title: string, cls: string): void {
+    const w = this.ui.addWindow(key, title, cls);
+    this.wins[key] = { root: w.root, body: w.body, open: false };
+  }
+
   private buildWindows(): void {
     this.makeWin('dialog', 'Conversation', 'dialog-win');
     this.makeWin('depot', 'Depot', 'depot-win');
@@ -1337,11 +1443,11 @@ export class HUD {
     this.makeWin('craft', 'Production', 'craft-win');
     this.makeWin('appearance', 'Appearance', 'appearance-win');
     this.makeWin('spells', 'Spellbook', 'spells-win');
-    this.makeWin('quests', 'Quest Log', 'quests-win');
+    this.makeSideWin('quests', t('Quest Log'), 'quests-win');
     this.makeWin('help', 'How to play', 'help-win');
     this.makeWin('dev', 'Test console', 'dev-win');
     this.makeWin('inspect', 'Inspect', 'inspect-win');
-    this.makeWin('friends', 'Friends', 'friends-win');
+    this.makeSideWin('friends', t('Friends'), 'friends-win');
     this.makeWin('corpse', 'Dead body', 'corpse-win');
     this.renderHelp();
   }
@@ -1349,17 +1455,18 @@ export class HUD {
   private zTop = 10;
 
   private openWin(key: keyof HUD['wins']): void {
+    if (key === 'friends' || key === 'quests') return this.ui.toggle(key, true);
     const w = this.wins[key];
     w.open = true;
     w.root.hidden = false;
     w.root.style.zIndex = String(++this.zTop);
     if (key === 'spells') this.renderSpells();
-    if (key === 'quests') this.renderQuests();
     if (key === 'appearance') this.renderAppearance();
     if (key === 'dev') this.renderDev();
   }
 
   closeWin(key: keyof HUD['wins']): void {
+    if (key === 'friends' || key === 'quests') return this.ui.setClosed(key, true);
     const w = this.wins[key];
     if (!w.open) return;
     w.open = false;
@@ -1391,6 +1498,10 @@ export class HUD {
   }
 
   closeTop(): boolean {
+    if (this.qtyPop) {
+      this.qtyPop.cancel();
+      return true;
+    }
     if (this.aiming) {
       this.cancelAim();
       return true;
@@ -1408,7 +1519,7 @@ export class HUD {
       this.root.classList.remove('assigning');
       return true;
     }
-    for (const k of ['settings', 'dev', 'help', 'appearance', 'spells', 'quests', 'craft', 'market', 'trade', 'depot', 'dialog'] as const) {
+    for (const k of ['settings', 'dev', 'help', 'appearance', 'spells', 'craft', 'market', 'trade', 'depot', 'dialog'] as const) {
       if (this.wins[k].open) {
         this.closeWin(k);
         return true;
@@ -2151,8 +2262,8 @@ export class HUD {
     intro.textContent = t(this.ctl.online
       ? 'You are playing online. Other adventurers share this world with you; the server keeps your character.'
       : 'You are playing offline. Your character is saved in this browser.');
-    const lay = el('p', 'hint', b, t('Layout: drag the striped bar at the top of a side panel to move it, drag its bottom edge to resize it, drag the left edge of the side bar to widen it, drag the top edge of the chat to make it taller, and ⇅ on the action bar moves it to the top of the game view.') + ' ');
-    button(lay, t('Reset layout'), () => resetPanelLayout(), 'btn small');
+    const lay = el('p', 'hint', b, t('Layout: drag a window by its title bar to another place or column, click the title to fold it, − folds it, ✕ closes it (Windows brings it back), drag its bottom edge to resize it. Drag an action bar or the health bar by its striped grip to any edge of the game view, or anywhere over it. Drag the inner edge of the columns to widen them and the top edge of the chat to make it taller. Lock layout keeps everything in place.') + ' ');
+    button(lay, t('Reset layout'), () => this.ui.reset(), 'btn small');
     const grid = el('div', 'help-grid', b);
     const rows: Array<[string, string]> = [
       [k('WASD / arrows'), k('Walk (Q E Z C or numpad for diagonals)')],
@@ -2171,6 +2282,7 @@ export class HUD {
       [k('Ctrl + direction / Ctrl+R'), k('Turn without moving')],
       [k('` (key under Esc)'), k('Test console: levels, gold, items, teleports (also /help in chat)')],
       [k('Ctrl-click item'), k('Store in depot while a locker is open')],
+      [k('Drag a stack'), k('How many? — move, drop or trade only part of it (slider, 1 / Half / All, Enter confirms, Esc cancels). Hold Ctrl while dragging to move the whole stack without asking; right-click → Split stack… splits it into a free slot')],
       [k('Click a tree (with an axe)'), k('Chop it: logs and woodcutting experience (higher trees need higher woodcutting)')],
       [k('Click water within 3 tiles (with a fishing rod)'), k('Fish: catches to eat or sell and fishing experience (better fish need higher fishing; ice fish near snow, swordfish in deep sea)')],
       [k('Market board (in depots)'), k('Buy from and sell to other players; gold goes to the bank, items to the depot')],
@@ -2196,6 +2308,7 @@ export class HUD {
   /** A new language was picked: rebuild everything that shows text (fixed labels were relabelled by ui/lang.ts). */
   private languageChanged(): void {
     for (const f of this.relabelers) f();
+    this.relabelLayout();
     this.skillsKey = '';
     this.partyKey = '';
     this.lastRegion = '';
@@ -2385,14 +2498,23 @@ export class HUD {
   /** Party panel: rebuilt when membership changes, health bars every frame. */
   private renderParty(): void {
     const pv = this.ctl.game.partyView(this.ctl.pid);
-    this.partyEl.hidden = !pv;
-    if (!pv) { this.partyKey = ''; return; }
+    if (!!pv !== this.inParty) {
+      this.inParty = !!pv;
+      if (pv) this.ui.toggle('party', true);
+    }
+    if (!pv) {
+      if (this.partyKey !== 'none') {
+        this.partyKey = 'none';
+        this.partyEl.replaceChildren();
+        el('p', 'hint', this.partyEl, t('You are not in a party. Right-click a player to invite them.'));
+      }
+      return;
+    }
     const key = JSON.stringify([getLang(), pv.leader, pv.shared, pv.sharedActive, pv.members.map((m) => [m.id, m.name, m.level])]);
     if (key !== this.partyKey) {
       this.partyKey = key;
       const b = this.partyEl;
       b.replaceChildren();
-      el('div', 'panel-title', b, t('Party'));
       for (const m of pv.members) {
         const row = el('div', 'party-row', b);
         row.dataset.pid = String(m.id);
@@ -2414,6 +2536,58 @@ export class HUD {
       const fill = this.partyEl.querySelector(`.party-row[data-pid="${m.id}"] .party-fill`) as HTMLDivElement | null;
       if (fill) { fill.style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`; fill.style.background = hpColor(frac); }
     }
+  }
+
+  // ================================================================ cast / channel bar
+
+  /** Times are wall-clock ms (performance.now), so a slow frame rate cannot make the bar lag behind the server's 3 s. */
+  private cast: { root: HTMLDivElement; label: HTMLSpanElement; secs: HTMLSpanElement; fill: HTMLDivElement; end: number; dur: number; hide: number } | null = null;
+
+  /** A channel starts (teleport rune): the bar fills over `dur` seconds under your character. */
+  private castStart(label: string, dur: number): void {
+    if (!this.cast) {
+      const root = el('div', 'panel cast-bar', this.root);
+      root.setAttribute('role', 'status');
+      const top = el('div', 'cast-top', root);
+      const lb = el('span', 'cast-label', top);
+      const secs = el('span', 'cast-secs', top);
+      const bar = el('div', 'bar cast-track', root);
+      const fill = el('div', 'bar-fill cast-fill', bar);
+      this.cast = { root, label: lb, secs, fill, end: 0, dur: 1, hide: 0 };
+    }
+    const c = this.cast;
+    c.label.textContent = label;
+    c.dur = Math.max(0.1, dur);
+    c.end = performance.now() + c.dur * 1000;
+    c.hide = 0;
+    c.root.classList.remove('broken', 'done');
+    c.root.classList.add('on');
+    this.updateCast();
+  }
+
+  /** The channel ends: done (full, gold) or broken off (red); the bar fades a moment later. */
+  private castEnd(label: string, done: boolean): void {
+    const c = this.cast;
+    if (!c || !c.root.classList.contains('on')) return;
+    c.label.textContent = label;
+    c.secs.textContent = '';
+    c.fill.style.width = done ? '100%' : c.fill.style.width;
+    c.root.classList.toggle('done', done);
+    c.root.classList.toggle('broken', !done);
+    c.hide = performance.now() + 1200;
+  }
+
+  private updateCast(): void {
+    const c = this.cast;
+    if (!c || !c.root.classList.contains('on')) return;
+    const now = performance.now();
+    if (c.hide > 0) {
+      if (now >= c.hide) c.root.classList.remove('on');
+      return;
+    }
+    const left = Math.max(0, (c.end - now) / 1000);
+    c.fill.style.width = `${Math.min(1, 1 - left / c.dur) * 100}%`;
+    c.secs.textContent = `${left.toFixed(1)} s`;
   }
 
   // ================================================================ tutorial objective bar
@@ -2501,6 +2675,7 @@ export class HUD {
 
   update(dt: number): void {
     this.updateTutorialArrow(dt);
+    this.updateCast();
     this.music?.update();
     this.renderParty();
     this.inspectTimer -= dt;

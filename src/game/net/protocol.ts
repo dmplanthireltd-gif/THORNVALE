@@ -32,7 +32,7 @@ const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 29;
+export const PROTOCOL_VERSION = 30;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -55,7 +55,7 @@ export type Command =
   | { c: 'unequip'; slot: EquipSlot }
   | { c: 'drop'; slot: number }
   | { c: 'throw'; from: number | EquipSlot; x: number; y: number; qty?: number }
-  | { c: 'moveSlot'; from: number; to: number }
+  | { c: 'moveSlot'; from: number; to: number; qty?: number }
   | { c: 'equipTo'; from: number; slot: EquipSlot }
   | { c: 'dialogue'; action: string }
   | { c: 'closeDialogue' }
@@ -71,7 +71,9 @@ export type Command =
   | { c: 'tradeRequest'; id: number }
   | { c: 'tradeOffer'; slots: number[]; gold: number }
   /** Drag an item onto another player: opens the trade if needed and offers that item. */
-  | { c: 'tradeItem'; id: number; slot: number }
+  | { c: 'tradeItem'; id: number; slot: number; qty?: number }
+  /** Adds a backpack item, or `qty` of a stack, to your side of the open trade (the trade window). */
+  | { c: 'tradeAdd'; slot: number; qty?: number }
   | { c: 'fightMode'; mode: FightMode; chase: boolean }
   | { c: 'partyInvite'; id: number }
   | { c: 'partyRevoke'; id: number }
@@ -342,6 +344,8 @@ export function eventAudience(e: GameEvent): number | null {
 /** Validates and executes a client command against the authoritative game. */
 export function executeCommand(game: Game, pid: number, m: Command): void {
   const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  // an amount that was sent but is not a number is refused (NaN never passes the game's checks), not taken as "all"
+  const amt = (v: unknown): number | undefined => (v === undefined || v === null ? undefined : num(v) ? v : Number.NaN);
   switch (m.c) {
     case 'moveTo': if (num(m.x) && num(m.y)) game.commandMoveTo(pid, Math.floor(m.x), Math.floor(m.y)); break;
     case 'attack': if (num(m.id)) game.commandAttack(pid, m.id); break;
@@ -354,7 +358,7 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'cast': if (isSpellId(m.spell)) game.castSpell(pid, m.spell, typeof m.param === 'string' ? m.param.slice(0, 24) : null); break;
     case 'useSlot': if (num(m.slot)) game.useSlot(pid, Math.floor(m.slot)); break;
     case 'useRuneAt': if (num(m.slot) && num(m.x) && num(m.y)) game.useRune(pid, Math.floor(m.slot), { x: Math.floor(m.x), y: Math.floor(m.y) }); break;
-    case 'moveBag': if (num(m.id) && num(m.x) && num(m.y)) game.moveBagItem(pid, Math.floor(m.id), Math.floor(m.x), Math.floor(m.y), num(m.qty) ? Math.floor(m.qty) : undefined); break;
+    case 'moveBag': if (num(m.id) && num(m.x) && num(m.y)) game.moveBagItem(pid, Math.floor(m.id), Math.floor(m.x), Math.floor(m.y), amt(m.qty)); break;
     case 'useRuneOn': {
       if (!num(m.slot) || !num(m.id)) break;
       const t = game.getCreature(Math.floor(m.id));
@@ -367,10 +371,10 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'drop': if (num(m.slot)) game.dropSlot(pid, Math.floor(m.slot)); break;
     case 'throw': {
       const from = num(m.from) ? Math.floor(m.from) : (EQUIP_SLOTS as readonly string[]).includes(m.from as string) ? m.from : null;
-      if (from !== null && num(m.x) && num(m.y)) game.throwItem(pid, from as number | EquipSlot, Math.floor(m.x), Math.floor(m.y), num(m.qty) ? m.qty : undefined);
+      if (from !== null && num(m.x) && num(m.y)) game.throwItem(pid, from as number | EquipSlot, Math.floor(m.x), Math.floor(m.y), amt(m.qty));
       break;
     }
-    case 'moveSlot': if (num(m.from) && num(m.to)) game.moveSlot(pid, Math.floor(m.from), Math.floor(m.to)); break;
+    case 'moveSlot': if (num(m.from) && num(m.to)) game.moveSlot(pid, Math.floor(m.from), Math.floor(m.to), amt(m.qty)); break;
     case 'equipTo': if (num(m.from) && (EQUIP_SLOTS as readonly string[]).includes(m.slot)) game.equipTo(pid, Math.floor(m.from), m.slot); break;
     case 'dialogue': if (typeof m.action === 'string') game.dialogueAction(pid, m.action.slice(0, 80)); break;
     case 'closeDialogue': game.closeDialogue(pid); break;
@@ -383,7 +387,8 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'closeDepot': game.closeDepot(pid); break;
     case 'tradeRequest': if (num(m.id)) game.requestTrade(pid, m.id); break;
     case 'tradeOffer': if (Array.isArray(m.slots) && num(m.gold)) game.setTradeOffer(pid, m.slots.filter(num), m.gold); break;
-    case 'tradeItem': if (num(m.id) && num(m.slot)) game.offerItemTo(pid, Math.floor(m.id), Math.floor(m.slot)); break;
+    case 'tradeItem': if (num(m.id) && num(m.slot)) game.offerItemTo(pid, Math.floor(m.id), Math.floor(m.slot), amt(m.qty)); break;
+    case 'tradeAdd': if (num(m.slot)) game.addToTrade(pid, Math.floor(m.slot), amt(m.qty)); break;
     case 'fightMode': if (typeof m.mode === 'string' && m.mode in FIGHT_MODE && typeof m.chase === 'boolean') game.setFightMode(pid, m.mode, m.chase); break;
     case 'partyInvite': if (num(m.id)) game.partyInvite(pid, Math.floor(m.id)); break;
     case 'partyRevoke': if (num(m.id)) game.partyRevoke(pid, Math.floor(m.id)); break;

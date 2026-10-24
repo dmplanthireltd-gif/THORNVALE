@@ -4,7 +4,7 @@
 
 - **Source of truth for values:** the game's `src/style.css` (`:root` tokens) and the website's `site/styles.css`. The tables below copy those values. If code and this guide disagree, fix one of them in the same change.
 - **Changing the brand:** only with the owner's OK. Update this file in **both places** (repo `BRAND.md` and the claude.ai Project doc `claude/THORNVALE-BRAND.md`) and add a Change Log row in `BIBLE.md` §13.
-- **Current look:** the in-game HUD "Two Flanks" (design 2c, shipped 2026-10-21). The darker "Iron & Ember" blackletter look from the HUD canvas was **not** chosen; don't use it.
+- **Current look:** the in-game HUD "Classic" layout (owner request 2026-10-24) built from the "Two Flanks" pieces (design 2c, shipped 2026-10-21). The darker "Iron & Ember" blackletter look from the HUD canvas was **not** chosen; don't use it.
 
 ---
 
@@ -139,8 +139,8 @@ All of these exist in code (`src/style.css`, `site/styles.css`); reuse, don't re
 
 ## 6. Layout
 
-- **Game layout presets (Settings → Layout):** "Two Flanks" is the default (below). "Full View" (design 3c, owner-approved 2026-10-21) is the alternative: the game view fills the screen under the title strip and the same panels float in five framed docks (status top-left, map + battle top-right, chat bottom-left, menu + action bar + combat bottom-centre, equipment + inventory bottom-right), each a normal panel with the drop shadow `0 4px 14px rgba(0,0,0,.55)`.
-- **Game:** "Two Flanks". The title strip sits on top. The **left flank** holds character, Combat, Skills, Battle and Party. The **game view** is centred with gold corner brackets and a soft vignette, with the target bar hanging from its top. Hotbar and chat sit under the view. The **right flank** holds Map, menu, Equipment, Pockets and Backpack. Controls and layout don't change without the owner (BIBLE §10).
+- **Game layout (owner request 2026-10-24, "like Tibia"):** **"Classic"** is the default: the title strip on top, the game view on the left/centre (gold corner brackets, target bar hanging from its top), and on the right one or two columns of stackable **mini-windows** on the frame colour `#1d1915` with 4 px gaps. A mini-window is a normal panel (fill `#2b2621`, 1 px `#0d0b09` border, `#4a4034` inset line, square corners) with a 23 px header strip (`#1d1915`, `0 1px 0 #5a4a30`), a gold diamond + Verdana 700 11 px uppercase label in `#d4ad55` (letter-spacing 0.14 em), muted info on the right and two 17 px iron buttons (− fold, ✕ close). A fixed control bar of iron HUD buttons tops the right column. The health/mana bar and the action bars sit on frame-coloured strips docked to an edge of the view (striped bronze `#8a7340` grip), or float over the view as panels with the drop shadow `0 4px 14px rgba(0,0,0,.55)`. The "How many?" box is a small panel with gold corner brackets, a Palatino gold title and the one "on" button. Other presets in Settings → Layout: "Two flanks" (design 2c, the 2026-10-21 look) and "Full view" (design 3c: the view fills the screen, the windows and chat float over it with the drop shadow).
+- **Game, "Two flanks" preset:** the left flank holds character, Combat, Skills, Battle and Party; the right flank holds Map, menu, Equipment, Pockets and Backpack; hotbar and chat sit under the view. Controls and layout don't change without the owner (BIBLE §10).
 - **Login / start screen (chosen 2026-10-21: "A · The Gatehouse")** has these parts:
   - **Background:** a darkened gameplay still filling the screen.
   - **Header:** the title strip, showing realm status and the countdown.

@@ -248,6 +248,7 @@ export const MESSAGES: Table = {
   "There is no field here to dispel.": ["Nie ma tu pola do rozproszenia.", "Não há campo aqui para dissipar."],
   "You may not use this rune inside a protection zone.": ["W strefie ochronnej nie wolno używać tej runy.", "Não é permitido usar esta runa numa zona de proteção."],
   "There is not enough room.": ["Jest za mało miejsca.", "Não há espaço suficiente."],
+  "You need a free slot to split that stack.": ["Potrzebujesz wolnego miejsca, aby podzielić stos.", "Você precisa de um espaço livre para dividir a pilha."],
   "Aim this rune at a monster.": ["Wyceluj tą runą w potwora.", "Mire esta runa num monstro."],
   "The {name} is paralysed.": ["Paraliż: {name}.", "{name} está paralisado."],
   "Aim the rune at a spot, or target a monster first.": ["Wyceluj runą w miejsce albo najpierw wybierz potwora.", "Mire a runa num lugar ou escolha um monstro como alvo primeiro."],
