@@ -8,6 +8,7 @@ import { COMPOST, TROWEL } from './farming';
 import { BIRD_SNARE, BOX_TRAP } from './hunter';
 import { HUSH_COWL, SLAYER_HELM } from './slayer';
 import { HERBS } from './herblore';
+import { BOATS } from './sailing';
 
 const HUNT_MATERIAL_IDS = HUNT_MATERIALS.map(([id]) => id);
 
@@ -77,6 +78,16 @@ export const TRADE_MASTERS: TradeNpc[] = [
       advice: 'The farm south of the plaza has patches anyone may use. Bring a trowel and a seed, plant it, and come back when it is ripe. Potatoes are quickest. Herb seeds grow herbs for potions.',
       sells: [price(TROWEL, 15), price(COMPOST, 8), price('potato_seed'), price('onion_seed'), price('cabbage_seed'), price('marshwort_seed'), price('mooncress_seed')],
       buys: [...CROP_IDS],
+    },
+  },
+  {
+    town: 'millbrook',
+    def: {
+      key: 'shipwright', name: 'Captain Maren Tallow', role: 'Shipwright', prop: 'ledger', look: look('citizen', 115, 88, 94),
+      greeting: 'Mind the tar, {name}. Every boat on this coast went through my hands.',
+      advice: 'Buy a boat from me and keep the deed in your pack. At any harbour or island landing there are mooring posts beside the pier: use one and you are afloat. Sail over the water as you would walk, and come ashore at any mooring. Every tile sailed teaches you something, and a long voyage to another harbour teaches you a great deal. Out on the open sea you can haul in floating wreckage and fish from the boat. Watch the sky, and watch the water.',
+      sells: [...BOATS.map((b) => price(b.deed, ITEMS[b.deed]?.value)), price('fishing_rod')],
+      buys: [...BOATS.map((b) => b.deed)],
     },
   },
   {

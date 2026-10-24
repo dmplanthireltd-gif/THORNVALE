@@ -102,6 +102,7 @@ export const CAPES: CapeDef[] = [
   skill('tillers_cape', "Tiller's Cape", 'farming', 'farm_master', '#6a8a2a', 'There is always a little soil in its hem, and it smells of rain.'),
   skill('trappers_cape', "Trapper's Cape", 'hunter', 'hunt_master', '#7a5a32', 'Patched with the pelts of a hundred careful catches.'),
   skill('banewarden_cape', "Banewarden's Cape", 'slayer', 'slayer_vesna', '#4a1214', 'Each stitch marks a task done. There are a great many stitches.'),
+  skill('tidewalker_cape', "Tidewalker's Cape", 'sailing', 'shipwright', '#1e4a6e', 'Stiff with salt and patched with sailcloth. It always knows which way the wind blows.'),
   // --- mastery ---------------------------------------------------------------------------------
   {
     id: 'grandmaster_mantle', name: "Grandmaster's Mantle", kind: 'mastery', seller: 'elias', price: MASTERY_CAPE_PRICE, value: 25000, rarity: 'legendary', tint: '#e8c040',
@@ -191,7 +192,7 @@ function seasonOpen(c: CapeDef, now: number): boolean {
 const SKILL_LABEL: Record<CapeSkill, string> = {
   fist: 'fist fighting', club: 'club fighting', sword: 'sword fighting', axe: 'axe fighting', distance: 'distance fighting', shielding: 'shielding', magic: 'magic level',
   woodcutting: 'woodcutting', fishing: 'fishing', mining: 'mining', smithing: 'blacksmithing', fletching: 'fletching', crafting: 'crafting', cooking: 'cooking', firemaking: 'firemaking',
-  agility: 'agility', herblore: 'herblore', thieving: 'thieving', slayer: 'slayer', farming: 'farming', hunter: 'hunter',
+  agility: 'agility', herblore: 'herblore', thieving: 'thieving', slayer: 'slayer', farming: 'farming', hunter: 'hunter', sailing: 'sailing',
 };
 
 /**

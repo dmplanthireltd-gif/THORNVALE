@@ -24,6 +24,7 @@ import { Obj } from '../src/game/world/WorldMap';
 import { npcKeyword } from '../src/game/npc/keywords';
 import { PLANTS } from '../src/game/trades/farming';
 import { TASK_BY_ID } from '../src/game/trades/slayer';
+import { seaTile } from '../src/game/trades/SeaSystem';
 
 const PLANTS_OK = () => PLANTS.every((d) => !!ITEMS[d.seed] && !!ITEMS[d.produce] && d.minutes > 0);
 
@@ -41,7 +42,13 @@ function withRandom<T>(v: number, fn: () => T): T {
   Math.random = () => v;
   try { return fn(); } finally { Math.random = realRandom; }
 }
-const setLevel = (s: Session, id: 'agility' | 'herblore' | 'thieving' | 'fletching' | 'slayer' | 'farming' | 'hunter', lvl: number) => { s.gathering[id] = gatherXpForLevel(lvl); };
+/** Runs `fn` with Math.random giving these values in turn (then the last one). */
+function withRandoms<T>(vs: number[], fn: () => T): T {
+  let i = 0;
+  Math.random = () => vs[Math.min(i++, vs.length - 1)];
+  try { return fn(); } finally { Math.random = realRandom; }
+}
+const setLevel = (s: Session, id: 'agility' | 'herblore' | 'thieving' | 'fletching' | 'slayer' | 'farming' | 'hunter' | 'sailing', lvl: number) => { s.gathering[id] = gatherXpForLevel(lvl); };
 const run = (g: Game, seconds: number) => { for (let t = 0; t < seconds; t += 0.05) g.update(0.05); };
 
 // ---------------------------------------------------------------- save migration
@@ -417,6 +424,113 @@ console.log('slayer');
   g.dialogueAction(p.id, 'trades:rewards');
   g.dialogueAction(p.id, 'trades:buy:helm');
   check(s.trades.points === 50 && s.inventory.count('slayer_helm') === 1, 'slayer points buy a slayer helm');
+}
+
+// ---------------------------------------------------------------- sailing
+console.log('sailing');
+{
+  const sg = new Game();
+  const s = sg.addPlayer('Sailor', { intent: new BufferedIntent() });
+  const p = s.player;
+  p.ignoredByMonsters = true;
+  const said: string[] = [];
+  sg.events.on((e) => { if (e.type === 'message' && e.to === p.id) said.push(e.text); });
+  const W = sg.world;
+  const sl = W.trades!;
+  check(sl.moorings.length >= 30 && new Set(sl.moorings.map((m) => m.name)).size >= 18, `moorings at the harbours and landings (${sl.moorings.length} at ${new Set(sl.moorings.map((m) => m.name)).size})`);
+  check(sl.moorings.every((m) => W.getObj(m.x, m.y, 0) === Obj.Mooring && W.isWalkable(m.dockX, m.dockY, 0) && seaTile(W, m.x, m.y, 0)), 'every post stands in the water beside a walkable pier tile');
+  check(sl.flotsam.length >= 100 && sl.flotsam.every((f) => W.getObj(f.x, f.y, 0) === Obj.Flotsam && f.level >= 1 && f.level <= 80), `floating wreckage out on the open sea (${sl.flotsam.length})`);
+  const mo = sl.moorings.find((m) => m.name === 'Thornvale Harbour') ?? sl.moorings[0];
+  p.placeAt(mo.dockX, mo.dockY, 0);
+  sg.skillSys.useTile(s, mo.x, mo.y, 0);
+  check(!p.boat && said.some((t) => t.includes('You need a boat')), 'without a boat you cannot sail');
+  s.inventory.add('cutter_deed', 1);
+  sg.skillSys.useTile(s, mo.x, mo.y, 0);
+  check(!p.boat && said.some((t) => t.includes('sailing level 60')), 'a cutter wants sailing level 60');
+  s.inventory.add('skiff_deed', 1);
+  sg.skillSys.useTile(s, mo.x, mo.y, 0);
+  check(p.boat === 1 && p.x === mo.x && p.y === mo.y, 'with a skiff deed you board at the mooring');
+  const act = currentActivity(sg, p.id);
+  check(act?.kind === 'sail' && act.tool === 'skiff_deed', 'others see you rowing a skiff');
+  run(sg, 1.5);
+  // never onto land, except back onto the pier from the post
+  let landBlocked = true;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const x = mo.x + dx, y = mo.y + dy;
+    if ((dx || dy) && !(x === mo.dockX && y === mo.dockY) && !seaTile(W, x, y, 0) && sg.canStepFor(p, dx, dy)) landBlocked = false;
+  }
+  check(landBlocked && sg.canStepFor(p, mo.dockX - mo.x, mo.dockY - mo.y), 'a boat never runs onto land; from the post you can step back onto the pier');
+  // sail out into open water
+  let target: { x: number; y: number } | null = null;
+  for (let r = 10; r < 30 && !target; r++) for (let a = 0; a < 32 && !target; a++) {
+    const x = Math.round(mo.x + Math.cos(a / 32 * 6.283) * r), y = Math.round(mo.y + Math.sin(a / 32 * 6.283) * r);
+    if (seaTile(W, x, y, 0) && W.getObj(x, y, 0) === Obj.None && sg.pathTo(p, x, y, false, 40000)) target = { x, y };
+  }
+  check(!!target, 'there is open water to sail to');
+  const xp0 = s.gathering.sailing;
+  if (target) {
+    sg.commandMoveTo(p.id, target.x, target.y);
+    for (let i = 0; i < 600 && (p.x !== target.x || p.y !== target.y || p.moving); i++) sg.update(0.05);
+    check(p.x === target.x && p.y === target.y && p.boat === 1, 'a click on the water sails you there');
+    check(s.gathering.sailing > xp0, 'every tile sailed gives sailing experience');
+  }
+  const save = sg.serialize(p.id);
+  check(save.player.x === mo.dockX && save.player.y === mo.dockY, 'a save at sea puts you back on the pier you sailed from');
+  // the boat steps quicker than walking and the fire stays ashore
+  check(sg.skillSys.predictFactor(s) < 1, 'a boat steps quicker than walking');
+  // wreckage: salvage it from the boat
+  setLevel(s, 'sailing', 99);
+  const f = sl.flotsam[0];
+  let beside: { x: number; y: number } | null = null;
+  for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, -1]]) if (!beside && seaTile(W, f.x + dx, f.y + dy, 0) && W.getObj(f.x + dx, f.y + dy, 0) === Obj.None) beside = { x: f.x + dx, y: f.y + dy };
+  p.placeAt(beside!.x, beside!.y, 0);
+  const gold0 = s.inventory.count('gold');
+  const sxp = s.gathering.sailing;
+  sg.skillSys.useTile(s, f.x, f.y, 0);
+  check(currentActivity(sg, p.id)?.kind === 'salvage', 'you reach over the side for the wreckage (shown to others)');
+  for (let i = 0; i < 400 && W.getObj(f.x, f.y, 0) === Obj.Flotsam; i++) sg.update(0.05);
+  check(W.getObj(f.x, f.y, 0) === Obj.FlotsamGone && s.inventory.count('gold') > gold0 && s.gathering.sailing > sxp, 'salvaged wreckage gives gold and goods and sailing experience, then is gone for a while');
+  // at sea: a drifting crate, a squall, a monster from the deep
+  const g1 = s.inventory.count('gold');
+  withRandom(0, () => sg.skillSys.sea.onStep(s));
+  check(s.inventory.count('gold') > g1, 'a drifting crate hauled aboard');
+  p.level = 40;
+  const enemies0 = sg.enemies.length;
+  withRandoms([0, 0.8, 0.1, 0.1, 0.1, 0.1], () => sg.skillSys.sea.onStep(s));
+  const surfaced = sg.enemies.slice(enemies0).find((e) => e.tag === 'sea');
+  check(!!surfaced && seaTile(W, surfaced.x, surfaced.y, 0), 'a monster surfaces on the water beside the boat');
+  const hp0 = p.hp;
+  withRandoms([0, 0.5], () => sg.skillSys.sea.onStep(s));
+  check(p.hp < hp0, 'a squall hurts');
+  p.hp = p.maxHp;
+  // fishing from the boat teaches a little sailing too
+  const fx = s.gathering.sailing;
+  sg.skillSys.sea.onFishCaught(s);
+  check(s.gathering.sailing > fx, 'a fish caught from the boat gives sailing experience');
+  // a voyage: come ashore at another harbour
+  const far = sl.moorings.filter((m) => m.name !== mo.name).sort((a, b) => Math.hypot(b.x - mo.x, b.y - mo.y) - Math.hypot(a.x - mo.x, a.y - mo.y))[0];
+  p.placeAt(far.x, far.y, 0);
+  const vx = s.gathering.sailing;
+  sg.skillSys.useTile(s, far.x, far.y, 0);
+  run(sg, 1.5);
+  check(!p.boat && p.x === far.dockX && p.y === far.dockY, 'from the post you step ashore onto the pier');
+  check(s.gathering.sailing - vx >= 100 && said.some((t) => t.includes(`from ${mo.name}`)), 'a long voyage to another harbour pays a sailing bonus');
+  // the network: everyone sees the boat
+  sg.skillSys.useTile(s, far.x, far.y, 0);
+  run(sg, 0.5);
+  const mirror = new Game({ simulate: false });
+  const me = mirror.addPlayer('Sailor', { id: p.id, starter: false });
+  mirror.localId = me.player.id;
+  const snap = buildSnapshot(sg, s);
+  if (snap.t === 'snap') applySnapshot(mirror, snap);
+  check(p.boat === 3 && me.player.boat === 3, 'at sailing 99 you take your cutter; the boat is in the snapshot (bt): every client draws it and steps over water the same way');
+  check(mirror.canStepFor(me.player, far.dockX - far.x, far.dockY - far.y), 'the client may predict the step onto the pier');
+  // death and teleports send the boat home
+  sg.teleport(p, mo.dockX, mo.dockY, 0);
+  check(!p.boat, 'a teleport ends the voyage');
+  runAdminCommand(sg, s, '/maxskills');
+  check(sg.skillLevel(s, 'sailing') === 99, '/maxskills raises sailing too');
+  check(!!NPCS.shipwright?.sells?.some((e) => e.id === 'skiff_deed') && !!CAPE_BY_ID.tidewalker_cape, 'Captain Maren Tallow sells boats; the Tidewalker\'s Cape is sailing\'s');
 }
 
 // ---------------------------------------------------------------- test commands, network view

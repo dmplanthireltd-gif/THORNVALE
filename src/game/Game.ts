@@ -527,6 +527,7 @@ export class Game implements AIContext {
     this.friendRequests.delete(id);
     for (const set of this.friendRequests.values()) set.delete(id);
     if (!this.sessions.delete(id)) return;
+    this.skillSys.sea.forget(id);
     for (const e of this.enemies) if (e.targetId === id) e.targetId = null;
     for (const o of this.sessions.values()) if (o.player.targetId === id) o.player.targetId = null;
     this.events.emit({ type: 'playerLeft', id });
@@ -778,9 +779,15 @@ export class Game implements AIContext {
 
   // ================================================================ movement
 
+  /** Whether a creature may step this way: over land, or over water in a boat (trades/SeaSystem.ts). */
+  canStepFor(c: Creature, dx: number, dy: number): boolean {
+    if (c instanceof Player && c.boat) return this.skillSys.sea.canStep(c.x, c.y, c.z, dx, dy);
+    return this.world.canStep(c.x, c.y, c.z, dx, dy);
+  }
+
   tryStep(c: Creature, dx: number, dy: number): boolean {
     if (c.moving) return false;
-    if (!this.world.canStep(c.x, c.y, c.z, dx, dy)) return false;
+    if (!this.canStepFor(c, dx, dy)) return false;
     if (this.isOccupied(c.x + dx, c.y + dy, c.z, c.id, c.kind === 'player')) return false;
     if (c.kind === 'enemy') {
       // monsters never enter protection zones, stairs or holes
@@ -826,7 +833,7 @@ export class Game implements AIContext {
       const k = y * W + x;
       return others.has(k) || (players.has(k) && (!isPlayer || !this.world.isSafe(x, y, z)));
     };
-    return findPath(this.world.grid(z), {
+    return findPath(c instanceof Player && c.boat ? this.skillSys.sea.grid(z) : this.world.grid(z), {
       sx: c.x, sy: c.y, tx, ty, maxNodes,
       isGoal: adjacent ? (x, y) => chebyshev(x, y, tx, ty) === 1 && !occupied(x, y) : undefined,
       isBlocked: (x, y) => {
@@ -871,7 +878,7 @@ export class Game implements AIContext {
     // a fresh turn may not have reached the server before it chose this step: let the server lead
     if ((dx !== lastDx || dy !== lastDy) && this.predictDirAge < PREDICT_TURN_WAIT) return;
     if (this.world.linkAt(p.x, p.y, p.z)) return;
-    const ok = (sx: number, sy: number) => (sx || sy) && this.world.canStep(p.x, p.y, p.z, sx, sy)
+    const ok = (sx: number, sy: number) => (sx || sy) && this.canStepFor(p, sx, sy)
       && !this.isOccupied(p.x + sx, p.y + sy, p.z, p.id, true) && !this.world.linkAt(p.x + sx, p.y + sy, p.z);
     let sx = dx, sy = dy;
     if (!ok(sx, sy)) {
@@ -1701,6 +1708,7 @@ export class Game implements AIContext {
       this.events.emit({ type: 'inventoryChanged', to: s.id });
       this.msg(s.id, what, 'loot');
       if (xp > 0) this.gainFishing(s, xp, p.id);
+      if (catchId) this.skillSys.sea.onFishCaught(s);
       const n = (spot?.n ?? 0) + 1;
       this.fishSpots.set(key, { n, t: spot?.t ?? SPOT_RECOVER_SECONDS });
       if (n === SPOT_WARY_AFTER) this.msg(s.id, 'The fish here are getting wary. Try another spot for a while.', 'info');
@@ -1984,6 +1992,7 @@ export class Game implements AIContext {
   private fireProblem(s: Session): string | null {
     const p = s.player;
     const w = this.world;
+    if (p.boat) return 'You cannot light a fire in a boat.';
     if (w.isSafe(p.x, p.y, p.z)) return 'You may not light a fire in a protection zone.';
     if (w.getObj(p.x, p.y, p.z) !== Obj.None || w.linkAt(p.x, p.y, p.z) || this.fires.has(WorldMap.key(p.x, p.y, p.z)) || this.fields.has(WorldMap.key(p.x, p.y, p.z))) return 'You cannot light a fire here.';
     if (!this.stepAside(p, true)) return 'There is no room to step away from a fire here.';
@@ -2608,8 +2617,9 @@ export class Game implements AIContext {
    * on a free, unprotected tile within `radius` of x, y. It never respawns and
    * leaves after its corpse fades. Returns null when there is no room.
    */
-  spawnEnemy(kind: EnemyKind, x: number, y: number, z: number, opts: { tag: string; radius?: number; masterId?: number; noReward?: boolean; alwaysAwake?: boolean; lifetime?: number }): Enemy | null {
-    const at = this.spawnTileNear(x, y, z, opts.radius ?? 4);
+  spawnEnemy(kind: EnemyKind, x: number, y: number, z: number, opts: { tag: string; radius?: number; masterId?: number; noReward?: boolean; alwaysAwake?: boolean; lifetime?: number; at?: { x: number; y: number } }): Enemy | null {
+    // `at`: exactly this tile (sea monsters surfacing beside a boat; the caller checked it)
+    const at = opts.at ?? this.spawnTileNear(x, y, z, opts.radius ?? 4);
     if (!at) return null;
     const e = new Enemy(this.nextId++, kind, at.x, at.y, z);
     e.dynamic = true;
@@ -3102,7 +3112,9 @@ export class Game implements AIContext {
     p.pending = null;
     p.chaseSuppressed = 1.5;
     // someone standing on the tile (outside a protection zone): walk next to them instead
-    const walkable = this.world.isWalkable(x, y, p.z) && !this.isOccupied(x, y, p.z, p.id, true);
+    // in a boat: over water or onto a pier from its mooring; a click on the shore sails up beside it
+    const enter = p.boat ? this.skillSys.sea.canEnter(x, y, p.z) : this.world.isWalkable(x, y, p.z);
+    const walkable = enter && !this.isOccupied(x, y, p.z, p.id, true);
     const path = this.pathTo(p, x, y, !walkable, budget);
     if (!path) {
       if (budget >= 40000) this.msg(pid, 'There is no way.', 'warn');
@@ -3189,6 +3201,11 @@ export class Game implements AIContext {
     p.pending = { type: 'use', x, y, z: p.z };
   }
 
+  /** Whether the local player is out in a boat (Input: a right-click on water fishes). */
+  localPlayerSailing(): boolean {
+    return !!this.session(this.localId)?.player.boat;
+  }
+
   /** Whether a tile has something to use (for cursors and clicks). */
   isUsable(x: number, y: number, z: number): boolean {
     // agility shortcuts, stalls, strongboxes, herbs… (trades/TradeSystem.ts)
@@ -3201,9 +3218,10 @@ export class Game implements AIContext {
       return !!s && !!this.bestAxe(s);
     }
     if (isFishingWater(this.world, x, y, z)) {
-      // open water is "usable" (fish) with a rod, when it is close enough and in sight
+      // open water is "usable" (fish) with a rod, when it is close enough and in sight;
+      // in a boat a click on water sails there instead (a right-click fishes: Input)
       const s = this.session(this.localId);
-      return !!s && this.hasRod(s) && this.canReachWater(s.player, x, y, z);
+      return !!s && !s.player.boat && this.hasRod(s) && this.canReachWater(s.player, x, y, z);
     }
     if (oreAt(o)) {
       // ore rocks are "usable" (mine) for whoever carries a pickaxe

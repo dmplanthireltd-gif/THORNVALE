@@ -34,7 +34,7 @@ const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 33;
+export const PROTOCOL_VERSION = 34;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -152,6 +152,8 @@ export interface CreatureSnap {
   ac?: ActivitySnap;
   /** The pet that is out: "pet_fox:3" (item:level), '' = none (protocol 26; sent with the look). */
   pe?: string;
+  /** Sailing: the boat sailed, 0 none, 1 skiff, 2 sloop, 3 cutter (protocol 34; sent with the look). */
+  bt?: 0 | 1 | 2 | 3;
 }
 
 export interface SelfSnap {
@@ -264,7 +266,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     for (const [k, v] of Object.entries(o.inventory.equipment)) eq[k] = v?.id ?? null;
     // a hidden cape (the cloak switch) is hidden from everyone else too
     if (o.cosmetics.hideCloak) eq.cape = null;
-    const look = JSON.stringify([p.name, p.level, p.vocation, encodeAppearance(p.appearance), eq, p.showGear, p.illusion ?? '', p.cloak, p.title, p.premium, petLook(o.pets)]);
+    const look = JSON.stringify([p.name, p.level, p.vocation, encodeAppearance(p.appearance), eq, p.showGear, p.illusion ?? '', p.cloak, p.title, p.premium, petLook(o.pets), p.boat]);
     const full = looks.get(p.id) !== look;
     if (full) looks.set(p.id, look);
     const act = computeActivity(game, o);
@@ -276,7 +278,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
       hp: Math.ceil(p.hp), mhp: p.maxHp, d: p.dead ? 1 : 0,
       ...(full ? {
         name: p.name, lvl: p.level, voc: p.vocation, ap: encodeAppearance(p.appearance), eq, sg: p.showGear ? 1 as const : 0 as const, ill: p.illusion ?? '',
-        ck: p.cloak, tt: p.title, pr: p.premium ? 1 as const : 0 as const, pe: petLook(o.pets),
+        ck: p.cloak, tt: p.title, pr: p.premium ? 1 as const : 0 as const, pe: petLook(o.pets), bt: p.boat,
       } : {}),
       buffs: {
         haste: p.buffs.haste > 0 || p.buffs.strongHaste > 0 ? 1 : 0, magicShield: p.buffs.magicShield > 0 ? 1 : 0, light: p.buffs.light > 0 ? 1 : 0,
@@ -492,6 +494,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
       }
       p.netSkull = c.sk === 1 || c.sk === 2 ? c.sk : 0;
       if (c.ac !== undefined) setNetActivity(p, decodeActivity(c.ac));
+      if (c.bt !== undefined) p.boat = c.bt === 1 || c.bt === 2 || c.bt === 3 ? c.bt : 0;
       if (c.pt) game.netPartyFlags.set(p.id, c.pt);
       else game.netPartyFlags.delete(p.id);
       if (c.buffs) {

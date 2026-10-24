@@ -130,6 +130,8 @@ export class TradeView {
     l.herbs.forEach((h) => this.herb(h.x, h.y, h.z, HERB_BY_ID[h.herb]?.color ?? '#6a9a3a'));
     l.patches.forEach((q) => this.patch(q.x, q.y, q.z, q.kind));
     l.hunts.forEach((h) => this.huntSpot(h.x, h.y, h.z, h.kind));
+    l.moorings.forEach((mo) => this.mooring(mo.x, mo.y, mo.z, mo.dockX, mo.dockY));
+    l.flotsam.forEach((f) => this.flotsam(f.x, f.y, f.z));
     for (const [key, part] of this.parts) part.build(this.floorGroup(Number(key.split('|')[0])));
   }
 
@@ -280,6 +282,39 @@ export class TradeView {
       g.add(goodsOwner, compose(x + ox * c - oy * s, 0.85, y + ox * s + oy * c, hash2(x, y, i + 5) * 2, 1, 0.8 + hash2(x, y, i + 9) * 0.5, 1), cs[i % cs.length]);
     }
     this.watched.push({ x, y, z, full: goodsOwner, empty: -1, fullObj: Obj.TradeStall, last: -1 });
+  }
+
+  /** A mooring post in the water beside the pier, a rope to the pier and a ring. */
+  private mooring(x: number, y: number, z: number, dx: number, dy: number): void {
+    const G = TradeView.geo, M = TradeView.m;
+    const owner = this.nextOwner++;
+    this.part(z, 'mpost', () => [G.post, M('tarwood', 0x3a2a1c)]).add(owner, compose(x, -0.45, y, 0, 1.9, 1.35, 1.9));
+    this.part(z, 'mcap', () => [G.bloom, M('iron', 0x5a5e66)]).add(owner, compose(x, 0.92, y, 0, 1.4, 0.7, 1.4));
+    const rope = this.part(z, 'mrope', () => [new THREE.CylinderGeometry(0.022, 0.022, 1, 5), M('rope', 0xc8b088), false]);
+    const a = new THREE.Vector3(x, 0.7, y), b = new THREE.Vector3(x + (dx - x) * 0.55, 0.12, y + (dy - y) * 0.55);
+    rope.add(owner, segment(a, b));
+    this.part(z, 'mring', () => [new THREE.TorusGeometry(0.1, 0.02, 4, 10), M('iron', 0x5a5e66), false]).add(owner, compose(x, 0.55, y, 0, 1, 1, 1, Math.PI / 2));
+  }
+
+  /** Floating wreckage: planks, a barrel and a scrap of sail; a few splinters while the sea brings more. */
+  private flotsam(x: number, y: number, z: number): void {
+    const G = TradeView.geo, M = TradeView.m;
+    const full = this.nextOwner++;
+    const empty = this.nextOwner++;
+    const W = -0.07;
+    const plank = this.part(z, 'fplank', () => [G.plank, M('wetwood', 0xa8875a)]);
+    for (let i = 0; i < 3; i++) {
+      const r = hash2(x, y, i) * Math.PI;
+      plank.add(full, compose(x + (hash2(x, y, i + 4) - 0.5) * 0.6, W, y + (hash2(x, y, i + 9) - 0.5) * 0.6, r, 0.95, 1, 2.8));
+    }
+    this.part(z, 'fbarrel', () => [new THREE.CylinderGeometry(0.2, 0.2, 0.46, 10).rotateZ(Math.PI / 2), M('barrel', 0xa0703a)])
+      .add(full, compose(x + 0.18, W + 0.14, y - 0.12, hash2(x, y, 21) * 3));
+    this.part(z, 'fcrate', () => [new THREE.BoxGeometry(0.42, 0.34, 0.42).translate(0, 0.17, 0), M('crate', 0xc09a62)])
+      .add(full, compose(x - 0.18, W + 0.04, y + 0.1, hash2(x, y, 27) * 3, 1, 1, 1, 0.12, 0.08));
+    this.part(z, 'fsail', () => [new THREE.PlaneGeometry(0.6, 0.45).rotateX(-Math.PI / 2), M('sailcloth', 0xd8cfb4)])
+      .add(full, compose(x - 0.2, W + 0.05, y + 0.18, hash2(x, y, 33) * 3, 1, 1, 1, 0.05));
+    for (let i = 0; i < 3; i++) plank.add(empty, compose(x + (hash2(x, y, i + 40) - 0.5) * 0.7, W, y + (hash2(x, y, i + 50) - 0.5) * 0.7, hash2(x, y, i + 60) * 3, 0.4, 0.6, 0.6));
+    this.watched.push({ x, y, z, full, empty, fullObj: Obj.Flotsam, last: -1 });
   }
 
   private box(x: number, y: number, z: number): void {
@@ -475,9 +510,82 @@ export class TradeView {
     }
   }
 
-  /** Climbers go up and over the cliff (after CreatureView.update); works the same on mirror games. */
+  private boats = new Map<number, { n: number; group: THREE.Group; t: number }>();
+
+  /** A boat under a sailing player: a rowing skiff, a one-mast sloop or a two-mast cutter (bow along +z). */
+  private static buildBoat(n: number): THREE.Group {
+    const g = new THREE.Group();
+    g.name = 'boat';
+    const hullM = TradeView.m(`hull${n}`, n === 1 ? 0x7a5a32 : n === 2 ? 0x8a6a3e : 0x5a3e24);
+    const trimM = TradeView.m(`trim${n}`, n === 3 ? 0xd0b070 : 0xa8804a);
+    const deckM = TradeView.m('deck', 0xb89868);
+    const len = n === 1 ? 1.3 : n === 2 ? 1.7 : 2.1;
+    const wid = n === 1 ? 0.62 : n === 2 ? 0.78 : 0.86;
+    const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) => {
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.position.set(x, y, z);
+      mesh.rotation.set(rx, ry, rz);
+      mesh.castShadow = true;
+      g.add(mesh);
+      return mesh;
+    };
+    // hull: a box with a pointed bow, a deck inside and a trim along the gunwale
+    add(new THREE.BoxGeometry(wid, 0.3, len * 0.72), hullM, 0, 0.05, -len * 0.08);
+    const bow = new THREE.CylinderGeometry(0, wid * 0.72, len * 0.36, 4, 1).rotateX(Math.PI / 2).rotateZ(Math.PI / 4).scale(1, 0.42, 1);
+    add(bow, hullM, 0, 0.07, len * 0.46);
+    add(new THREE.BoxGeometry(wid * 0.86, 0.04, len * 0.66), deckM, 0, 0.16, -len * 0.08);
+    for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.05, 0.06, len * 0.74), trimM, s * wid * 0.5, 0.22, -len * 0.08);
+    add(new THREE.BoxGeometry(wid, 0.08, 0.06), trimM, 0, 0.22, -len * 0.44);
+    if (n === 1) {
+      // two oars resting in their locks
+      for (const s of [-1, 1]) add(new THREE.CylinderGeometry(0.02, 0.02, 1.1, 5), TradeView.m('oar', 0x9a7a4a), s * (wid * 0.5 + 0.3), 0.18, -0.05, 0, 0, s * 1.25);
+      return g;
+    }
+    const sailM = TradeView.m(`sail${n}`, n === 3 ? 0xf0e8d4 : 0xe0d4b4);
+    const masts = n === 2 ? [0.15] : [0.45, -0.35];
+    for (const mz of masts) {
+      const h = n === 2 ? 1.9 : 2.2;
+      add(new THREE.CylinderGeometry(0.035, 0.045, h, 6), TradeView.m('mast', 0x5a4028), 0, 0.2 + h / 2, mz);
+      const sail = new THREE.BufferGeometry();
+      // a triangular sail from the mast top to the boom
+      sail.setAttribute('position', new THREE.Float32BufferAttribute([0, 0.45, 0, 0, h + 0.1, 0, 0, 0.45, -(n === 2 ? 0.95 : 0.75)], 3));
+      sail.computeVertexNormals();
+      const mesh = add(sail, sailM, 0.02, 0, mz);
+      (mesh.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      add(new THREE.CylinderGeometry(0.025, 0.025, n === 2 ? 0.95 : 0.75, 5).rotateX(Math.PI / 2), TradeView.m('mast', 0x5a4028), 0, 0.45, mz - (n === 2 ? 0.47 : 0.37));
+    }
+    if (n === 3) add(new THREE.BoxGeometry(0.5, 0.08, 0.04), TradeView.m(`trim${n}`, 0xd0b070), 0, 0.3, len * 0.62);
+    return g;
+  }
+
+  /** The boat under a sailing player, rocking on the swell (all clients: `Player.boat`). */
+  private adjustBoat(view: CreatureView, c: Player): void {
+    let b = this.boats.get(c.id);
+    if (!c.boat || c.dead) {
+      if (b) {
+        b.group.removeFromParent();
+        this.boats.delete(c.id);
+      }
+      return;
+    }
+    if (!b || b.n !== c.boat || b.group.parent !== view.rig.root) {
+      b?.group.removeFromParent();
+      b = { n: c.boat, group: TradeView.buildBoat(c.boat), t: Math.random() * 6 };
+      view.rig.root.add(b.group);
+      this.boats.set(c.id, b);
+    }
+    b.t += 1 / 60;
+    b.group.position.y = -0.04 + Math.sin(b.t * 1.7) * 0.025;
+    b.group.rotation.z = Math.sin(b.t * 1.3) * 0.04;
+    b.group.rotation.x = Math.sin(b.t * 1.1 + 1) * 0.025;
+    // stand (or sit) on the deck
+    view.rig.body.position.y += 0.08;
+  }
+
+  /** Climbers go up and over the cliff, sailors ride in their boat (after CreatureView.update); the same on mirror games. */
   adjustCreature(view: CreatureView): void {
     const c = view.creature;
+    if (c instanceof Player && (c.boat || this.boats.has(c.id))) this.adjustBoat(view, c);
     if (!(c instanceof Player) || !c.moving) return;
     const a = currentActivity(this.game, c.id);
     if (!a || a.kind !== 'climb') return;

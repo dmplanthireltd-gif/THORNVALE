@@ -56,6 +56,7 @@ export const CAPE_LOOK: Record<string, CapeLook> = {
   tillers_cape: L(0x6a8a2a, 0x2e4212, 0xc8a050, 'stripes', 0x5a7a22, 'wheat', 0xe8c060, 'straight', 'plain'),
   trappers_cape: L(0x7a5a32, 0x3a2810, 0xd8c8a0, 'speckle', 0x6a4a28, 'hill', 0xe8dcc0, 'tattered', 'fur'),
   banewarden_cape: L(0x4a1214, 0x200608, 0xb8b0a0, 'cracks', 0x2a0a0a, 'skull', 0xe8e0d0, 'pointed', 'plain'),
+  tidewalker_cape: L(0x1e4a6e, 0x0e2236, 0xe8d8a8, 'waves', 0x2a6a8e, 'star', 0xf0e4c0, 'swallow', 'plain'),
   shadowpurse_cape: L(0x2a2630, 0x100e14, 0x8a7a5a, 'speckle', 0x3a3442, 'moon', 0xb8a878, 'tattered', 'plain'),
   flamekeeper_cape: L(0x7a1e08, 0x3a0a02, 0xffc040, 'plain', 0x7a1e08, 'flame', 0xffe070, 'tattered', 'plain', 'flames', 0xffa020),
   // mastery

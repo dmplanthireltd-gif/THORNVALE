@@ -196,6 +196,9 @@ export class Input {
         } else if (!right) {
           this.ctl.send({ c: 'moveTo', x: hit.x, y: hit.y });
           this.renderer.showClickMarker(hit.x, hit.y);
+        } else if (this.ctl.game.localPlayerSailing()) {
+          // in a boat: right-click the water to fish from it
+          this.ctl.send({ c: 'useTile', x: hit.x, y: hit.y });
         }
         break;
     }

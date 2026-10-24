@@ -11,13 +11,13 @@
  * migration that sets it to 0, then write the activity (gathering/ or production/).
  */
 export type NonCombatSkill = 'woodcutting' | 'fishing' | 'mining' | 'smithing' | 'fletching' | 'crafting' | 'cooking' | 'firemaking'
-  | 'agility' | 'herblore' | 'thieving' | 'slayer' | 'farming' | 'hunter';
+  | 'agility' | 'herblore' | 'thieving' | 'slayer' | 'farming' | 'hunter' | 'sailing';
 
 /**
  * Skills the save already makes room for (save v16 sets them all to 0) but whose activity ships in a
  * later stage: they appear in NONCOMBAT_SKILLS as they are built. Their saved experience is kept.
  */
-export const RESERVED_SKILL_IDS = ['sailing'] as const;
+export const RESERVED_SKILL_IDS: readonly string[] = [];
 
 /**
  * Gathering skills take from the world; production skills turn materials into items at a station;
@@ -50,6 +50,7 @@ export const NONCOMBAT_SKILLS: NonCombatSkillDef[] = [
   { id: 'agility', name: 'Agility', kind: 'adventure', icon: 'rope', hint: 'Cross shortcuts across the world: balance logs, climbing rocks, swims and squeezes. Agility also gives you more running stamina.', aliases: ['agi', 'ag', 'run'] },
   { id: 'farming', name: 'Farming', kind: 'gathering', icon: 'trowel', hint: 'Plant seeds in farm patches with a trowel; they grow in real time, even while you are away. Harvest vegetables and herbs.', aliases: ['farm', 'fa', 'grow'] },
   { id: 'hunter', name: 'Hunter', kind: 'gathering', icon: 'box_trap', hint: 'Set box traps by burrows and snares in nesting bushes, then collect what you catch: pelts, plumes, feathers and pet morsels.', aliases: ['hunt', 'hu', 'trap', 'traps'] },
+  { id: 'sailing', name: 'Sailing', kind: 'adventure', icon: 'skiff_deed', hint: 'Board your own boat at a mooring by a pier and sail the open sea: every tile teaches sailing, a voyage to another harbour pays a bonus, and out at sea you can salvage wreckage and fish from the boat.', aliases: ['sail', 'sa', 'boat'] },
   { id: 'slayer', name: 'Slayer', kind: 'adventure', icon: 'slayer_helm', hint: 'Take a task from a slayer master and slay that kind of monster for slayer experience and points. Some monsters only a slayer can hurt.', aliases: ['sl', 'slay', 'task'] },
   { id: 'thieving', name: 'Thieving', kind: 'adventure', icon: 'lockpick', hint: 'Pick the pockets of townsfolk, steal from market stalls and pick the locks of strongboxes. Get caught and you are stunned.', aliases: ['thief', 'th', 'steal'] },
 ];

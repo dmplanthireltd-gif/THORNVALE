@@ -8,6 +8,7 @@ import { STALLS } from '../trades/thieving';
 import { TRADE_NPCS } from '../trades/tradeNpcs';
 import { HUNT_REGIONS, PREY_BY_ID } from '../trades/hunter';
 import { SLAYER_REQ, type SlayerKind } from '../trades/slayer';
+import { seaLevel } from '../trades/sailing';
 import { TOWNS } from './townList';
 import { Ground, Obj, SOLID_OBJ, STRUCTURE_OBJ, UNWALKABLE_GROUND, type Region, type WorldMap } from './WorldMap';
 
@@ -499,6 +500,110 @@ const SLAYER_NAMES: Record<SlayerKind, string> = {
   gloomcrawler: 'Gloomcrawlers', wailing_shade: 'Wailing shades', cinder_wraith: 'Cinder wraiths', marrow_gargoyle: 'Marrow gargoyles', abyssal_horror: 'Abyssal horrors',
 };
 
+
+// ================================================================== sailing: moorings and wreckage
+
+const isSea = (g: number) => g === Ground.Water || g === Ground.DeepWater;
+
+/** Size of the connected stretch of water (4-way) each surface water tile belongs to (0 = land). */
+function seaSizes(m: WorldMap): Int32Array {
+  const W = m.width, H = m.height;
+  const comp = new Int32Array(W * H).fill(-1);
+  const sizes: number[] = [];
+  const q = new Int32Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    if (comp[i] !== -1) continue;
+    const x0 = i % W, y0 = (i / W) | 0;
+    if (!isSea(m.getGround(x0, y0, 0))) { comp[i] = -2; continue; }
+    const id = sizes.length;
+    let head = 0, tail = 0;
+    q[tail++] = i;
+    comp[i] = id;
+    while (head < tail) {
+      const k = q[head++];
+      const x = k % W, y = (k / W) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const j = ny * W + nx;
+        if (comp[j] !== -1) continue;
+        if (!isSea(m.getGround(nx, ny, 0))) continue;
+        comp[j] = id;
+        q[tail++] = j;
+      }
+    }
+    sizes.push(tail);
+  }
+  const out = new Int32Array(W * H);
+  for (let i = 0; i < W * H; i++) out[i] = comp[i] >= 0 ? sizes[comp[i]] : 0;
+  return out;
+}
+
+/** Open sea a boat may sail over: water, nothing on it, no stairs or whirlpools. */
+function openSea(m: WorldMap, x: number, y: number): boolean {
+  return m.inBounds(x, y) && isSea(m.getGround(x, y, 0)) && m.getObj(x, y, 0) === Obj.None && !m.linkAt(x, y, 0) && !excluded(x, y, 0);
+}
+
+/**
+ * Two moorings at every harbour and island landing: a post in the water beside the pier. Piers are
+ * railed all round, so the railing opens at the mooring (that tile becomes the landing stage).
+ */
+function placeMoorings(m: WorldMap, l: TradeLayout, used: Set<number>, sea: Int32Array): void {
+  const W = m.width;
+  const harbours = m.regions.filter((r) => r.z0 === 0 && /( Harbour| Landing)$/.test(r.name));
+  const deck = (x: number, y: number) => m.getGround(x, y, 0) === Ground.Wood && m.isWalkable(x, y, 0) && m.getObj(x, y, 0) === Obj.None && !m.linkAt(x, y, 0);
+  for (const r of harbours) {
+    const dest = Object.values(m.destinations).find((d) => d.z === 0 && d.x >= r.x0 - 2 && d.x <= r.x1 + 2 && d.y >= r.y0 - 2 && d.y <= r.y1 + 2);
+    const picks: Array<{ x: number; y: number; dx: number; dy: number; score: number }> = [];
+    for (let y = r.y0 - 1; y <= r.y1 + 1; y++) for (let x = r.x0 - 1; x <= r.x1 + 1; x++) {
+      if (m.getGround(x, y, 0) !== Ground.Wood || m.linkAt(x, y, 0) || used.has(tileKey(x, y, 0))) continue;
+      const o = m.getObj(x, y, 0);
+      if (o !== Obj.Railing && !(o === Obj.None && m.isWalkable(x, y, 0))) continue;
+      if (dest && Math.abs(dest.x - x) <= 1 && Math.abs(dest.y - y) <= 1) continue;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const wx = x + dx, wy = y + dy;
+        // water on one side, the walkable deck on the other (through the railing)
+        if (!openSea(m, wx, wy) || sea[wy * W + wx] < 3000 || !deck(x - dx, y - dy)) continue;
+        let open = 0;
+        for (const [ax, ay] of RING) if (openSea(m, wx + ax, wy + ay)) open++;
+        if (open < 5) continue;
+        picks.push({ x, y, dx, dy, score: open * 10 + (dest ? Math.hypot(dest.x - x, dest.y - y) : 0) });
+      }
+    }
+    picks.sort((a, b) => b.score - a.score || a.y - b.y || a.x - b.x);
+    const chosen: typeof picks = [];
+    for (const p of picks) {
+      if (chosen.length >= 2) break;
+      if (chosen.some((c) => Math.hypot(c.x - p.x, c.y - p.y) < 4)) continue;
+      chosen.push(p);
+    }
+    for (const c of chosen) {
+      const wx = c.x + c.dx, wy = c.y + c.dy;
+      if (m.getObj(c.x, c.y, 0) === Obj.Railing) m.setObj(c.x, c.y, Obj.None, 0);
+      m.setObj(wx, wy, Obj.Mooring, 0);
+      used.add(tileKey(wx, wy, 0));
+      used.add(tileKey(c.x, c.y, 0));
+      l.moorings.push({ id: l.moorings.length, x: wx, y: wy, z: 0, dockX: c.x, dockY: c.y, name: r.name });
+    }
+  }
+}
+
+/** Floating wreckage out on the open sea, away from every shore; harder to salvage the further from home. */
+function placeFlotsam(m: WorldMap, l: TradeLayout, sea: Int32Array, rng: Rng): void {
+  const W = m.width, H = m.height;
+  const WANT = 140;
+  for (let tries = 0; tries < 40000 && l.flotsam.length < WANT; tries++) {
+    const x = 4 + Math.floor(rng.next() * (W - 8)), y = 4 + Math.floor(rng.next() * (H - 8));
+    if (m.getGround(x, y, 0) !== Ground.DeepWater || sea[y * W + x] < 3000 || !openSea(m, x, y) || m.isSafe(x, y, 0)) continue;
+    let open = true;
+    for (let dy = -3; dy <= 3 && open; dy++) for (let dx = -3; dx <= 3; dx++) if (!isSea(m.getGround(x + dx, y + dy, 0))) { open = false; break; }
+    if (!open) continue;
+    if (l.flotsam.some((f) => Math.abs(f.x - x) < 12 && Math.abs(f.y - y) < 12)) continue;
+    m.setObj(x, y, Obj.Flotsam, 0);
+    l.flotsam.push({ x, y, z: 0, level: seaLevel(x, y) });
+  }
+}
+
 // ================================================================== map spots
 
 function addSpots(l: TradeLayout): void {
@@ -515,6 +620,12 @@ function addSpots(l: TradeLayout): void {
   const areas = new Map<string, { x: number; y: number; z: number; level: number }>();
   for (const b of l.boxes) if (!areas.has(b.area)) areas.set(b.area, { x: b.x, y: b.y, z: b.z, level: b.level });
   for (const [area, a] of areas) l.spots.push({ skill: 'thieving', x: a.x, y: a.y, z: a.z, label: `Strongboxes · ${area} · thieving ${a.level}` });
+  const docks = new Set<string>();
+  for (const mo of l.moorings) {
+    if (docks.has(mo.name)) continue;
+    docks.add(mo.name);
+    l.spots.push({ skill: 'sailing', x: mo.dockX, y: mo.dockY, z: mo.z, label: `Moorings · ${mo.name} · sailing` });
+  }
 }
 
 /** Builds `m.trades` (the last step of world generation). */
@@ -540,6 +651,10 @@ export function buildTradeSpots(m: WorldMap): void {
   placeHunting(m, l, used, rng);
   placeSlayerLairs(m, l, rng);
   T('farms, hunting, slayer');
+  const sea = seaSizes(m);
+  placeMoorings(m, l, used, sea);
+  placeFlotsam(m, l, sea, rng);
+  T('moorings, wreckage');
   addSpots(l);
   indexTradeLayout(l);
   m.trades = l;

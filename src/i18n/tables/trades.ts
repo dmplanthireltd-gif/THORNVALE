@@ -19,6 +19,11 @@ export const TRADE_UI: Table = {
 };
 
 export const TRADE_NAMES: Table = {
+  // stage 3: sailing
+  "Sailing": ["Żeglarstwo", "Navegação"],
+  "Tidewalker's Cape": ["Peleryna Wędrowca Fal", "Capa do Andarilho das Marés"],
+  "Captain Maren Tallow": ["Kapitan Maren Tallow", "Capitã Maren Tallow"],
+  "Shipwright": ["Szkutniczka", "Construtora naval"],
   // stage 2: farming, hunter, slayer
   "Farming": ["Rolnictwo", "Agricultura"],
   "Hunter": ["Łowiectwo", "Caça"],
@@ -227,6 +232,12 @@ export const TRADE_NAMES: Table = {
 };
 
 export const TRADE_TEXTS: Table = {
+  "Stiff with salt and patched with sailcloth. It always knows which way the wind blows.": ["Sztywna od soli i łatana płótnem żaglowym. Zawsze wie, skąd wieje wiatr.", "Dura de sal e remendada com lona de vela. Sempre sabe de onde sopra o vento."],
+  "Board your own boat at a mooring by a pier and sail the open sea: every tile teaches sailing, a voyage to another harbour pays a bonus, and out at sea you can salvage wreckage and fish from the boat.": ["Wsiądź do własnej łodzi przy palu cumowniczym obok pomostu i żegluj po otwartym morzu: każde pole uczy żeglarstwa, rejs do innego portu daje premię, a na morzu możesz wyławiać szczątki i łowić ryby z łodzi.", "Embarque no seu próprio barco num poste de amarração junto ao píer e navegue em mar aberto: cada quadrado ensina navegação, uma viagem a outro porto dá um bônus, e no mar você pode recolher destroços e pescar do barco."],
+  "Buy a boat from me and keep the deed in your pack. At any harbour or island landing there are mooring posts beside the pier: use one and you are afloat. Sail over the water as you would walk, and come ashore at any mooring. Every tile sailed teaches you something, and a long voyage to another harbour teaches you a great deal. Out on the open sea you can haul in floating wreckage and fish from the boat. Watch the sky, and watch the water.": [
+    "Kup u mnie łódź i trzymaj akt własności w plecaku. W każdym porcie i przystani na wyspie są pale cumownicze przy pomoście: użyj jednego, a jesteś na wodzie. Żegluj po wodzie tak, jak chodzisz, i schodź na ląd przy dowolnym palu. Każde przepłynięte pole czegoś uczy, a długi rejs do innego portu uczy bardzo wiele. Na otwartym morzu możesz wyławiać dryfujące szczątki i łowić ryby z łodzi. Patrz w niebo i patrz w wodę.",
+    "Compre um barco comigo e guarde a escritura na mochila. Em cada porto ou desembarcadouro de ilha há postes de amarração junto ao píer: use um e você está na água. Navegue pela água como se andasse e desembarque em qualquer amarração. Cada quadrado navegado ensina algo, e uma longa viagem a outro porto ensina muito. Em mar aberto você pode recolher destroços à deriva e pescar do barco. Olhe o céu e olhe a água.",
+  ],
   "Worn while on a slayer task: 8% more damage to the monsters of your task.": ["Noszony podczas zadania łowcy: 8% więcej obrażeń przeciw potworom z zadania.", "Usado durante uma tarefa de caça: 8% mais dano contra os monstros da tarefa."],
   "Thick wool that muffles every sound. With it on, a slayer can hurt the wailing shades.": ["Gruba wełna tłumiąca każdy dźwięk. W nim łowca może zranić zawodzące cienie.", "Lã grossa que abafa todo som. Com ele, um caçador pode ferir as sombras uivantes."],
   "There is always a little soil in its hem, and it smells of rain.": ["W jej obrąbku zawsze jest trochę ziemi i pachnie deszczem.", "Sempre há um pouco de terra na barra, e ela cheira a chuva."],
@@ -314,6 +325,27 @@ export const TRADE_TEXTS: Table = {
 };
 
 export const TRADE_MESSAGES: Table = {
+  "You need a boat to sail from here. Captain Maren Tallow, the shipwright in Millbrook, sells them.": ["Aby stąd wypłynąć, potrzebujesz łodzi. Sprzedaje je kapitan Maren Tallow, szkutniczka w Millbrook.", "Você precisa de um barco para zarpar daqui. A capitã Maren Tallow, construtora naval em Millbrook, vende."],
+  "You need sailing level {level} to sail that boat.": ["Potrzebujesz poziomu żeglarstwa {level}, aby pływać tą łodzią.", "Você precisa de navegação nível {level} para navegar esse barco."],
+  "You need sailing level {level} to haul in this wreckage.": ["Potrzebujesz poziomu żeglarstwa {level}, aby wyłowić te szczątki.", "Você precisa de navegação nível {level} para recolher esses destroços."],
+  "Mind the tar, {name}. Every boat on this coast went through my hands.": ["Uważaj na smołę, {name}. Każda łódź na tym wybrzeżu przeszła przez moje ręce.", "Cuidado com o piche, {name}. Todo barco desta costa passou pelas minhas mãos."],
+  "You cannot light a fire in a boat.": ["Nie możesz rozpalić ogniska w łodzi.", "Você não pode acender uma fogueira num barco."],
+  "Someone is standing on the pier.": ["Ktoś stoi na pomoście.", "Há alguém de pé no píer."],
+  "Another boat is tied up there.": ["Przycumowana jest tam już inna łódź.", "Outro barco está amarrado ali."],
+  "You climb into your {name} and cast off. Sail anywhere over water; come ashore at any mooring.": ["Wsiadasz do łodzi ({name}) i odbijasz od brzegu. Żegluj gdziekolwiek po wodzie; zejdziesz na ląd przy dowolnym palu cumowniczym.", "Você entra no seu barco ({name}) e zarpa. Navegue por onde houver água; desembarque em qualquer amarração."],
+  "You tie up at {name}. A voyage of {dist} tiles from {name2}: {xp} sailing experience.": ["Cumujesz w: {name}. Rejs na {dist} pól z: {name2} — doświadczenie żeglarskie: {xp}.", "Você atraca em {name}. Uma viagem de {dist} quadrados desde {name2}: {xp} de experiência de navegação."],
+  "You tie up at {name} and step ashore.": ["Cumujesz w: {name} i schodzisz na ląd.", "Você atraca em {name} e desembarca."],
+  "You tie up your boat and step ashore.": ["Cumujesz łódź i schodzisz na ląd.", "Você amarra o barco e desembarca."],
+  "A crate drifts past and you haul it aboard: {got}.": ["Obok dryfuje skrzynia, wciągasz ją na pokład: {got}.", "Um caixote passa à deriva e você o puxa a bordo: {got}."],
+  "A sudden squall slams into your boat!": ["Nagły szkwał uderza w twoją łódź!", "Uma rajada súbita atinge o seu barco!"],
+  "The squall throws you against the side of the boat.": ["Szkwał rzuca tobą o burtę łodzi.", "A rajada joga você contra o costado do barco."],
+  "Something rises out of the deep: a {name}!": ["Coś wynurza się z głębin: {name}!", "Algo sobe das profundezas: {name}!"],
+  "Only a few splinters are left. The sea will bring more.": ["Zostało tylko kilka drzazg. Morze przyniesie więcej.", "Só restam algumas lascas. O mar trará mais."],
+  "The wreckage floats out of reach. You need a boat.": ["Szczątki dryfują poza zasięgiem. Potrzebujesz łodzi.", "Os destroços flutuam fora de alcance. Você precisa de um barco."],
+  "You lean over the side and reach for the wreckage...": ["Wychylasz się za burtę i sięgasz po szczątki...", "Você se debruça na borda e estica a mão para os destroços..."],
+  "The wreckage bobs away from your hands. Try again.": ["Szczątki wymykają ci się z rąk. Spróbuj jeszcze raz.", "Os destroços escapam das suas mãos. Tente de novo."],
+  "You salvage {got}.": ["Wyławiasz: {got}.", "Você recupera: {got}."],
+  "You cannot do that from a boat. Come ashore at a mooring first.": ["Nie możesz tego zrobić z łodzi. Najpierw zejdź na ląd przy palu cumowniczym.", "Você não pode fazer isso de um barco. Desembarque numa amarração primeiro."],
   "Wipe your boots, {name}. Good soil is a thing to be respected.": ["Wytrzyj buty, {name}. Dobrą ziemię trzeba szanować.", "Limpe as botas, {name}. Terra boa merece respeito."],
   "Seeds, {name}! Potatoes for the hungry, herbs for the clever.": ["Nasiona, {name}! Ziemniaki dla głodnych, zioła dla mądrych.", "Sementes, {name}! Batatas para os famintos, ervas para os espertos."],
   "Quiet, {name}. You are standing on a hare run.": ["Cicho, {name}. Stoisz na zajęczej ścieżce.", "Silêncio, {name}. Você está pisando numa trilha de lebres."],

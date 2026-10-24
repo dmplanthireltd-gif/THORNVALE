@@ -62,6 +62,8 @@ export type GameEvent =
   | { type: 'farm'; id: number; x: number; y: number; z: number; op: 'plant' | 'compost' | 'harvest' }
   /** A hunter's trap (trades/hunter.ts): set, taken back, caught something, sprung empty, emptied. */
   | { type: 'hunt'; id: number; x: number; y: number; z: number; op: 'set' | 'take' | 'caught' | 'broken' | 'collect' }
+  /** Sailing (trades/SeaSystem.ts): boarding, coming ashore, salvage, and what happens at sea. */
+  | { type: 'sailing'; id: number; x: number; y: number; z: number; what: 'board' | 'land' | 'salvage' | 'drift' | 'squall' | 'monster' }
   /** A player sprang a jungle trap (world/traps.ts): `i` = trap index, `id` = the player. */
   | { type: 'trap'; kind: 'vines' | 'flower'; i: number; x: number; y: number; z: number; id: number }
   /** The station window (smithing etc.) opened, closed or changed. */

@@ -102,6 +102,8 @@ export interface FlotsamSpot {
   x: number;
   y: number;
   z: number;
+  /** Sailing level needed to salvage it (trades/sailing.ts seaLevel). */
+  level: number;
 }
 
 /** A training spot on the minimap and the world map (one icon per spot). */

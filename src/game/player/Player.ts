@@ -89,6 +89,8 @@ export class Player extends Creature {
   god = false;
   /** Monsters never pick this player as a target (unused since the arena bots were removed 2026-10-24). Not saved. */
   ignoredByMonsters = false;
+  /** Sailing (trades/sailing.ts): the boat sailed, 0 none, 1 skiff, 2 sloop, 3 cutter (snapshot `bt`). */
+  boat: 0 | 1 | 2 | 3 = 0;
   /** Classic fight stance: how much you put into hitting versus covering yourself (melee and distance). */
   fightMode: FightMode = 'balanced';
   /** Chase: walk after your target. Stand: keep your position and only hit what comes into reach. */

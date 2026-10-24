@@ -20,6 +20,7 @@ import {
   BOX_RESTOCK, boxLoot, LOCK_TIME, lockChance, LOCKPICK, LOCKPICK_BREAK, MARK_TIERS, PICKPOCKET_TIME, pickpocketChance, rollEach, rollFirst,
   STALL_TIME, stallChance, STALLS,
 } from './thieving';
+import { SeaSystem } from './SeaSystem';
 
 /**
  * The trade skills of 2026-10-24 inside the game (`Game.trades`): running stamina
@@ -171,7 +172,12 @@ export const TRADE_EMPTY: Partial<Record<Obj, Obj>> = {
 };
 
 export class TradeSystem {
-  constructor(private readonly game: Game) {}
+  /** Sailing: boats, voyages, salvage and what happens at sea (trades/SeaSystem.ts). */
+  readonly sea: SeaSystem;
+
+  constructor(private readonly game: Game) {
+    this.sea = new SeaSystem(game, (s, list) => this.give(s, list));
+  }
 
   private get layout(): TradeLayout | null {
     return this.game.world.trades;
@@ -186,7 +192,7 @@ export class TradeSystem {
     return this.layout?.obstacles[i] ?? null;
   }
 
-  private level(s: Session, id: 'agility' | 'herblore' | 'thieving' | 'farming' | 'hunter' | 'slayer'): number {
+  private level(s: Session, id: 'agility' | 'herblore' | 'thieving' | 'farming' | 'hunter' | 'slayer' | 'sailing'): number {
     return this.game.skillLevel(s, id);
   }
 
@@ -200,6 +206,15 @@ export class TradeSystem {
       t.work = null;
       t.cross = null;
       t.goCross = null;
+      if (p.boat) this.sea.cancel(s);
+      return;
+    }
+    if (p.boat) {
+      // at sea: no running, no stamina use; stamina comes back as if resting
+      if (t.stamina < STAMINA_MAX) t.stamina = Math.min(STAMINA_MAX, t.stamina + staminaRegen(this.level(s, 'agility')) * dt);
+      t.work = null;
+      this.sea.update(s, dt);
+      if (t.traps.length) this.updateTraps(s, dt);
       return;
     }
     // stamina comes back while not running (half as fast while walking)
@@ -222,6 +237,10 @@ export class TradeSystem {
   /** Called when a player starts a normal step: running makes it quicker and uses stamina. Returns the step-time factor. */
   onStep(s: Session): number {
     const t = s.trades;
+    if (s.player.boat) {
+      this.sea.onStep(s);
+      return this.sea.stepFactor(s.player);
+    }
     if (!t.run || t.cross) return 1;
     if (t.stamina < 1) {
       if (t.stamina >= 0) {
@@ -237,11 +256,13 @@ export class TradeSystem {
   /** Online mirror: may the local player's next step be predicted (not while a crossing moves it)? */
   mayPredict(s: Session): boolean {
     const a = currentActivity(this.game, s.player.id);
-    return !a || !MOVING_ACTIVITIES.has(a.kind);
+    // sailing is steered like walking (predicted); only the shortcut crossings move you by themselves
+    return !a || !MOVING_ACTIVITIES.has(a.kind) || a.kind === 'sail';
   }
 
   /** Online mirror: the step-time factor the server will use for the local player's next step (running). */
   predictFactor(s: Session): number {
+    if (s.player.boat) return this.sea.stepFactor(s.player);
     return s.trades.run && s.trades.stamina >= 1 ? RUN_STEP_FACTOR : 1;
   }
 
@@ -345,7 +366,7 @@ export class TradeSystem {
   savePosition(s: Session): { x: number; y: number } | null {
     const c = s.trades.cross;
     const ob = c ? this.obstacle(c.ob) : null;
-    if (!c || !ob) return null;
+    if (!c || !ob) return this.sea.savePosition(s);
     return c.fromA ? { x: ob.ax, y: ob.ay } : { x: ob.bx, y: ob.by };
   }
 
@@ -361,7 +382,9 @@ export class TradeSystem {
       case 'stall': return o === Obj.TradeStall || o === Obj.TradeStallEmpty;
       case 'box': return o === Obj.StrongBox || o === Obj.StrongBoxOpen;
       case 'herb': return o === Obj.WildHerbs && !!s;
-      case 'patch': case 'hunt': return true;
+      case 'patch': case 'hunt': return !s?.player.boat;
+      case 'moor': return true;
+      case 'flot': return o === Obj.Flotsam || o === Obj.FlotsamGone;
       default: return null;
     }
   }
@@ -372,6 +395,9 @@ export class TradeSystem {
     if (!tt) return false;
     const l = this.layout!;
     const o = this.game.world.getObj(x, y, z);
+    if (tt.t === 'moor') { this.sea.useMooring(s, l.moorings[tt.i]); return true; }
+    if (tt.t === 'flot') { this.sea.useFlotsam(s, tt.i); return true; }
+    if (s.player.boat) { this.game.msg(s.id, 'You cannot do that from a boat. Come ashore at a mooring first.', 'info'); return true; }
     switch (tt.t) {
       case 'ob': this.useObstacle(s, l.obstacles[tt.i]); return true;
       case 'stall':
@@ -428,6 +454,7 @@ export class TradeSystem {
 
   /** Teleported (stairs, ships, death, a game master): every crossing and job ends where it was. */
   cancel(s: Session): void {
+    this.sea.cancel(s);
     s.trades.work = null;
     s.trades.cross = null;
     s.trades.goCross = null;
@@ -488,7 +515,7 @@ export class TradeSystem {
   pickpocket(s: Session, npcId: number): void {
     const p = s.player;
     const n = this.game.npcs.find((x) => x.id === npcId);
-    if (!n || p.dead || this.busy(s)) return;
+    if (!n || p.dead || this.busy(s) || p.boat) return;
     const def = NPCS[n.key];
     const tier = def?.thieve ? MARK_TIERS[def.thieve] : null;
     if (!tier) return this.game.msg(s.id, `You would never get away with robbing ${n.name}.`, 'warn');
@@ -1008,6 +1035,7 @@ export class TradeSystem {
   /** What the player is doing, for the animations of every client (gathering/activity.ts). */
   activity(s: Session): Activity | null {
     const t = s.trades;
+    if (s.player.boat) return this.sea.activity(s);
     if (t.cross) {
       const ob = this.obstacle(t.cross.ob);
       if (ob) return { kind: ob.kind, x: t.cross.fromA ? ob.bx : ob.ax, y: t.cross.fromA ? ob.by : ob.ay, tool: null };
