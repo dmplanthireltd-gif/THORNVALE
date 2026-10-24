@@ -3382,7 +3382,7 @@ function fire() {
 }
 // ---------- voice lines (the owner's recordings, served next to the page; silent where they can't be loaded)
 const VO = { reload: ['vo-reload-1.mp3', 'vo-reload-2.mp3'], down: ['vo-down-1.mp3'], kill: ['vo-kill-1.mp3', 'vo-kill-2.mp3'], boss: ['vo-boss-1.mp3'], mate: ['vo-mate-down.mp3'], revive: ['vo-revive-1.mp3'], last: 0, loading: false };
-const VO_PERKS = ['bulwark', 'fleet', 'rapid', 'revive', 'swift', 'mule', 'steady', 'blast', 'echo', 'dropbass', 'vibes', 'slap']; for (const k of VO_PERKS) VO['perk_' + k] = ['vo-perk-' + k + '.mp3'];
+const VO_PERKS = ['bulwark', 'fleet', 'rapid', 'revive', 'swift', 'mule', 'steady', 'blast', 'echo', 'dropbass', 'vibes', 'slap', 'nuff']; for (const k of VO_PERKS) VO['perk_' + k] = ['vo-perk-' + k + '.mp3'];
 async function voLoad() {
   if (VO.loading || !A.ctx || !/^https?:$/.test(location.protocol)) return; VO.loading = true;
   for (const k of ['reload', 'down', 'kill', 'boss', 'mate', 'revive'].concat(VO_PERKS.map(q => 'perk_' + q))) {
