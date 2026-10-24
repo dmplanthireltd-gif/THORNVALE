@@ -33,6 +33,7 @@ import {
   FOUNDER_SALE_FROM, FOUNDER_SALE_UNTIL, LAUNCH_AT, LEGEND_CAP, NO_PERKS, PREMIUM_RESERVED_SHARE, PRODUCTS, type AccountPerks,
 } from '../src/game/premium/premium';
 import { WsConnection } from './ws';
+import { acceptBunker, BUNKER_FILE, BUNKER_PATH, BUNKER_WS, bunkerReady } from './bunker';
 import { stagesFromEnv, stagesTable } from '../src/game/progression/stages';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -859,6 +860,13 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
     res.end(JSON.stringify({ online: real.length, players: real.map((p) => ({ name: p.name, level: p.level })) }));
     return;
   }
+  // Bunker 47 (owner's separate co-op game) at an unlisted address; see server/bunker.ts
+  if (url.pathname === BUNKER_PATH || url.pathname === BUNKER_PATH.slice(0, -1)) {
+    if (url.pathname !== BUNKER_PATH) return void res.writeHead(301, { location: BUNKER_PATH + url.search }).end();
+    if (!bunkerReady()) return void res.writeHead(404).end('Not found');
+    res.setHeader('x-robots-tag', 'noindex, nofollow');
+    return sendFile(res, BUNKER_FILE, 200);
+  }
   // The game lives under /play/ (Vite base '/play/'); /play without the slash is redirected so the
   // page's relative URLs and email sign-in links (built from location.pathname) all resolve under /play/.
   if (url.pathname === '/play') {
@@ -928,6 +936,7 @@ function sendFile(res: ServerResponse, file: string, status: number, range?: str
 
 const http = createServer(serveStatic);
 http.on('upgrade', (req, socket) => {
+  if ((req.url ?? '').startsWith(BUNKER_WS)) return acceptBunker(req, socket);
   if (!(req.url ?? '').startsWith('/ws')) {
     socket.end('HTTP/1.1 404 Not Found\r\n\r\n');
     return;
@@ -1016,6 +1025,7 @@ console.log(exchange ? `Exchange: open (${exchange.orders.length} offers, ${exch
 console.log(`Saves: ${storage.kind === 'supabase' ? 'Supabase database' : `files in ${dirname(DATA_FILE)}`} (save format v${SAVE_VERSION})`);
 console.log(`Tutorial flags: ${await storage.accountFlagsMode()}`);
 console.log(`PvP: ${PVP ? 'on' : 'off'}`);
+console.log(`Bunker 47: ${bunkerReady() ? 'served at an unlisted address' : 'off (games/bunker47.html missing)'}`);
 console.log(`Exp stages: ${STAGES.stages.name}${STAGES.warning ? ` (${STAGES.warning})` : ''} — ${stagesTable(STAGES.stages).join('; ')}`);
 console.log(`Premium: ${PREMIUM ? 'enforced (free heartland, premium regions)' : 'open to everyone (test mode)'}`);
 console.log(`Store: ${!storeTables ? 'closed (no store tables in storage yet)' : !EMAIL_AUTH ? 'closed (needs email login)' : paddleReady(PADDLE) ? `open (Paddle ${PADDLE.env}, ${Object.keys(PADDLE.prices).length} prices)` : 'closed (Paddle not set up yet)'}`);

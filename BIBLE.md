@@ -57,6 +57,8 @@ server/
   storage.ts          ← Storage interface: FileStorage (local JSON) / SupabaseStorage; characters, backups, market, premium perks and purchases
   payments.ts         ← Paddle: settings from env, webhook signature check, payment/refund/chargeback → storage
   ws.ts               ← minimal WebSocket implementation
+  bunker.ts           ← Bunker 47 (owner's separate zombie co-op game, not part of Thornvale): serves games/bunker47.html at an unlisted address (`BUNKER_PATH`, default in the file; noindex) and the co-op relay websocket `/b47ws` (rooms of ≤ 8, presence relay, nothing stored)
+games/bunker47.html   ← the Bunker 47 page (single self-contained file; three.js r128 from cdnjs/jsdelivr)
   data/               ← local JSON saves (dev only, git-ignored content)
 src/
   main.ts             ← boot: start screen → local or online game
@@ -117,6 +119,7 @@ public/audio/music/   ← rendered region tracks (AAC loops, served at /play/aud
 | Supabase project | `thornvale`, ref `gvknnzdhxwmqimaoiref`, region eu-central-1, org `thornvale` |
 | Supabase URL | https://gvknnzdhxwmqimaoiref.supabase.co |
 | Publishable key (public, OK to commit) | `sb_publishable_Do-DXlXiAHd6f8xLCFo_qA_JHrsygW3` |
+| Bunker 47 (owner's side game) | unlisted page on this server, path in `server/bunker.ts` (`BUNKER_PATH` env overrides); co-op relay `/b47ws`. The repo is public, so the default path is findable there: set `BUNKER_PATH` in Render to make it private |
 | claude.ai artifact (offline playable build) | https://claude.ai/artifact/Ei6rAWKjnb5bWSaNcchW3K |
 
 **Secrets policy**
@@ -741,3 +744,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-24 | — | **Daily & weekly tasks and world events** (owner): a task-board keeper in all 14 towns hands every character 3 daily and 2 weekly tasks fitted to its level and skills (hunt a monster of its level, train any trade skill incl. agility/herblore/thieving/fletching/farming/hunter/slayer/sailing, bring goods, travel somewhere), pays exp, gold and task seals, one swap a day, login streak up to +30%, resets 06:00 UTC daily and Monday weekly; seal shop of potions, a teleport rune, pet morsels and two capes (no stats). World events: a calendar (treasure hunt 12:00, raid 18:00 every day, world boss Sat/Sun 20:00 UTC, all announced), raid defenders rewarded by contribution (exp, gold, seals), raids Bandit Riders (Millbrook) and Minotaur Stampede (Highmoor), treasure hunts with Seek, double experience / skill by `/double`, the Hollow Moon festival now (pumpkin drops, Gourdmaw the Hollow King at a town four times a day, Hollow Moon Guise costume, cape, candied apples) and Winterhearth for December; no event monster in protection zones, the Gilded Exchange or on Wayfarer's Isle. Tasks and Events windows, strip of what is on, GM `/event`, `/double`, `/festival`, `/tasks`; EN/PL/PT-BR; `scripts/liveops-test.ts` + net test | 18 | 35 |
 | 2026-10-24 | — | Testers (owner): characters Akasha and Gilbert the Killer get the test console commands (`TESTER_CHARACTERS` in server.ts, more via the `TESTERS` env var), like test mode: no /god, /kill or GM-only commands, no GM premium | — | — |
 | 2026-10-24 | — | Testers (owner): characters Akasha and Gilbert the Killer get the test commands (`TESTER_CHARACTERS` in server.ts, more via the `TESTERS` env var), like test mode: no /god, /kill or GM-only commands | — | — |
+| 2026-10-24 | — | Bunker 47 (owner's separate zombie co-op game) hosted at an unlisted address on the Thornvale server with its own co-op relay `/b47ws` (`server/bunker.ts`, `games/bunker47.html`); Thornvale game, saves and protocol untouched | — | — |
