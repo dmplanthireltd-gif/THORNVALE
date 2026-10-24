@@ -41,6 +41,7 @@ export const BUNKER_SONGS: Record<string, string> = {
   'vo-kill-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-kill-1.mp3')),
   'vo-kill-2.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-kill-2.mp3')),
   'vo-boss-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-boss-1.mp3')),
+  'vo-boss-2.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-boss-2.mp3')),
   'vo-perk-bulwark.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-bulwark.mp3')),
   'vo-perk-fleet.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-fleet.mp3')),
   'vo-perk-rapid.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-rapid.mp3')),
@@ -55,6 +56,8 @@ export const BUNKER_SONGS: Record<string, string> = {
   'vo-perk-slap.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-slap.mp3')),
   'vo-perk-nuff.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-nuff.mp3')),
   'vo-revive-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-revive-1.mp3')),
+  'vo-round-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-round-1.mp3')),
+  'vo-round-2.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-round-2.mp3')),
   'vo-mate-down.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-mate-down.mp3')),
 };
 

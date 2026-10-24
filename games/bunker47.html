@@ -127,6 +127,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
 .ammo .mg.low { color: #ff6b5c; }
 .gren { display: flex; gap: 4px; justify-content: flex-end; margin-top: 4px; }
 .gren i { width: 9px; height: 13px; border-radius: 3px 3px 4px 4px; background: #6d7a5c; box-shadow: inset 0 -3px 0 rgba(0,0,0,.4); }
+.gren i.ch { width: 13px; border-radius: 2px; background: linear-gradient(90deg, #2e8b3e 0 30%, #e8b420 30% 50%, #c8261c 50% 60%, #2e8b3e 60%); margin-left: 3px; }
 .cross { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transition: opacity .12s; }
 .cross i { position: absolute; background: rgba(233,220,192,.85); box-shadow: 0 0 2px #000; }
 .cross i:nth-child(1), .cross i:nth-child(2) { width: 2px; height: 9px; left: -1px; }
@@ -309,7 +310,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
         <kbd>R</kbd><span>Reload</span>
         <kbd>F</kbd><span>Buy, open doors, hold to rebuild windows or revive</span>
         <kbd>Q / 1 / 2 / 3</kbd><span>Swap weapons (you carry two, three with Pack Mule)</span>
-        <kbd>V</kbd><span>Knife · <b>G</b> grenade · <b>T</b> flashlight</span>
+        <kbd>V</kbd><span>Knife · <b>G</b> grenade · <b>X</b> Chill Grenade (zombies in the smoke go mellow) · <b>T</b> flashlight</span>
         <kbd>Esc</kbd><span>Menu</span>
       </div>
       <p style="margin-top:10px">Every hit earns points; kills and headshots earn more. Spend them on wall weapons, the Dubplate Crate's random weapon, tonics from the machines, and the steel doors to the Rum Bar, the Sound System Hall, the Record Store and the Dancehall. Clear the stairs in the Sound System Hall to reach the Studio, where the Remix Desk turns any weapon into something far nastier. Every tenth round Deadlock comes for you. Go down in co-op and a teammate has 30 seconds to revive you.</p>
@@ -360,7 +361,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
         <kbd>Mouse</kbd><span>Left click fires · right click aims</span>
         <kbd>R · F</kbd><span>Reload · buy, open, hold to rebuild or revive</span>
         <kbd>Q / 1 2 3</kbd><span>Swap weapons</span>
-        <kbd>V · G · T</kbd><span>Knife · grenade · flashlight</span>
+        <kbd>V · G · X · T</kbd><span>Knife · grenade · Chill Grenade · flashlight</span>
         <kbd>Tab</kbd><span>Scoreboard and leaderboard</span>
         <kbd>Esc</kbd><span>Pause (pauses the whole squad in co-op)</span>
       </div>
@@ -1007,6 +1008,24 @@ function wall(axis, fixed, a0, a1, ops) {
   }
   seg(cur, a1, 0, WALL_H, true);
 }
+// fake volumetric light: an additive cone that fades with height and at its silhouette, plus dust motes drifting in it
+const SHAFT = { geo: null, mat: null, dust: [], points: null };
+function shaftMat() {
+  return new THREE.ShaderMaterial({
+    uniforms: { k: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    vertexShader: 'varying float vY; varying vec3 vN; varying vec3 vV; void main(){ vY = uv.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'uniform float k; varying float vY; varying vec3 vN; varying vec3 vV; void main(){ float edge = pow(abs(dot(normalize(vN), normalize(vV))), 1.6); float a = edge * pow(vY, 1.5) * 0.085 * k; gl_FragColor = vec4(vec3(1.0, 0.82, 0.58) * a, a); }'
+  });
+}
+function buildDust() {
+  if (!SHAFT.dust.length) return; const per = 46, n = SHAFT.dust.length * per, pos = new Float32Array(n * 3), seed = new Float32Array(n);
+  let q = 0; for (const [x, y, z] of SHAFT.dust) for (let i = 0; i < per; i++) { const h = Math.random(), r = (0.15 + h * 1.35) * Math.sqrt(Math.random()), a = Math.random() * TAU; pos[q * 3] = x + Math.cos(a) * r; pos[q * 3 + 1] = y - h * 2.6; pos[q * 3 + 2] = z + Math.sin(a) * r; seed[q] = Math.random() * 100; q++; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+  const m = new THREE.ShaderMaterial({ uniforms: { time: { value: 0 }, scale: { value: 300 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: 'attribute float seed; uniform float time, scale; varying float vA; void main(){ vec3 p = position + vec3(sin(time * 0.21 + seed) * 0.12, sin(time * 0.13 + seed * 1.7) * 0.15, cos(time * 0.17 + seed * 0.7) * 0.12); vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = scale * 0.012 / -mv.z; vA = 0.35 + 0.65 * fract(seed * 7.13); }',
+    fragmentShader: 'varying float vA; void main(){ vec2 c = gl_PointCoord - 0.5; float d = 1.0 - smoothstep(0.1, 0.5, length(c)); gl_FragColor = vec4(vec3(1.0, 0.9, 0.7) * d * vA * 0.55, d * vA * 0.55); }' });
+  SHAFT.points = new THREE.Points(g, m); SHAFT.points.frustumCulled = false; scene.add(SHAFT.points);
+}
 function lamp(x, z, shadow, flick, base = 0) {
   const y = base + WALL_H - 0.05;
   gc(scene, 0.008, 0.008, 0.36, x, y - 0.18, z, M.steel, { ray: false, cast: false });
@@ -1018,7 +1037,9 @@ function lamp(x, z, shadow, flick, base = 0) {
   scene.add(sp, sp.target);
   sp.shadow.mapSize.set(1024, 1024); sp.shadow.bias = -0.0006; sp.shadow.camera.near = 0.2; sp.shadow.camera.far = 16;
   if ('normalBias' in sp.shadow) sp.shadow.normalBias = 0.02;
-  lamps.push({ sp, bulb, bm, base: 3.4, flick, wantShadow: shadow, t: Math.random() * 10 });
+  const shaft = new THREE.Mesh(SHAFT.geo || (SHAFT.geo = new THREE.CylinderGeometry(0.12, 1.55, 2.7, 28, 1, true)), SHAFT.mat || (SHAFT.mat = shaftMat())); shaft.position.set(x, y - 0.5 - 1.35, z); shaft.renderOrder = 2; scene.add(shaft);
+  SHAFT.dust.push([x, y - 0.55, z]);
+  lamps.push({ sp, bulb, bm, shaft, base: 3.4, flick, wantShadow: shadow, t: Math.random() * 10 });
 }
 function crate(x, z, s, ry = 0, y = 0) {
   const g = place(x, z, ry, y);
@@ -1299,6 +1320,22 @@ function posterTex(P) {
   x.fillStyle = 'rgba(255,255,255,.08)'; x.fillRect(127, 0, 2, 360); x.fillRect(0, 179, 256, 2);
   x.globalCompositeOperation = 'destination-out'; x.beginPath(); x.moveTo(256, 0); x.lineTo(206, 0); x.lineTo(256, 44); x.fill();
   const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+}
+function grimeTex(kind, seed) {
+  const r = rngf(seed), c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  if (kind === 'drip') { for (let i = 0; i < 9; i++) { const sx = 30 + r() * 196, len = 60 + r() * 190, w = 4 + r() * 12; const g = x.createLinearGradient(0, 0, 0, len); g.addColorStop(0, 'rgba(25,20,12,.55)'); g.addColorStop(1, 'rgba(25,20,12,0)'); x.fillStyle = g; x.fillRect(sx - w / 2, 0, w, len); } x.fillStyle = 'rgba(25,20,12,.35)'; x.fillRect(0, 0, 256, 18); }
+  else { for (let i = 0; i < 26; i++) { const g = x.createRadialGradient(128 + (r() - 0.5) * 120, 128 + (r() - 0.5) * 120, 0, 128, 128, 40 + r() * 80); const a = 0.08 + r() * 0.16; g.addColorStop(0, kind === 'damp' ? 'rgba(20,26,18,' + a + ')' : 'rgba(18,14,10,' + a + ')'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, 256, 256); } }
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+}
+function buildGrime() {
+  const mats = [['drip', 11], ['damp', 12], ['stain', 13], ['stain', 14]].map(([k, sd]) => new THREE.MeshStandardMaterial({ map: grimeTex(k, sd), transparent: true, depthWrite: false, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -3 }));
+  const r = rngf(2024), winNear = (x, z) => WINS.some(w => Math.abs(w.x - x) < 1.4 && Math.abs(w.z - z) < 0.6);
+  // drips from the ceiling line on the long walls
+  for (let i = 0; i < 46; i++) { const x = -16.5 + r() * 66, side = r() < 0.5 ? -1 : 1, z = side * 5.79; if (winNear(x, side * 6)) continue; const w = 0.8 + r() * 1.4, h = 0.9 + r() * 1.3; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mats[0]); m.position.set(x, WALL_H - h / 2 - 0.02, z); m.rotation.y = side < 0 ? 0 : Math.PI; scene.add(m); }
+  // damp patches at the foot of the walls
+  for (let i = 0; i < 40; i++) { const x = -16.5 + r() * 66, side = r() < 0.5 ? -1 : 1, z = side * 5.79; const w = 1 + r() * 2, h = 0.5 + r() * 0.6; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mats[1]); m.position.set(x, h / 2 + 0.01, z); m.rotation.y = side < 0 ? 0 : Math.PI; scene.add(m); }
+  // floor stains
+  for (let i = 0; i < 50; i++) { const x = -16.5 + r() * 66, z = (r() - 0.5) * 11, s = 0.8 + r() * 2.2; const m = new THREE.Mesh(new THREE.PlaneGeometry(s, s), mats[2 + (i & 1)]); m.rotation.set(-Math.PI / 2, 0, r() * TAU); m.position.set(x, 0.006, z); m.receiveShadow = true; scene.add(m); }
 }
 function buildPosters() {
   const busy = [];
@@ -1643,7 +1680,7 @@ function buildMap() {
   buildAnnex();
   // Studio (upstairs)
   buildUpper();
-  buildParty(); buildPosters();
+  buildParty(); buildPosters(); buildGrime(); buildDust();
   // outside
   const tr = rngf(99);
   for (let i = 0; i < 34; i++) {
@@ -2564,6 +2601,14 @@ function bolt(a, b) {
 let boomT = 0;
 // style: 0 grenade, 1 ion, 2 hellfire round, 3 rocket
 const BOOM_SC = [1, 0.55, 0.45, 1.2];
+const FX = { list: [], ringGeo: null, ballGeo: null };
+function fxUpdate(dt) {
+  if (SHAFT.points) SHAFT.points.material.uniforms.time.value = T.now;
+  for (let i = FX.list.length - 1; i >= 0; i--) { const f = FX.list[i]; f.t += dt; const q = f.t / 0.45;
+    f.ring.scale.setScalar(0.3 + q * 5.2 * f.sc); f.ring.material.opacity = Math.max(0, 0.8 * (1 - q));
+    f.ball.scale.setScalar((0.4 + Math.min(1, f.t / 0.08) * 1.3) * f.sc); f.ball.material.opacity = Math.max(0, 0.9 * (1 - f.t / 0.22));
+    if (q >= 1) { scene.remove(f.ring); scene.remove(f.ball); f.ring.material.dispose(); f.ball.material.dispose(); FX.list.splice(i, 1); } }
+}
 function explosion(p, style = 0) {
   const sc = BOOM_SC[style] || 1, ion = style === 1;
   boomLight.color.set(ion ? 0x60ff80 : 0xff9040);
@@ -2572,6 +2617,14 @@ function explosion(p, style = 0) {
   for (let i = 0; i < n; i++) { const v = 9 * Math.sqrt(sc); if (ion) PA.emit(p.x, p.y + 0.2, p.z, (Math.random() - 0.5) * v, Math.random() * v * 0.7, (Math.random() - 0.5) * v, 0.4 + Math.random() * 0.4, 0.08, 0.5, 2.6, 0.8, 1, 6); else PA.emit(p.x, p.y + 0.2, p.z, (Math.random() - 0.5) * v, Math.random() * v * 0.8, (Math.random() - 0.5) * v, 0.4 + Math.random() * 0.5, 0.08, 2.2, 1.0, 0.3, 1, 10); }
   for (let i = 0; i < Math.round(26 * sc); i++) PN.emit(p.x + (Math.random() - 0.5) * sc, p.y + 0.3, p.z + (Math.random() - 0.5) * sc, (Math.random() - 0.5) * 1.5, 0.6 + Math.random(), (Math.random() - 0.5) * 1.5, 2 + Math.random() * 1.5, 0.5 * sc, 0.09, 0.085, 0.08, 0.55, -0.2, 0.9);
   if (ion) SND.zap(p); else SND.boom(p);
+  if (!ion) {
+    const ring = new THREE.Mesh(FX.ringGeo || (FX.ringGeo = new THREE.RingGeometry(0.85, 1, 40)), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.5, 0.8), transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(p.x, surfaceAt(p.x, p.z, p.y) + 0.05, p.z); scene.add(ring);
+    const ball = new THREE.Mesh(FX.ballGeo || (FX.ballGeo = new THREE.SphereGeometry(1, 16, 12)), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.8, 0.7), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    ball.position.copy(p); ball.position.y += 0.3; scene.add(ball);
+    FX.list.push({ ring, ball, t: 0, sc });
+    for (let i = 0; i < Math.round(14 * sc); i++) PN.emit(p.x + (Math.random() - 0.5) * 1.5 * sc, p.y + 0.4 + Math.random(), p.z + (Math.random() - 0.5) * 1.5 * sc, (Math.random() - 0.5) * 0.6, 0.35 + Math.random() * 0.4, (Math.random() - 0.5) * 0.6, 4 + Math.random() * 3, 1.2 * sc, 0.12, 0.11, 0.1, 0.5, -0.03, 1.4);
+  }
   const d = Math.hypot(p.x - P.x, p.z - P.z); P.shake = Math.max(P.shake, clamp(1 - d / 14, 0, 1) * 0.6 * sc);
   const fy = surfaceAt(p.x, p.z, p.y);
   if (p.y - fy < 0.8) decal(new THREE.Vector3(p.x, fy + 0.005, p.z), new THREE.Vector3(0, 1, 0), 2.2 * sc, M.hole);
@@ -2975,7 +3028,7 @@ function hostReset() {
   sim.length = 0; G.ev = []; G.drops = []; G.insta = 0; G.dbl = 0; G.doors = 0; G.lastHit = {}; G.lastRep = {}; G.lastPick = {};
   G.ep = (G.ep || 0) + 1; G.nextZid = G.ep * 10000 + 1;
   WINS.forEach(w => { w.count = 6; });
-  G.st = { step: 0, tags: 0, charge: 0, tagCd: 15 }; G.lastSa = {}; G.radios = 0;
+  G.st = { step: 0, tags: 0, charge: 0, tagCd: 15 }; G.lastSa = {}; G.radios = 0; G.chills = [];
   startRound(1);
 }
 function activeWins() { return WINS.filter(w => w.room === 0 || (w.room === 1 && (G.doors & 1)) || (w.room === 2 && (G.doors & 2)) || (w.room === 3 && (G.doors & 8)) || (w.room === 4 && (G.doors & 16))); }
@@ -3014,6 +3067,7 @@ function zClamp(s) {
 }
 function damagePlayer(peer, amt, src) { if (peer === myPeer) hurt(amt, src && src.x, src && src.z); else pushEv(['d', peer, amt, src ? Math.round(src.x * 10) : null, src ? Math.round(src.z * 10) : null]); }
 function attackLogic(s, tgt, dt, range) {
+  if (s.chill) { s.swing = 0; return; }
   s.atkCd -= dt;
   if (s.swing > 0) { s.swing -= dt; if (s.swing <= 0) { const d = Math.hypot(tgt.x - s.x, tgt.z - s.z); if (d < range + 0.45 && Math.abs(tgt.y - s.y) < 1.3) damagePlayer(tgt.peer, s.type === 3 ? 80 : 50, s); } }
   else if (s.atkCd <= 0 && Math.hypot(tgt.x - s.x, tgt.z - s.z) < range && Math.abs(tgt.y - s.y) < 1.3) { s.swing = 0.55; s.atkCd = 1.25; }
@@ -3055,6 +3109,7 @@ function zThink(s, dt, players) {
   }
   if (s.swing > 0) spd *= 0.25;
   const dx = gx - s.x, dz = gz - s.z, d = Math.hypot(dx, dz);
+  s.chill = inChill(s); if (s.chill) { spd *= 0.3; s.yaw += Math.sin(T.now * 2 + s.id) * dt; }
   if (d > 0.05 && spd > 0) { const st = Math.min(d, spd * dt); s.x += dx / d * st; s.z += dz / d * st; s.yaw = angLerp(s.yaw, Math.atan2(dx, dz), Math.min(1, dt * 8)); }
   if (s.st === 'in' && tgt && Math.sqrt(best) < 2.5) s.yaw = angLerp(s.yaw, Math.atan2(tgt.x - s.x, tgt.z - s.z), Math.min(1, dt * 10));
   collide(s, 0.32, s.st === 'enter' ? s.win : -2, s.y);
@@ -3073,6 +3128,7 @@ function hostStep(dt) {
     else if (sim.length === 0 && G.boss !== 1) { G.phase = 'inter'; G.interT = 10; pushEv(['e', G.round]); }
   }
   storyHost(dt, players);
+  chillHostTick(dt);
   for (const s of sim) zThink(s, dt, players);
   // keep the horde from stacking up (capped push, same floor only)
   for (let i = 0; i < sim.length; i++) for (let j = i + 1; j < sim.length; j++) {
@@ -3216,9 +3272,9 @@ function handleEvent(e) {
   } else if (t === 'r') {
     const r = e[2]; $('round').textContent = r; $('round').classList.add('flash'); setTimeout(() => $('round').classList.remove('flash'), 1400);
     banner('Round ' + r, e[3] ? 'Something big is coming…' : r === 1 ? 'They are coming through the windows' : 'Here they come', 3000); SND.roundStart();
-    P.gren = Math.min(maxGren(), P.gren + (r > 1 ? 2 : 0)); P.repairPts = 0;
+    P.gren = Math.min(maxGren(), P.gren + (r > 1 ? 2 : 0)); P.chill = Math.min(2, (P.chill || 0) + (r > 1 ? 1 : 0)); P.repairPts = 0;
     if (P.dead) respawn();
-  } else if (t === 'e') { banner('Round ' + e[2] + ' survived', 'Rebuild the windows. Restock.', 3000); SND.roundEnd(); }
+  } else if (t === 'e') { banner('Round ' + e[2] + ' survived', 'Rebuild the windows. Restock.', 3000); SND.roundEnd(); setTimeout(() => { VO.last = 0; voSay('round', null, 0.75); }, 1800 + Math.random() * 900); }
   else if (t === 'b') {
     const w = WINS[e[2]]; if (w) SND.tear({ x: w.x, y: 1.5, z: w.z });
     let best = null, bd = 9; for (const v of zv.values()) { if (v.dying || v.st !== 1 || v.win !== e[2]) continue; const d = Math.hypot(v.x - w.fx, v.z - w.fz); if (d < bd) { bd = d; best = v; } }
@@ -3256,7 +3312,7 @@ function give(k) {
 }
 function forgeReset() { FORGE.state = 'idle'; FORGE.t = 0; FORGE.slot = null; if (FORGE.show) FORGE.show.clear(); }
 function resetLocalPlayer() {
-  Object.assign(P, { x: (Math.random() - 0.5) * 3, y: 0, z: 2.5 + Math.random(), vy: 0, yaw: 0, pitch: 0, hp: 100, maxHp: 100, regenT: 0, down: false, dead: false, bleed: 0, revT: 0, selfRev: 0, qrBuys: 0, eyeH: 1.62, rollT: 0, pts: 500, kills: 0, heads: 0, downs: 0, revives: 0, perks: {}, slots: [], cur: 0, gren: 2, fireT: 0, relT: 0, swapT: 0, knifeT: 0, ads: 0, reviving: null, repairPts: 0, shake: 0, dmgFx: 0 });
+  Object.assign(P, { x: (Math.random() - 0.5) * 3, y: 0, z: 2.5 + Math.random(), vy: 0, yaw: 0, pitch: 0, hp: 100, maxHp: 100, regenT: 0, down: false, dead: false, bleed: 0, revT: 0, selfRev: 0, qrBuys: 0, eyeH: 1.62, rollT: 0, pts: 500, kills: 0, heads: 0, downs: 0, revives: 0, perks: {}, slots: [], cur: 0, gren: 2, chill: 1, fireT: 0, relT: 0, swapT: 0, knifeT: 0, ads: 0, reviving: null, repairPts: 0, shake: 0, dmgFx: 0 });
   give('pistol');
   for (const L of Object.values(BOX.models)) L.visible = false; BOX.state = 'idle';
   for (const R of RADIOS) { R.on = false; R.dm.color.setRGB(0.25, 0.18, 0.08); } stopSong('radio'); stopSong('deadlock'); MUS.vol = OPT.music;
@@ -3381,11 +3437,11 @@ function fire() {
   if (endPt && Math.random() < 0.6) tracer(mw, endPt);
 }
 // ---------- voice lines (the owner's recordings, served next to the page; silent where they can't be loaded)
-const VO = { reload: ['vo-reload-1.mp3', 'vo-reload-2.mp3'], down: ['vo-down-1.mp3'], kill: ['vo-kill-1.mp3', 'vo-kill-2.mp3'], boss: ['vo-boss-1.mp3'], mate: ['vo-mate-down.mp3'], revive: ['vo-revive-1.mp3'], last: 0, loading: false };
+const VO = { reload: ['vo-reload-1.mp3', 'vo-reload-2.mp3'], down: ['vo-down-1.mp3'], kill: ['vo-kill-1.mp3', 'vo-kill-2.mp3'], boss: ['vo-boss-1.mp3', 'vo-boss-2.mp3'], mate: ['vo-mate-down.mp3'], revive: ['vo-revive-1.mp3'], round: ['vo-round-1.mp3', 'vo-round-2.mp3'], last: 0, loading: false };
 const VO_PERKS = ['bulwark', 'fleet', 'rapid', 'revive', 'swift', 'mule', 'steady', 'blast', 'echo', 'dropbass', 'vibes', 'slap', 'nuff']; for (const k of VO_PERKS) VO['perk_' + k] = ['vo-perk-' + k + '.mp3'];
 async function voLoad() {
   if (VO.loading || !A.ctx || !/^https?:$/.test(location.protocol)) return; VO.loading = true;
-  for (const k of ['reload', 'down', 'kill', 'boss', 'mate', 'revive'].concat(VO_PERKS.map(q => 'perk_' + q))) {
+  for (const k of ['reload', 'down', 'kill', 'boss', 'mate', 'revive', 'round'].concat(VO_PERKS.map(q => 'perk_' + q))) {
     const list = [];
     for (const f of VO[k]) { try { const r = await fetch(f); if (!r.ok) continue; const buf = await A.ctx.decodeAudioData(await r.arrayBuffer()); list.push(buf); } catch (e) {} }
     if (list.length) BANK.b['vo_' + k] = list;
@@ -3469,6 +3525,32 @@ function throwGrenade() {
   m.position.copy(camera.position).addScaledVector(camDir, 0.5); scene.add(m);
   grenades.push({ m, vx: camDir.x * 13, vy: camDir.y * 13 + 3, vz: camDir.z * 13, t: 2.3 });
 }
+// Chill Grenade: a cloud of green smoke; zombies inside go mellow (slow, swaying, no attacks) for as long as it lasts
+const CHILL = { list: [] }; // {x,y,z,t}
+function throwChill() {
+  if (!(P.chill > 0) || P.down) return; P.chill--;
+  camera.getWorldDirection(camDir);
+  const m = new THREE.Group(); const can = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.12, 12), new THREE.MeshStandardMaterial({ color: 0x2e8b3e, roughness: 0.5, metalness: 0.4 })); can.rotation.z = Math.PI / 2; m.add(can);
+  for (const [dx, c] of [[-0.03, 0xc8261c], [0, 0xe8b420], [0.03, 0x2e8b3e]]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.037, 0.037, 0.014, 12), new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 })); b.rotation.z = Math.PI / 2; b.position.x = dx; m.add(b); }
+  m.position.copy(camera.position).addScaledVector(camDir, 0.5); scene.add(m);
+  grenades.push({ m, vx: camDir.x * 12, vy: camDir.y * 12 + 3, vz: camDir.z * 12, t: 1.6, chill: true });
+}
+function chillCloud(p, local) {
+  CHILL.list.push({ x: p.x, y: p.y, z: p.z, t: 12, puffT: 0 });
+  if (isHost) (G.chills || (G.chills = [])).push({ x: p.x, y: p.y, z: p.z, t: 12 });
+  if (A.ctx) { const t = A.ctx.currentTime, d = bus(p, 0.4, 1); nz(d, t, 2.2, 'lowpass', 1600, 0.7, 0.5, 0.001, 300); osc(d, t, 0.15, 'triangle', 300, 120, 0.15); }
+  for (let i = 0; i < 40; i++) PN.emit(p.x, p.y + 0.2, p.z, (Math.random() - 0.5) * 3, Math.random() * 1.2, (Math.random() - 0.5) * 3, 3 + Math.random() * 2, 0.9, 0.42, 0.62, 0.38, 0.5, -0.05, 1.6);
+}
+function chillUpdate(dt) {
+  for (let i = CHILL.list.length - 1; i >= 0; i--) {
+    const c = CHILL.list[i]; c.t -= dt; c.puffT -= dt;
+    if (c.puffT <= 0 && c.t > 1.5) { c.puffT = 0.08; const a = Math.random() * TAU, r = Math.random() * 3.6; PN.emit(c.x + Math.cos(a) * r, c.y + 0.1 + Math.random() * 1.2, c.z + Math.sin(a) * r, (Math.random() - 0.5) * 0.3, 0.1 + Math.random() * 0.2, (Math.random() - 0.5) * 0.3, 3.5 + Math.random() * 2, 1.3, 0.4, 0.6, 0.36, 0.42, -0.02, 1.0); }
+    if (c.t <= 0) CHILL.list.splice(i, 1);
+  }
+  if (G.chills) for (let i = G.chills.length - 1; i >= 0; i--) { G.chills[i].t -= dt; if (G.chills[i].t <= 0) G.chills.splice(i, 1); }
+}
+const inChill = s => !!G.chills && s.type !== 3 && G.chills.some(c => Math.hypot(s.x - c.x, s.z - c.z) < 4.2 && Math.abs(s.y - c.y) < 2.5);
+function chillHostTick(dt) { /* host-side cloud timers live in chillUpdate, which runs every frame */ }
 function grenadeUpdate(dt) {
   for (let i = grenades.length - 1; i >= 0; i--) {
     const g = grenades[i], p = g.m.position; g.t -= dt; g.vy -= 14 * dt;
@@ -3478,10 +3560,15 @@ function grenadeUpdate(dt) {
     const o2 = { x: p.x, z: p.z + g.vz * dt }; collide(o2, 0.06, -2, gy); if (Math.abs(o2.z - (p.z + g.vz * dt)) > 1e-4) g.vz *= -0.4; p.z = o2.z;
     const fl = surfaceAt(p.x, p.z, p.y) + 0.05;
     p.y += g.vy * dt; if (p.y < fl) { p.y = fl; g.vy *= -0.35; g.vx *= 0.6; g.vz *= 0.6; }
-    const inB = Math.abs(p.z) < 6.3 && p.x > -8.3 && p.x < 36.3;
+    const inB = Math.abs(p.z) < 6.3 && p.x > -17.3 && p.x < 50.3;
     if (inB && p.y < 3.5 && !inRamp(p.x, p.z) && p.y > WALL_H - 0.1) { p.y = WALL_H - 0.1; g.vy = -Math.abs(g.vy) * 0.4; }
     if (inB && p.y >= 3.5 && p.x > 7.8 && p.x < 24.2 && p.y > 7.0) { p.y = 7.0; g.vy = -Math.abs(g.vy) * 0.4; }
     g.m.rotation.x += dt * 8;
+    if (g.t <= 0 && g.chill) {
+      scene.remove(g.m); grenades.splice(i, 1); chillCloud(p.clone(), true);
+      Q.gxSeq++; Q.gx = [Q.gxSeq, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.z * 10), 9];
+      continue;
+    }
     if (g.t <= 0) {
       scene.remove(g.m); grenades.splice(i, 1); explosion(p.clone(), 0);
       Q.gxSeq++; Q.gx = [Q.gxSeq, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.z * 10), 0];
@@ -3995,7 +4082,7 @@ function avatarsUpdate(dt) {
     }
     if (typeof s.sh === 'number' && p.lastSh != null && s.sh > p.lastSh) { const wk = WKEYS[s.w | 0] || 'pistol'; SND.shot(wk, { x: av.x, y: 1.4, z: av.z }); av.flashT = 0.05; }
     p.lastSh = s.sh;
-    if (Array.isArray(s.gx) && s.gx[0] !== p.lastGx) { if (p.lastGx != null) explosion(new THREE.Vector3(s.gx[1] / 10, s.gx[2] / 10, s.gx[3] / 10), s.gx[4] | 0); p.lastGx = s.gx[0]; }
+    if (Array.isArray(s.gx) && s.gx[0] !== p.lastGx) { if (p.lastGx != null) { const gp = new THREE.Vector3(s.gx[1] / 10, s.gx[2] / 10, s.gx[3] / 10); if ((s.gx[4] | 0) === 9) chillCloud(gp, false); else explosion(gp, s.gx[4] | 0); } p.lastGx = s.gx[0]; }
     if (av.flashT > 0) { av.flashT -= dt; if (!av.fl) { av.fl = new THREE.Mesh(planeGeo, M.flash); av.fl.scale.setScalar(0.3); av.gun.add(av.fl); av.fl.position.copy(av.gun.userData.mz).divideScalar(1.05); } av.fl.visible = true; av.fl.rotation.z = Math.random() * 3; } else if (av.fl) av.fl.visible = false;
   }
 }
@@ -4036,6 +4123,7 @@ function worldUpdate(dt) {
     L.t += dt; let k = 0.97 + Math.sin(L.t * 47) * 0.015;
     if (L.flick) { const ph = L.t % 7; if (ph < 0.5) k *= Math.sin(L.t * 61) > 0.1 ? 0.12 : 1; }
     L.sp.intensity = L.base * k; L.bm.color.setRGB(3 * k, 2.3 * k, 1.4 * k);
+    if (L.shaft) L.shaft.visible = k > 0.5;
   }
   if (genLight) genLight.intensity = 0.9 + Math.sin(T.now * 3) * 0.35;
   if (flashlight) flashlight.intensity = P.light && !P.dead ? 2.6 : 0;
@@ -4115,7 +4203,7 @@ function hudUpdate(dt) {
   { let h = ''; for (let i = dmgDirs.length - 1; i >= 0; i--) { const d = dmgDirs[i]; d.t -= dt; if (d.t <= 0) { dmgDirs.splice(i, 1); continue; } const ang = Math.atan2(d.x - P.x, d.z - P.z), rel = (Math.PI - ang + P.yaw) * 180 / Math.PI; h += '<i style="transform:rotate(' + rel.toFixed(0) + 'deg);opacity:' + Math.min(1, d.t).toFixed(2) + '"></i>'; } setText('dmgdirs', h); }
   $('spec').hidden = !P.dead; if (P.dead) setText('spec', specName ? '<b>Spectating</b>' + esc(specName) + ' · click or Q for the next teammate · you are back next round' : '<b>You are out</b>You come back at the start of the next round');
   storyHud();
-  setText('gren', '<i></i>'.repeat(P.gren));
+  setText('gren', '<i></i>'.repeat(P.gren) + '<i class="ch"></i>'.repeat(P.chill || 0));
   setText('perks', Object.keys(P.perks).map(k => '<i style="--c:' + PERKS[k].css + '" title="' + PERKS[k].name + '">' + perkSvg(k, '#f4ead2', PERKS[k].css) + '</i>').join(''));
   setText('prompt', promptText);
   const chips = []; if (V.insta > 0) chips.push('<span>Insta-Kill ' + Math.ceil(V.insta) + 's</span>'); if (V.dbl > 0) chips.push('<span>Double Points ' + Math.ceil(V.dbl) + 's</span>'); if (V.phase === 'inter' && V.interT > 0) chips.push('<span style="background:rgba(60,50,30,.6);border-color:#d6a64a;color:#f2e2b8;text-shadow:none">Next round in ' + Math.ceil(V.interT) + 's</span>');
@@ -4361,6 +4449,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyV') knife();
   if (e.code === 'KeyC' && !e.repeat && P.sprint && P.ground && !(P.slideCd > 0)) startSlide();
   if (e.code === 'KeyG') throwGrenade();
+  if (e.code === 'KeyX') throwChill();
   if (e.code === 'KeyT') P.light = !P.light;
   if (e.code === 'Space') e.preventDefault();
 });
@@ -4484,7 +4573,7 @@ function frame() {
   } else if (APP.screen === 'over') { if (isHost) hostStep(dt); VM.root.visible = false; }
   if (APP.screen === 'play' && APP.paused) VM.root.visible = VM.root.visible;
   const fz = APP.screen === 'play' && (held || (APP.paused && APP.mode === 'solo')) ? 0 : dt;
-  zVisUpdate(fz); gibUpdate(fz); avatarsUpdate(dt); worldUpdate(fz); storyWorld(fz); perkMachinesUpdate(fz); soundSystemUpdate(fz); partyUpdate(fz); discoUpdate(fz);
+  zVisUpdate(fz); gibUpdate(fz); avatarsUpdate(dt); worldUpdate(fz); storyWorld(fz); perkMachinesUpdate(fz); soundSystemUpdate(fz); partyUpdate(fz); discoUpdate(fz); chillUpdate(fz); fxUpdate(fz);
   if (APP.screen === 'play') hudUpdate(dt);
   netTick(dt); listen(); musicTick();
   if (composer) { finalPass.uniforms.time.value = T.now; composer.render(dt); }
