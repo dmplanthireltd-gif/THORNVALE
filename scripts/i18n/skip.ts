@@ -47,4 +47,6 @@ export const SKIP_MESSAGES = new Set<string>([
   "Thornvale server is running, but the client is not built yet. Run \"npm run build\" first.",
   "Market: open ({offers} offers, {deliveries} deliveries waiting)",
   "Market: closed (no market tables in storage yet)",
+  "Exchange: open ({orders} offers, {boxes} collect boxes)",
+  "Exchange: closed (no exchange tables in storage yet)",
 ]);

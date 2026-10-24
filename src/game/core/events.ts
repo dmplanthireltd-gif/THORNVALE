@@ -90,6 +90,8 @@ export type GameEvent =
   | { type: 'friendsChanged'; to: number }
   | { type: 'spellsChanged'; to: number }
   | { type: 'marketChanged'; to: number }
+  /** The Gilded Exchange window of this player changed (opened, closed, or its book moved). */
+  | { type: 'exchangeChanged'; to: number }
   | { type: 'gameLoaded'; to: number }
   /** Tutorial progress changed (objective bar; derived from snapshots online). */
   | { type: 'tutorialChanged'; to: number }

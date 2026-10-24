@@ -2,6 +2,7 @@ import type { GameEvent } from '../game/core/events';
 import { BufferedIntent, Game, type Session, type TradeView } from '../game/Game';
 import type { ItemStack } from '../game/inventory/items';
 import type { MarketView } from '../game/market/market';
+import type { ExchangeView } from '../game/exchange/exchange';
 import type { CraftView } from '../game/production/recipes';
 import {
   applySnapshot, executeCommand, PROTOCOL_VERSION, type ClientMessage, type Command, type MirrorExtras, type ServerMessage,
@@ -29,6 +30,8 @@ export interface Controller {
   trade(): TradeView | null;
   /** The market window's contents while a market board is in use. */
   market(): MarketView | null;
+  /** The Gilded Exchange window's contents while it is open at a clerk. */
+  exchange(): ExchangeView | null;
   /** The station window (furnace, anvil) while one is in use. */
   craft(): CraftView | null;
   update(dt: number): void;
@@ -150,6 +153,10 @@ export class LocalController implements Controller {
 
   market(): MarketView | null {
     return this.game.marketView(this.pid);
+  }
+
+  exchange(): ExchangeView | null {
+    return this.game.exchange.view(this.pid);
   }
 
   craft(): CraftView | null {
@@ -317,6 +324,10 @@ export class NetController implements Controller {
 
   market(): MarketView | null {
     return this.extras.market ?? null;
+  }
+
+  exchange(): ExchangeView | null {
+    return this.extras.exchange ?? null;
   }
 
   craft(): CraftView | null {

@@ -119,6 +119,49 @@ async function main(): Promise<void> {
     rejected = e instanceof Error ? e.message : String(e);
   }
   check(/wrong password|already online/i.test(rejected), `someone else cannot take a name (${rejected || 'accepted!'})`);
+  // the Gilded Exchange: both go to a clerk, Ann sells ore, Ben buys some at a higher price (trades at Ann's), collect
+  {
+    const clerk = a.game.npcs.find((n) => n.key === 'exchange_odile');
+    check(!!clerk, 'the clients know the Exchange clerks');
+    if (clerk) {
+      a.send({ c: 'say', text: `/goto ${clerk.x} ${clerk.y - 2} 0` });
+      b.send({ c: 'say', text: `/goto ${clerk.x + 1} ${clerk.y - 2} 0` });
+      a.send({ c: 'say', text: '/item iron_ore 6' });
+      b.send({ c: 'say', text: '/item gold 500' });
+      await pump([a, b], 1);
+      for (const c of [a, b]) {
+        c.send({ c: 'talk', id: clerk.id });
+        await pump([a, b], 0.6);
+        c.send({ c: 'dialogue', action: 'exchange' });
+      }
+      await pump([a, b], 0.8);
+      const va = a.exchange(), vb = b.exchange();
+      check(!!va && !!vb, `the clerk opens the Exchange window on both clients${va && !va.enabled ? ' (closed: no storage)' : ''}`);
+      if (va?.enabled && vb) {
+        a.send({ c: 'exPlace', side: 'sell', item: 'iron_ore', qty: 6, price: 40 });
+        await pump([a, b], 0.6);
+        check(a.exchange()?.orders.length === 1, 'a sell offer appears in Ann\'s window');
+        b.send({ c: 'exQuery', item: 'iron_ore' });
+        await pump([a, b], 0.6);
+        check(b.exchange()?.item?.ask === 40, 'Ben sees the best sell offer');
+        b.send({ c: 'exPlace', side: 'buy', item: 'iron_ore', qty: 2, price: 50 });
+        await pump([a, b], 0.6);
+        const bb = b.exchange()?.box;
+        check(!!bb && bb.items.some((i) => i.id === 'iron_ore' && i.qty === 2) && bb.gold === 20, 'Ben bought 2 at 40 and got 20 back in his collect box');
+        check(a.exchange()?.orders[0]?.left === 4 && a.exchange()?.box.gold === 80 - 1, 'Ann\'s offer filled in part; 79 gold (after tax) waits for her');
+        a.send({ c: 'exCancel', id: a.exchange()!.orders[0].id });
+        await pump([a, b], 0.5);
+        a.send({ c: 'exCollect' });
+        await pump([a, b], 0.6);
+        check(!a.exchange()?.orders.length && !a.exchange()?.box.gold && !a.exchange()?.box.items.length, 'Ann cancelled the rest and collected everything');
+        b.send({ c: 'exCollect' });
+        b.send({ c: 'exClose' });
+        await pump([a, b], 0.6);
+        check(b.exchange() === null, 'closing the window');
+      }
+      a.send({ c: 'exClose' });
+    }
+  }
   // world bosses: a tester wakes one (test mode), everyone hears it, the map marks it, and a client next to it sees it
   const heard: string[] = [];
   b.game.events.on((e) => { if (e.type === 'announce') heard.push(e.text); });

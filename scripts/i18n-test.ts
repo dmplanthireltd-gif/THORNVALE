@@ -103,7 +103,7 @@ console.log(`  ${contentOk} of ${content.length} content strings translated`);
 // ---------------------------------------------------------------- 3. game messages
 console.log('Game messages');
 const MSG_FILES = sourceFiles(root, [
-  'src/game/Game.ts', 'src/game/pets/PetSystem.ts', 'src/game/bosses/WorldEvents.ts', 'src/game/bosses/bosses.ts', 'src/game/npc/dialogue.ts',
+  'src/game/Game.ts', 'src/game/pets/PetSystem.ts', 'src/game/exchange/ExchangeSystem.ts', 'src/game/bosses/WorldEvents.ts', 'src/game/bosses/bosses.ts', 'src/game/npc/dialogue.ts',
   'src/game/inventory/capes.ts', 'src/game/progression/stages.ts', 'src/game/net/protocol.ts', 'src/client/Controller.ts', 'server/server.ts',
   'src/game/trades',
 ]);

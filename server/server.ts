@@ -18,6 +18,7 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BufferedIntent, Game, type Session } from '../src/game/Game';
 import type { MarketChange } from '../src/game/market/market';
+import type { ExchangeChange } from '../src/game/exchange/exchange';
 import { migrateSave, SAVE_VERSION } from '../src/game/save/migrate';
 import {
   buildSnapshot, eventAudience, executeCommand, PROTOCOL_VERSION, type ClientMessage, type ServerMessage,
@@ -214,6 +215,63 @@ function persistMarket(c: MarketChange): void {
   });
 }
 game.marketSink = persistMarket;
+
+// ------------------------------------------------------------------ Gilded Exchange storage
+
+/** Exchange changes are stored one after another, in the order they happened. */
+let exchangeTail: Promise<void> = Promise.resolve();
+/** Changes not stored yet (the Exchange closes while storage fails and opens again once it caught up). */
+let exchangeBacklog = 0;
+
+/**
+ * Stores an Exchange change and the acting character's save (as it is right now) in ONE
+ * transaction (storage.commitExchange). It waits for every earlier Exchange change and
+ * for that character's earlier saves, and that character's later saves wait for it, so
+ * the database always holds a consistent pair: never escrow both in the save and on the
+ * book, never neither. A failing database is retried until it works (the Exchange is
+ * closed meanwhile); if the server stops first, nothing of the change is stored and the
+ * older, consistent state stays.
+ */
+function persistExchange(c: ExchangeChange): void {
+  const s = c.actor !== null ? game.sessions.get(c.actor) : undefined;
+  const actor = s && !s.bot ? s : null;
+  const key = actor ? actor.player.name.toLowerCase() : null;
+  const change = {
+    putOrders: c.putOrders, dropOrders: c.dropOrders, putBoxes: c.putBoxes, trades: c.trades,
+    character: actor && key ? { key, name: actor.player.name, data: game.serialize(actor.id), owner: sessionOwner.get(actor.id) ?? null } : null,
+  };
+  exchangeBacklog++;
+  const prev = key ? pendingSaves.get(key) ?? Promise.resolve() : Promise.resolve();
+  const next = Promise.all([prev, exchangeTail]).then(async () => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await storage.commitExchange(change);
+        break;
+      } catch (err) {
+        if (stopping && attempt >= 3) throw err;
+        if (game.exchange.book.enabled) console.error('EXCHANGE STORAGE FAILED — Exchange closed until it works again:', (err as Error).message);
+        game.exchange.book.enabled = false;
+        await new Promise((r) => setTimeout(r, Math.min(30_000, 500 * attempt)));
+      }
+    }
+    exchangeBacklog--;
+    if (!exchangeBacklog && !game.exchange.book.enabled && exchangeReady) {
+      game.exchange.book.enabled = true;
+      console.log('Exchange storage works again — Exchange open.');
+    }
+  });
+  exchangeTail = next.catch((err) => console.error('An Exchange change could not be stored before shutdown:', err));
+  if (key) {
+    const chained = next.catch(() => undefined);
+    pendingSaves.set(key, chained);
+    void chained.then(() => {
+      if (pendingSaves.get(key) === chained) pendingSaves.delete(key);
+    });
+  }
+}
+game.exchange.sink = persistExchange;
+/** True once the Exchange tables were found at start-up. */
+let exchangeReady = false;
 
 // the tutorial: an island graduate sets the account flag (later characters may skip it); test servers
 // raise the level now, once the character has left the island
@@ -920,6 +978,7 @@ async function shutdown(): Promise<void> {
   // Render and similar hosts send SIGTERM before a redeploy: make sure every save lands first
   await Promise.all([...game.sessions.values()].map((s) => saveCharacter(s)));
   await marketTail;
+  await exchangeTail;
   await Promise.all([...pendingSaves.values()]);
   await storage.flush().catch((err) => console.error(err));
   process.exit(0);
@@ -934,10 +993,20 @@ const market = await storage.loadMarket().catch((err) => {
 });
 if (market) game.market.load(market.offers, market.deliveries);
 else game.market.enabled = false;
+const exchange = await storage.loadExchange().catch((err) => {
+  console.error('Loading the Exchange failed:', err);
+  return null;
+});
+if (exchange) {
+  game.exchange.book.load(exchange.orders, exchange.boxes, exchange.trades);
+  game.exchange.book.enabled = true;
+  exchangeReady = true;
+}
 storeTables = await storage.storeReady().catch(() => false);
 await carveFoundersStone();
 console.log(`Login: ${EMAIL_AUTH ? 'email (Supabase Auth)' : 'character name + password'}`);
 console.log(market ? `Market: open (${market.offers.length} offers, ${market.deliveries.length} deliveries waiting)` : 'Market: closed (no market tables in storage yet)');
+console.log(exchange ? `Exchange: open (${exchange.orders.length} offers, ${exchange.boxes.length} collect boxes)` : 'Exchange: closed (no exchange tables in storage yet)');
 console.log(`Saves: ${storage.kind === 'supabase' ? 'Supabase database' : `files in ${dirname(DATA_FILE)}`} (save format v${SAVE_VERSION})`);
 console.log(`Tutorial flags: ${await storage.accountFlagsMode()}`);
 console.log(`PvP: ${PVP ? 'on' : 'off'}`);

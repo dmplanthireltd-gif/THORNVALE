@@ -88,6 +88,7 @@ export function buildDialogue(d: DialogueState, ctx: DialogueContext): DialogueV
     if (npc.tutor) options.push({ label: 'What should I do now?', action: 'tutorial:hint' });
     if (npc.sells?.length || npc.buys?.length) options.push({ label: 'Let us trade.', action: 'page:trade' });
     if (npc.bank) options.push({ label: 'I would like to bank.', action: 'page:bank' });
+    if (npc.exchange) options.push({ label: 'Trade on the Exchange.', action: 'exchange' });
     for (const t of npc.travel ?? []) options.push({ label: `Take me to ${t.name} (${t.price ? `${t.price} gold` : 'free'}).`, action: `travel:${t.key}`, disabled: gold < t.price });
     if (npc.spells?.length) options.push({ label: 'Teach me spells.', action: 'page:spells' });
     for (const o of ctx.extra ?? []) options.push(o);

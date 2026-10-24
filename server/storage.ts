@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path';
 import type { SaveData } from '../src/game/Game';
 import { cleanDelivery, cleanOffer, type MarketDelivery, type MarketOffer } from '../src/game/market/market';
+import { cleanBox, cleanOrder, cleanTrade, type ExBox, type ExOrder, type ExTrade } from '../src/game/exchange/exchange';
 import {
   bestTier, FOUNDER_TIERS, isFounderTier, NO_PERKS, PRODUCTS, type AccountPerks, type FounderTier, type ProductId,
 } from '../src/game/premium/premium';
@@ -54,6 +55,15 @@ export interface StoredCharacter {
   owner?: string | null;
 }
 
+/** One Gilded Exchange change as stored: the book rows plus the acting character's save, in one transaction. */
+export interface StoredExchangeChange {
+  putOrders: ExOrder[];
+  dropOrders: string[];
+  putBoxes: ExBox[];
+  trades: ExTrade[];
+  character: { key: string; name: string; data: SaveData; owner: string | null } | null;
+}
+
 export interface CharacterSummary {
   name: string;
   level: number;
@@ -88,6 +98,17 @@ export interface Storage {
   /** Inserts or updates deliveries (by id). */
   putMarketDeliveries(deliveries: MarketDelivery[]): Promise<void>;
   deleteMarketDeliveries(ids: string[]): Promise<void>;
+  /**
+   * The Gilded Exchange: every open order, every collect box and recent trades (newest
+   * last). Null when this storage has no Exchange tables yet (the Exchange stays closed).
+   */
+  loadExchange(): Promise<{ orders: ExOrder[]; boxes: ExBox[]; trades: ExTrade[] } | null>;
+  /**
+   * Stores one Exchange change TOGETHER with the acting character's save, in one
+   * transaction: either all of it is stored or none of it, so a crash can neither
+   * lose nor duplicate escrow.
+   */
+  commitExchange(c: StoredExchangeChange): Promise<void>;
   /**
    * Premium store (tables account_perks, purchases). False when this storage has no
    * store tables yet: the store then stays closed and nobody has premium.
@@ -146,6 +167,12 @@ export class FileStorage implements Storage {
   private market: { offers: Record<string, MarketOffer>; deliveries: Record<string, MarketDelivery> };
   private store: { perks: Record<string, AccountPerks>; purchases: Record<string, FilePurchase> };
   private flags: Record<string, { tutorialDone?: number }>;
+  /**
+   * The Exchange file holds the book AND a journal of the character saves that went with its
+   * changes (written in one atomic file write); a journal entry newer than the character file
+   * wins at start-up, and the journal is emptied once the character file has caught up.
+   */
+  private exchange: { orders: Record<string, ExOrder>; boxes: Record<string, ExBox>; trades: ExTrade[]; chars: Record<string, SaveData> };
   private dirty = false;
 
   constructor(
@@ -156,6 +183,7 @@ export class FileStorage implements Storage {
     private readonly storeFile = join(dirname(charFile), 'store.json'),
     private readonly flagFile = join(dirname(charFile), 'account-flags.json'),
     private readonly signupFile = join(dirname(charFile), 'signups.json'),
+    private readonly exchangeFile = join(dirname(charFile), 'exchange.json'),
   ) {
     this.flags = FileStorage.read(flagFile, {});
     this.chars = FileStorage.read(charFile, {});
@@ -165,6 +193,12 @@ export class FileStorage implements Storage {
     this.market = { offers: m.offers ?? {}, deliveries: m.deliveries ?? {} };
     const st = FileStorage.read<{ perks?: Record<string, AccountPerks>; purchases?: Record<string, FilePurchase> }>(storeFile, {});
     this.store = { perks: st.perks ?? {}, purchases: st.purchases ?? {} };
+    const ex = FileStorage.read<Partial<FileStorage['exchange']>>(exchangeFile, {});
+    this.exchange = { orders: ex.orders ?? {}, boxes: ex.boxes ?? {}, trades: ex.trades ?? [], chars: ex.chars ?? {} };
+    // saves that went in with an Exchange change but never reached the character file
+    for (const [key, d] of Object.entries(this.exchange.chars)) {
+      if (!this.chars[key] || (this.chars[key].savedAt ?? 0) < (d.savedAt ?? 0)) { this.chars[key] = d; this.dirty = true; }
+    }
   }
 
   private static read<T>(file: string, fallback: T): T {
@@ -252,6 +286,41 @@ export class FileStorage implements Storage {
     if (!this.dirty) return;
     FileStorage.write(this.charFile, this.chars);
     this.dirty = false;
+    // the character file has every journalled save now
+    if (Object.keys(this.exchange.chars).length) {
+      this.exchange.chars = {};
+      FileStorage.write(this.exchangeFile, this.exchange);
+    }
+  }
+
+  // the Exchange file is written on every change, in one atomic write with the character's save
+
+  async loadExchange(): Promise<{ orders: ExOrder[]; boxes: ExBox[]; trades: ExTrade[] }> {
+    return {
+      orders: Object.values(this.exchange.orders).map(cleanOrder).filter((o): o is ExOrder => !!o),
+      boxes: Object.values(this.exchange.boxes).map(cleanBox).filter((b): b is ExBox => !!b),
+      trades: this.exchange.trades.map(cleanTrade).filter((t): t is ExTrade => !!t),
+    };
+  }
+
+  async commitExchange(c: StoredExchangeChange): Promise<void> {
+    const ex = this.exchange;
+    for (const id of c.dropOrders) delete ex.orders[id];
+    for (const o of c.putOrders) ex.orders[o.id] = { ...o };
+    for (const b of c.putBoxes) {
+      if (b.gold <= 0 && !b.items.length) delete ex.boxes[b.owner];
+      else ex.boxes[b.owner] = { owner: b.owner, gold: b.gold, items: b.items.map((i) => ({ ...i })) };
+    }
+    ex.trades.push(...c.trades.map((t) => ({ ...t })));
+    if (ex.trades.length > 5000) ex.trades.splice(0, ex.trades.length - 5000);
+    if (c.character) {
+      const { key, data, owner } = c.character;
+      this.chars[key] = data;
+      if (owner) this.owners[key] = owner;
+      ex.chars[key] = data;
+      this.dirty = true;
+    }
+    FileStorage.write(this.exchangeFile, ex);
   }
 
   // the market file is written on every change: escrowed items must never wait for a flush
@@ -539,6 +608,55 @@ export class SupabaseStorage implements Storage {
       id: r.id, to: r.name_key, gold: Number(r.gold), items: r.items, reason: r.reason, created: Date.parse(String(r.created_at)) || 0,
     } as unknown as MarketDelivery)).filter((d): d is MarketDelivery => !!d);
     return { offers, deliveries };
+  }
+
+  // ---------------------------------------------------------------- the Gilded Exchange (exchange_orders, exchange_boxes, exchange_trades)
+
+  async loadExchange(): Promise<{ orders: ExOrder[]; boxes: ExBox[]; trades: ExTrade[] } | null> {
+    try {
+      await this.req('GET', 'exchange_orders?select=id&limit=1');
+      await this.req('GET', 'exchange_boxes?select=owner_key&limit=1');
+      await this.req('GET', 'exchange_trades?select=id&limit=1');
+    } catch (err) {
+      console.warn(`Exchange tables not found (${String((err as Error).message).slice(0, 120)}). The Exchange stays closed until the migration is applied.`);
+      return null;
+    }
+    const all = async (table: string, order: string): Promise<Array<Record<string, unknown>>> => {
+      const out: Array<Record<string, unknown>> = [];
+      for (let from = 0; ; from += 1000) {
+        const rows = (await this.req('GET', `${table}?select=*&order=${order}&offset=${from}&limit=1000`)) as Array<Record<string, unknown>>;
+        out.push(...rows);
+        if (rows.length < 1000) return out;
+      }
+    };
+    const orders = (await all('exchange_orders', 'seq')).map((r) => cleanOrder({
+      id: r.id, owner: r.owner_key, ownerName: r.owner_name, side: r.side, item: r.item_id, qty: Number(r.qty), left: Number(r.qty_left),
+      price: Number(r.price), seq: Number(r.seq), created: Date.parse(String(r.created_at)) || 0,
+    })).filter((o): o is ExOrder => !!o);
+    const boxes = (await all('exchange_boxes', 'owner_key')).map((r) => cleanBox({ owner: r.owner_key, gold: Number(r.gold), items: r.items } as unknown as ExBox)).filter((b): b is ExBox => !!b);
+    // recent trades for the price history (newest 3000, oldest first)
+    const rows = (await this.req('GET', 'exchange_trades?select=*&order=created_at.desc&limit=3000')) as Array<Record<string, unknown>>;
+    const trades = rows.reverse().map((r) => cleanTrade({
+      id: r.id, item: r.item_id, qty: Number(r.qty), price: Number(r.price), at: Date.parse(String(r.created_at)) || 0, buyer: r.buyer_key, seller: r.seller_key,
+    } as unknown as ExTrade)).filter((t): t is ExTrade => !!t);
+    return { orders, boxes, trades };
+  }
+
+  async commitExchange(c: StoredExchangeChange): Promise<void> {
+    const ch = c.character;
+    await this.req('POST', 'rpc/thornvale_exchange_commit', {
+      p: {
+        character: ch ? {
+          key: ch.key, name: ch.name, owner: ch.owner ?? '', data: ch.data, version: ch.data.version, level: ch.data.player.level, vocation: ch.data.player.vocation ?? null,
+        } : null,
+        drop: c.dropOrders,
+        orders: c.putOrders.map((o) => ({
+          id: o.id, owner_key: o.owner, owner_name: o.ownerName, side: o.side, item_id: o.item, qty: o.qty, qty_left: o.left, price: o.price, seq: o.seq, created_ms: o.created,
+        })),
+        boxes: c.putBoxes.map((b) => ({ owner_key: b.owner, gold: b.gold, items: b.items })),
+        trades: c.trades.map((t) => ({ id: t.id, item_id: t.item, qty: t.qty, price: t.price, buyer_key: t.buyer, seller_key: t.seller, at_ms: t.at })),
+      },
+    });
   }
 
   async putMarketOffers(offers: MarketOffer[]): Promise<void> {

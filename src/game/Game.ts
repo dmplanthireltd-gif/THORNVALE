@@ -46,6 +46,7 @@ import { WorldEvents } from './bosses/WorldEvents';
 import { migrateSave, SAVE_VERSION } from './save/migrate';
 import { emptyPets, parsePets, PetSystem, savePets, type PetState } from './pets/PetSystem';
 import { emptyTrades, parseTrades, saveTrades, tradeEmptyOf, TradeSystem, type TradeState } from './trades/TradeSystem';
+import { ExchangeSystem } from './exchange/ExchangeSystem';
 import { CLASSIC_STAGES, combatSkillRate, expRate, gatheringRate, scaleAmount, stagedGold, type ExpStages } from './progression/stages';
 import { isAppearance, sameAppearance, sanitizeAppearance, type Appearance } from './player/appearance';
 import { TrapSystem, VINE_ROOT_SECONDS, FLOWER_POISON_BASE, FLOWER_POISON_SECONDS } from './world/traps';
@@ -444,6 +445,8 @@ export class Game implements AIContext {
   readonly petSys: PetSystem;
   /** Agility, thieving, herblore and the other trade skills of 2026-10-24 (trades/TradeSystem.ts). */
   readonly skillSys: TradeSystem;
+  /** The Gilded Exchange in Grand Thornvale (buy/sell orders, escrow, collect boxes; exchange/). */
+  readonly exchange: ExchangeSystem;
   /** World bosses and raids (schedule, broadcasts, loot by contribution). */
   readonly worldEvents: WorldEvents;
   /** Online mirror: active world boss / raid markers as last sent by the server. */
@@ -464,6 +467,7 @@ export class Game implements AIContext {
     this.stages = opts.stages ?? CLASSIC_STAGES;
     this.petSys = new PetSystem(this);
     this.skillSys = new TradeSystem(this);
+    this.exchange = new ExchangeSystem(this);
     this.worldEvents = new WorldEvents(this);
     // a mirror drops raid monsters, summons and world bosses when the server says they left
     if (!this.simulate) this.events.on((e) => { if (e.type === 'despawn') this.removeEnemyNow(e.id); });
@@ -941,6 +945,7 @@ export class Game implements AIContext {
       this.premiumTimer = 1;
       for (const s of this.sessions.values()) this.checkPremium(s);
     }
+    if (this.simulate) this.exchange.tick();
     this.marketTimer -= dt;
     if (this.marketTimer <= 0) {
       this.marketTimer = 10;
@@ -4871,6 +4876,12 @@ export class Game implements AIContext {
       case 'bye':
         this.msg(pid, `${d.npcName}: Farewell, ${p.name}.`, 'npc');
         this.closeDialogue(pid);
+        return;
+      case 'exchange':
+        // an Exchange clerk opens the trading window (exchange/ExchangeSystem.ts)
+        if (!npc?.exchange) return;
+        this.closeDialogue(pid);
+        this.exchange.open(pid, d.npcId);
         return;
       case 'page': {
         const page = rest.join(':') as DialogueState['page'];

@@ -5,6 +5,7 @@ import type { Inventory } from '../inventory/Inventory';
 import { EQUIP_SLOTS, isItem, type EquipSlot, type ItemStack } from '../inventory/items';
 import { isSpellId, type SpellId } from '../magic/spells';
 import type { MarketView } from '../market/market';
+import type { ExchangeView, ExSide } from '../exchange/exchange';
 import { NONCOMBAT_IDS, type NonCombatSkill } from '../gathering/skills';
 import { activityKey, computeActivity, decodeActivity, encodeActivity, setNetActivity, type ActivitySnap } from '../gathering/activity';
 import type { CraftView } from '../production/recipes';
@@ -33,7 +34,7 @@ const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 31;
+export const PROTOCOL_VERSION = 32;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -94,6 +95,12 @@ export type Command =
   | { c: 'marketBuy'; id: string; qty: number }
   | { c: 'marketCancel'; id: string }
   | { c: 'marketClose' }
+  /** The Gilded Exchange (protocol 32; at a clerk): look at an item, place / cancel an offer, empty the collect box, close. */
+  | { c: 'exQuery'; item: string }
+  | { c: 'exPlace'; side: ExSide; item: string; qty: number; price: number }
+  | { c: 'exCancel'; id: string }
+  | { c: 'exCollect' }
+  | { c: 'exClose' }
   /** Production station (furnace, anvil): make `count` of a recipe; count 0 stops the batch. */
   | { c: 'craft'; recipe: string; count: number }
   | { c: 'craftClose' }
@@ -179,6 +186,8 @@ export interface SelfSnap {
   cw?: CraftView | null;
   /** Market window contents; only sent when it changed (null = closed, absent = unchanged). */
   mk?: MarketView | null;
+  /** Gilded Exchange window (protocol 32); only sent when it changed (null = closed, absent = unchanged). */
+  ex?: ExchangeView | null;
   friends?: ReturnType<Game['friendsView']>;
   /** Premium state (sent only when changed). */
   pm?: PremiumView;
@@ -314,6 +323,12 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     marketSent.set(s, mkKey);
     self.mk = game.marketView(s.id);
   }
+  // the Exchange window, likewise only when its book, your gold or your things changed
+  const exKey = game.exchange.viewKey(s.id);
+  if (exKey !== exchangeSent.get(s)) {
+    exchangeSent.set(s, exKey);
+    self.ex = game.exchange.view(s.id);
+  }
   const holes: string[] = [];
   for (const k of game.dugHoles()) holes.push(k);
   // rune fields near the player (x,y,z,obj)
@@ -333,6 +348,8 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
 
 /** What market view each session was last sent (so an unchanged market is not resent 20 times a second). */
 const marketSent = new WeakMap<Session, string>();
+/** What Exchange view each session was last sent. */
+const exchangeSent = new WeakMap<Session, string>();
 
 /** Routes a simulation event: null = drop, otherwise the recipient (-1 = everyone). */
 export function eventAudience(e: GameEvent): number | null {
@@ -341,7 +358,7 @@ export function eventAudience(e: GameEvent): number | null {
     case 'bagCreated': case 'bagRemoved': case 'bagChanged': case 'playerJoined': case 'playerLeft': case 'tileChanged':
     case 'inventoryChanged': case 'questChanged': case 'dialogueOpened': case 'dialogueClosed':
     case 'gameLoaded': case 'equipmentChanged': case 'lookChanged': case 'depotChanged': case 'tradeChanged': case 'partyChanged': case 'friendsChanged': case 'spellsChanged':
-    case 'marketChanged': case 'craftChanged': case 'tutorialChanged':
+    case 'marketChanged': case 'craftChanged': case 'tutorialChanged': case 'exchangeChanged':
       return null;
     default:
       return 'to' in e ? e.to : -1;
@@ -416,6 +433,13 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'marketBuy': if (typeof m.id === 'string' && num(m.qty)) game.marketBuy(pid, m.id.slice(0, 64), Math.floor(m.qty)); break;
     case 'marketCancel': if (typeof m.id === 'string') game.marketCancel(pid, m.id.slice(0, 64)); break;
     case 'marketClose': game.closeMarket(pid); break;
+    case 'exQuery': if (typeof m.item === 'string') game.exchange.query(pid, m.item.slice(0, 64)); break;
+    case 'exPlace':
+      if ((m.side === 'buy' || m.side === 'sell') && typeof m.item === 'string' && num(m.qty) && num(m.price)) game.exchange.place(pid, m.side, m.item.slice(0, 64), Math.floor(m.qty), Math.floor(m.price));
+      break;
+    case 'exCancel': if (typeof m.id === 'string') game.exchange.cancel(pid, m.id.slice(0, 64)); break;
+    case 'exCollect': game.exchange.collect(pid); break;
+    case 'exClose': game.exchange.close(pid); break;
     case 'craft': if (typeof m.recipe === 'string' && num(m.count)) game.commandCraft(pid, m.recipe.slice(0, 64), Math.floor(m.count)); break;
     case 'craftClose': game.closeCraft(pid); break;
     case 'cosmetics': game.setCosmetics(pid, { cloak: typeof m.cloak === 'boolean' ? m.cloak : undefined, title: typeof m.title === 'boolean' ? m.title : undefined }); break;
@@ -434,6 +458,8 @@ export interface MirrorExtras {
   trade: TradeView | null;
   market?: MarketView | null;
   craft?: CraftView | null;
+  /** The Gilded Exchange window (null = closed). */
+  exchange?: ExchangeView | null;
 }
 
 /** Cloak switch last applied from the server, per mirrored own session. */
@@ -672,6 +698,10 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
       extras.market = me.mk;
       s.marketOpen = me.mk ? { x: p.x, y: p.y, z: p.z } : null;
       ev.emit({ type: 'marketChanged', to: me.id });
+    }
+    if (me.ex !== undefined) {
+      extras.exchange = me.ex;
+      ev.emit({ type: 'exchangeChanged', to: me.id });
     }
   }
 }

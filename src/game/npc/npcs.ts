@@ -46,6 +46,8 @@ export interface NpcDef {
   thieve?: string;
   /** Slayer masters: their tier (trades/slayer.ts). */
   slayer?: number;
+  /** A clerk of the Gilded Exchange: offers "Trade on the Exchange" (exchange/ExchangeSystem.ts). */
+  exchange?: boolean;
 }
 
 const s = (id: string, price?: number): ShopEntry => ({ id, price: price ?? Math.max(1, Math.round(ITEMS[id].value * 2.5)) });
@@ -104,23 +106,23 @@ export const NPCS: Record<string, NpcDef> = {
   },
   // the Gilded Exchange (Grand Thornvale, on the island in the great fountain): four clerks behind the counters
   exchange_odile: {
-    key: 'exchange_odile', name: 'Clerk Odile', role: 'Exchange clerk', prop: 'ledger',
-    greeting: 'Welcome to the Gilded Exchange, {name}. Our ledgers open soon: come back to buy and sell with every hero of the realm.',
+    key: 'exchange_odile', name: 'Clerk Odile', role: 'Exchange clerk', prop: 'ledger', exchange: true,
+    greeting: 'Welcome to the Gilded Exchange, {name}. Here you buy and sell with every hero of the realm, even while they sleep.',
     look: { type: 'noble', head: 58, body: 125, legs: 107, feet: 99 },
   },
   exchange_benedek: {
-    key: 'exchange_benedek', name: 'Clerk Benedek', role: 'Exchange clerk', prop: 'ledger',
-    greeting: 'Welcome to the Gilded Exchange, {name}. Our ledgers open soon: come back to buy and sell with every hero of the realm.',
+    key: 'exchange_benedek', name: 'Clerk Benedek', role: 'Exchange clerk', prop: 'ledger', exchange: true,
+    greeting: 'Welcome to the Gilded Exchange, {name}. Here you buy and sell with every hero of the realm, even while they sleep.',
     look: { type: 'noble', head: 2, body: 46, legs: 107, feet: 99 },
   },
   exchange_sabine: {
-    key: 'exchange_sabine', name: 'Clerk Sabine', role: 'Exchange clerk', prop: 'ledger',
-    greeting: 'Welcome to the Gilded Exchange, {name}. Our ledgers open soon: come back to buy and sell with every hero of the realm.',
+    key: 'exchange_sabine', name: 'Clerk Sabine', role: 'Exchange clerk', prop: 'ledger', exchange: true,
+    greeting: 'Welcome to the Gilded Exchange, {name}. Here you buy and sell with every hero of the realm, even while they sleep.',
     look: { type: 'noble', head: 78, body: 31, legs: 107, feet: 99 },
   },
   exchange_wendel: {
-    key: 'exchange_wendel', name: 'Clerk Wendel', role: 'Exchange clerk', prop: 'ledger',
-    greeting: 'Welcome to the Gilded Exchange, {name}. Our ledgers open soon: come back to buy and sell with every hero of the realm.',
+    key: 'exchange_wendel', name: 'Clerk Wendel', role: 'Exchange clerk', prop: 'ledger', exchange: true,
+    greeting: 'Welcome to the Gilded Exchange, {name}. Here you buy and sell with every hero of the realm, even while they sleep.',
     look: { type: 'noble', head: 0, body: 62, legs: 107, feet: 99 },
   },
   elias: {

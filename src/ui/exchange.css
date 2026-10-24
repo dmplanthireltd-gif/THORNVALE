@@ -1,0 +1,68 @@
+/* ---------------------------------------------------------------- the Gilded Exchange (ui/exchangeUi.ts) */
+.exchange-win { width: min(760px, calc(100vw - var(--left) - var(--side) - 24px)); }
+.ex-body { gap: 8px; }
+.ex-top { display: flex; flex-wrap: wrap; gap: 6px; }
+.ex-chip {
+  font: 600 12px var(--pixel); color: var(--ink); padding: 3px 7px;
+  background: var(--slot); box-shadow: inset 2px 2px 0 #0d0b09, 0 0 0 1px #4a4034;
+  font-variant-numeric: tabular-nums;
+}
+.ex-cols { display: flex; gap: 8px; align-items: stretch; }
+.ex-col {
+  background: var(--panel); border: 1px solid #0d0b09; box-shadow: inset 0 0 0 1px #4a4034;
+  padding: 7px; display: flex; flex-direction: column; gap: 6px; min-width: 0;
+}
+.ex-left { flex: 0 0 230px; }
+.ex-right { flex: 1 1 auto; }
+.ex-orders { flex: 1 1 auto; }
+.ex-box { flex: 0 0 230px; }
+.ex-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.ex-list { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow-y: auto; }
+.ex-mine { max-height: 190px; }
+.ex-item {
+  display: flex; align-items: center; gap: 6px; padding: 2px 4px; text-align: left; cursor: pointer;
+  background: transparent; border: 1px solid transparent; color: var(--ink); font: 600 12px var(--pixel);
+}
+.ex-item:hover { background: #36302a; }
+.ex-item.on { background: #4f4126; border-color: var(--accent); color: #ffe9a8; }
+.ex-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-item-have { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ex-head { display: flex; align-items: center; gap: 8px; }
+.ex-head-info { display: flex; flex-direction: column; gap: 2px; }
+.ex-name { font: 700 17px var(--serif); color: var(--gold); }
+.ex-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.ex-stat { display: flex; flex-direction: column; gap: 1px; padding: 4px 6px; background: var(--slot); box-shadow: inset 0 0 0 1px #4a4034; }
+.ex-stat-label { font: 700 10px var(--pixel); letter-spacing: 0.12em; text-transform: uppercase; color: #d4ad55; }
+.ex-stat-value { font: 600 13px var(--pixel); color: var(--ink); font-variant-numeric: tabular-nums; }
+.ex-stat.bid .ex-stat-value, .ex-depth-col.bid .ex-depth-title { color: #8fd17a; }
+.ex-stat.ask .ex-stat-value, .ex-depth-col.ask .ex-depth-title { color: #ff9a7a; }
+.ex-chart { background: var(--slot); box-shadow: inset 2px 2px 0 #0d0b09, 0 0 0 1px #4a4034; padding: 4px; }
+.ex-spark { display: block; width: 100%; height: 64px; }
+.ex-spark polyline { fill: none; stroke: #c9a24a; stroke-width: 2; stroke-linejoin: round; }
+.ex-spark rect { fill: #e8c26a; }
+.ex-chart-legend { font: 600 11px var(--pixel); color: var(--muted); font-variant-numeric: tabular-nums; }
+.ex-depth { display: flex; gap: 6px; }
+.ex-depth-col { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.ex-depth-title { font: 700 10px var(--pixel); letter-spacing: 0.12em; text-transform: uppercase; }
+.ex-depth-row { display: flex; justify-content: space-between; font: 600 12px var(--pixel); font-variant-numeric: tabular-nums; padding: 1px 4px; background: rgba(0, 0, 0, 0.2); }
+.ex-depth-row .muted { color: var(--muted); }
+.ex-form { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: rgba(0, 0, 0, 0.2); box-shadow: inset 0 0 0 1px #4a4034; }
+.ex-summary { line-height: 1.4; }
+/* the one gold primary action of the window */
+.btn.ex-go {
+  background: linear-gradient(180deg, #f6dc8e, #e0b85a 45%, #b48a34); color: #1d1915; border-color: #0d0b09;
+  font: 700 14px var(--serif); font-variant: small-caps; letter-spacing: 0.04em;
+  box-shadow: inset 0 1px 0 #fff3c4, inset 0 -1px 0 #7a5a20, 0 6px 22px rgba(232, 194, 106, 0.25);
+}
+.btn.ex-go:hover:not(:disabled) { background: linear-gradient(180deg, #fbe6a6, #e8c26a 45%, #c09440); }
+.btn.ex-go:disabled { background: #3a332b; color: var(--muted); box-shadow: none; }
+.ex-order { display: flex; align-items: center; gap: 6px; padding: 3px 4px; background: rgba(0, 0, 0, 0.2); }
+.ex-order-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ex-side { flex: none; font: 700 10px var(--pixel); letter-spacing: 0.12em; padding: 2px 5px; border: 1px solid; }
+.ex-side.buy { color: #8fd17a; border-color: #3f7a3a; background: rgba(143, 209, 122, 0.12); }
+.ex-side.sell { color: #ff9a7a; border-color: #7a3a30; background: rgba(255, 154, 122, 0.12); }
+.ex-bar { height: 5px; background: #0c0a08; }
+.ex-bar-fill { height: 100%; background: var(--xp); box-shadow: inset 0 1px 0 #f0c850; }
+.ex-box-gold { font: 700 15px var(--serif); color: var(--gold); font-variant-numeric: tabular-nums; }
+.ex-box-grid { grid-template-columns: repeat(auto-fill, 50px); }
+@media (max-width: 900px) { .ex-cols { flex-direction: column; } .ex-left, .ex-box { flex: none; } }

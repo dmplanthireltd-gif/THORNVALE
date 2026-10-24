@@ -13,6 +13,7 @@ import { previewPlazaStyle } from './game/world/spawnPlaza';
 import { PetsView } from './render/PetsView';
 import { PetsUi } from './ui/petsUi';
 import { TradesUi } from './ui/tradesUi';
+import { ExchangeUi } from './ui/exchangeUi';
 import { initLang } from './ui/lang';
 import { t } from './i18n/i18n';
 
@@ -63,6 +64,8 @@ function run(container: HTMLElement, ctl: Controller, music: Music): void {
   const pets = new PetsView(renderer, ctl);
   const petsUi = new PetsUi(ctl, hud.root);
   const tradesUi = new TradesUi(ctl, hud.root);
+  // the Gilded Exchange window (opened by an Exchange clerk in Grand Thornvale)
+  const exchangeUi = new ExchangeUi(ctl, hud.root);
   new Input(ctl, renderer, hud);
   hud.applyStoredPixelSetting();
   const first = (() => {
@@ -92,6 +95,7 @@ function run(container: HTMLElement, ctl: Controller, music: Music): void {
     hud.update(dt);
     petsUi.update(dt);
     tradesUi.update(dt);
+    exchangeUi.update(dt);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
