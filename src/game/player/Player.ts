@@ -87,7 +87,7 @@ export class Player extends Creature {
   legacyOutfit: unknown = undefined;
   /** Test mode: takes no damage. Not saved. */
   god = false;
-  /** Arena bots (server/pvpBots.ts): monsters never pick them as a target. Not saved. */
+  /** Monsters never pick this player as a target (unused since the arena bots were removed 2026-10-24). Not saved. */
   ignoredByMonsters = false;
   /** Classic fight stance: how much you put into hitting versus covering yourself (melee and distance). */
   fightMode: FightMode = 'balanced';

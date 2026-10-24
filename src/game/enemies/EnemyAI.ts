@@ -25,7 +25,7 @@ function nearestPlayer(e: Enemy, ctx: AIContext, range: number): Player | null {
   let best: Player | null = null;
   let bestD = Infinity;
   for (const p of ctx.alivePlayers()) {
-    // invisible players (utana vid) cannot be seen by monsters; arena bots are left alone
+    // invisible players (utana vid) cannot be seen by monsters, nor anyone flagged ignoredByMonsters
     if (ctx.isProtected(p) || p.buffs.invisible > 0 || p.ignoredByMonsters) continue;
     const d = dist(e, p);
     if (d <= range && d < bestD && ctx.canSee(e, p)) {

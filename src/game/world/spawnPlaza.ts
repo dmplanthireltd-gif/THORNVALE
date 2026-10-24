@@ -310,7 +310,7 @@ export function buildSpawnPlaza(m: WorldMap, style: PlazaStyle = activePlazaStyl
   }
   m.setObj(C.board.x, C.board.y, Obj.MarketBoard);
   // the North Green behind the temple (its north doors open onto it): an open lawn
-  // where the test servers' arena bots fight (server/pvpBots.ts PVP_ARENA)
+  // open to real players (the arena bots that used to fight here were removed 2026-10-24)
   for (let y = NORTH_GREEN.y0; y <= NORTH_GREEN.y1; y++) for (let x = NORTH_GREEN.x0; x <= NORTH_GREEN.x1; x++) {
     const o = m.getObj(x, y);
     if (o === Obj.Pine || o === Obj.Tree || o === Obj.Bush || o === Obj.Rock) m.setObj(x, y, Obj.None);
