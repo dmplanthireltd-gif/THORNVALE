@@ -8,7 +8,7 @@ import { Ground, Obj } from '../game/world/WorldMap';
 import { Enemy } from '../game/enemies/Enemy';
 import { bodyFall, bodyOf, elementHit, footstep, impact, spellSweep, voice, type Body, type Cry, type Kit, type SpellElement } from './foley';
 import { Ambience } from './ambience';
-import { SOUNDS, type SoundName } from './sfxlib';
+import { SOUNDS, teleportHum, type SoundName } from './sfxlib';
 import { CombatBank } from './CombatBank';
 import {
   blockLayers, fallOf, flightTime, hitLayers, playerSurface, shieldMaterial, surfaceOf,
@@ -46,7 +46,7 @@ const SOUND_CAT: Partial<Record<SoundName, SfxCat>> = {
   bow: 'combat', crossbow: 'combat', throw: 'combat', die: 'combat', monsterDie: 'creatures',
   swingMagic: 'magic', fire: 'magic', energy: 'magic', ice: 'magic', earth: 'magic', death: 'magic', holy: 'magic',
   explosion: 'magic', boom: 'magic', roar: 'magic', thunder: 'magic', shatter: 'magic', quake: 'magic', implode: 'magic',
-  heal: 'magic', healBig: 'magic', mana: 'magic', buff: 'magic', shield: 'magic', spellCast: 'magic', teleport: 'magic', respawn: 'magic',
+  heal: 'magic', healBig: 'magic', mana: 'magic', buff: 'magic', shield: 'magic', spellCast: 'magic', teleport: 'magic', respawn: 'magic', teleportOut: 'magic', teleportIn: 'magic', teleportFizzle: 'magic',
   levelUp: 'ui', skillUp: 'ui', quest: 'ui', click: 'ui', uiOpen: 'ui', error: 'ui', chat: 'ui', crafted: 'ui',
 };
 
@@ -67,6 +67,10 @@ export class Sfx {
   private last = new Map<Sound, number>();
   private pulses = new Map<number, PeriodicWave>();
   private lastVoice = new Map<number, number>();
+  /** Teleport rune channels in progress: creature id → token of its hum (a new channel or a cancel stops the old one). */
+  private teleHum = new Map<number, number>();
+  /** Creatures whose next plain `teleport` event is a rune jump (already has its sounds). */
+  private runeJumps = new Set<number>();
   private steps = new Map<number, { x: number; y: number; z: number; alt: boolean }>();
   private ambience: Ambience | null = null;
   private myZ: number | null = null;
@@ -390,7 +394,42 @@ export class Sfx {
           } else if (v) this.play('monsterDie', v);
         }
         break;
+      case 'teleportCast': {
+        // the channel hum in one-second pieces, stopped when the channel breaks off
+        const token = (this.teleHum.get(e.id) ?? 0) + 1;
+        this.teleHum.set(e.id, token);
+        const n = Math.max(1, Math.round(e.dur));
+        for (let i = 0; i < n; i++) {
+          this.later(i * 1000, () => {
+            if (this.teleHum.get(e.id) !== token) return;
+            const v = e.id === me ? 0.8 : this.at(e.x, e.y, e.z) * 0.7;
+            if (v > 0) this.sound((k) => teleportHum(k, Math.min(2, i)), v, 0, 'magic');
+          });
+        }
+        break;
+      }
+      case 'teleportCancel': {
+        this.teleHum.delete(e.id);
+        const v = e.id === me ? 0.8 : this.at(e.x, e.y, e.z) * 0.7;
+        if (v > 0) this.play('teleportFizzle', v);
+        break;
+      }
+      case 'teleportDone': {
+        this.teleHum.delete(e.id);
+        this.runeJumps.add(e.id);
+        if (e.id === me) {
+          this.play('teleportOut', 0.8);
+          this.play('teleportIn', 0.9, 0.18);
+        } else {
+          const vo = this.at(e.fx, e.fy, e.fz), vi = this.at(e.x, e.y, e.z);
+          if (vo > 0) this.play('teleportOut', vo * 0.7);
+          if (vi > 0) this.play('teleportIn', vi * 0.8, 0.12);
+        }
+        break;
+      }
       case 'teleport': {
+        // a teleport rune's jump already has its own sounds (teleportDone)
+        if (this.runeJumps.delete(e.id)) break;
         if (e.id !== me) break;
         const p = this.ctl.game.getPlayer(me);
         if (p && this.myZ !== null && p.z !== this.myZ) {

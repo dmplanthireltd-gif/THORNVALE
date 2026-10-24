@@ -45,6 +45,8 @@ import { SILK_THRONE, STEPPE } from '../src/game/world/spiderSteppe';
 import { DEEPEN_REPORT, DEEPENED_FLOORS, UNDERGROUND_AREAS } from '../src/game/world/underground';
 import { TOWNS } from '../src/game/world/townList';
 import { WEB_SLOW } from '../src/game/Game';
+import { TELEPORT_RUNES } from '../src/game/magic/teleport';
+const townMageSells = (id: string): boolean => Object.values(NPCS).filter((n) => n.role === 'Magic, runes & potions').every((n) => !!n.sells?.some((e) => e.id === id));
 
 let failures = 0;
 function check(cond: unknown, label: string): void {
@@ -373,12 +375,15 @@ console.log('Spells update');
   });
   check(badGroup.length === 0, `spells use the right cooldown group${badGroup.length ? ` (${badGroup.join(' ')})` : ''}`);
   const runesConjured = new Set(all.map((id) => SPELLS[id].conjure).filter((c) => c?.from === 'blank_rune').map((c) => c!.item));
-  const runeItems = Object.values(ITEMS).filter((d) => d.rune).map((d) => d.id);
+  // teleport runes are bought ready-made only (magic/teleport.ts)
+  const runeItems = Object.values(ITEMS).filter((d) => d.rune && d.rune.type !== 'teleport').map((d) => d.id);
   const noSpell = runeItems.filter((id) => !runesConjured.has(id));
   check(noSpell.length === 0, `every rune in the game has a rune spell${noSpell.length ? ` (${noSpell.join(' ')})` : ''}`);
   const sold = new Set(Object.values(NPCS).flatMap((n) => (n.sells ?? []).map((e) => e.id)));
   const unsold = [...SPELL_RUNES, 'blank_rune'].filter((id) => !ITEMS[id] || !sold.has(id));
   check(unsold.length === 0, `blank runes and every new rune are sold by mage shops${unsold.length ? ` (${unsold.join(' ')})` : ''}`);
+  const teleUnsold = TELEPORT_RUNES.filter((id) => !ITEMS[id] || !sold.has(id) || !townMageSells(id));
+  check(TELEPORT_RUNES.length >= 15 && teleUnsold.length === 0, `every teleport rune (${TELEPORT_RUNES.length}) is sold by Mirella and the town mages${teleUnsold.length ? ` (${teleUnsold.join(' ')})` : ''}`);
   const townMage = Object.values(NPCS).find((n) => n.role === 'Magic, runes & potions' && n.key !== 'mirella');
   check(!!townMage?.sells?.some((e) => e.id === 'blank_rune'), `town mage shops sell blank runes (${townMage?.name})`);
 

@@ -32,6 +32,7 @@ import { Blood } from './Blood';
 import { CreatureGore, goreStain } from './fx/creatureGore';
 import { playSkillFx } from './skillFx';
 import { SkillAnimator } from './skillAnim';
+import { TeleportFx } from './fx/teleportFx';
 import { oreAt } from '../game/gathering/mining';
 import { stationAt } from '../game/production/recipes';
 import { Obj, WorldMap, type EnemyKind } from '../game/world/WorldMap';
@@ -96,6 +97,8 @@ export class Renderer {
   private gore: CreatureGore | null = null;
   /** Tools in hand and work loops for mining, woodcutting, fishing and production (skillAnim.ts). */
   private skillAnim!: SkillAnimator;
+  /** Teleport rune channel, departure and arrival (fx/teleportFx.ts). */
+  private teleFx!: TeleportFx;
   /** The underwater look of the Sunken Reach (sea/underwater.ts). */
   private underwater!: UnderwaterFx;
   private sky = new THREE.Color(0x2a4f6e);
@@ -161,6 +164,10 @@ export class Renderer {
     this.blood = new Blood(this.scene, (z) => this.worldView.floorOffset(z));
     if (PAINTED) this.gore = new CreatureGore(this.scene, this.blood);
     this.skillAnim = new SkillAnimator(this.scene, this.effects, { game: () => this.ctl.game, near: (x, y) => chebyshev(x, y, this.me.x, this.me.y) <= VIEW_RANGE + 2 });
+    this.teleFx = new TeleportFx(this.scene, this.effects, {
+      view: (id) => this.views.get(id), floorY: (z) => this.worldView.floorOffset(z), quality: () => this.graphics, localId: () => this.ctl.pid,
+      near: (x, y) => chebyshev(x, y, this.me.x, this.me.y) <= VIEW_RANGE + 2,
+    });
     this.underwater = new UnderwaterFx(this.scene, ctl.game.world, { hemi: this.hemi, sun: this.sun, torch: this.torch, background: this.scene.background as THREE.Color }, () => {
       this.lastPz = Number.NaN;
     });
@@ -498,6 +505,7 @@ export class Renderer {
     const v = this.views.get(id);
     if (!v) return;
     this.skillAnim.forget(id);
+    this.teleFx.forget(id);
     v.dispose();
     this.views.delete(id);
     this.overlay.removeLabel(id);
@@ -784,6 +792,7 @@ export class Renderer {
   private onEvent(e: GameEvent): void {
     const me = this.ctl.pid;
     if (e.type === 'mine' || e.type === 'chop' || e.type === 'fish' || e.type === 'craft') this.skillAnim.onEvent(e);
+    if (e.type === 'teleportCast' || e.type === 'teleportCancel' || e.type === 'teleportDone') this.teleFx.onEvent(e);
     switch (e.type) {
       case 'attack':
         this.visibleView(e.attackerId)?.onAttack();
@@ -917,15 +926,17 @@ export class Renderer {
         break;
       }
       case 'teleport': {
+        // a teleport rune's jump brings its own departure and arrival (fx/teleportFx.ts)
+        const rune = this.teleFx.consumeJump(e.id);
         if (e.id === me) {
           const p = this.me;
           this.cam.snapTo(p.x, p.y);
-          this.effects.ring(new THREE.Vector3(p.x, 0.05, p.y), 0xffffff, 0.2, 0.9, 0.5);
+          if (!rune) this.effects.ring(new THREE.Vector3(p.x, 0.05, p.y), 0xffffff, 0.2, 0.9, 0.5);
         }
         const v = this.views.get(e.id);
         if (v) {
           v.onRespawn();
-          this.effects.teleport(new THREE.Vector3(v.creature.x, v.yOffset, v.creature.y));
+          if (!rune) this.effects.teleport(new THREE.Vector3(v.creature.x, v.yOffset, v.creature.y));
         }
         break;
       }
@@ -1261,6 +1272,7 @@ export class Renderer {
       const rp = view.rig.root.position;
       view.setCastShadow(rp.x >= sx0 && rp.x <= sx1 && rp.z >= sz0 && rp.z <= sz1);
       this.skillAnim.apply(view, dt);
+      this.teleFx.apply(view, dt);
       if (this.underwater.active && c instanceof Player && !c.dead && c.z === pz) this.underwater.swim(view, c.id);
       if (c.dead || c.z !== pz) {
         this.overlay.setLabel(c.id, null, c.name, 0);
@@ -1280,6 +1292,7 @@ export class Renderer {
     for (const c of g.npcs) consider(c);
     for (const c of g.enemies) consider(c);
     this.skillAnim.frame(dt);
+    this.teleFx.frame(dt);
 
     this.updateFieldMeshes(dt);
 

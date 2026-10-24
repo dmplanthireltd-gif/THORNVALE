@@ -589,6 +589,7 @@ export const UI: Table = {
   "cures poison": ["leczy truciznę", "cura veneno"],
   "slows a monster for {s} s": ["spowalnia potwora na {s} s", "deixa um monstro lento por {s} s"],
   "removes a magic field": ["usuwa magiczne pole", "remove um campo mágico"],
+  "teleports you to {place}": ["teleportuje cię: {place}", "teleporta você para {place}"],
   "3×3 magic wall, {s} s": ["magiczna ściana 3×3, {s} s", "parede mágica 3×3, {s} s"],
   "5-tile magic wall, {s} s": ["magiczna ściana na 5 pól, {s} s", "parede mágica de 5 quadrados, {s} s"],
   "a magic wall, {s} s": ["magiczna ściana, {s} s", "parede mágica, {s} s"],

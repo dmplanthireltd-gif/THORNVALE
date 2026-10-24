@@ -15,6 +15,7 @@ export type SoundName =
   | 'fire' | 'energy' | 'ice' | 'earth' | 'death' | 'holy' | 'explosion'
   | 'boom' | 'thunder' | 'shatter' | 'implode' | 'roar' | 'quake' | 'healBig'
   | 'heal' | 'mana' | 'buff' | 'shield' | 'spellCast' | 'teleport' | 'respawn'
+  | 'teleportOut' | 'teleportIn' | 'teleportFizzle'
   // progress
   | 'levelUp' | 'skillUp' | 'quest' | 'die' | 'monsterDie'
   // items
@@ -207,6 +208,29 @@ export const SOUNDS: Record<SoundName, Recipe> = {
     k.noise('bandpass', 500, 5000, k.t, 0.4, 0.12, 3, 0.05);
     bell(k, 1568, k.t + 0.35, 0.4, 0.06);
   },
+  // teleport runes (render/fx/teleportFx.ts): the channel hum is `teleportHum` below
+  teleportOut: (k) => {
+    // the column collapses: a deep suck of air, a falling sweep and a glassy chord
+    k.noise('bandpass', 3200, 300, k.t, 0.5, 0.2, 2, 0.02);
+    k.tone('sine', 520, 70, k.t, 0.55, 0.2, 0.01);
+    k.tone('triangle', 1040, 260, k.t + 0.05, 0.4, 0.06, 0.01);
+    bell(k, 784, k.t + 0.08, 0.7, 0.05);
+    bell(k, 1175, k.t + 0.1, 0.6, 0.035);
+  },
+  teleportIn: (k) => {
+    // arrival: a soft thump of displaced air, a bright rising shimmer and two bells
+    k.tone('sine', 90, 45, k.t, 0.3, 0.3, 0.004);
+    k.noise('lowpass', 1800, 200, k.t, 0.25, 0.25, 1, 0.003);
+    k.noise('highpass', 5000, 9000, k.t + 0.02, 0.6, 0.06, 0.8, 0.05);
+    k.tone('sine', 400, 1200, k.t, 0.35, 0.08, 0.02);
+    bell(k, 1047, k.t + 0.12, 0.9, 0.06);
+    bell(k, 1568, k.t + 0.22, 0.8, 0.045);
+  },
+  teleportFizzle: (k) => {
+    k.noise('bandpass', 2400, 600, k.t, 0.3, 0.12, 3, 0.01);
+    k.tone('sine', 660, 180, k.t, 0.28, 0.07, 0.01);
+    k.pulse(0.2, 300, 120, k.t + 0.05, 0.16, 0.025);
+  },
   respawn: (k) => {
     [262, 330, 392, 523].forEach((f) => k.tone('sine', f, f, k.t, 1.2, 0.07, 0.4));
     k.noise('highpass', 6000, 9000, k.t + 0.2, 0.9, 0.04, 0.7, 0.4);
@@ -374,3 +398,16 @@ export const SOUNDS: Record<SoundName, Recipe> = {
   },
   chat: (k) => k.tone('sine', 880, 990, k.t, 0.05, 0.05, 0.005),
 };
+
+/**
+ * One second of a teleport rune's channel (`step` 0, 1, 2): a low drone and an airy swirl
+ * that rise a little each second, with a chime on the beat. Played in one-second pieces so
+ * a broken channel can simply stop.
+ */
+export function teleportHum(k: Kit, step: number): void {
+  const up = 1 + step * 0.26;
+  k.tone('sine', 110 * up, 124 * up, k.t, 1.05, 0.09, 0.15);
+  k.tone('triangle', 220 * up, 250 * up, k.t, 1.05, 0.035, 0.2);
+  k.noise('bandpass', 700 * up, 2400 * up, k.t, 1.05, 0.05, 6, 0.3);
+  bell(k, [659, 784, 988][step] ?? 988, k.t + 0.02, 0.8, 0.03);
+}

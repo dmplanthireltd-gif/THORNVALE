@@ -5,6 +5,7 @@ import { CUT_GEMS } from '../production/crafting';
 import { RAW_FOOD_ITEMS } from '../production/cooking';
 import { SET_BUYS, SET_SELLS } from '../inventory/sets';
 import type { SpellId } from '../magic/spells';
+import { TELEPORT_RUNES } from '../magic/teleport';
 import type { ShopEntry } from './npcs';
 
 /**
@@ -66,6 +67,8 @@ export const EXTRA_SELLS: Record<string, ShopEntry[]> = {
     s('berserk_potion', 400), s('bullseye_potion', 400), s('mastermind_potion', 600), s('glacier_robe', 9500), s('frost_circlet', 6000),
     // spells update: blank runes for rune spells, and every new rune ready-made
     s('blank_rune', 10), ...SPELL_RUNES.map((id) => s(id)),
+    // teleport runes to every town temple and the big hunting hubs (magic/teleport.ts); every town mage copies this list
+    ...TELEPORT_RUNES.map((id) => s(id)),
     // death protection
     s('hearthward_amulet', 10000),
   ],

@@ -1,4 +1,5 @@
 import type { ItemDef } from '../game/inventory/items';
+import { TELEPORT_DESTS, teleportRuneId } from '../game/magic/teleport';
 
 /**
  * Rune icons: small flat river-stone tablets with one carved glyph whose
@@ -18,6 +19,8 @@ export const RUNE_LABEL: Record<string, string> = {
   stormcloud_rune: 'STRM', blast_rune: 'BLST', sunlance_rune: 'SUN', soothing_rune: 'HEAL', antidote_rune: 'CURE', snare_rune: 'SNAR',
   flame_field_rune: 'FF', static_field_rune: 'EF', venom_field_rune: 'PF', firebloom_rune: 'FB', stormbloom_rune: 'EB', venombloom_rune: 'PB',
   flame_barrier_rune: 'FW', static_barrier_rune: 'EW', venom_barrier_rune: 'PW', arcane_wall_rune: 'MW', dispel_rune: 'DISP',
+  // teleport runes: the destination's short name (magic/teleport.ts)
+  ...Object.fromEntries(TELEPORT_DESTS.map((d) => [teleportRuneId(d.key), d.label])),
 };
 
 interface Look {
@@ -43,6 +46,8 @@ const LOOKS: Record<string, Look> = {
   arcane: { stone: '#464c5e', glow: '#5aa0ff', core: '#e6f2ff', groove: '#04122e' },
   snare: { stone: '#48445a', glow: '#c8a8ff', core: '#f8f2ff', groove: '#140a2a' },
   dispel: { stone: '#545862', glow: '#c8d4ee', core: '#ffffff', groove: '#10141e' },
+  // teleport runes: sea-green waystone light (the same colour as the teleport effect, render/fx/teleportFx.ts)
+  travel: { stone: '#434c4a', glow: '#4fe0c8', core: '#effff9', groove: '#032420' },
 };
 
 function lookOf(d: ItemDef): Look {
@@ -52,6 +57,7 @@ function lookOf(d: ItemDef): Look {
   if (r.type === 'heal' || r.type === 'cure') return LOOKS.heal;
   if (r.type === 'paralyze') return LOOKS.snare;
   if (r.type === 'destroyField') return LOOKS.dispel;
+  if (r.type === 'teleport') return LOOKS.travel;
   return LOOKS[r.element ?? 'physical'] ?? LOOKS.physical;
 }
 
@@ -461,6 +467,10 @@ function buildGlyph(x: Ctx, d: ItemDef): boolean {
   if (own) { own(x, d); return true; }
   const r = d.rune;
   if (!r) return false;
+  if (r.type === 'teleport') {
+    waystoneGlyph(x);
+    return true;
+  }
   if (r.type === 'field') {
     const m = fieldMark(d);
     if (r.shape === 'bomb') bloomGlyph(x, m);
@@ -474,6 +484,27 @@ function buildGlyph(x: Ctx, d: ItemDef): boolean {
   else if (r.element === 'earth') drop(x, 16, 12.4, 7);
   else ring(x, CX, CY, 7);
   return true;
+}
+
+/** Teleport runes: a gate ring open at the top, a spiral drawing inward and a rising chevron. */
+function waystoneGlyph(x: Ctx): void {
+  // the ring, broken at the top where the traveller leaves
+  x.moveTo(CX + Math.cos(-Math.PI / 2 + 0.55) * 7.6, CY + Math.sin(-Math.PI / 2 + 0.55) * 7.6);
+  x.arc(CX, CY, 7.6, -Math.PI / 2 + 0.55, -Math.PI / 2 - 0.55 + Math.PI * 2);
+  // spiral (1.4 turns) toward the centre
+  const turns = 1.4, steps = 26;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const a = Math.PI / 2 + t * turns * Math.PI * 2;
+    const r = 5 * (1 - t) + 0.6;
+    const px = CX + Math.cos(a) * r, py = CY + Math.sin(a) * r;
+    if (i === 0) x.moveTo(px, py);
+    else x.lineTo(px, py);
+  }
+  // chevron rising out of the gap
+  x.moveTo(CX - 2.6, CY - 6.4);
+  x.lineTo(CX, CY - 9);
+  x.lineTo(CX + 2.6, CY - 6.4);
 }
 
 /** Strokes the current glyph path as a glowing carved groove. */

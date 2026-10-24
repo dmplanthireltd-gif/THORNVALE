@@ -3,6 +3,7 @@ import { bonusParts, PIECE_SET, SET_BY_ID, SET_ITEM_SPECS, setSummary } from './
 import { CAPE_BY_ID, CAPE_ITEM_SPECS, capeSummary } from './capes';
 import { PET_ITEM_SPECS, petForItem } from '../pets/petDefs';
 import { SEA_ITEM_SPECS, SEA_UNIQUES } from './seaItems';
+import { TELEPORT_BY_KEY, TELEPORT_DESTS, teleportRuneId } from '../magic/teleport';
 
 export type ItemKind =
   | 'gold' | 'consumable' | 'rune' | 'tool' | 'material'
@@ -50,9 +51,10 @@ export type FieldKind = 'fire' | 'energy' | 'poison' | 'wall';
 export interface RuneEffect {
   /**
    * damage/heal: hits or heals; field: lays fields on the ground; destroyField: removes them;
-   * paralyze: slows a monster; cure: cures poison.
+   * paralyze: slows a monster; cure: cures poison; teleport: channels, then moves you to `dest`
+   * (magic/teleport.ts).
    */
-  type: 'damage' | 'heal' | 'field' | 'destroyField' | 'paralyze' | 'cure';
+  type: 'damage' | 'heal' | 'field' | 'destroyField' | 'paralyze' | 'cure' | 'teleport';
   element?: Element;
   /** 0 = single target, otherwise area radius around the target tile. */
   radius: number;
@@ -65,18 +67,20 @@ export interface RuneEffect {
   shape?: 'tile' | 'bomb' | 'wall';
   /** Field lifetime or paralysis, seconds. */
   duration?: number;
+  /** Teleport runes: destination key in magic/teleport.ts TELEPORT_DESTS. */
+  dest?: string;
 }
 
 /** Exhaustion group a rune shares (see magic/spells GROUP_COOLDOWN). */
 export function runeGroup(r: RuneEffect): 'attack' | 'heal' | 'support' {
   if (r.type === 'heal' || r.type === 'cure') return 'heal';
-  if (r.type === 'destroyField') return 'support';
+  if (r.type === 'destroyField' || r.type === 'teleport') return 'support';
   return 'attack';
 }
 
 /** Runes thrown with the crosshair (everything but self-use healing and curing). */
 export function runeIsAimed(r: RuneEffect): boolean {
-  return r.type !== 'heal' && r.type !== 'cure';
+  return r.type !== 'heal' && r.type !== 'cure' && r.type !== 'teleport';
 }
 
 export interface ItemDef {
@@ -210,6 +214,11 @@ const defs: ItemDef[] = [
   def({ id: 'static_barrier_rune', name: 'Static Barrier Rune', kind: 'rune', weight: 0.7, value: 22, level: 41, tint: '#c890ff', icon: '☰', rune: { type: 'field', field: 'energy', shape: 'wall', element: 'energy', radius: 2, min: 0, max: 0, perLevel: 0, range: 6, duration: 30 }, rarity: 'uncommon' }),
   def({ id: 'venom_barrier_rune', name: 'Venom Barrier Rune', kind: 'rune', weight: 0.7, value: 15, level: 29, tint: '#6ad040', icon: '☰', rune: { type: 'field', field: 'poison', shape: 'wall', element: 'earth', radius: 2, min: 0, max: 0, perLevel: 0, range: 6, duration: 60 }, rarity: 'uncommon' }),
   def({ id: 'arcane_wall_rune', name: 'Magic Wall Rune', kind: 'rune', weight: 0.7, value: 40, level: 32, tint: '#7fb2ff', icon: '▣', rune: { type: 'field', field: 'wall', shape: 'tile', radius: 0, min: 0, max: 0, perLevel: 0, range: 6, duration: 20 }, rarity: 'rare' }),
+  // teleport runes (magic/teleport.ts): one per town temple and hunting hub, sold by every magic shop
+  ...TELEPORT_DESTS.map((t) => def({
+    id: teleportRuneId(t.key), name: `Teleport Rune (${t.name})`, kind: 'rune', weight: 0.7, value: t.value, level: t.level > 1 ? t.level : undefined,
+    tint: '#4fe0c8', icon: '⌖', rune: { type: 'teleport', dest: t.key, radius: 0, min: 0, max: 0, perLevel: 0, range: 0 }, rarity: t.town ? 'common' : 'uncommon', note: t.note,
+  })),
   def({ id: 'dispel_rune', name: 'Dispel Rune', kind: 'rune', weight: 0.7, value: 5, level: 17, tint: '#d8d8e8', icon: '⊘', rune: { type: 'destroyField', radius: 0, min: 0, max: 0, perLevel: 0, range: 6 } }),
 
   // --- tools -----------------------------------------------------------------------
@@ -576,6 +585,7 @@ function runeSummary(r: RuneEffect): string {
     case 'cure': return 'cures poison';
     case 'paralyze': return `slows a monster for ${r.duration ?? 10} s`;
     case 'destroyField': return 'removes a magic field';
+    case 'teleport': return `teleports you to ${TELEPORT_BY_KEY[r.dest ?? '']?.name ?? '?'}`;
     case 'field': {
       const what = r.field === 'wall' ? 'a magic wall' : `${r.field} field${r.shape === 'tile' ? '' : 's'}`;
       return `${r.shape === 'bomb' ? '3×3 ' : r.shape === 'wall' ? '5-tile wall of ' : ''}${what}, ${r.duration ?? 30} s`;

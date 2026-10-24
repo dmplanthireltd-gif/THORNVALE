@@ -58,6 +58,10 @@ import {
   tutorialChestItems, tutorialStep, type TutorialState,
 } from './tutorial/tutorial';
 import { ISLE_CAPTAIN, ISLE_CHEST, ISLE_DEST, ISLE_REST, ISLE_TRADER, onIsle } from './world/tutorialIsle';
+import {
+  TELEPORT_BY_KEY, TELEPORT_CANCEL_TEXT, TELEPORT_CAST_SECONDS, TELEPORT_COMBAT_SECONDS, TELEPORT_COOLDOWN_SECONDS, TELEPORT_NEAR_TILES,
+  teleportForbiddenRegion, teleportTarget, type TeleportCancel, type TeleportCast,
+} from './magic/teleport';
 import { FLOOR_MAX, FLOOR_MIN, Ground, Obj, WorldMap, type EnemyKind } from './world/WorldMap';
 
 /** Source of directional input. Keeps the simulation free of DOM concerns. */
@@ -176,6 +180,10 @@ export interface Session {
   gathering: Record<NonCombatSkill, number>;
   /** Production station window in use (furnace, anvil), if any. */
   craftOpen: { station: Station; x: number; y: number; z: number } | null;
+  /** Teleport rune being channelled (magic/teleport.ts; never saved). */
+  teleport?: (TeleportCast & { age: number; hp: number }) | null;
+  /** Game time when the next teleport rune may be used (never saved). */
+  teleportReady?: number;
   /** Market board the player is using, if any. */
   marketOpen: { x: number; y: number; z: number } | null;
   /** Ids of market deliveries this character already received (saved; makes hand-outs idempotent). */
@@ -955,6 +963,7 @@ export class Game implements AIContext {
     }
     for (const k of Object.keys(p.spellCooldowns)) p.spellCooldowns[k] -= dt;
     for (const g of ['attack', 'heal', 'support', 'potion'] as const) p.groupCooldowns[g] = Math.max(0, p.groupCooldowns[g] - dt);
+    if (s.teleport) this.tickTeleport(s, dt);
     if (p.webbed > 0) {
       p.webbed = Math.max(0, p.webbed - dt);
       if (p.webbed === 0) {
@@ -2909,6 +2918,7 @@ export class Game implements AIContext {
     p.fromX = p.x;
     p.fromY = p.y;
     p.respawnTimer = 4;
+    if (s?.teleport) this.cancelTeleport(s, 'died');
     this.closeDialogue(p.id);
     if (s?.depotOpen) this.closeDepot(s.id);
     this.cancelTrade(p.id, 'died');
@@ -3533,6 +3543,7 @@ export class Game implements AIContext {
     if (!r) return;
     if (d.level && p.level < d.level) return this.msg(pid, `You need level ${d.level} to use this rune.`, 'warn');
     if (d.vocations && !d.vocations.includes(p.vocation)) return this.msg(pid, `${VOCATIONS[p.vocation].name}s cannot use this rune.`, 'warn');
+    if (r.type === 'teleport') return this.startTeleport(s, st.id, r.dest ?? '');
     const grp = runeGroup(r);
     if (p.groupCooldowns[grp] > 0) return this.msg(pid, 'You are exhausted.', 'warn');
     const voc = VOCATIONS[p.vocation];
@@ -3657,6 +3668,74 @@ export class Game implements AIContext {
     }
     s.inventory.removeFromSlot(slot, 1);
     this.events.emit({ type: 'inventoryChanged', to: pid });
+  }
+
+  // ---------------------------------------------------------------- teleport runes (magic/teleport.ts)
+
+  /** Why this player cannot start a teleport to `key` right now, or null. */
+  teleportProblem(s: Session, key: string): string | null {
+    const p = s.player;
+    const dest = TELEPORT_BY_KEY[key];
+    const to = dest ? teleportTarget(this.world, dest) : null;
+    if (!dest || !to) return 'This rune has lost its way.';
+    if (p.dead) return 'You are dead.';
+    if (s.teleport) return 'You are already channelling a teleport.';
+    if (teleportForbiddenRegion(this.world.regionAt(p.x, p.y, p.z)?.name) || onIsle(p.x, p.y, p.z)) return 'Teleport magic does not work here.';
+    if (p.pzLock > 0) return 'You cannot teleport while you are PZ-locked.';
+    if (p.sinceCombat < TELEPORT_COMBAT_SECONDS) return 'You cannot teleport during a fight.';
+    if ((s.teleportReady ?? 0) > this.time) return `The waystones need rest. Try again in ${Math.ceil((s.teleportReady ?? 0) - this.time)} s.`;
+    if (p.moving) return 'Stand still to channel a teleport.';
+    if (p.z === to.z && chebyshev(p.x, p.y, to.x, to.y) <= TELEPORT_NEAR_TILES) return `You are already at ${dest.name}.`;
+    if (!this.isPremium(s) && this.premiumLand(to.x, to.y)) return `${dest.name} lies beyond the heartland. Only premium adventurers may teleport there.`;
+    return null;
+  }
+
+  /** Starts channelling a teleport rune; the rune is used up when the jump happens. */
+  private startTeleport(s: Session, item: string, key: string): void {
+    const p = s.player;
+    const why = this.teleportProblem(s, key);
+    if (why) return this.msg(s.id, why, 'warn');
+    s.teleport = { dest: key, item, left: TELEPORT_CAST_SECONDS, x: p.x, y: p.y, z: p.z, age: 0, hp: p.hp };
+    p.path = [];
+    p.pending = null;
+    stopWork(p);
+    this.events.emit({ type: 'teleportCast', id: p.id, x: p.x, y: p.y, z: p.z, dest: key, dur: TELEPORT_CAST_SECONDS });
+    this.msg(s.id, `You channel the rune. Hold still... (${TELEPORT_BY_KEY[key].name})`, 'info');
+  }
+
+  /** Breaks off a channel (the rune is kept). */
+  cancelTeleport(s: Session, why: TeleportCancel): void {
+    const c = s.teleport;
+    if (!c) return;
+    s.teleport = null;
+    this.events.emit({ type: 'teleportCancel', id: s.player.id, x: c.x, y: c.y, z: c.z });
+    if (why !== 'died') this.msg(s.id, TELEPORT_CANCEL_TEXT[why], 'warn');
+  }
+
+  private tickTeleport(s: Session, dt: number): void {
+    const c = s.teleport!;
+    const p = s.player;
+    c.age += dt;
+    if (p.moving || p.x !== c.x || p.y !== c.y || p.z !== c.z) return this.cancelTeleport(s, 'moved');
+    if (p.hp < c.hp) return this.cancelTeleport(s, 'hurt');
+    c.hp = p.hp;
+    if (p.sinceCombat < c.age || p.pzLock > 0) return this.cancelTeleport(s, 'fight');
+    c.left -= dt;
+    if (c.left > 0) return;
+    const slot = s.inventory.slots.findIndex((st) => st?.id === c.item);
+    const dest = TELEPORT_BY_KEY[c.dest];
+    const to = dest ? teleportTarget(this.world, dest) : null;
+    if (slot < 0 || !to) return this.cancelTeleport(s, 'gone');
+    s.teleport = null;
+    s.inventory.removeFromSlot(slot, 1);
+    this.events.emit({ type: 'inventoryChanged', to: s.id });
+    s.teleportReady = this.time + TELEPORT_COOLDOWN_SECONDS;
+    // the event goes first so views play the rune's own departure and arrival instead of the plain stairs flash
+    const at = this.freeTileNear(to.x, to.y, to.z);
+    this.events.emit({ type: 'teleportDone', id: p.id, fx: c.x, fy: c.y, fz: c.z, x: at.x, y: at.y, z: at.z, dest: c.dest });
+    this.teleport(p, at.x, at.y, at.z);
+    this.msg(s.id, `You step out at ${dest.name}.`, 'info');
+    s.wantsSave = true;
   }
 
   /** Local chat. Saying a spell's words casts it, the classic way. */

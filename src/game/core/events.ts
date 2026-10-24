@@ -36,6 +36,12 @@ export type GameEvent =
    */
   | { type: 'announce'; title: string; text: string; style: 'worldboss' | 'raid' | 'boss'; big: boolean }
   | { type: 'teleport'; id: number }
+  /** A teleport rune channel began (magic/teleport.ts): `dur` seconds on tile x, y, z; protocol 29. */
+  | { type: 'teleportCast'; id: number; x: number; y: number; z: number; dest: string; dur: number }
+  /** A channel broke off (moved, hurt, fight, died); the rune was kept. */
+  | { type: 'teleportCancel'; id: number; x: number; y: number; z: number }
+  /** A channel finished: from fx, fy, fz to x, y, z (sent just before the `teleport` event of the jump). */
+  | { type: 'teleportDone'; id: number; fx: number; fy: number; fz: number; x: number; y: number; z: number; dest: string }
   /** Experience gained; `skill` names a gathering skill (otherwise character experience). */
   | { type: 'xp'; amount: number; atId: number; to: number; skill?: string }
   /** A player swings an axe at a tree; `got` = a log came loose, `felled` = the tree fell. */

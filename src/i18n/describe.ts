@@ -6,6 +6,7 @@ import type { Bonus, ItemDef, RuneEffect } from '../game/inventory/items';
 import { CAPE_BY_ID, CAPE_TRAINING_BONUS, TRADE_CAPE_LEVEL } from '../game/inventory/capes';
 import { SET_BY_ID, type GearSet } from '../game/inventory/sets';
 import { petForItem } from '../game/pets/petDefs';
+import { TELEPORT_BY_KEY } from '../game/magic/teleport';
 import { SKILL_NAMES } from '../game/player/skills';
 import { VOCATIONS } from '../game/player/vocations';
 import { fmtNum, getLang, k, t } from './i18n';
@@ -58,6 +59,7 @@ function runeSummaryL(r: RuneEffect): string {
     case 'cure': return t('cures poison');
     case 'paralyze': return t('slows a monster for {s} s', { s: r.duration ?? 10 });
     case 'destroyField': return t('removes a magic field');
+    case 'teleport': return t('teleports you to {place}', { place: trName(TELEPORT_BY_KEY[r.dest ?? '']?.name ?? '?') });
     case 'field': {
       const secs = r.duration ?? 30;
       if (r.field === 'wall') return t(r.shape === 'bomb' ? '3×3 magic wall, {s} s' : r.shape === 'wall' ? '5-tile magic wall, {s} s' : 'a magic wall, {s} s', { s: secs });

@@ -32,7 +32,7 @@ const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 28;
+export const PROTOCOL_VERSION = 29;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
