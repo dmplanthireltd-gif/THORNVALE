@@ -1153,6 +1153,7 @@ function storyStep() { return (V.story && V.story[0]) | 0; }
 function storyAct(act, peer) {
   // host only
   const st = G.st;
+  if (/^r[0-2]$/.test(act)) { const i = +act[1]; if (!((G.radios | 0) >> i & 1)) { G.radios = (G.radios | 0) | (1 << i); let n = 0; for (let b = 0; b < 3; b++) n += G.radios >> b & 1; pushEv(['ra', i, peer, n]); } return; }
   if (act === 'j' && st.step === 0) { st.step = 1; pushEv(['sy', 1, peer]); }
   else if (act === 'g' && st.step === 2) { st.step = 3; st.charge = 0; pushEv(['sy', 3, peer]); }
   else if (act === 's' && st.step === 4) { st.step = 5; pushEv(['sy', 5, peer]); }
@@ -2765,7 +2766,7 @@ function hostReset() {
   sim.length = 0; G.ev = []; G.drops = []; G.insta = 0; G.dbl = 0; G.doors = 0; G.lastHit = {}; G.lastRep = {}; G.lastPick = {};
   G.ep = (G.ep || 0) + 1; G.nextZid = G.ep * 10000 + 1;
   WINS.forEach(w => { w.count = 6; });
-  G.st = { step: 0, tags: 0, charge: 0, tagCd: 15 }; G.lastSa = {};
+  G.st = { step: 0, tags: 0, charge: 0, tagCd: 15 }; G.lastSa = {}; G.radios = 0;
   startRound(1);
 }
 function activeWins() { return WINS.filter(w => w.room === 0 || (w.room === 1 && (G.doors & 1)) || (w.room === 2 && (G.doors & 2))); }
@@ -3016,6 +3017,7 @@ function handleEvent(e) {
   }
   else if (t === 'o') { gameOver(e[2]); }
   else if (t === 'sy') storyEvent(e);
+  else if (t === 'ra') radioEvent(e);
   else if (t === 'bs') { if (e[2] === 1) { banner('Deadlock is coming', 'Kill him before the track ends you', 3400); SND.alarm(); setTimeout(() => SND.roar(null), 900); if (!(SONG_EL.radio && !SONG_EL.radio.paused)) { MUS.vol = 0; playSong('deadlock', () => { MUS.vol = OPT.music; }); } } else { banner('Deadlock is enraged', '', 2000); SND.roar(null); } }
   else if (t === 'bd') { banner('Deadlock is dead', e[2] === myPeer ? '+1000 points' : peerName(e[2]) + ' got the kill', 3000, true); if (e[2] === myPeer) addPts(1000); SND.power(); stopSong('deadlock', true); setTimeout(() => { MUS.vol = OPT.music; }, 2100); }
   else if (t === 'sl') {
@@ -3338,11 +3340,13 @@ function playSong(k, onFail, onEnd) {
 }
 function stopSong(k, fade) { const el = SONG_EL[k]; if (!el || el.paused) return; if (!fade) { el.pause(); return; } const v0 = el.volume; let n = 0; const iv = setInterval(() => { n++; el.volume = Math.max(0, v0 * (1 - n / 20)); if (n >= 20) { clearInterval(iv); el.pause(); el.volume = v0; } }, 100); }
 let musDuck = 0;
-function tuneRadio(i) {
-  const R = RADIOS[i]; if (!R || R.on) return;
+// radios are shared: whoever tunes one tells the host, the host tells everyone (event 'ra' = [_, 'ra', radio, peer, count])
+function tuneRadio(i) { const R = RADIOS[i]; if (!R || R.on) return; requestStory('r' + i); }
+function radioEvent(e) {
+  const i = e[2] | 0, R = RADIOS[i], n = e[4] | 0; if (!R || R.on) return;
   R.on = true; R.dm.color.setRGB(0.4, 2.6, 0.6); playB('radio', { x: R.x, y: R.y + 0.2, z: R.z }, 0.9, 0.3);
-  const n = RADIOS.filter(q => q.on).length;
-  if (n < 3) { banner(n + ' / 3', 'Something is playing far away…', 1800, true); return; }
+  const who = e[3] === myPeer ? 'You tuned it in' : peerName(e[3]) + ' tuned one in';
+  if (n < 3) { banner(n + ' / 3', who + ' · something is playing far away…', 2200, true); return; }
   banner('♪', 'The bunker remembers', 3000, true);
   try {
     MUS.vol = 0; const back = () => { MUS.vol = OPT.music; };
