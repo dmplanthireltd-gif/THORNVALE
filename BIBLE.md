@@ -460,6 +460,27 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - Proper names stay (Thornvale, Mirella, Hearthward…); spell words (exura, exori…) are never translated. NPCs also answer typed keywords in all three languages (src/game/npc/keywords.ts: hi/cześć/oi, trade/handel/negociar, yes/tak/sim, bye, bank, spells, work/quest, deposit, help…).
 - Choice: title strip buttons EN / PL / PT-BR and Settings → Language; remembered as `localStorage['thornvale.lang']`; first visit follows the browser language. Switching relabels the screen at once (no reload).
 - **Test:** `npm run test:i18n` (also in test:logic) fails on any UI string, content string (from `scripts/i18n/dump-content.ts`) or game message (`scripts/i18n/extract.ts`) without both translations, on wrong placeholders or plural forms. Fragments glued into longer messages are listed in `scripts/i18n/skip.ts`. `npx tsx scripts/i18n-test.ts --list` prints what is missing, ready to fill in.
+- **Glossary (native proofreading 2026-10-24; use these words in new strings):**
+
+  | English | Polski | Português (BR) |
+  |---|---|---|
+  | Knight / Paladin / Sorcerer / Druid | Rycerz / Paladyn / Czarnoksiężnik / Druid | Cavaleiro / Paladino / Feiticeiro / Druida |
+  | Fist / Club / Sword / Axe / Distance Fighting | Walka pięściami / obuchem / mieczem / toporem / dystansowa | Luta com Punhos / com Clava / com Espada / com Machado / à Distância |
+  | Shielding · Magic Level | Obrona tarczą · Poziom magii | Defesa com Escudo · Nível Mágico |
+  | Woodcutting · Fishing · Mining · Blacksmithing | Drwalnictwo · Wędkarstwo · Górnictwo · Kowalstwo | Corte de Lenha · Pesca · Mineração · Ferraria |
+  | Fletching · Crafting · Cooking · Firemaking | Łuczarstwo · Rzemiosło · Gotowanie · Rozpalanie ognia | Flecharia · Artesanato · Culinária · Arte do Fogo |
+  | Agility · Herblore · Thieving · Farming | Zręczność · Zielarstwo · Złodziejstwo · Rolnictwo | Agilidade · Herbalismo · Furto · Agricultura |
+  | Hunter · Slayer · Sailing | Łowiectwo · Pogromca (zadanie/punkty/mistrz pogromcy) · Żeglarstwo | Caça · Extermínio (tarefa/pontos/mestre do extermínio; a slayer = exterminador) · Navegação |
+  | realm · hero · vocation · wanderers | kraina · bohater · profesja · wędrowcy | reino · herói · vocação · andarilhos |
+  | depot · bank · Exchange · collect box · escrow | depozyt · bank · Złota Giełda · skrzynka odbioru · zablokowane na Giełdzie | depósito · banco · Bolsa Dourada · caixa de coleta · custódia |
+  | quest · loot · spell · rune · pet | zadanie · łup · zaklęcie · runa · zwierzak | missão · saque · magia · runa · mascote (masculine: o mascote) |
+  | experience (short) · hitpoints · mana · stamina | doświadczenie (PD) · punkty życia (HP) · mana · kondycja | experiência (XP) · pontos de vida (HP) · mana · fôlego |
+  | boss · world boss · raid · skull · party | boss · boss świata · najazd · czaszka · drużyna | chefe · chefe mundial · invasão · caveira · grupo |
+  | protection zone · tile · floor · slot | strefa ochronna (PZ) · pole · piętro · miejsce | zona de proteção (PZ) · quadrado · andar · espaço |
+  | Haste · Berserk · Fury (potion) | Przyspieszenie · Szał · Furia | Aceleração · Frenesi · Fúria |
+  | Full screen · Full view (layout) | Pełny ekran · Pełny widok | Tela cheia · Visão total |
+
+  Style: grim, short, plain (BRAND §10) in every language; spell words (exura…) and proper names never change. **Polish:** a name dropped into a sentence stays in the nominative, so put it after a colon or in brackets ("Zabijasz: {name}", "Łup ({who})"); never a gendered past tense for the player ("Zabiłeś" → "Zabijasz", "Pokonano: {boss}"); a count next to a noun needs `one|few|many` forms (1 pole | 2 pola | 5 pól — allowed in a Polish row even when the English key has no "|") or a colon ("Limit ofert: {cap}"). **Portuguese:** "você" register; refer to the player as "você", not "o/a" ("A cidade honra você"); "o mascote".
 
 **Approvals:** ask the owner before anything hard to undo: deleting data, dropping tables, rotating keys, changing hosting, force-push, big redesigns. Don't repeat a tool action the owner already rejected without asking.
 
@@ -515,7 +536,7 @@ Then `npm run build` (on Render or a machine with npm registry access).
 - [ ] Later (owner): more pets (e.g. from quests, world bosses), pet names chosen by players, pet cosmetics in the store (never with stats), a pet tab on the website bestiary.
 - [x] Exp stages / server rates for seasonal servers (2026-10-22). Owner: check the season numbers after the first weeks of real play (goal: end-game money and gear after 2–3 weeks); set `STAGES=classic` for a classic server.
 - [x] Languages in the game (2026-10-23): English, Polish and Brazilian Portuguese for the title screen, HUD, every window, tooltips, help, server and game messages, NPC dialogue (typed keywords too), quests, tutorial and all item/monster/spell/place names (§11 Languages).
-- [ ] Languages later: the website (thornvaleonline.com pages, store, sign-up and store API answers) is still English only; test-command (`/`) replies and `/events` lines stay English; owner/native speakers to read the Polish and Portuguese in game and suggest better wording; a Polish/Portuguese name check for new content is enforced by `npm run test:i18n`.
+- [ ] Languages later: the website (thornvaleonline.com pages, store, sign-up and store API answers) is still English only; test-command (`/`) replies and `/events` lines stay English; first native proofreading pass of the Polish and Portuguese done 2026-10-24 (glossary in §11 Languages), the owner may still suggest wording; a Polish/Portuguese name check for new content is enforced by `npm run test:i18n`.
 - [ ] Owner decision: upgrade the thornvale service from Free to a paid instance (Starter is enough for ~50 players) so the server never sleeps; then set `plan:` in render.yaml.
 - [x] **Painted style is the default (2026-10-24):** Settings → Look switch (Painted / Classic, after reload), `?style=classic` and `thornvale.style = classic` keep the old look; perf pass brought the court under the 150 draw-call budget. Left: triangles are still over the ~400k budget on High in wooded towns (pine crowns + their shadows, ~670k court / ~880k Westmarch at 1366×768; Low ≈ 250–300k).
 - [ ] **Painted style (owner 2026-10-23, "like medivia.online"):** sample done behind `?style=painted` (start city, road, caves). Next if approved: hand-painted textures for every remaining ground/wall/roof kind, grim detailed bosses (every NPC done 2026-10-23, `grimKit.ts`; every regular monster done 2026-10-23, `grimMonsters.ts`), painted border tiles for water/lava/shores (done 2026-10-23: painted liquids, shores, rock and cave regions), Settings switch, then make it the default. Monster shapes rounded/organic and sizes made readable with see-through over the hero (2026-10-23); later if the owner wants: hand-sculpted bespoke models for the remaining box-built humanoids (dwarves, minotaurs, frost giants).

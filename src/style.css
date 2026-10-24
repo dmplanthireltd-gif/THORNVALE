@@ -654,7 +654,8 @@ html.ui-moving .mw-col.empty::after { border-color: var(--accent); background: r
 }
 html.ui-locked .mw-head { cursor: pointer; }
 .mw-title { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: 700 11px/1 var(--pixel); letter-spacing: 0.14em; text-transform: uppercase; color: #d4ad55; }
+  /* line-height above 1: overflow:hidden would clip the accents of Polish/Portuguese capitals (Ś, Ń, Ó, Ú, Ã) */
+  font: 700 11px/1.35 var(--pixel); letter-spacing: 0.14em; text-transform: uppercase; color: #d4ad55; }
 .mw-title::before { content: ''; flex: none; width: 5px; height: 5px; background: var(--accent); transform: rotate(45deg); }
 .mw.min .mw-title::before { background: #8a7340; }
 .mw-extra { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--muted); }
