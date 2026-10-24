@@ -753,3 +753,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-25 | — | Dead Locks: crouch (C) and slide, downed crawl + last-stand pose, new melee (lunge, slash, trail), perk voice lines + teammate-down line (`games/bunker47-vo-perk-*.mp3`, `vo-mate-down.mp3`). Game + `BUNKER_SONGS` only | — | — |
 | 2026-10-25 | — | Dead Locks: new gun finishes (worn blued steel, varnished walnut, muzzle bores), more voice lines (Drop the Bass, Good Vibes, Dubplate Slap, reviving). Game + `BUNKER_SONGS` only | — | — |
 | 2026-10-25 | — | Dead Locks: graphics pass (light shafts, dust motes, wall/floor grime, explosion shockwave + flash + smoke), Chill Grenade (X), round-complete and second boss voice lines. Game + `BUNKER_SONGS` only | — | — |
+| 2026-10-25 | — | Dead Locks leaderboard table `b47_scores` applied to the live DB (RLS on, no policies: server-only). Banter, Insta-Kill and game-start voice lines (`vo-miseh/hungry/nuhave/insta/start.mp3`). | — | — |

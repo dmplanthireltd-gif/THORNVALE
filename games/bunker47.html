@@ -2135,7 +2135,7 @@ function aInit() {
     A.rev = c.createConvolver(); A.rev.buffer = ir; const rg = c.createGain(); rg.gain.value = 0.5; A.rev.connect(rg); rg.connect(A.master);
     const nb = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1; A.noise = nb;
     ambient();
-    setTimeout(() => { voLoad(); }, 500);
+    setTimeout(() => { voLoad(); }, 50);
   } catch (e) { A.ctx = null; }
 }
 function bus(pos, wet = 0.25, vol = 1) {
@@ -3268,6 +3268,7 @@ function handleEvent(e) {
   else if (t === 'p') {
     const nm = DROP_TYPES[e[2]] || 'Power-up'; banner(nm, e[3] === myPeer ? 'You grabbed it' : (peerName(e[3]) + ' grabbed it'), 2400, true); SND.power();
     if (e[2] === 'ammo') { for (const s of P.slots) s.res = WS(s).res; P.gren = Math.max(P.gren, 2); }
+    if (e[2] === 'insta') setTimeout(() => { VO.last = 0; voSay('insta', null); }, 600);
     if (e[2] === 'nuke') { addPts(400); P.shake = 0.5; boomLight.position.set(P.x, 2.5, P.z); boomLight.intensity = 6; boomT = 0.6; }
   } else if (t === 'r') {
     const r = e[2]; $('round').textContent = r; $('round').classList.add('flash'); setTimeout(() => $('round').classList.remove('flash'), 1400);
@@ -3283,6 +3284,7 @@ function handleEvent(e) {
   else if (t === 'o') { gameOver(e[2]); }
   else if (t === 'sy') storyEvent(e);
   else if (t === 'ra') radioEvent(e);
+  else if (t === 'bt') banterEvent(e);
   else if (t === 'bs') { if (e[2] === 1) { banner('Deadlock is coming', 'Kill him before the track ends you', 3400); SND.alarm(); setTimeout(() => SND.roar(null), 900); setTimeout(() => { VO.last = 0; voSay('boss', null); }, 1900); if (!(SONG_EL.radio && !SONG_EL.radio.paused)) { MUS.vol = 0; playSong('deadlock', () => { MUS.vol = OPT.music; }); } } else { banner('Deadlock is enraged', '', 2000); SND.roar(null); } }
   else if (t === 'bd') { banner('Deadlock is dead', e[2] === myPeer ? '+1000 points' : peerName(e[2]) + ' got the kill', 3000, true); if (e[2] === myPeer) addPts(1000); SND.power(); stopSong('deadlock', true); setTimeout(() => { MUS.vol = OPT.music; }, 2100); }
   else if (t === 'sl') {
@@ -3437,11 +3439,11 @@ function fire() {
   if (endPt && Math.random() < 0.6) tracer(mw, endPt);
 }
 // ---------- voice lines (the owner's recordings, served next to the page; silent where they can't be loaded)
-const VO = { reload: ['vo-reload-1.mp3', 'vo-reload-2.mp3'], down: ['vo-down-1.mp3'], kill: ['vo-kill-1.mp3', 'vo-kill-2.mp3'], boss: ['vo-boss-1.mp3', 'vo-boss-2.mp3'], mate: ['vo-mate-down.mp3'], revive: ['vo-revive-1.mp3'], round: ['vo-round-1.mp3', 'vo-round-2.mp3'], last: 0, loading: false };
+const VO = { reload: ['vo-reload-1.mp3', 'vo-reload-2.mp3'], down: ['vo-down-1.mp3'], kill: ['vo-kill-1.mp3', 'vo-kill-2.mp3'], boss: ['vo-boss-1.mp3', 'vo-boss-2.mp3'], mate: ['vo-mate-down.mp3'], revive: ['vo-revive-1.mp3'], round: ['vo-round-1.mp3', 'vo-round-2.mp3'], miseh: ['vo-miseh.mp3'], hungry: ['vo-hungry.mp3'], nuhave: ['vo-nuhave.mp3'], insta: ['vo-insta.mp3'], start: ['vo-start.mp3'], last: 0, loading: false };
 const VO_PERKS = ['bulwark', 'fleet', 'rapid', 'revive', 'swift', 'mule', 'steady', 'blast', 'echo', 'dropbass', 'vibes', 'slap', 'nuff']; for (const k of VO_PERKS) VO['perk_' + k] = ['vo-perk-' + k + '.mp3'];
 async function voLoad() {
   if (VO.loading || !A.ctx || !/^https?:$/.test(location.protocol)) return; VO.loading = true;
-  for (const k of ['reload', 'down', 'kill', 'boss', 'mate', 'revive', 'round'].concat(VO_PERKS.map(q => 'perk_' + q))) {
+  for (const k of ['start', 'reload', 'down', 'kill', 'boss', 'mate', 'revive', 'round', 'miseh', 'hungry', 'nuhave', 'insta'].concat(VO_PERKS.map(q => 'perk_' + q))) {
     const list = [];
     for (const f of VO[k]) { try { const r = await fetch(f); if (!r.ok) continue; const buf = await A.ctx.decodeAudioData(await r.arrayBuffer()); list.push(buf); } catch (e) {} }
     if (list.length) BANK.b['vo_' + k] = list;
@@ -3550,7 +3552,21 @@ function chillUpdate(dt) {
   if (G.chills) for (let i = G.chills.length - 1; i >= 0; i--) { G.chills[i].t -= dt; if (G.chills[i].t <= 0) G.chills.splice(i, 1); }
 }
 const inChill = s => !!G.chills && s.type !== 3 && G.chills.some(c => Math.hypot(s.x - c.x, s.z - c.z) < 4.2 && Math.abs(s.y - c.y) < 2.5);
-function chillHostTick(dt) { /* host-side cloud timers live in chillUpdate, which runs every frame */ }
+function chillHostTick(dt) {
+  // random banter now and then during a round: a one-liner, or (with 2+ players) a two-player exchange
+  if (G.phase !== 'play') return; G.btT = (G.btT == null ? 70 + Math.random() * 60 : G.btT) - dt; if (G.btT > 0) return;
+  G.btT = 110 + Math.random() * 120;
+  const ids = [myPeer]; for (const [id, p] of peers) if (p.pres && p.pres.ig && !p.pres.dn) ids.push(id);
+  const a = ids[(Math.random() * ids.length) | 0];
+  if (ids.length > 1 && Math.random() < 0.5) { let b = a; while (b === a) b = ids[(Math.random() * ids.length) | 0]; pushEv(['bt', 1, a, b]); }
+  else pushEv(['bt', 0, a]);
+}
+function voFrom(peer) { if (peer === myPeer) return null; const p = peers.get(peer); return p && p.av ? { x: p.av.x, y: p.av.y + 1.5, z: p.av.z } : null; }
+function banterEvent(e) {
+  if (e[2] === 0) { VO.last = 0; voSay('miseh', voFrom(e[3])); return; }
+  VO.last = 0; voSay('hungry', voFrom(e[3]));
+  setTimeout(() => { VO.last = 0; voSay('nuhave', voFrom(e[4])); }, 3300);
+}
 function grenadeUpdate(dt) {
   for (let i = grenades.length - 1; i >= 0; i--) {
     const g = grenades[i], p = g.m.position; g.t -= dt; g.vy -= 14 * dt;
@@ -4350,6 +4366,7 @@ function beginPlay() {
   for (const v of Array.from(zv.values())) zRemove(v);
   if (isHost) { hostReset(); }
   lock(); setLobbyPresence();
+  { let tries = 0; const go = () => { if (BANK.b.vo_start) { VO.last = 0; voSay('start', null); } else if (++tries < 12) setTimeout(go, 400); }; setTimeout(go, 1400); }
 }
 function gameOver(r) {
   if (APP.screen === 'over') return;
