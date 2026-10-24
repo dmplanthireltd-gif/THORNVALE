@@ -41,6 +41,16 @@ export const BUNKER_SONGS: Record<string, string> = {
   'vo-kill-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-kill-1.mp3')),
   'vo-kill-2.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-kill-2.mp3')),
   'vo-boss-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-boss-1.mp3')),
+  'vo-perk-bulwark.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-bulwark.mp3')),
+  'vo-perk-fleet.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-fleet.mp3')),
+  'vo-perk-rapid.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-rapid.mp3')),
+  'vo-perk-revive.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-revive.mp3')),
+  'vo-perk-swift.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-swift.mp3')),
+  'vo-perk-mule.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-mule.mp3')),
+  'vo-perk-steady.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-steady.mp3')),
+  'vo-perk-blast.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-blast.mp3')),
+  'vo-perk-echo.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-perk-echo.mp3')),
+  'vo-mate-down.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-mate-down.mp3')),
 };
 
 const MAX_SOCKETS = 400;

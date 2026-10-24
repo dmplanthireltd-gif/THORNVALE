@@ -304,7 +304,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
     <details class="howto">
       <summary>Controls and rules</summary>
       <div class="keys">
-        <kbd>W A S D</kbd><span>Move · <b>Shift</b> to sprint · <b>Space</b> to jump</span>
+        <kbd>W A S D</kbd><span>Move · <b>Shift</b> to sprint · <b>Space</b> to jump · <b>C</b> crouch, or slide while sprinting</span>
         <kbd>Mouse</kbd><span>Aim · left click fires · right click aims down sights</span>
         <kbd>R</kbd><span>Reload</span>
         <kbd>F</kbd><span>Buy, open doors, hold to rebuild windows or revive</span>
@@ -356,7 +356,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
       <div class="orow"><label for="oInv">Invert mouse Y</label><input type="checkbox" id="oInv"><output></output></div>
       <div class="keys">
         <kbd>W A S D</kbd><span>Move · <b>Shift</b> sprint · <b>Space</b> jump</span>
-        <kbd>C / Ctrl</kbd><span>Crouch · press while sprinting to <b>slide</b></span>
+        <kbd>C</kbd><span>Hold to crouch · press while sprinting to <b>slide</b></span>
         <kbd>Mouse</kbd><span>Left click fires · right click aims</span>
         <kbd>R · F</kbd><span>Reload · buy, open, hold to rebuild or revive</span>
         <kbd>Q / 1 2 3</kbd><span>Swap weapons</span>
@@ -2564,8 +2564,14 @@ function buildViewmodel() {
   const fb = new THREE.Mesh(planeGeo, M.flash); fb.scale.set(0.22, 0.22, 1); fl.add(fb);
   fl.visible = false; VM.flash = fl; VM.root.add(fl);
   const k = new THREE.Group();
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.03, 0.22), M.steel); blade.position.z = -0.13; k.add(blade);
-  const hd = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.035, 0.11), M.leather); k.add(hd);
+  { const sh = new THREE.Shape(); sh.moveTo(0, -0.014); sh.lineTo(0.2, -0.012); sh.quadraticCurveTo(0.245, -0.004, 0.255, 0.012); sh.lineTo(0.17, 0.016); sh.lineTo(0, 0.016); sh.lineTo(0, -0.014);
+    const bg = new THREE.ExtrudeGeometry(sh, { depth: 0.004, bevelEnabled: true, bevelThickness: 0.0015, bevelSize: 0.0015, bevelSegments: 1 }); bg.translate(0, 0, -0.002);
+    const blade = new THREE.Mesh(bg, new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: 0.22, metalness: 1 })); blade.rotation.y = Math.PI / 2; blade.position.z = -0.075; k.add(blade);
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.06, 0.012), M.brass); guard.position.z = -0.07; k.add(guard);
+    for (let i = 0; i < 4; i++) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.0145, 0.0145, 0.018, 10), M.leather); r.rotation.x = Math.PI / 2; r.position.z = -0.05 + i * 0.022; k.add(r); }
+    const pom = new THREE.Mesh(new THREE.SphereGeometry(0.016, 10, 8), M.brass); pom.position.z = 0.04; k.add(pom);
+    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.085), PM.glove); fist.position.set(0.004, -0.012, -0.012); k.add(fist);
+    const trail = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.09), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.35, 1.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })); trail.position.set(0, 0.02, -0.2); trail.rotation.y = Math.PI / 2; k.add(trail); VM.ktrail = trail; }
   const sl = limb(new THREE.Vector3(0.08, -0.12, 0.4), new THREE.Vector3(0, -0.01, 0.04), 0.046, PM.sleeve); k.add(sl);
   k.visible = false; VM.knife = k; wScene.add(k);
   // revive syringe in hand
@@ -3348,10 +3354,11 @@ function fire() {
   if (endPt && Math.random() < 0.6) tracer(mw, endPt);
 }
 // ---------- voice lines (the owner's recordings, served next to the page; silent where they can't be loaded)
-const VO = { reload: ['vo-reload-1.mp3', 'vo-reload-2.mp3'], down: ['vo-down-1.mp3'], kill: ['vo-kill-1.mp3', 'vo-kill-2.mp3'], boss: ['vo-boss-1.mp3'], last: 0, loading: false };
+const VO = { reload: ['vo-reload-1.mp3', 'vo-reload-2.mp3'], down: ['vo-down-1.mp3'], kill: ['vo-kill-1.mp3', 'vo-kill-2.mp3'], boss: ['vo-boss-1.mp3'], mate: ['vo-mate-down.mp3'], last: 0, loading: false };
+const VO_PERKS = ['bulwark', 'fleet', 'rapid', 'revive', 'swift', 'mule', 'steady', 'blast', 'echo']; for (const k of VO_PERKS) VO['perk_' + k] = ['vo-perk-' + k + '.mp3'];
 async function voLoad() {
   if (VO.loading || !A.ctx || !/^https?:$/.test(location.protocol)) return; VO.loading = true;
-  for (const k of ['reload', 'down', 'kill', 'boss']) {
+  for (const k of ['reload', 'down', 'kill', 'boss', 'mate'].concat(VO_PERKS.map(q => 'perk_' + q))) {
     const list = [];
     for (const f of VO[k]) { try { const r = await fetch(f); if (!r.ok) continue; const buf = await A.ctx.decodeAudioData(await r.arrayBuffer()); list.push(buf); } catch (e) {} }
     if (list.length) BANK.b['vo_' + k] = list;
@@ -3418,8 +3425,15 @@ function blast(at, pr, mul) {
   const sr = pr.rad * 0.75, sd = Math.hypot(P.x - at.x, P.z - at.z);
   if (!P.perks.blast && sd < sr && Math.abs(P.y + 1 - at.y) < 2) hurt(pr.self * (1 - sd / sr));
 }
+function startSlide() {
+  const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw); P.slideDX = -sy; P.slideDZ = -cy; P.slideT = 0.8; P.slideCd = 1.1;
+  if (A.ctx) { const t = A.ctx.currentTime, d = bus(null, 0.1, 0.7); nz(d, t, 0.7, 'bandpass', 900, 0.8, 0.35, 0.001, 380); nz(d, t, 0.25, 'lowpass', 400, 1, 0.4, 0.001); }
+}
 function knife() {
-  if (P.knifeT > 0 || P.down) return; P.knifeDur = P.knifeT = P.perks.slap ? 0.4 : 0.55; P.knifeHit = false; SND.knife();
+  if (P.knifeT > 0 || P.down) return; P.knifeDur = P.knifeT = P.perks.slap ? 0.42 : 0.58; P.knifeHit = false; SND.knife();
+  camera.getWorldDirection(camDir); let best = null, bd = 3.0;
+  for (const v of zv.values()) { if (v.dying || v.rise > 0.5 || Math.abs(v.y - P.y) > 1.2) continue; const dx = v.x - P.x, dz = v.z - P.z, d = Math.hypot(dx, dz); if (d < bd && d > 1.2 && (dx * camDir.x + dz * camDir.z) / (d || 1) > 0.7) { bd = d; best = v; } }
+  if (best) { const L = (bd - 1.0), T0 = 0.16; P.lungeT = T0; P.lungeVX = (best.x - P.x) / bd * L / T0; P.lungeVZ = (best.z - P.z) / bd * L / T0; }
 }
 function throwGrenade() {
   if (P.gren <= 0 || P.down) return; P.gren--;
@@ -3584,7 +3598,7 @@ function doInteract(dt, pressed) {
       if (a.k === 'bulwark') { P.maxHp = 200; P.hp = 200; }
       if (a.k === 'revive' && nPlayers() === 1) P.qrBuys++;
       if (a.k === 'blast') P.gren = Math.min(maxGren(), P.gren + 2);
-      banner(PERKS[a.k].name, PERKS[a.k].desc, 2200); SND.perk(); perkJingle(a.k, null, 0.8); P.drinkT = 1.1; P.drinkK = a.k;
+      banner(PERKS[a.k].name, PERKS[a.k].desc, 2200); SND.perk(); perkJingle(a.k, null, 0.8); P.drinkT = 1.1; P.drinkK = a.k; setTimeout(() => { VO.last = 0; voSay('perk_' + a.k, null); }, 900);
     }
   }
   else if (a.t === 'box') { if (buy(950)) { BOX.state = 'spin'; BOX.t = 0; BOX.k = pickBoxWeapon(); SND.box(); } }
@@ -3615,12 +3629,19 @@ function playerUpdate(dt) {
   if (P.dead) { spectate(dt); return; }
   const w = curW(), s = curSlot();
   let mx = 0, mz = 0;
-  if (!P.down) { mx = (K.KeyD ? 1 : 0) - (K.KeyA ? 1 : 0) + TM.x; mz = (K.KeyS ? 1 : 0) - (K.KeyW ? 1 : 0) + TM.y; }
+  mx = (K.KeyD ? 1 : 0) - (K.KeyA ? 1 : 0) + TM.x; mz = (K.KeyS ? 1 : 0) - (K.KeyW ? 1 : 0) + TM.y;
   const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
-  P.sprint = !P.down && (K.ShiftLeft || K.ShiftRight || TM.sprint) && mz < -0.3 && !P.adsHeld && P.relT <= 0;
-  const spd = P.down ? 0 : P.sprint ? (P.perks.fleet ? 7.6 : 6.4) : P.ads > 0.5 ? 2.6 : (P.perks.fleet ? 5.2 : 4.4);
+  P.slideCd = Math.max(0, (P.slideCd || 0) - dt);
+  if (P.slideT > 0) { P.slideT -= dt; if (P.down || P.vy > 0.5) P.slideT = 0; }
+  P.crouch = !P.down && !!K.KeyC && !(P.slideT > 0);
+  P.sprint = !P.down && !P.crouch && !(P.slideT > 0) && (K.ShiftLeft || K.ShiftRight || TM.sprint) && mz < -0.3 && !P.adsHeld && P.relT <= 0;
+  // downed: you can drag yourself along slowly
+  const spd = P.down ? (P.selfRev > 0 ? 0 : 0.55) : P.sprint ? (P.perks.fleet ? 7.6 : 6.4) : P.crouch ? (P.perks.fleet ? 2.6 : 2.2) : P.ads > 0.5 ? 2.6 : (P.perks.fleet ? 5.2 : 4.4);
   const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
-  P.x += (cy * mx - sy * -mz) * spd * dt * 1; P.z += (-sy * mx - cy * -mz) * spd * dt;
+  if (P.slideT > 0) { const k = Math.max(0, P.slideT / 0.8), v = 3.2 + 6.3 * k; P.x += P.slideDX * v * dt; P.z += P.slideDZ * v * dt; if (Math.random() < dt * 30) PN.emit(P.x + (Math.random() - 0.5) * 0.4, P.y + 0.05, P.z + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.6, 0.3, (Math.random() - 0.5) * 0.6, 0.8, 0.12, 0.45, 0.42, 0.38, 0.25, -0.02, 0.6); }
+  else { P.x += (cy * mx - sy * -mz) * spd * dt * 1; P.z += (-sy * mx - cy * -mz) * spd * dt; }
+  if (P.lungeT > 0) { const k = Math.min(dt, P.lungeT); P.lungeT -= dt; P.x += P.lungeVX * k; P.z += P.lungeVZ * k; }
+  if (P.down && ml > 0.1 && Math.random() < dt * 1.2) decal(new THREE.Vector3(P.x, surfaceAt(P.x, P.z, P.y) + 0.004, P.z), new THREE.Vector3(0, 1, 0), 0.35 + Math.random() * 0.3, M.bloodDecal);
   collide(P, 0.35, -2, P.y);
   const fl = surfaceAt(P.x, P.z, P.y);
   P.vy -= 18 * dt; P.y += P.vy * dt;
@@ -3628,20 +3649,22 @@ function playerUpdate(dt) {
   else if (P.ground && P.vy <= 0 && P.y - fl < 0.35) { P.y = fl; P.vy = 0; }
   else P.ground = false;
   if (K.Space && P.ground && !P.down) { P.vy = 4.6; P.ground = false; }
-  P.moving = ml > 0.1 && !P.down;
+  P.moving = ml > 0.1 && !P.down && !(P.slideT > 0);
   if (P.moving && P.ground) { P.bob += dt * spd * 1.75; P.stepT -= dt * spd; if (P.stepT <= 0) { P.stepT = 2.2; SND.step(P.y > 0.15); } }
   const bobY = P.moving ? Math.abs(Math.sin(P.bob)) * 0.045 : 0, bobX = P.moving ? Math.cos(P.bob) * 0.03 : 0;
   P.shake = Math.max(0, P.shake - dt); const sh = P.shake * 0.12;
   const revCrouch = !!(P.reviving && P.reviveHold > 0);
-  const eyeT = P.down ? 0.42 : revCrouch ? 1.05 : 1.62;
+  const eyeT = P.down ? 0.42 : P.slideT > 0 ? 0.82 : revCrouch || P.crouch ? 1.05 : 1.62;
   if (P.eyeH == null) P.eyeH = eyeT;
   P.eyeH = lerp(P.eyeH, eyeT, Math.min(1, dt * (eyeT < P.eyeH ? (P.down ? 7 : 6) : 2.6)));
-  P.rollT = lerp(P.rollT || 0, P.down ? 0.32 : 0, Math.min(1, dt * (P.down ? 5 : 2.2)));
-  const getUp = !P.down && !revCrouch && P.eyeH < 1.55 ? 1.62 - P.eyeH : 0;
-  const eye = P.eyeH + (P.down ? Math.sin(T.now * 1.7) * 0.02 : 0);
+  P.rollT = lerp(P.rollT || 0, P.down ? 0.32 : P.slideT > 0 ? 0.07 : 0, Math.min(1, dt * (P.down ? 5 : P.slideT > 0 ? 10 : 2.2)));
+  const getUp = !P.down && !revCrouch && !P.crouch && !(P.slideT > 0) && P.eyeH < 1.55 ? 1.62 - P.eyeH : 0;
+  const crawl = P.down && P.moving === false && ml > 0.1 ? Math.sin(T.now * 6) : 0;
+  const eye = P.eyeH + (P.down ? Math.sin(T.now * 1.7) * 0.02 + Math.abs(crawl) * 0.03 : 0);
   camera.position.set(P.x + (Math.random() - 0.5) * sh, P.y + eye + bobY + (Math.random() - 0.5) * sh, P.z);
   P.pitch = clamp(P.pitch, -1.5, 1.5);
-  camera.rotation.set(P.pitch + P.vmKick * 0.15 + (P.down ? Math.sin(T.now * 1.3) * 0.02 : 0), P.yaw + (P.down ? Math.sin(T.now * 0.9) * 0.015 : 0), P.rollT + getUp * Math.sin(T.now * 9) * 0.07 + bobX * 0.15);
+  const kn = P.knifeT > 0 ? 1 - P.knifeT / (P.knifeDur || 0.55) : -1, kSl = kn > 0.3 && kn < 0.6 ? Math.sin((kn - 0.3) / 0.3 * Math.PI) : 0;
+  camera.rotation.set(P.pitch + P.vmKick * 0.15 + (P.down ? Math.sin(T.now * 1.3) * 0.02 : 0) - kSl * 0.025, P.yaw + (P.down ? Math.sin(T.now * 0.9) * 0.015 : 0) + kSl * 0.03, P.rollT + getUp * Math.sin(T.now * 9) * 0.07 + bobX * 0.15 + crawl * 0.04 - kSl * 0.05);
   const fovT = OPT.fov - P.ads * (curSlot() && curW().scope ? 38 : 20) * OPT.fov / 72 + (P.sprint ? 4 : 0) + (P.slideT > 0 ? 7 : 0);
   if (Math.abs(camera.fov - fovT) > 0.05) { camera.fov = fovT; camera.updateProjectionMatrix(); }
   // health
@@ -3668,10 +3691,10 @@ function playerUpdate(dt) {
   if (P.relT > 0) { P.relT -= dt; if (P.relT <= 0) { P.relT = 0; const need = w.mag - s.mag, take = Math.min(need, s.res); s.mag += take; s.res -= take; } }
   if (P.knifeT > 0) {
     P.knifeT -= dt;
-    if (!P.knifeHit && P.knifeT < P.knifeDur * 0.76) {
+    if (!P.knifeHit && P.knifeT < P.knifeDur * 0.58) {
       P.knifeHit = true; camera.getWorldDirection(camDir);
       let best = null, bd = 2.0; for (const v of zv.values()) { if (v.dying || v.rise > 0.5 || Math.abs(v.y - P.y) > 1.2) continue; const dx = v.x - P.x, dz = v.z - P.z, d = Math.hypot(dx, dz); if (d < bd && (dx * camDir.x + dz * camDir.z) / (d || 1) > 0.55) { bd = d; best = v; } }
-      if (best) { requestHit(best.id, (150 + V.round * 15) * (P.perks.slap ? 3 : 1), false, 1); addPts(10); blood(new THREE.Vector3(best.x, best.y + 1.3, best.z), camDir.clone().negate(), 12); SND.flesh({ x: best.x, y: 1.2, z: best.z }, false); hitmark(false); }
+      if (best) { requestHit(best.id, (150 + V.round * 15) * (P.perks.slap ? 3 : 1), false, 1); addPts(10); blood(new THREE.Vector3(best.x, best.y + 1.3, best.z), camDir.clone().negate(), 18); SND.flesh({ x: best.x, y: 1.2, z: best.z }, false); hitmark(false); P.shake = Math.max(P.shake, 0.12); P.knifeStop = 0.06; }
     }
   }
   const busy = P.relT > 0 || P.swapT > 0 || P.knifeT > 0 || P.sprint;
@@ -3778,7 +3801,14 @@ function vmUpdate(dt) {
   if (VM.flash.visible) { VM.flash.userData.t = (VM.flash.userData.t || 0) + dt; if (VM.flash.userData.t > 0.04) { VM.flash.visible = false; VM.flash.userData.t = 0; } }
   VM.light.intensity = Math.max(0, VM.light.intensity - dt * 60); muzzleLight.intensity = Math.max(0, muzzleLight.intensity - dt * 50);
   VM.knife.visible = P.knifeT > 0;
-  if (P.knifeT > 0) { const p = 1 - P.knifeT / (P.knifeDur || 0.55); VM.knife.position.set(0.25 - p * 0.45, -0.12 + Math.sin(p * Math.PI) * 0.06, -0.3 - Math.sin(p * Math.PI) * 0.12); VM.knife.rotation.set(-0.2, 0.6 - p * 1.6, -0.6 + p * 0.8); }
+  if (P.knifeT > 0) {
+    // wind-up (blade drawn back by the right shoulder) → fast diagonal slash across → recover off-screen
+    const p = 1 - P.knifeT / (P.knifeDur || 0.55), K0 = VM.knife; let tr = 0;
+    if (p < 0.3) { const w = ease(p / 0.3); K0.position.set(lerp(0.36, 0.3, w), lerp(-0.3, -0.02, w), lerp(-0.3, -0.26, w)); K0.rotation.set(lerp(0, -0.55, w), lerp(0.4, 1.25, w), lerp(-0.4, -1.15, w)); }
+    else if (p < 0.58) { const q = (p - 0.3) / 0.28, w = q * q * (3 - 2 * q); K0.position.set(lerp(0.3, -0.3, w), lerp(-0.02, -0.22, w), lerp(-0.26, -0.5, Math.sin(w * Math.PI) * 0.6 + w * 0.4)); K0.rotation.set(lerp(-0.55, 0.15, w), lerp(1.25, -1.25, w), lerp(-1.15, 0.45, w)); tr = Math.sin(q * Math.PI); }
+    else { const w = ease((p - 0.58) / 0.42); K0.position.set(lerp(-0.3, 0.25, w), lerp(-0.22, -0.5, w), lerp(-0.5, -0.32, w)); K0.rotation.set(lerp(0.15, 0.3, w), lerp(-1.25, 0.2, w), lerp(0.45, -0.2, w)); }
+    if (VM.ktrail) VM.ktrail.material.opacity = tr * 0.35;
+  }
   if (k === 'volt') M.coil.color.setRGB(0.4, 2 + Math.sin(T.now * 12) * 0.5, 2.8);
 }
 
@@ -3791,13 +3821,23 @@ function reviveIconTex() {
   RIT = canvasTex(128, (x, N) => { x.fillStyle = 'rgba(165,35,27,0.9)'; x.beginPath(); x.arc(N / 2, N / 2, N * 0.42, 0, TAU); x.fill(); x.lineWidth = 6; x.strokeStyle = '#f2e8d3'; x.stroke(); x.fillStyle = '#f2e8d3'; x.fillRect(N * 0.42, N * 0.24, N * 0.16, N * 0.52); x.fillRect(N * 0.24, N * 0.42, N * 0.52, N * 0.16); });
   return RIT;
 }
-function poseDowned(h, a) {
-  const br = Math.sin(T.now * 2.2) * 0.03, L = (o, k, v) => { o[k] = lerp(o[k], v, a); };
-  L(h.hips.position, 'y', 0.24);
-  L(h.torso.rotation, 'x', -0.75 + br); L(h.torso.rotation, 'z', 0.3); L(h.head.rotation, 'x', 0.55);
-  L(h.lL.rotation, 'x', -1.45); L(h.kL.rotation, 'x', 0.25); L(h.lR.rotation, 'x', -1.1); L(h.kR.rotation, 'x', 1.0);
-  L(h.aL.rotation, 'x', 0.7); L(h.aL.rotation, 'z', -0.35); L(h.eL.rotation, 'x', -0.4);
-  L(h.aR.rotation, 'x', -0.6 + br); L(h.eR.rotation, 'x', -0.5);
+// last stand: half-lying on the floor, propped on the left elbow, right knee up, pistol held out,
+// chest heaving, head lolling, the free hand now and then pressed to the wound
+function poseDowned(h, a, t = T.now) {
+  const br = Math.sin(t * 2.6) * 0.04, loll = Math.sin(t * 0.7) * 0.12, clutch = Math.max(0, Math.sin(t * 0.45)) > 0.8 ? 1 : 0, L = (o, k, v) => { o[k] = lerp(o[k], v, a); };
+  L(h.hips.position, 'y', 0.17); L(h.hips.rotation, 'z', 0.12);
+  L(h.torso.rotation, 'x', -1.0 + br); L(h.torso.rotation, 'z', 0.32); L(h.torso.rotation, 'y', -0.15);
+  L(h.head.rotation, 'x', 0.85 + br * 0.5); L(h.head.rotation, 'z', -0.2 + loll); L(h.head.rotation, 'y', loll * 0.8);
+  L(h.lL.rotation, 'x', -1.52); L(h.lL.rotation, 'z', 0.12); L(h.kL.rotation, 'x', 0.18);
+  L(h.lR.rotation, 'x', -0.85); L(h.lR.rotation, 'z', -0.1); L(h.kR.rotation, 'x', 1.55);
+  L(h.aL.rotation, 'x', clutch ? -0.9 : 0.75); L(h.aL.rotation, 'z', clutch ? 0.3 : -0.55); L(h.eL.rotation, 'x', clutch ? -1.6 : -1.45);
+  L(h.aR.rotation, 'x', -1.65 + br * 0.5); L(h.aR.rotation, 'z', 0.1); L(h.eR.rotation, 'x', -0.15);
+}
+function poseCrouch(h, a, slide) {
+  const L = (o, k, v) => { o[k] = lerp(o[k], v, a); };
+  if (slide) { L(h.hips.position, 'y', 0.35); L(h.torso.rotation, 'x', -0.55); L(h.head.rotation, 'x', 0.45); L(h.lL.rotation, 'x', -1.5); L(h.kL.rotation, 'x', 0.15); L(h.lR.rotation, 'x', -0.6); L(h.kR.rotation, 'x', 1.7); return; }
+  L(h.hips.position, 'y', 0.62); L(h.torso.rotation, 'x', 0.32); L(h.head.rotation, 'x', -0.25);
+  L(h.lL.rotation, 'x', -1.25); L(h.kL.rotation, 'x', 1.75); L(h.lR.rotation, 'x', -0.35); L(h.kR.rotation, 'x', 1.95);
 }
 function poseKneel(h, a) {
   const L = (o, k, v) => { o[k] = lerp(o[k], v, a); }, w = Math.sin(T.now * 8) * 0.1;
@@ -3913,13 +3953,17 @@ function avatarsUpdate(dt) {
       _gp.set(0, -0.045, 0.02); av.gun.localToWorld(_gp); av.h.torso.worldToLocal(_gp); armIK(av.h.aR, av.h.eR, _gp);
       _gp.copy(u.hl).divideScalar(1.05); av.gun.localToWorld(_gp); av.h.torso.worldToLocal(_gp); armIK(av.h.aL, av.h.eL, _gp);
     }
-    if (av.dA > 0.01) poseDowned(av.h, av.dA);
+    av.h.hips.rotation.z = 0; av.h.torso.rotation.y = 0; av.h.head.rotation.z = 0; av.h.head.rotation.y = 0; av.h.lL.rotation.z = 0; av.h.lR.rotation.z = 0;
+    av.cA = lerp(av.cA || 0, s.cr && s.dn !== 1 ? 1 : 0, Math.min(1, dt * 10));
+    if (av.cA > 0.01) poseCrouch(av.h, av.cA, s.cr === 2);
+    if (av.dA > 0.01) { poseDowned(av.h, av.dA); av.aim.rotation.x = lerp(av.aim.rotation.x, 0.95, av.dA); av.aim.visible = true; }
+    if (s.dn === 1 && !av.pool) { av.pool = 1; decal(new THREE.Vector3(av.x, surfaceAt(av.x, av.z, av.y) + 0.004, av.z), new THREE.Vector3(0, 1, 0), 1.1, M.bloodDecal); } else if (s.dn !== 1) av.pool = 0;
     if (av.rA > 0.01) poseKneel(av.h, av.rA);
     if (s.dn === 1) { av.voT = (av.voT || 9) - dt; if (av.voT <= 0) { av.voT = 10; VO.last = 0; voSay('down', { x: av.x, y: 0.6, z: av.z }); } }
     av.icon.visible = s.dn === 1; if (av.icon.visible) { const pu = 0.42 + Math.sin(T.now * 5) * 0.06; av.icon.scale.set(pu, pu, 1); av.icon.material.opacity = 0.65 + Math.sin(T.now * 5) * 0.3; }
     const nm = String(s.n || 'Soldier').slice(0, 16), col = PCOLORS[(s.c | 0) % PCOLORS.length];
     if (av.name !== nm || av.dn !== s.dn) {
-      if (s.dn === 1 && av.dn !== 1 && av.dn !== -1) { banner(nm + ' is down!', 'Follow the red marker and hold F to revive', 2800); SND.alarm(); setTimeout(() => voSay('down', { x: av.x, y: 0.6, z: av.z }), 700); av.voT = 9; }
+      if (s.dn === 1 && av.dn !== 1 && av.dn !== -1) { banner(nm + ' is down!', 'Follow the red marker and hold F to revive', 2800); SND.alarm(); setTimeout(() => { VO.last = 0; voSay('mate', null); }, 300); setTimeout(() => { VO.last = 0; voSay('down', { x: av.x, y: 0.6, z: av.z }); }, 2200); av.voT = 11; }
       av.name = nm; av.dn = s.dn; avatarDraw(av, nm, col, s.dn);
     }
     if (typeof s.sh === 'number' && p.lastSh != null && s.sh > p.lastSh) { const wk = WKEYS[s.w | 0] || 'pistol'; SND.shot(wk, { x: av.x, y: 1.4, z: av.z }); av.flashT = 0.05; }
@@ -4082,7 +4126,7 @@ function myPresence() {
   const o = {
     n: myName, c: myColor, lk: lookStr(LOOK), ph: APP.screen === 'play' || APP.screen === 'over' ? 'play' : 'wait', ig: APP.screen === 'play' ? 1 : 0,
     p: [r2(P.x), r2(P.y), r2(P.z), r2(P.yaw), r2(P.pitch)], hp: Math.round(P.hp), dn: P.dead ? 2 : P.down ? 1 : 0,
-    w: s ? WKEYS.indexOf(s.k) : 0, sh: P.shotN, pts: P.pts, k: P.kills, hs: P.heads, ds: P.downs, rvs: P.revives, rv: P.reviving || null, qr: P.perks.revive ? 1 : 0, bl: P.down ? Math.ceil(P.bleed) : 0, pp: s && s.pap ? 1 : 0, at: s && s.att ? Object.keys(s.att).sort().join(',') : '',
+    w: s ? WKEYS.indexOf(s.k) : 0, sh: P.shotN, pts: P.pts, k: P.kills, hs: P.heads, ds: P.downs, rvs: P.revives, rv: P.reviving || null, qr: P.perks.revive ? 1 : 0, bl: P.down ? Math.ceil(P.bleed) : 0, cr: P.slideT > 0 ? 2 : P.crouch ? 1 : 0, kn: P.knifeT > 0 ? 1 : 0, pp: s && s.pap ? 1 : 0, at: s && s.att ? Object.keys(s.att).sort().join(',') : '',
     hits: Q.hits, rp: Q.rep, pk: Q.pick, sa: Q.sa, pz: APP.pauseReq ? 1 : 0, dr: localDoors, gx: Q.gx, host: isHost ? 1 : 0, s: null
   };
   if (isHost && APP.screen !== 'wait') o.s = snapshot();
@@ -4288,6 +4332,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyQ' && P.slots.length > 1) swapTo((P.cur + 1) % P.slots.length);
   if (e.code === 'Digit1') swapTo(0); if (e.code === 'Digit2') swapTo(1); if (e.code === 'Digit3') swapTo(2);
   if (e.code === 'KeyV') knife();
+  if (e.code === 'KeyC' && !e.repeat && P.sprint && P.ground && !(P.slideCd > 0)) startSlide();
   if (e.code === 'KeyG') throwGrenade();
   if (e.code === 'KeyT') P.light = !P.light;
   if (e.code === 'Space') e.preventDefault();
