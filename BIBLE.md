@@ -754,3 +754,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-25 | — | Dead Locks: new gun finishes (worn blued steel, varnished walnut, muzzle bores), more voice lines (Drop the Bass, Good Vibes, Dubplate Slap, reviving). Game + `BUNKER_SONGS` only | — | — |
 | 2026-10-25 | — | Dead Locks: graphics pass (light shafts, dust motes, wall/floor grime, explosion shockwave + flash + smoke), Chill Grenade (X), round-complete and second boss voice lines. Game + `BUNKER_SONGS` only | — | — |
 | 2026-10-25 | — | Dead Locks leaderboard table `b47_scores` applied to the live DB (RLS on, no policies: server-only). Banter, Insta-Kill and game-start voice lines (`vo-miseh/hungry/nuhave/insta/start.mp3`). | — | — |
+| 2026-10-25 | — | Dead Locks graphics pass 2: contact shadows under props and walls, glossy puddles, teal/warm colour grade. Game file only | — | — |
