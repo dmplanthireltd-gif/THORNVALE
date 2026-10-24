@@ -57,7 +57,7 @@ server/
   storage.ts          ← Storage interface: FileStorage (local JSON) / SupabaseStorage; characters, backups, market, premium perks and purchases
   payments.ts         ← Paddle: settings from env, webhook signature check, payment/refund/chargeback → storage
   ws.ts               ← minimal WebSocket implementation
-  bunker.ts           ← Bunker 47 (owner's separate zombie co-op game, not part of Thornvale): serves games/bunker47.html at an unlisted address (`BUNKER_PATH`, default in the file; noindex) and the co-op relay websocket `/b47ws` (rooms of ≤ 8, presence relay, nothing stored)
+  bunker.ts           ← Bunker 47 (owner's separate zombie co-op game, not part of Thornvale): serves games/bunker47.html at an unlisted address (`BUNKER_PATH`, default in the file; noindex) and the co-op relay websocket `/b47ws` (rooms of ≤ 8, presence relay, nothing stored); leaderboard API `GET/POST /api/b47/scores` (table `b47_scores`, migration 20261024_bunker47_scores.sql — until it is applied, scores live in memory and reset on restart)
 games/bunker47.html   ← the Bunker 47 page (single self-contained file; three.js r128 from cdnjs/jsdelivr)
   data/               ← local JSON saves (dev only, git-ignored content)
 src/
@@ -745,3 +745,4 @@ Then `npm run build` (on Render or a machine with npm registry access).
 | 2026-10-24 | — | Testers (owner): characters Akasha and Gilbert the Killer get the test console commands (`TESTER_CHARACTERS` in server.ts, more via the `TESTERS` env var), like test mode: no /god, /kill or GM-only commands, no GM premium | — | — |
 | 2026-10-24 | — | Testers (owner): characters Akasha and Gilbert the Killer get the test commands (`TESTER_CHARACTERS` in server.ts, more via the `TESTERS` env var), like test mode: no /god, /kill or GM-only commands | — | — |
 | 2026-10-24 | — | Bunker 47 (owner's separate zombie co-op game) hosted at an unlisted address on the Thornvale server with its own co-op relay `/b47ws` (`server/bunker.ts`, `games/bunker47.html`); Thornvale game, saves and protocol untouched | — | — |
+| 2026-10-24 | — | Bunker 47 update (owner): new sound bank, barricade/downed/revive animations, headshot damage + feedback, sculpted zombies (limb loss, crawlers, death falls), soldier models holding their real gun, detailed guns with reload animations, BAR wall buy, leaderboard API `/api/b47/scores` + migration `20261024_bunker47_scores.sql` (not applied yet). Thornvale game, saves and protocol untouched | — | — |

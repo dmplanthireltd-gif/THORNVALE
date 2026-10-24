@@ -33,7 +33,7 @@ import {
   FOUNDER_SALE_FROM, FOUNDER_SALE_UNTIL, LAUNCH_AT, LEGEND_CAP, NO_PERKS, PREMIUM_RESERVED_SHARE, PRODUCTS, type AccountPerks,
 } from '../src/game/premium/premium';
 import { WsConnection } from './ws';
-import { acceptBunker, BUNKER_FILE, BUNKER_PATH, BUNKER_WS, bunkerReady } from './bunker';
+import { acceptBunker, BUNKER_FILE, BUNKER_PATH, BUNKER_WS, bunkerReady, handleBunkerApi } from './bunker';
 import { stagesFromEnv, stagesTable } from '../src/game/progression/stages';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -791,6 +791,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): P
   if (url.pathname.startsWith('/api/store/') || url.pathname === '/api/founders' || url.pathname === '/api/pay/webhook') {
     if (await handleStore(req, res, url)) return;
   }
+  if (url.pathname.startsWith('/api/b47/') && await handleBunkerApi(req, res, url.pathname)) return;
   if (url.pathname === '/api/notify' && req.method === 'POST') return notifySignup(req, res);
   if (url.pathname === '/api/notify/unsubscribe') return notifyUnsubscribe(res, url);
   if (url.pathname === '/api/auth-config') {
