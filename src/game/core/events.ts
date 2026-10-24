@@ -15,6 +15,9 @@ export type Effect =
   | 'physical' | 'fire' | 'energy' | 'ice' | 'earth' | 'death' | 'holy'
   | 'arrow' | 'bolt' | 'spear' | 'star' | 'stone' | 'heal' | 'haste' | 'shield' | 'light' | 'blood';
 
+/** Look of a server-wide announcement banner. */
+export type AnnounceStyle = 'worldboss' | 'raid' | 'boss' | 'event' | 'festival';
+
 export type GameEvent =
   | { type: 'attack'; attackerId: number; targetId: number }
   | { type: 'damage'; targetId: number; sourceId: number; amount: number; result: 'hit' | 'miss' | 'blocked'; element: Element; manaShield?: number }
@@ -34,7 +37,9 @@ export type GameEvent =
    * Server-wide announcement: world bosses, raids, boss kills. `big` shows the
    * centred banner, otherwise only a line in the log.
    */
-  | { type: 'announce'; title: string; text: string; style: 'worldboss' | 'raid' | 'boss'; big: boolean }
+  | { type: 'announce'; title: string; text: string; style: AnnounceStyle; big: boolean }
+  /** A task-board keeper opens the task window on this player's screen (liveops/TaskSystem.ts). */
+  | { type: 'tasksOpen'; tab: 'daily' | 'festival'; to: number }
   | { type: 'teleport'; id: number }
   /** A teleport rune channel began (magic/teleport.ts): `dur` seconds on tile x, y, z; protocol 29. */
   | { type: 'teleportCast'; id: number; x: number; y: number; z: number; dest: string; dur: number }

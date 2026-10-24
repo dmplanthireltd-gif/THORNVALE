@@ -29,6 +29,12 @@ export const ENGAGE_SECONDS = 30;
 export const HEAL_WEIGHT = 2;
 /** Smallest share of a world boss fight that still earns a loot bag. */
 export const WORLD_BOSS_MIN_SHARE = 0.005;
+/** Smallest share of a raid's defence that still earns a reward. */
+export const RAID_MIN_SHARE = 0.01;
+/** Share of the raiders' experience that the defenders get again as the raid reward (on top of their kills). */
+export const RAID_REWARD_SHARE = 0.3;
+/** Task seals for a full share of a won raid (each defender gets at least one; the top three two more). */
+export const RAID_SEALS = 6;
 /** Dungeon boss respawn times vary by ±10% so they cannot be timed to the second. */
 export const BOSS_RESPAWN_JITTER = 0.1;
 
@@ -153,6 +159,33 @@ export const RAIDS: RaidDef[] = [
       { at: 600, monsters: [['scarab', 6], ['mummy', 4]] },
     ],
     boss: 'raid_swarm_queen',
+  },
+  // more towns (2026-10-24, world events): led by the strongest of their own kind
+  {
+    id: 'bandit_riders', name: 'Bandit Riders', town: 'Millbrook', area: { region: 'Millbrook', mode: 'ring' }, target: 'Millbrook',
+    warning: 'Dust clouds on the roads round Millbrook… bandit riders are coming for the harvest!',
+    start: 'Bandit riders are raiding the farms of Millbrook!',
+    victory: 'The valkyrie who led them has fallen! The bandit riders scatter from Millbrook.',
+    end: 'The bandit riders ride off with what they could carry.',
+    waves: [
+      { at: 0, monsters: [['bandit', 8], ['amazon', 3]] },
+      { at: 300, monsters: [['bandit', 6], ['amazon', 4], ['valkyrie', 2]] },
+      { at: 600, monsters: [['valkyrie', 4], ['amazon', 4]] },
+    ],
+    boss: 'valkyrie',
+  },
+  {
+    id: 'minotaur_stampede', name: 'Minotaur Stampede', town: 'Highmoor', area: { region: 'Highmoor', mode: 'ring' }, target: 'Highmoor',
+    warning: 'The hills round Highmoor shake with hooves… a minotaur stampede is coming!',
+    start: 'The minotaur stampede crashes into Highmoor!',
+    victory: 'The cyclops driving the herd is down! The minotaurs flee back into the hills.',
+    end: 'The minotaurs thunder back into the hills round Highmoor.',
+    waves: [
+      { at: 0, monsters: [['minotaur', 8]] },
+      { at: 300, monsters: [['minotaur', 5], ['minotaur_archer', 4]] },
+      { at: 600, monsters: [['minotaur_mage', 4], ['minotaur', 4]] },
+    ],
+    boss: 'cyclops',
   },
 ];
 

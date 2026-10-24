@@ -9,6 +9,7 @@ import { FISH_ITEMS, FISHING_ROD, RAW_FISH_ITEMS } from '../gathering/fishing';
 import { applyCapeStock } from '../inventory/capes';
 import { SEA_MATERIAL_IDS } from '../inventory/seaItems';
 import { applyTradeNpcs } from '../trades/tradeNpcs';
+import { applyLiveNpcs } from '../liveops/liveNpcs';
 
 export interface ShopEntry {
   id: string;
@@ -48,6 +49,8 @@ export interface NpcDef {
   slayer?: number;
   /** A clerk of the Gilded Exchange: offers "Trade on the Exchange" (exchange/ExchangeSystem.ts). */
   exchange?: boolean;
+  /** A task-board keeper: daily and weekly tasks, the seal shop, festival trades (liveops/TaskSystem.ts). */
+  tasks?: boolean;
 }
 
 const s = (id: string, price?: number): ShopEntry => ({ id, price: price ?? Math.max(1, Math.round(ITEMS[id].value * 2.5)) });
@@ -340,6 +343,8 @@ for (const n of Object.values(NPCS)) {
 
 // the trade-skill masters and the townsfolk you can pick pockets from (trades/tradeNpcs.ts); vials and pestles where potions are sold
 applyTradeNpcs(NPCS);
+// the task-board keepers, one per town (liveops/liveNpcs.ts)
+applyLiveNpcs(NPCS);
 
 // capes (inventory/capes.ts): skill masters, town quest givers and seasonal sellers; every banker buys them
 applyCapeStock(NPCS);

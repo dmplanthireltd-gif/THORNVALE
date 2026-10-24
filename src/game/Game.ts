@@ -55,6 +55,10 @@ import { BUFF_NAMES, emptyBuffs, expForLevel, FIGHT_MODE, Player, type FightMode
 import { isVocation, VOCATIONS, type Vocation } from './player/vocations';
 import { QUESTS, QuestLog } from './quests/quests';
 import { buildWorld } from './world/worldGen';
+import type { AnnounceStyle } from './core/events';
+import { LiveEvents } from './liveops/LiveEvents';
+import { TaskSystem } from './liveops/TaskSystem';
+import { emptyTaskState, parseTaskState, saveTaskState, type TaskState } from './liveops/tasks';
 import {
   finishedTutorial, newTutorial, parseTutorial, saveTutorial, skipGifts, STEP_GIFTS, stepNo, stepTarget, TUTORIAL_LAST, TUTORIAL_START_ITEMS,
   tutorialChestItems, tutorialStep, type TutorialState,
@@ -208,6 +212,8 @@ export interface Session {
   pets: PetState;
   /** The trade skills of 2026-10-24 (save v16+: running, slayer task, farm patches; trades/TradeSystem.ts). */
   trades: TradeState;
+  /** Daily and weekly tasks, task seals and the login streak (save v18+; liveops/TaskSystem.ts). */
+  tasks: TaskState;
 }
 
 export interface Cosmetics {
@@ -282,6 +288,8 @@ export interface SaveData {
   pets?: { active: string | null; xp: Record<string, number>; pouch: (ItemStack | null)[] };
   /** Trade skills (save v16+): running on/off, slayer task and points, farm patches (trades/TradeSystem.ts). */
   trades?: Record<string, unknown>;
+  /** Daily and weekly tasks, seals, login streak (save v18+; liveops/tasks.ts). */
+  tasks?: Record<string, unknown>;
 }
 
 export interface GameOptions {
@@ -451,6 +459,10 @@ export class Game implements AIContext {
   readonly worldEvents: WorldEvents;
   /** Online mirror: active world boss / raid markers as last sent by the server. */
   netWorldMarks: WorldMark[] = [];
+  /** Daily and weekly tasks at the task boards (liveops/TaskSystem.ts). */
+  readonly taskSys: TaskSystem;
+  /** The event calendar, festivals, treasure hunts and double weekends (liveops/LiveEvents.ts). */
+  readonly liveEvents: LiveEvents;
   /** Dynamic monsters to take out of the world at the end of this update. */
   private despawnQueue: Enemy[] = [];
   /** Regional weather from the wall clock (world/weather.ts). */
@@ -472,6 +484,8 @@ export class Game implements AIContext {
     // a mirror drops raid monsters, summons and world bosses when the server says they left
     if (!this.simulate) this.events.on((e) => { if (e.type === 'despawn') this.removeEnemyNow(e.id); });
     this.now = opts.now ?? (() => Date.now());
+    this.taskSys = new TaskSystem(this);
+    this.liveEvents = new LiveEvents(this);
     this.premiumEnforced = opts.premium ?? false;
     this.world = buildWorld();
     this.weather = new WeatherSystem(this.world, this.now, opts.weatherSeed);
@@ -510,7 +524,7 @@ export class Game implements AIContext {
       bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
       skills: startSkills(), gathering: emptySkillXp(), craftOpen: null, marketOpen: null, marketClaimed: [],
       // bots, mirror copies and old characters have nothing to do on the island; new ones are sent there by beginTutorial
-      tutorial: finishedTutorial(), pets: emptyPets(), trades: emptyTrades(),
+      tutorial: finishedTutorial(), pets: emptyPets(), trades: emptyTrades(), tasks: emptyTaskState(),
     };
     if (opts.starter !== false) giveStarterKit(session.inventory, voc);
     this.sessions.set(id, session);
@@ -528,6 +542,7 @@ export class Game implements AIContext {
     for (const set of this.friendRequests.values()) set.delete(id);
     if (!this.sessions.delete(id)) return;
     this.skillSys.sea.forget(id);
+    this.taskSys.forget(id);
     for (const e of this.enemies) if (e.targetId === id) e.targetId = null;
     for (const o of this.sessions.values()) if (o.player.targetId === id) o.player.targetId = null;
     this.events.emit({ type: 'playerLeft', id });
@@ -653,7 +668,7 @@ export class Game implements AIContext {
   trainSkill(s: Session, skill: CombatSkill, tries: number): void {
     if (!this.simulate || tries <= 0) return;
     // exp stages: the skill's level picks the multiplier (fractions kept as a chance); a skill cape adds a little
-    const staged = scaleAmount(tries * capeTrainingBonus(s.inventory.equipment.cape?.id, skill), combatSkillRate(this.stages, skill, s.skills[skill].level));
+    const staged = scaleAmount(tries * capeTrainingBonus(s.inventory.equipment.cape?.id, skill) * this.liveEvents.skillRate(), combatSkillRate(this.stages, skill, s.skills[skill].level));
     const gained = addTries(s.skills, skill, staged, s.player.vocation);
     if (!gained) return;
     const lvl = s.skills[skill].level;
@@ -773,7 +788,7 @@ export class Game implements AIContext {
     if (!s.dialogue) return null;
     return buildDialogue(s.dialogue, {
       quests: s.quests, inventory: s.inventory, bank: s.bank, level: s.player.level, vocation: s.player.vocation, knownSpells: s.spells,
-      extra: this.skillSys.dialogueOptions(s, s.dialogue.npcKey),
+      extra: [...this.skillSys.dialogueOptions(s, s.dialogue.npcKey), ...this.taskSys.dialogueOptions(s, s.dialogue.npcKey)],
     });
   }
 
@@ -945,6 +960,7 @@ export class Game implements AIContext {
     this.updateFishSpots(dt);
     this.traps.update(dt);
     this.worldEvents.update(dt);
+    this.liveEvents.update(dt);
     this.petSys.update(dt);
     this.flushDespawns();
     this.premiumTimer -= dt;
@@ -1061,6 +1077,7 @@ export class Game implements AIContext {
     this.updateMine(s, dt);
     this.updateCraft(s, dt);
     this.skillSys.updateSession(s, dt);
+    this.taskSys.updateSession(s, dt);
     this.updatePlayerCombat(s);
     this.updateTutorial(s);
   }
@@ -1516,7 +1533,8 @@ export class Game implements AIContext {
   gainSkill(s: Session, id: NonCombatSkill, xp: number, atId: number): void {
     const before = this.skillLevel(s, id);
     // exp stages: the skill's level picks the multiplier; a skill cape (or the Grandmaster's Mantle) adds a little
-    xp = Math.round(Math.max(0, xp) * gatheringRate(this.stages, before) * capeTrainingBonus(s.inventory.equipment.cape?.id, id));
+    // double skill weekends (liveops/LiveEvents.ts) double it again
+    xp = Math.round(Math.max(0, xp) * gatheringRate(this.stages, before) * capeTrainingBonus(s.inventory.equipment.cape?.id, id) * this.liveEvents.skillRate());
     s.gathering[id] = Math.min(SKILL_XP_CAP, s.gathering[id] + xp);
     this.events.emit({ type: 'xp', amount: xp, atId, to: s.id, skill: id });
     const after = this.skillLevel(s, id);
@@ -1527,6 +1545,8 @@ export class Game implements AIContext {
     }
     // pets learn along; logs, ores and catches may turn up a pet
     this.petSys.onSkill(s, id, xp);
+    // daily and weekly skill tasks (liveops/TaskSystem.ts)
+    this.taskSys.onSkill(s, id, xp);
   }
 
   /** Woodcutting level (1–99). */
@@ -2565,6 +2585,8 @@ export class Game implements AIContext {
       if (e.enemyKind === 'rat') this.tutorialNote(pid, 'rat');
       // slayer tasks (trades/slayer.ts): every damager on that task counts the kill
       this.skillSys.onKill(s, e.enemyKind, e.maxHp);
+      // daily and weekly hunts (liveops/TaskSystem.ts)
+      this.taskSys.onKill(s, e.enemyKind);
       if (e.def.boss && recordBossKill(s.bossKills, e.enemyKind)) this.bossDeed(s, e.enemyKind);
       const changed = s.quests.onKill(e.enemyKind);
       for (const q of changed) {
@@ -2592,6 +2614,8 @@ export class Game implements AIContext {
     for (const l of e.def.loot) {
       if (Math.random() < l.chance) items.push({ id: l.id, qty: l.id === 'gold' ? stagedGold(this.stages, randInt(l.min, l.max)) : randInt(l.min, l.max) });
     }
+    // festival tokens while a festival is on (liveops/LiveEvents.ts)
+    items.push(...this.liveEvents.festivalLoot(e));
     const names = items.length ? items.map(describeStack).join(', ') : 'nothing';
     for (const pid of looters) this.msg(pid, `Loot of ${who}: ${names}.`, 'loot');
     this.petSys.onLoot(looters, items, who);
@@ -2719,7 +2743,7 @@ export class Game implements AIContext {
   }
 
   /** Server-wide announcement (big banner and a log line on every client). */
-  announce(title: string, text: string, style: 'worldboss' | 'raid' | 'boss', big: boolean): void {
+  announce(title: string, text: string, style: AnnounceStyle, big: boolean): void {
     this.events.emit({ type: 'announce', title, text, style, big });
   }
 
@@ -2954,10 +2978,13 @@ export class Game implements AIContext {
     this.partyChanged(party);
   }
 
-  /** Character experience from monsters and quests; the receiver's level picks the exp stage. */
-  private grantExp(s: Session, exp: number, atId: number, why: string): void {
+  /**
+   * Character experience from monsters, quests and raids; the receiver's level picks the exp stage
+   * and a double experience weekend doubles it. `raw`: task rewards, already sized for the level.
+   */
+  grantExp(s: Session, exp: number, atId: number, why: string, raw = false): void {
     const p = s.player;
-    exp = Math.max(1, Math.round(exp * expRate(this.stages, p.level)));
+    exp = Math.max(1, Math.round(raw ? exp : exp * expRate(this.stages, p.level) * this.liveEvents.expRate()));
     this.events.emit({ type: 'xp', amount: exp, atId, to: s.id });
     this.msg(s.id, `You gained ${exp} experience points ${why}.`, 'info');
     const levels = p.gainExp(exp);
@@ -3920,6 +3947,8 @@ export class Game implements AIContext {
     if (d.kind === 'pet') return this.petSys.useSlot(s, slot);
     // Draught of Vigour, lockpicks, seeds, traps, boats… (trades/TradeSystem.ts)
     if (this.skillSys.useItem(s, slot, d)) return;
+    // festival costumes (liveops/LiveEvents.ts)
+    if (this.liveEvents.useItem(s, slot, d)) return;
     const eq = equipSlotFor(d);
     if (eq) return this.equipFromSlot(s, slot, eq, d);
     if (d.rune) return this.useRune(pid, slot);
@@ -4898,6 +4927,12 @@ export class Game implements AIContext {
         if (line && s.dialogue) s.dialogue.text = line;
         break;
       }
+      case 'tasks': {
+        // the task boards (liveops/TaskSystem.ts)
+        const line = this.taskSys.dialogueAction(s, rest);
+        if (line && s.dialogue) s.dialogue.text = line;
+        break;
+      }
       case 'bye':
         this.msg(pid, `${d.npcName}: Farewell, ${p.name}.`, 'npc');
         this.closeDialogue(pid);
@@ -5137,6 +5172,7 @@ export class Game implements AIContext {
       feats: { bosses: [...s.bossKills] },
       pets: savePets(s.pets),
       trades: saveTrades(s.trades),
+      tasks: saveTaskState(s.tasks),
     };
   }
 
@@ -5201,6 +5237,7 @@ export class Game implements AIContext {
     // pets: anything the pouch held that no longer exists is kept with the lost items
     s.pets = parsePets(data.pets, s.lostItems);
     s.trades = parseTrades(data.trades);
+    s.tasks = parseTaskState(data.tasks);
     this.refreshStats(s);
     s.friends = Array.isArray(data.friends) ? data.friends.filter((n): n is string => typeof n === 'string').slice(0, 100) : [];
     s.cosmetics = { hideCloak: data.cosmetics?.hideCloak === true, hideTitle: data.cosmetics?.hideTitle === true };
@@ -5254,6 +5291,7 @@ export class Game implements AIContext {
     s.tutorial = { ...finishedTutorial(), canSkip: s.tutorial.canSkip };
     s.pets = emptyPets();
     s.trades = emptyTrades();
+    s.tasks = emptyTaskState();
     this.refreshStats(s);
     p.hp = p.maxHp;
     p.mana = p.maxMana;

@@ -883,6 +883,9 @@ export const BOSS_LOOK: Partial<Record<EnemyKind, BossLook>> = {
   raid_frost_jarl: { base: 'frost_giant', tint: 0xd0e8ff, amt: 0.35, crown: 0xf0f8ff, aura: 0x8ae8ff },
   raid_swarm_queen: { base: 'scarab', tint: 0xd0a020, amt: 0.45, crown: 0xffe070, aura: 0xffd040 },
   boss_drowned_tyrant: { base: 'deepfin_raider', tint: 0x1a4a5a, amt: 0.35, crown: 0xd8443a, aura: 0x4ad8e8, glow: 0x061a20 },
+  // festival mini-bosses (liveops/festivals.ts)
+  fest_hollow_king: { base: 'skeleton', tint: 0xe07a1a, amt: 0.5, crown: 0xffa020, aura: 0xff8a1a, glow: 0x3a1400 },
+  fest_rimeclaw: { base: 'polar_bear', tint: 0xe8f4ff, amt: 0.4, crown: 0xc8302a, aura: 0x9ae0ff, glow: 0x0a1a2a },
 };
 
 /** Slayer monsters (enemies/slayerDefs.ts): a tinted, faintly glowing cousin of an existing monster (no crown, no ring). */
@@ -1014,5 +1017,7 @@ export const ENEMY_SCALE: Record<EnemyKind, number> = {
   boss_drowned_tyrant: 1.75,
   // slayer monsters
   gloomcrawler: 1.3, wailing_shade: 1.32, cinder_wraith: 1.4, marrow_gargoyle: 1.42, abyssal_horror: 1.45,
+  // festival mini-bosses
+  fest_hollow_king: 1.6, fest_rimeclaw: 1.7,
 };
 

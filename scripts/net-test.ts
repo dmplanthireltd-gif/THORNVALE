@@ -176,6 +176,41 @@ async function main(): Promise<void> {
     const seen = b.game.enemies.find((e) => e.def.boss === 'world' && !e.dead);
     check(!!seen && !!seen.def.title, `a client near it sees the world boss (${seen ? `${seen.name}, ${seen.def.title}` : 'nothing'})`);
   }
+  // task boards and world events (protocol 35): a fresh board, finish it, collect at a keeper; a treasure hunt
+  {
+    a.send({ c: 'say', text: '/tasks reset' });
+    await pump([a, b], 0.8);
+    const tk = () => a.game.session(a.pid)!.tasks;
+    check(tk().daily.length === 3 && tk().weekly.length === 2, `the client receives its task board (${tk().daily.map((t) => t.k).join(', ')})`);
+    const keeper = a.game.npcs.find((n) => n.key === 'taskboard_thornvale');
+    check(!!keeper, 'the clients know the task-board keepers');
+    if (keeper) {
+      a.send({ c: 'say', text: '/tasks done' });
+      a.send({ c: 'say', text: `/goto ${keeper.x} ${keeper.y + 1} ${keeper.z}` });
+      await pump([a, b], 1);
+      const seals0 = tk().seals, exp0 = a.game.getPlayer(a.pid)!.exp;
+      a.send({ c: 'task', a: 'claim', i: 0 });
+      await pump([a, b], 0.8);
+      check(tk().daily[0].c && tk().seals === seals0 + tk().daily[0].s && a.game.getPlayer(a.pid)!.exp > exp0, `a finished task is collected at the board over the network (+${tk().seals - seals0} seals)`);
+      a.send({ c: 'task', a: 'claim', i: 0 });
+      await pump([a, b], 0.5);
+      check(tk().seals === seals0 + tk().daily[0].s, 'the server pays a task once');
+    }
+    a.send({ c: 'say', text: '/double both 1' });
+    a.send({ c: 'say', text: '/event start treasure' });
+    await pump([a, b], 1.5);
+    const lv = b.game.liveEvents.clientView();
+    check(!!lv.v?.a.some((e) => e[0] === 'double_exp') && !!lv.v?.a.some((e) => e[0] === 'treasure') && (lv.v?.tr?.length ?? 0) > 0, 'every client sees the double weekend and the treasure hunt in the events view');
+    check((lv.v?.c.length ?? 0) > 0 && Math.abs(lv.now - Date.now()) < 120_000, 'the calendar and the server clock reach the client');
+    const said: string[] = [];
+    a.game.events.on((e) => { if (e.type === 'message') said.push(e.text); });
+    a.send({ c: 'live', a: 'seek' });
+    await pump([a, b], 0.8);
+    check(said.some((t) => /trail|cache|surface/i.test(t)), `seek answers over the network (${said[said.length - 1] ?? 'nothing'})`);
+    a.send({ c: 'say', text: '/event stop treasure' });
+    a.send({ c: 'say', text: '/double off' });
+    await pump([a, b], 0.6);
+  }
   const aGold = a.game.session(a.pid)!.inventory.count('gold');
   const aItem = a.game.session(a.pid)!.inventory.count(item);
   a.close();

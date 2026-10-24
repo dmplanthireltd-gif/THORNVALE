@@ -4,6 +4,7 @@ import { drawGear } from './gearIcons';
 import { drawRuneStone } from './runeIcons';
 import { drawPetIcon } from './petIcons';
 import { drawTradeIcon, TRADE_MATERIAL_SHAPES } from './tradeIcons';
+import { drawLiveIcon, LIVE_MATERIAL_SHAPES } from './liveIcons';
 
 /**
  * Hand-drawn item and spell icons, painted once on a canvas and cached as
@@ -310,6 +311,8 @@ export const MATERIAL_SHAPE: Record<string, [string, string]> = {
 
 // herbs, seeds, stolen goods, pelts… of the trade skills (ui/tradeIcons.ts)
 Object.assign(MATERIAL_SHAPE, TRADE_MATERIAL_SHAPES);
+// festival tokens (ui/liveIcons.ts)
+Object.assign(MATERIAL_SHAPE, LIVE_MATERIAL_SHAPES);
 
 function drawMaterial(x: Ctx, d: ItemDef): void {
   const [shape, c] = MATERIAL_SHAPE[d.id] ?? ['orb', d.tint];
@@ -641,6 +644,8 @@ function drawAmmo(x: Ctx, d: ItemDef): void {
 
 function draw(x: Ctx, d: ItemDef): void {
   if (drawGear(x, d)) return;
+  // festival tokens, sweets and costumes (ui/liveIcons.ts)
+  if (drawLiveIcon(x, d)) return;
   if (drawTradeIcon(x, d)) return;
   switch (d.kind) {
     case 'gold': return drawGold(x);

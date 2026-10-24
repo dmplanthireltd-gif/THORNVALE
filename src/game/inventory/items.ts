@@ -5,6 +5,7 @@ import { PET_ITEM_SPECS, petForItem } from '../pets/petDefs';
 import { SEA_ITEM_SPECS, SEA_UNIQUES } from './seaItems';
 import { TELEPORT_BY_KEY, TELEPORT_DESTS, teleportRuneId } from '../magic/teleport';
 import { TRADE_ITEM_SPECS } from './tradeItems';
+import { LIVE_ITEM_SPECS } from '../liveops/liveItems';
 
 export type ItemKind =
   | 'gold' | 'consumable' | 'rune' | 'tool' | 'material'
@@ -536,6 +537,8 @@ const defs: ItemDef[] = [
   // --- the Sunken Reach (seaItems.ts): sea materials and Ulmaroth's uniques -------------------
   ...SEA_ITEM_SPECS.map(def),
   ...TRADE_ITEM_SPECS.map(def),
+  // festival tokens, sweets and costumes (liveops/liveItems.ts)
+  ...LIVE_ITEM_SPECS.map(def),
 ];
 
 /** Unique items only bosses drop (bosses/bosses.ts). */

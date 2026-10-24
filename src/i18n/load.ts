@@ -6,6 +6,7 @@
  *   tables/texts.ts      whole game sentences: dialogue options, NPC lines, tutorial, quests, notes…
  *   tables/names.ts      names: items, monsters, spells, NPCs, roles, places, sets, skills…
  *   tables/trades.ts     all four kinds for the trade skills of 2026-10-24 (agility, herblore, thieving, farming, hunter, slayer, sailing)
+ *   tables/liveops.ts    all four kinds for the task boards and world events of 2026-10-24
  */
 import { register } from './i18n';
 import { registerMessages, registerNames, registerTexts } from './gameText';
@@ -14,6 +15,7 @@ import { MESSAGES } from './tables/messages';
 import { TEXTS } from './tables/texts';
 import { NAMES } from './tables/names';
 import { TRADE_MESSAGES, TRADE_NAMES, TRADE_TEXTS, TRADE_UI } from './tables/trades';
+import { LIVE_MESSAGES, LIVE_NAMES, LIVE_TEXTS, LIVE_UI } from './tables/liveops';
 import { installSpecials } from './specials';
 
 register(UI);
@@ -25,5 +27,10 @@ register(TRADE_UI);
 registerMessages(TRADE_MESSAGES);
 registerTexts(TRADE_TEXTS);
 registerNames(TRADE_NAMES);
+// task boards and world events of 2026-10-24 (tables/liveops.ts)
+register(LIVE_UI);
+registerMessages(LIVE_MESSAGES);
+registerTexts(LIVE_TEXTS);
+registerNames(LIVE_NAMES);
 // after the tables: code-built texts (item look lines, quest progress variants)
 installSpecials();

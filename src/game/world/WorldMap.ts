@@ -4,6 +4,7 @@ import type { SpawnPlaza } from './spawnPlaza';
 import type { SeaKind, SeaLayout } from './sea';
 import { cloneTradeLayout, type TradeLayout } from '../trades/layout';
 import type { SlayerKind } from '../trades/slayer';
+import type { FestivalKind } from '../liveops/festivals';
 
 /** Ground layer — what the tile floor is made of. */
 export enum Ground {
@@ -224,7 +225,9 @@ export type EnemyKind =
   // the Sunken Reach under the sea south of Millbrook (world/sea.ts)
   | SeaKind
   // slayer monsters (trades/slayer.ts, enemies/slayerDefs.ts): only slayers can hurt them
-  | SlayerKind;
+  | SlayerKind
+  // festival mini-bosses (liveops/festivals.ts): they come to the towns during the Hollow Moon and Winterhearth
+  | FestivalKind;
 
 export interface Region {
   name: string;

@@ -58,8 +58,10 @@ console.log('Boss definitions');
 {
   const dungeon = ALL_BOSSES.filter((k) => ENEMIES[k].boss === 'dungeon');
   const world = ALL_BOSSES.filter((k) => ENEMIES[k].boss === 'world');
-  const raid = ALL_BOSSES.filter((k) => ENEMIES[k].boss === 'raid');
-  check(dungeon.length === DUNGEON_BOSSES.length && dungeon.length >= 11 && world.length === 3 && raid.length === 4, `${DUNGEON_BOSSES.length} dungeon bosses, 3 world bosses, 4 raid bosses (${dungeon.length}/${world.length}/${raid.length})`);
+  // festival bosses (liveops/festivals.ts) are raid-type bosses that come with the festivals
+  const raid = ALL_BOSSES.filter((k) => ENEMIES[k].boss === 'raid' && !k.startsWith('fest_'));
+  const fest = ALL_BOSSES.filter((k) => k.startsWith('fest_'));
+  check(dungeon.length === DUNGEON_BOSSES.length && dungeon.length >= 11 && world.length === 3 && raid.length === 4 && fest.length === 2, `${DUNGEON_BOSSES.length} dungeon bosses, 3 world bosses, 4 raid bosses, 2 festival bosses (${dungeon.length}/${world.length}/${raid.length}/${fest.length})`);
   check(ALL_BOSSES.every((k) => ENEMIES[k].elite && ENEMIES[k].title && ENEMIES[k].enrage), 'every boss is elite, has a title and enrages');
   const names = new Set(ALL_BOSSES.map((k) => ENEMIES[k].name));
   check(names.size === ALL_BOSSES.length, 'boss names are unique');

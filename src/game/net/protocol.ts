@@ -24,8 +24,12 @@ import { applyPetsView, parsePetLook, petLook, petsView, type PetView } from '..
 import { applyTradeView, type TradeView as TradeSkillView } from '../trades/TradeSystem';
 import { petForItem, petXpForLevel } from '../pets/petDefs';
 import { decodeWeather, encodeWeather, type WeatherSnap } from '../world/weather';
+import type { LiveView } from '../liveops/LiveEvents';
+import { applyTaskState, type TaskState } from '../liveops/tasks';
 
 export type PetAction = 'dismiss' | 'pouch' | 'pouchClose' | 'put' | 'take';
+export type TaskAction = 'claim' | 'deliver' | 'reroll' | 'buy' | 'festival';
+const TASK_ACTIONS: TaskAction[] = ['claim', 'deliver', 'reroll', 'buy', 'festival'];
 const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take'];
 
 /**
@@ -34,7 +38,7 @@ const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 34;
+export const PROTOCOL_VERSION = 35;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -112,7 +116,14 @@ export type Command =
   | { c: 'pet'; a: PetAction; i?: number }
   /** Trade skills (protocol 29): switch running on/off; try to pick an NPC's pocket. */
   | { c: 'run'; on: boolean }
-  | { c: 'thieve'; id: number };
+  | { c: 'thieve'; id: number }
+  /**
+   * Task boards (protocol 35): claim a finished task, hand in goods, swap a daily task, buy from the seal
+   * shop, trade festival tokens. `w` 1 = a weekly task; `i` = task / shop index.
+   */
+  | { c: 'task'; a: TaskAction; i: number; w?: 0 | 1 }
+  /** World events (protocol 35): follow the treasure trail (digs when standing by a cache). */
+  | { c: 'live'; a: 'seek' };
 
 export type ClientMessage =
   | { t: 'hello'; v: number; name: string; password?: string; token?: string; ap?: number[]; vocation?: Vocation; skipTutorial?: boolean }
@@ -201,6 +212,8 @@ export interface SelfSnap {
   pet?: PetView;
   /** Trade skills (protocol 29): stamina, running, and later the slayer task, farm patches, traps and boat; only when changed. */
   tw?: TradeSkillView;
+  /** Daily and weekly tasks, seals, login streak (protocol 35); only when changed. */
+  tk?: TaskState;
 }
 
 export type ServerMessage =
@@ -216,6 +229,8 @@ export type ServerMessage =
     wx?: WeatherSnap;
     /** Sprung jungle traps near the player (trap indexes, world/traps.ts); only sent when the list changes. */
     tr?: number[];
+    /** World events and the calendar (liveops/LiveEvents.ts; protocol 35): when it changes, and once a minute for the clock. */
+    lv?: LiveView;
   }
   | { t: 'ev'; e: GameEvent }
   | { t: 'error'; text: string };
@@ -250,6 +265,7 @@ export function resendAll(s: Session): void {
   selfSent.delete(s);
   lookSent.delete(s);
   activitySent.delete(s);
+  liveSent.delete(s);
 }
 
 export function buildSnapshot(game: Game, s: Session): ServerMessage {
@@ -317,6 +333,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     cos: onlyChanged(s, 'cos', [s.cosmetics.hideCloak ? 0 : 1, s.cosmetics.hideTitle ? 0 : 1] as [0 | 1, 0 | 1]),
     pet: onlyChanged(s, 'pet', petsView(s.pets)),
     tw: onlyChanged(s, 'tw', game.skillSys.view(s)),
+    tk: onlyChanged(s, 'tk', s.tasks),
     tu: onlyChanged(s, 'tu', { s: s.tutorial.state, st: s.tutorial.step, f: s.tutorial.flags, n: s.tutorial.count, cs: s.tutorial.canSkip ? 1 as const : 0 as const }),
   };
   // the market list is only sent when something in it (or in your depot or bank) changed
@@ -345,7 +362,20 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     wev: onlyChanged(s, 'wev', game.worldMarks()),
     wx: onlyChanged(s, 'wx', encodeWeather(game.weatherView(me.id))),
     tr: onlyChanged(s, 'tr', game.traps.sprungNear(me.x, me.y, me.z, VIEW_RADIUS + 4)),
+    lv: liveFor(game, s),
   };
+}
+
+/** What world-event view each session was last sent, and when (the view carries the server's clock). */
+const liveSent = new WeakMap<Session, { key: string; at: number }>();
+
+function liveFor(game: Game, s: Session): LiveView | undefined {
+  const v = game.liveEvents.view();
+  const key = JSON.stringify([v.a, v.c, v.tr ?? null]);
+  const last = liveSent.get(s);
+  if (last && last.key === key && v.t - last.at < 60_000) return undefined;
+  liveSent.set(s, { key, at: v.t });
+  return v;
 }
 
 /** What market view each session was last sent (so an unchanged market is not resent 20 times a second). */
@@ -449,6 +479,18 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'pet': if (PET_ACTIONS.includes(m.a)) game.petCommand(pid, m.a, num(m.i) ? Math.floor(m.i) : -1); break;
     case 'run': { const s = game.session(pid); if (s) game.skillSys.setRunning(s, m.on === true); break; }
     case 'thieve': { const s = game.session(pid); if (s && num(m.id)) game.skillSys.pickpocket(s, Math.floor(m.id)); break; }
+    case 'task': {
+      const s = game.session(pid);
+      if (!s || !TASK_ACTIONS.includes(m.a) || !num(m.i) || !Number.isInteger(m.i)) break;
+      const weekly = m.w === 1;
+      if (m.a === 'claim') game.taskSys.claim(s, weekly, m.i);
+      else if (m.a === 'deliver') game.taskSys.deliver(s, weekly, m.i);
+      else if (m.a === 'reroll') game.taskSys.reroll(s, m.i);
+      else if (m.a === 'buy') game.taskSys.buy(s, m.i);
+      else game.taskSys.festivalTrade(s, m.i);
+      break;
+    }
+    case 'live': { const s = game.session(pid); if (s && m.a === 'seek') game.liveEvents.seek(s); break; }
   }
 }
 
@@ -635,6 +677,8 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
   }
   if (me.pet) applyPetsView(s.pets, me.pet);
   if (me.tw) applyTradeView(s.trades, me.tw);
+  if (me.tk) applyTaskState(s.tasks, me.tk);
+  if (snap.lv) game.liveEvents.applyNet(snap.lv);
   if (me.cos) {
     const hideCloak = me.cos[0] === 0;
     s.cosmetics = { hideCloak, hideTitle: me.cos[1] === 0 };

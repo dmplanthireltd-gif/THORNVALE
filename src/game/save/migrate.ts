@@ -18,7 +18,7 @@ import { inRebuiltThornvale } from '../world/grandCity';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -106,6 +106,12 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
     for (const id of ['agility', 'herblore', 'thieving', 'slayer', 'farming', 'hunter', 'sailing']) if (typeof g[id] !== 'number') g[id] = 0;
     const old = d.trades && typeof d.trades === 'object' ? (d.trades as Record<string, unknown>) : {};
     return { ...d, gathering: g, trades: { run: false, slayer: null, points: 0, streak: 0, farm: {}, ...old }, version: 17 };
+  },
+  // v17 → v18: daily and weekly tasks (liveops/tasks.ts). An empty board, no seals and no login streak yet:
+  // the first login after the update hands out the first tasks. Nothing else changes.
+  17: (d) => {
+    const old = d.tasks && typeof d.tasks === 'object' ? (d.tasks as Record<string, unknown>) : {};
+    return { ...d, tasks: { day: -1, week: -1, daily: [], weekly: [], rr: -1, seals: 0, streak: 0, best: 0, last: -1, done: 0, ...old }, version: 18 };
   },
 };
 

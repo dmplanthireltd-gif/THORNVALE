@@ -79,6 +79,11 @@ export const CAPE_LOOK: Record<string, CapeLook> = {
   // seasons
   frostfall_cape: L(0x9ad0f0, 0x3a7aa8, 0xffffff, 'snow', 0xffffff, 'flake', 0xffffff, 'scalloped', 'fur', 'frost', 0xd8f6ff),
   harvestmoon_cape: L(0xc86a1a, 0x5a2a08, 0x5a3a1a, 'leaves', 0xa84a10, 'moon', 0xffe8a0, 'tattered', 'plain'),
+  // rewards: the task boards' seal shop and the festivals (liveops/)
+  taskbearer_cape: L(0x5a4a30, 0x2a2014, 0xc9a24a, 'check', 0x4a3c26, 'feather', 0xe8c26a, 'straight', 'plain'),
+  wayfinder_mantle: L(0x24384a, 0x0e1a24, 0xe8c26a, 'rays', 0x2e4658, 'globe', 0xe8c26a, 'pointed', 'gold', 'glint', 0xfff0a0),
+  hollowmoon_cape: L(0x2a1a2e, 0x100810, 0xe07a1a, 'speckle', 0x3a2440, 'moon', 0xffa030, 'tattered', 'plain', 'embers', 0xff8a20),
+  winterhearth_cape: L(0x8a1a1a, 0x3a0808, 0xf0f0f0, 'snow', 0xffffff, 'flake', 0xffffff, 'scalloped', 'fur', 'frost', 0xd8f6ff),
 };
 
 /** Look of any cape id (unknown ids get a plain brown cape). */

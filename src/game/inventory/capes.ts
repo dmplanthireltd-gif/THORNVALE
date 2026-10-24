@@ -16,7 +16,8 @@ import type { EnemyKind } from '../world/WorldMap';
  * Ids are stable forever (they live in saves).
  */
 
-export type CapeKind = 'skill' | 'mastery' | 'town' | 'boss' | 'deed' | 'season';
+/** `reward`: from the task boards' seal shop or a festival's trades (liveops/), never sold for gold. */
+export type CapeKind = 'skill' | 'mastery' | 'town' | 'boss' | 'deed' | 'season' | 'reward';
 export type CapeSkill = CombatSkill | NonCombatSkill;
 
 /** Deeds a deed cape asks for (tracked per character in `Session.bossKills`, save v13+). */
@@ -149,6 +150,23 @@ export const CAPES: CapeDef[] = [
   {
     id: 'harvestmoon_cape', name: 'Harvestmoon Cape', kind: 'season', season: { from: 9, to: 11, name: 'autumn (September to November)' }, seller: 'millbrook_elder', price: 5000, value: 500, rarity: 'uncommon', tint: '#c86a1a',
     note: 'Sold only in autumn, from September to November, under the harvest moon.',
+  },
+  // --- rewards (liveops/: the task boards' seal shop and the festival trades) -------------------
+  {
+    id: 'taskbearer_cape', name: "Taskbearer's Cape", kind: 'reward', value: 100, rarity: 'uncommon', tint: '#5a4a30',
+    note: 'Worn by those who never leave a notice unanswered. Bought with task seals at any task board.',
+  },
+  {
+    id: 'wayfinder_mantle', name: "Wayfinder's Mantle", kind: 'reward', value: 250, rarity: 'rare', tint: '#24384a',
+    note: 'A traveller\'s mantle stitched with the roads of the realm. Bought with task seals at any task board.',
+  },
+  {
+    id: 'hollowmoon_cape', name: 'Hollow Moon Cape', kind: 'reward', value: 150, rarity: 'uncommon', tint: '#2a1a2e',
+    note: 'Dusk-purple cloth with a pumpkin moon. Traded for hollow pumpkins at the task boards during the Hollow Moon festival.',
+  },
+  {
+    id: 'winterhearth_cape', name: 'Winterhearth Cape', kind: 'reward', value: 150, rarity: 'uncommon', tint: '#8a1a1a',
+    note: 'Hearth-red wool trimmed with white fur. Traded for frost baubles at the task boards during the Winterhearth festival.',
   },
 ];
 

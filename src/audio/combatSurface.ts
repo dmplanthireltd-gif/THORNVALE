@@ -36,6 +36,8 @@ export const MONSTER_SURFACE: Record<string, Surface> = {
   deepfin_raider: S, deepfin_harpooner: S, deepfin_tidecaller: S, gloom_eel: W, boss_drowned_tyrant: W,
   // slayer monsters (enemies/slayerDefs.ts)
   gloomcrawler: C, wailing_shade: E, cinder_wraith: E, marrow_gargoyle: ST, abyssal_horror: S,
+  // festival bosses (liveops/festivals.ts)
+  fest_hollow_king: B, fest_rimeclaw: F,
 };
 
 /** A creature's surface; kinds without an entry are guessed from their name. */

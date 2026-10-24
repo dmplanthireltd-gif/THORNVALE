@@ -1,4 +1,5 @@
 import { buildTradeSpots } from './tradeSpots';
+import { placeTaskBoards } from './taskBoards';
 import { hash2, Rng } from '../core/rng';
 import { buildAreas } from './areas';
 import { Gen, SOFT } from './genKit';
@@ -92,6 +93,8 @@ function generate(seed: number): WorldMap {
   // so every tile, spawn, chest and NPC placed before stays the same (world/tradeSpots.ts)
   buildTradeSpots(m);
   T('trades');
+  // the task-board keepers, after everything else (world/taskBoards.ts; no random numbers)
+  placeTaskBoards(m);
   return m;
 }
 

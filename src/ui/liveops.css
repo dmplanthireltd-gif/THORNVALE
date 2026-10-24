@@ -1,0 +1,71 @@
+/* ---------------------------------------------------------------- task board and world events (ui/tasksUi.ts, ui/eventsUi.ts) */
+.tasks-win { width: min(600px, calc(100vw - var(--vl) - var(--vr) - 24px)); }
+.events-win { width: min(560px, calc(100vw - var(--vl) - var(--vr) - 24px)); }
+.tk-body, .ev-body { gap: 7px; }
+/* the windows scroll; their rows keep their size */
+.tk-body > *, .ev-body > * { flex-shrink: 0; }
+.tk-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.tk-chip {
+  font: 600 12px var(--pixel); color: var(--ink); padding: 3px 7px; font-variant-numeric: tabular-nums;
+  background: var(--slot); box-shadow: inset 2px 2px 0 #0d0b09, 0 0 0 1px #4a4034;
+}
+.tk-chip.gold { color: var(--gold); }
+.tk-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.tk-dia { flex: 0 0 auto; width: 6px; height: 6px; background: var(--accent); transform: rotate(45deg); margin: 0 3px; }
+.tk-task {
+  background: var(--panel); border: 1px solid #0d0b09; box-shadow: inset 0 0 0 1px #4a4034;
+  padding: 7px 8px; display: flex; flex-direction: column; gap: 5px;
+}
+.tk-task.done { box-shadow: inset 0 0 0 1px var(--accent); }
+.tk-task.claimed { opacity: 0.6; }
+.tk-task-head { display: flex; align-items: center; gap: 6px; }
+.tk-task-name { flex: 1; font: 700 15px var(--serif); color: var(--gold); }
+.tk-state { font: 700 11px var(--pixel); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.tk-state.ready { color: #ffe9a8; }
+.tk-hint { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.tk-bar { position: relative; height: 15px; background: #0c0a08; box-shadow: 0 0 0 1px #4a4034; }
+.tk-bar-fill { position: absolute; inset: 0 auto 0 0; background: #d9a520; box-shadow: inset 0 2px 0 #f0c850; }
+.tk-bar-text { position: absolute; inset: 0; text-align: center; font: 700 11px/15px var(--pixel); color: #fff; text-shadow: 1px 1px 0 #000; font-variant-numeric: tabular-nums; }
+.tk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.tk-reward { font: 600 12px var(--pixel); color: var(--ink); font-variant-numeric: tabular-nums; }
+.tk-reward.gold { color: var(--gold); }
+.tk-spacer { flex: 1; }
+.tk-shop { display: flex; flex-direction: column; gap: 3px; }
+.tk-shop-row { display: flex; align-items: center; gap: 8px; padding: 3px 4px; background: var(--panel); box-shadow: inset 0 0 0 1px #4a4034; }
+.tk-slot { width: 34px; height: 34px; flex: 0 0 34px; position: relative; display: grid; place-items: center; }
+.tk-seal { color: var(--gold); font-size: 18px; }
+.tk-shop-name { flex: 1; font: 600 13px var(--serif); color: var(--ink); }
+.tk-price { font: 700 12px var(--pixel); color: var(--gold); font-variant-numeric: tabular-nums; }
+.tk-price.short { color: var(--muted); }
+
+/* the strip of what is on now, hanging from the top edge of the game view */
+.live-strip {
+  position: absolute; left: calc(var(--vl) + 10px); top: calc(var(--vt) + 4px); z-index: 6; cursor: pointer;
+  display: flex; flex-direction: column; gap: 3px; max-width: min(320px, 40%);
+}
+.live-chip {
+  display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 6px;
+  background: #2b2621; border: 1px solid #0d0b09; box-shadow: inset 0 0 0 1px #4a4034, 0 4px 14px rgba(0, 0, 0, 0.55);
+  font: 600 11px var(--pixel); color: var(--ink);
+}
+.live-chip:hover { background: #36302a; }
+.live-dia { flex: 0 0 auto; width: 6px; height: 6px; background: var(--accent); transform: rotate(45deg); }
+.live-chip.k-raid .live-dia, .ev-row.k-raid .tk-dia { background: #e05a3a; }
+.live-chip.k-festival .live-dia, .live-chip.k-miniboss .live-dia, .ev-row.k-festival .tk-dia, .ev-row.k-miniboss .tk-dia { background: #ff9a3a; }
+.live-chip.k-double_exp .live-dia, .live-chip.k-double_skill .live-dia { background: #3ccf3c; }
+.live-name { color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-time { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.ev-row { display: flex; align-items: center; gap: 7px; padding: 3px 4px; font: 600 12px var(--pixel); color: var(--ink); }
+.ev-name { flex: 1; font: 700 13px var(--serif); color: var(--gold); }
+.ev-when { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ev-time { flex: 0 0 72px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ev-local { flex: 0 0 46px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ev-cal { display: flex; flex-direction: column; gap: 1px; max-height: 300px; overflow-y: auto; background: var(--slot); box-shadow: inset 2px 2px 0 #0d0b09, 0 0 0 1px #4a4034; padding: 4px; }
+.ev-day { font: 700 11px var(--pixel); letter-spacing: 0.14em; text-transform: uppercase; color: #d4ad55; padding: 6px 4px 2px; }
+.ev-treasure { display: flex; flex-direction: column; gap: 5px; padding: 6px 8px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--accent); }
+.ev-seek { align-self: flex-start; }
+
+/* world-event banners (announce styles 'event' and 'festival') */
+.announce-banner.event { border-color: #c9a24a; box-shadow: 0 0 18px rgba(232, 194, 106, 0.35); }
+.announce-banner.festival { border-color: #e07a1a; box-shadow: 0 0 18px rgba(255, 140, 40, 0.45); }

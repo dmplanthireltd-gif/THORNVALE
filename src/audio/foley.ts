@@ -71,6 +71,8 @@ const BODIES: Record<string, Body> = {
   // slayer monsters (enemies/slayerDefs.ts)
   gloomcrawler: B('insect', 'chitin', 'large'), wailing_shade: B('ghoul', 'cloth', 'medium'), cinder_wraith: B('flame', 'fire', 'large'),
   marrow_gargoyle: B('golem', 'stone', 'huge'), abyssal_horror: B('demon', 'scale', 'huge'),
+  // festival bosses (liveops/festivals.ts)
+  fest_hollow_king: B('skeleton', 'bone', 'large'), fest_rimeclaw: B('bear', 'fur', 'huge'),
 };
 
 export function bodyOf(kind: string): Body {

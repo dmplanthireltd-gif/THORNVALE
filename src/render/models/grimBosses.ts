@@ -716,6 +716,55 @@ const RECIPES: Partial<Record<EnemyKind, Recipe>> = {
       },
     },
   },
+  // Gourdmaw, the Hollow King (festival, liveops/festivals.ts): a carved pumpkin for a head with candle-lit eyes,
+  // a rag cloak and a pumpkin lantern swinging from one hand
+  fest_hollow_king: {
+    glow: 0xffa030,
+    fx: [
+      { kind: 'embers', color: 0xff9a2a, n: 14, size: 0.05, radius: 0.7, height: 1.9, speed: 0.22 },
+      { kind: 'mist', color: 0x3a2a40, n: 8, size: 0.7, radius: 0.9, height: 0.3, speed: 0.05 },
+    ],
+    parts: {
+      head: (m, b, g) => {
+        const y = b.cy + 0.05, z = b.cz;
+        for (const [dx, sx] of [[-0.09, 0.8], [0.09, 0.8], [0, 1]] as Array<[number, number]>) m.sph(b.w * 0.62, 0xd8701a, [dx, y, z], { s: [sx, 0.82, 0.95], grit: 0.25 }, 1);
+        m.cyl(0.025, 0.035, 0.12, 0x3a5a22, [0, y + b.w * 0.5, z], { r: [0.2, 0, 0.15] }, 5);
+        // the carved face, lit from inside
+        for (const sx of [-1, 1]) g.cone(0.045, 0.05, 0xffd860, [sx * 0.07, y + 0.04, z + b.w * 0.55], { r: [Math.PI / 2, 0, 0], glow: true }, 3);
+        g.box(0.16, 0.035, 0.02, 0xffd860, [0, y - 0.07, z + b.w * 0.56], { glow: true });
+      },
+      torso: (m, b) => {
+        strips(m, [b.x0 * 1.1, b.y1 - 0.02, b.z0 - 0.02], [b.x1 * 1.1, b.y1 - 0.02, b.z0 - 0.02], 7, 0.9, 0x2a1a2e, 0.1, 0);
+        strips(m, [b.x0 * 1.05, b.y1 - 0.05, b.z1 + 0.01], [b.x1 * 1.05, b.y1 - 0.05, b.z1 + 0.01], 5, 0.5, 0x4a3a2a, 0.07, 0);
+        m.ring(b.w * 0.4, 0.02, 0x5a3a1a, [0, b.y1 - 0.06, b.cz], { s: [1, 1, 1.3] }, Math.PI * 2, 12);
+      },
+      armL: (m, b, g) => {
+        const end = hang(m, [b.cx, b.y0 + 0.02, b.cz + 0.06], 2, 0.02);
+        m.sph(0.07, 0xd8701a, [end[0], end[1] - 0.08, end[2]], { s: [1.1, 0.85, 1.1], grit: 0.2 }, 1);
+        g.sph(0.04, 0xffd860, [end[0], end[1] - 0.08, end[2] + 0.04], { glow: true }, 1);
+      },
+    },
+  },
+  // Old Rimeclaw, the Feast-Thief (festival): a stolen red feast-cap with white fur, a sack of baubles on his back
+  fest_rimeclaw: {
+    glow: 0x9ae0ff,
+    fx: [
+      { kind: 'snow', color: 0xf0f8ff, n: 18, size: 0.05, radius: 1.0, height: 2.0, speed: 0.2, y0: 2.2 },
+      { kind: 'mist', color: 0xc8e0f0, n: 8, size: 0.8, radius: 1.0, height: 0.3, speed: 0.05 },
+    ],
+    parts: {
+      head: (m, b, g) => {
+        m.cone(b.w * 0.42, 0.34, 0xb82a22, [0, b.y1 + 0.12, b.cz - 0.02], { r: [-0.35, 0, 0.2], grit: 0.2 }, 7);
+        m.ring(b.w * 0.42, 0.04, 0xf4f4f0, [0, b.y1 - 0.02, b.cz - 0.02], { r: [Math.PI / 2, 0, 0] }, Math.PI * 2, 12);
+        g.sph(0.05, 0xffffff, [0.06, b.y1 + 0.3, b.cz - 0.14], { glow: true }, 1);
+      },
+      torso: (m, b, g) => {
+        m.sph(b.w * 0.42, 0x6a4a2a, [0, b.y1 + 0.18, b.cz - 0.1], { s: [1, 0.85, 1.2], grit: 0.35 }, 1);
+        m.ring(b.w * 0.2, 0.03, 0x3a2a14, [0, b.y1 + 0.42, b.cz - 0.1], { r: [Math.PI / 2, 0, 0] }, Math.PI * 2, 8);
+        for (let i = 0; i < 4; i++) g.sph(0.05, [0x9ad0f0, 0xe8c26a, 0xc8302a, 0x9ae0ff][i], [between(-0.2, 0.2), b.y1 + 0.42 + between(0, 0.06), b.cz - 0.1 + between(-0.15, 0.15)], { glow: true }, 1);
+      },
+    },
+  },
   // Hjalmvar Rimeborn, the frost jarl: a fur mantle, frozen trophy shields, icicles and frost runes
   raid_frost_jarl: {
     glow: 0x8ae8ff,

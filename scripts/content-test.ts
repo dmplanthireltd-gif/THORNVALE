@@ -47,6 +47,8 @@ import { DEEPEN_REPORT, DEEPENED_FLOORS, UNDERGROUND_AREAS } from '../src/game/w
 import { TOWNS } from '../src/game/world/townList';
 import { WEB_SLOW } from '../src/game/Game';
 import { TELEPORT_RUNES } from '../src/game/magic/teleport';
+import { SEAL_SHOP } from '../src/game/liveops/tasks';
+import { FESTIVALS } from '../src/game/liveops/festivals';
 const townMageSells = (id: string): boolean => Object.values(NPCS).filter((n) => n.role === 'Magic, runes & potions').every((n) => !!n.sells?.some((e) => e.id === id));
 
 let failures = 0;
@@ -1091,7 +1093,9 @@ console.log('Capes');
     const seller = c.seller ? NPCS[c.seller] : undefined;
     const sold = !!seller && !!seller.sells?.some((e) => e.id === c.id && e.price === c.price);
     const dropped = !!c.drop && !!ENEMIES[c.drop.kind]?.loot.some((l) => l.id === c.id);
-    check(sold || dropped, `${c.id}: has a source (${c.seller ?? c.drop?.kind})`);
+    // reward capes: the task boards' seal shop or a festival's trades (liveops/)
+    const reward = c.kind === 'reward' && [...SEAL_SHOP, ...FESTIVALS.flatMap((f) => f.shop)].some((e) => e.id === c.id && e.price > 0);
+    check(sold || dropped || reward, `${c.id}: has a source (${c.seller ?? c.drop?.kind ?? (reward ? 'task board' : undefined)})`);
     if (c.seller) check(world.npcs.some((n) => n.key === c.seller), `${c.id}: its seller ${c.seller} stands in the world`);
     // a buyer: its seller buys it back, and every banker buys every cape
     const buyers = Object.values(NPCS).filter((n) => n.buys?.includes(c.id));

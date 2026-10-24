@@ -5,6 +5,7 @@ import { CAPE_DROPS } from '../inventory/capes';
 import { PET_DROPS } from '../pets/petDefs';
 import { SEA_ENEMIES } from './seaDefs';
 import { SLAYER_ENEMIES } from './slayerDefs';
+import { FESTIVAL_ENEMIES } from '../liveops/festivals';
 
 export interface LootEntry {
   id: string;
@@ -665,6 +666,8 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   // the Sunken Reach (seaDefs.ts, world/sea.ts)
   ...SEA_ENEMIES,
   ...SLAYER_ENEMIES,
+  // festival mini-bosses (liveops/festivals.ts)
+  ...FESTIVAL_ENEMIES,
 };
 
 // gear-set pieces (inventory/sets.ts) join the loot tables of the monsters that wear them

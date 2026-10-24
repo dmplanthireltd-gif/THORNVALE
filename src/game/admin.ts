@@ -17,6 +17,7 @@ import { Climate, WEATHER_NAMES, weatherKindByName } from './world/weather';
 import { CAPE_IDS, DUNGEON_BOSS_KINDS, WORLD_BOSS_KINDS } from './inventory/capes';
 import { PET_DEFS, PET_MAX_LEVEL, petXpForLevel } from './pets/petDefs';
 import { PLANT_BY_SEED } from './trades/farming';
+import { LIVE_HELP, liveStatus, runLiveCommand } from './liveops/commands';
 
 /**
  * Test / game-master commands, typed in chat with a leading "/".
@@ -118,7 +119,7 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
   switch (cmd) {
     case 'help':
     case '?':
-      for (const l of ADMIN_HELP) say(l);
+      for (const l of [...ADMIN_HELP, ...LIVE_HELP]) say(l);
       return;
     case 'level':
     case 'lvl': {
@@ -280,6 +281,7 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
     case 'events': {
       if (s.testOnly) return say('Only game masters can see the event timers.', 'warn');
       for (const l of game.worldEvents.upcoming()) say(l);
+      for (const l of liveStatus(game)) say(l);
       return;
     }
     case 'goto':
@@ -431,6 +433,8 @@ export function runAdminCommand(game: Game, s: Session, text: string): void {
       return say('Usage: /tutorial, /tutorial step N, /tutorial done, /tutorial skip, /tutorial reset', 'warn');
     }
     default:
+      // world events and task boards (liveops/commands.ts)
+      if (runLiveCommand(game, s, cmd, rest)) return;
       say(`Unknown command "/${cmd}". Type /help.`, 'warn');
   }
 }
