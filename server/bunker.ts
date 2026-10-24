@@ -30,10 +30,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const BUNKER_PATH = normalisePath(process.env.BUNKER_PATH ?? '/bunker47-563f4cb0f8/');
 export const BUNKER_FILE = resolve(join(HERE, '..', 'games', 'bunker47.html'));
 export const BUNKER_WS = '/b47ws';
-/** The owner's songs, served next to the page: <BUNKER_PATH>song.mp3 (radio easter egg) and deadlock.mp3 (boss theme). */
+/** The owner's songs and voice lines, served next to the page: <BUNKER_PATH>song.mp3 (radio easter egg), deadlock.mp3 (boss theme), vo-*.mp3 (voice lines). */
 export const BUNKER_SONGS: Record<string, string> = {
   'song.mp3': resolve(join(HERE, '..', 'games', 'bunker47-song.mp3')),
   'deadlock.mp3': resolve(join(HERE, '..', 'games', 'bunker47-deadlock.mp3')),
+  // voice lines
+  'vo-reload-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-reload-1.mp3')),
+  'vo-reload-2.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-reload-2.mp3')),
+  'vo-down-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-down-1.mp3')),
+  'vo-kill-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-kill-1.mp3')),
+  'vo-kill-2.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-kill-2.mp3')),
+  'vo-boss-1.mp3': resolve(join(HERE, '..', 'games', 'bunker47-vo-boss-1.mp3')),
 };
 
 const MAX_SOCKETS = 400;

@@ -312,7 +312,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
         <kbd>V</kbd><span>Knife · <b>G</b> grenade · <b>T</b> flashlight</span>
         <kbd>Esc</kbd><span>Menu</span>
       </div>
-      <p style="margin-top:10px">Every hit earns points; kills and headshots earn more. Spend them on wall weapons, the glowing crate's random weapon, tonics from the cabinets, and the steel doors that open new rooms. Clear the stairway in the Generator Hall to reach the Officers' Quarters upstairs, where the Upgrade Forge turns any weapon into something far nastier. Go down in co-op and a teammate has 30 seconds to revive you.</p>
+      <p style="margin-top:10px">Every hit earns points; kills and headshots earn more. Spend them on wall weapons, the Dubplate Crate's random weapon, tonics from the machines, and the steel doors to the Sound System Hall and the Record Store. Clear the stairs in the Sound System Hall to reach the Studio, where the Remix Desk turns any weapon into something far nastier. Every tenth round Deadlock comes for you. Go down in co-op and a teammate has 30 seconds to revive you.</p>
     </details>
     <div class="row"><button class="btn ghost" id="optBtn">Options</button><button class="btn ghost" id="soldierBtn">Customise character</button></div>
   </div>
@@ -741,9 +741,9 @@ function limb(a, b, r, m) {
 // world data
 // =====================================================================
 const DOORS = [
-  { x: 8, z: 0, w: 2.2, h: 2.55, cost: 750, name: 'the Generator Hall', lab: 'Clear the door', sides: [-1, 1], open: false, anim: 0, mesh: null },
-  { x: 24, z: 0, w: 2.2, h: 2.55, cost: 1000, name: 'the Armory', lab: 'Clear the door', sides: [-1, 1], open: false, anim: 0, mesh: null },
-  { x: STAIR.x0, z: 5.1, w: 1.4, h: 2.4, cost: 1250, name: 'the stairs to the Officers’ Quarters', lab: 'Clear the stairs', sides: [-1], sink: true, open: false, anim: 0, mesh: null }
+  { x: 8, z: 0, w: 2.2, h: 2.55, cost: 750, name: 'the Sound System Hall', lab: 'Clear the door', sides: [-1, 1], open: false, anim: 0, mesh: null },
+  { x: 24, z: 0, w: 2.2, h: 2.55, cost: 1000, name: 'the Record Store', lab: 'Clear the door', sides: [-1, 1], open: false, anim: 0, mesh: null },
+  { x: STAIR.x0, z: 5.1, w: 1.4, h: 2.4, cost: 1250, name: 'the stairs to the Studio', lab: 'Clear the stairs', sides: [-1], sink: true, open: false, anim: 0, mesh: null }
 ];
 const doorMask = () => DOORS.reduce((m, d, i) => m | (d.open ? 1 << i : 0), 0);
 const WINS = [
@@ -841,14 +841,19 @@ function WS(s) {
 const BOX_POOL = ['thompson', 'trench', 'stg', 'bar', 'kar', 'volt', 'carbine', 'mp40', 'garand', 'g43', 'dbl', 'ppsh', 'mg42', 'panzer', 'ion'];
 const BOX_WT = { volt: 0.6, ion: 0.6, panzer: 0.8, carbine: 0.6, mp40: 0.8 };
 const PERKS = {
-  bulwark: { name: 'Bulwark Tonic', cost: 2500, color: 0xb3261e, css: '#b3261e', ab: 'B', desc: 'take twice the hits before going down' },
-  swift:   { name: 'Swift Hands',   cost: 3000, color: 0x2f7fbf, css: '#2f7fbf', ab: 'S', desc: 'reload twice as fast' },
-  fleet:   { name: 'Fleetfoot',     cost: 2000, color: 0x3f9a4a, css: '#3f9a4a', ab: 'F', desc: 'move and sprint faster' },
-  revive:  { name: 'Second Wind',   cost: 1500, solo: 500, color: 0x3aa6c9, css: '#3aa6c9', ab: 'W', desc: 'solo: get back up on your own (3 per game) · squad: revive teammates twice as fast' },
-  rapid:   { name: 'Rapid Fire',    cost: 2000, color: 0xd9a21b, css: '#c98f0f', ab: 'R', desc: 'fire 33% faster and hit 50% harder' },
-  mule:    { name: 'Pack Mule',     cost: 4000, color: 0x8a5a2b, css: '#a8743a', ab: 'M', desc: 'carry a third weapon' },
-  steady:  { name: 'Steady Aim',    cost: 1500, color: 0x9aa7b4, css: '#7f8c99', ab: 'A', desc: 'tighter hip fire and 50% stronger headshots' },
-  blast:   { name: 'Blast Guard',   cost: 2000, color: 0x8e3fb3, css: '#8e3fb3', ab: 'X', desc: 'no damage from your own explosions · carry 6 grenades' }
+  bulwark: { name: 'Heavy Bass', cost: 2500, color: 0xb3261e, css: '#b3261e', ab: 'B', desc: 'take twice the hits before going down' },
+  swift:   { name: 'Rewind Selecta', cost: 3000, color: 0x2f7fbf, css: '#2f7fbf', ab: 'S', desc: 'reload twice as fast' },
+  fleet:   { name: 'Riddim Runner', cost: 2000, color: 0x3f9a4a, css: '#3f9a4a', ab: 'F', desc: 'move and sprint faster' },
+  revive:  { name: 'Bless Up',      cost: 1500, solo: 500, color: 0x3aa6c9, css: '#3aa6c9', ab: 'W', desc: 'solo: get back up on your own (3 per game) · squad: revive teammates twice as fast' },
+  rapid:   { name: 'Bun Fyah',      cost: 2000, color: 0xd9a21b, css: '#c98f0f', ab: 'R', desc: 'fire 33% faster and hit 50% harder' },
+  mule:    { name: 'Crate Digga',   cost: 4000, color: 0x8a5a2b, css: '#a8743a', ab: 'M', desc: 'carry a third weapon' },
+  steady:  { name: 'Eagle Eye Dub', cost: 1500, color: 0x9aa7b4, css: '#7f8c99', ab: 'A', desc: 'tighter hip fire and 50% stronger headshots' },
+  echo:    { name: 'Echo Chamber', cost: 2500, color: 0x2fb39a, css: '#2a9d88', ab: 'E', desc: '20% chance each bullet echoes and hits twice' },
+  dropbass:{ name: 'Drop the Bass', cost: 2000, color: 0xd2491c, css: '#c8451b', ab: 'D', desc: 'going down sets off a bass shockwave that kills zombies close to you' },
+  vibes:   { name: 'Good Vibes',   cost: 1500, color: 0xe0c23a, css: '#c9a92a', ab: 'V', desc: 'health comes back twice as fast and starts sooner' },
+  slap:    { name: 'Dubplate Slap', cost: 1500, color: 0x5f6fd0, css: '#5463c4', ab: 'P', desc: 'knife hits do 3x damage and swing faster' },
+  nuff:    { name: 'Nuff Bullets', cost: 2500, color: 0x8fb33a, css: '#7f9f30', ab: 'N', desc: '25% chance each shot uses no ammo' },
+  blast:   { name: 'Boom Shacka Lacka', cost: 2000, color: 0x8e3fb3, css: '#8e3fb3', ab: 'X', desc: 'no damage from your own explosions · carry 6 grenades' }
 };
 // perk emblems (24×24 paths): f = fill, s = stroke, c = cut back out in the badge colour
 const PERK_ICON = {
@@ -859,6 +864,11 @@ const PERK_ICON = {
   rapid: [['M4 20.5 V11 C4 8.2 5.6 5.6 5.6 5.6 C5.6 5.6 7.2 8.2 7.2 11 V20.5 Z', 'f'], ['M10.4 20.5 V9 C10.4 6.2 12 3.6 12 3.6 C12 3.6 13.6 6.2 13.6 9 V20.5 Z', 'f'], ['M16.8 20.5 V11 C16.8 8.2 18.4 5.6 18.4 5.6 C18.4 5.6 20 8.2 20 11 V20.5 Z', 'f'], ['M3 17.6 H21', 'cs']],
   mule: [['M6.5 21 L11 3.5', 's'], ['M17.5 21 L13 3.5', 's'], ['M12 21 V5', 's'], ['M7.5 15 H16.5', 's'], ['M3.5 21 H20.5', 's']],
   steady: [['M4.6 12 A7.4 7.4 0 1 0 19.4 12 A7.4 7.4 0 1 0 4.6 12', 's'], ['M12 1.5 V7.5 M12 16.5 V22.5 M1.5 12 H7.5 M16.5 12 H22.5', 's'], ['M10.4 12 A1.6 1.6 0 1 0 13.6 12 A1.6 1.6 0 1 0 10.4 12', 'f']],
+  echo: [['M5 12 A1.8 1.8 0 1 0 8.6 12 A1.8 1.8 0 1 0 5 12', 'f'], ['M11 7.5 A6 6 0 0 1 11 16.5', 's'], ['M14.5 4.5 A10 10 0 0 1 14.5 19.5', 's'], ['M18 2 A13.5 13.5 0 0 1 18 22', 's']],
+  dropbass: [['M4 3 H20 V21 H4 Z', 'f'], ['M7.5 12.5 A4.5 4.5 0 1 0 16.5 12.5 A4.5 4.5 0 1 0 7.5 12.5', 'cf'], ['M10.3 12.5 A1.7 1.7 0 1 0 13.7 12.5 A1.7 1.7 0 1 0 10.3 12.5', 'f'], ['M10.6 5.4 A1.4 1.4 0 1 0 13.4 5.4 A1.4 1.4 0 1 0 10.6 5.4', 'cf']],
+  vibes: [['M7.2 12 A4.8 4.8 0 1 0 16.8 12 A4.8 4.8 0 1 0 7.2 12', 'f'], ['M12 1.5 V4.5 M12 19.5 V22.5 M1.5 12 H4.5 M19.5 12 H22.5 M4.6 4.6 L6.7 6.7 M17.3 17.3 L19.4 19.4 M4.6 19.4 L6.7 17.3 M17.3 6.7 L19.4 4.6', 's']],
+  slap: [['M2.5 12 A9.5 9.5 0 1 0 21.5 12 A9.5 9.5 0 1 0 2.5 12', 'f'], ['M6 12 A6 6 0 0 1 12 6', 'cs'], ['M9.6 12 A2.4 2.4 0 1 0 14.4 12 A2.4 2.4 0 1 0 9.6 12', 'cf'], ['M14.5 21 L22 4.5', 'cs']],
+  nuff: [['M9.6 21 V9.5 C9.6 6.3 12 3.2 12 3.2 C12 3.2 14.4 6.3 14.4 9.5 V21 Z', 'f'], ['M3 13.5 C3 11 6 11 7.2 13.5 C8.4 16 11.4 16 11.4 13.5', 'cs'], ['M3 13.5 C3 16 6 16 7.2 13.5', 's'], ['M16.6 13.5 C16.6 11 19.6 11 20.8 13.5 C22 16 19 16 17.8 13.5', 's']],
   blast: [['M12 1.2 L14.1 8 L20.2 4.2 L17 10.5 L23 12 L17 13.5 L20.2 19.8 L14.1 16 L12 22.8 L9.9 16 L3.8 19.8 L7 13.5 L1 12 L7 10.5 L3.8 4.2 L9.9 8 Z', 'f'], ['M9.6 12 A2.4 2.4 0 1 0 14.4 12 A2.4 2.4 0 1 0 9.6 12', 'cf']]
 };
 function perkSvg(k, fg, bg) {
@@ -878,10 +888,15 @@ const PERK_TUNE = {
   rapid: { bpm: 176, wave: 'square', n: [[60, 0.5], [60, 0.5], [63, 0.5], [60, 0.5], [65, 0.5], [60, 0.5], [67, 1], [70, 0.5], [72, 2]] },
   mule: { bpm: 100, wave: 'sawtooth', n: [[48, 1], [52, 1], [55, 1], [52, 1], [57, 1], [55, 1], [53, 1], [52, 1], [48, 2]] },
   steady: { bpm: 104, wave: 'sine', n: [[69, 1.5], [72, 0.5], [76, 2], [74, 1], [72, 1], [71, 1], [69, 3]] },
+  echo: { bpm: 120, wave: 'square', n: [[69, 1], [69, 0.5], [69, 0.5], [72, 1], [76, 2], [74, 1], [72, 2]] },
+  dropbass: { bpm: 90, wave: 'sawtooth', n: [[45, 1], [45, 1], [52, 1], [50, 1], [48, 0.5], [47, 0.5], [45, 3]] },
+  vibes: { bpm: 112, wave: 'triangle', n: [[67, 1], [71, 1], [74, 1], [76, 1], [74, 1], [71, 1], [72, 1], [74, 2]] },
+  slap: { bpm: 150, wave: 'square', n: [[62, 0.5], [65, 0.5], [67, 1], [65, 0.5], [67, 0.5], [70, 1], [69, 0.5], [67, 0.5], [62, 2]] },
+  nuff: { bpm: 132, wave: 'triangle', n: [[64, 0.5], [67, 0.5], [71, 0.5], [76, 1], [74, 0.5], [71, 0.5], [67, 1], [69, 0.5], [71, 2]] },
   blast: { bpm: 140, wave: 'sawtooth', n: [[57, 0.5], [57, 0.5], [60, 0.5], [57, 0.5], [62, 1], [63, 0.5], [62, 0.5], [60, 1], [57, 2]] }
 };
 const DROP_TYPES = { ammo: 'Max Ammo', insta: 'Insta-Kill', dbl: 'Double Points', nuke: 'Nuke' };
-const DROP_LABEL = Object.assign({ tag: 'Lazarus Tag' }, DROP_TYPES);
+const DROP_LABEL = Object.assign({ tag: 'Tape Reel' }, DROP_TYPES);
 const PCOLORS = ['#e0a040', '#5fb4d9', '#8fd16a', '#d9707a', '#b48cff', '#e6dc6c', '#6ee0c8', '#f08a4b'];
 
 // =====================================================================
@@ -915,7 +930,9 @@ function buildMaterials() {
   M.papA = new THREE.MeshStandardMaterial({ color: 0x241030, roughness: 0.28, metalness: 0.85, emissive: new THREE.Color(0.5, 0.1, 0.6), emissiveIntensity: 1 });
   M.papB = new THREE.MeshStandardMaterial({ color: 0x1a0d14, roughness: 0.4, metalness: 0.5, emissive: new THREE.Color(0.6, 0.2, 0.05), emissiveIntensity: 1 });
   M.floorWood = mat(TEX.wood, { color: 0x8c7a62 });
-  ZM.cloth = [0x454a3a, 0x3a3e33, 0x4d4638, 0x343a35, 0x4a4030].map(c => mat(TEX.clothB, { color: c }));
+  // the dead crowd: faded festival colours (dirty red, mustard, green, denim, black, grey-white)
+  ZM.cloth = [0x6e2a22, 0x7a6224, 0x2f5530, 0x34465c, 0x262628, 0x7a766a, 0x5a3b52, 0x4a4030].map(c => mat(TEX.clothB, { color: c }));
+  ZM.hats = [0x1d1d1f, 0x8a2a1e, 0xa0801f, 0x2b6a35, 0xbab4a2, 0x3a4a62].map(c => mat(TEX.clothB, { color: c }));
   ZM.skin = [0x7d8270, 0x6c6d5f, 0x857a66].map(c => mat(TEX.skin, { color: c }));
   ZM.eyes = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.7, 0.25), toneMapped: false });
   ZM.helm = mat(TEX.metal, { color: 0x6b7469, metalness: 0.5 });
@@ -1082,7 +1099,7 @@ function perkMachine(k, x, z, ry) {
   gb(g, 0.1, 0.16, 0.03, 0.33, 1.4, 0.345, M.brass, { ray: false }); gb(g, 0.012, 0.08, 0.035, 0.33, 1.41, 0.35, new THREE.MeshStandardMaterial({ color: 0x030303 }), { ray: false });
   // crown bulb + light
   const bulbM = new THREE.MeshBasicMaterial({ color: glowC.clone(), toneMapped: false }); const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 10), bulbM); bulb.position.set(0, 2.6, 0); g.add(bulb); gc(g, 0.04, 0.05, 0.08, 0, 2.53, 0, M.brass, { ray: false, seg: 10 });
-  const light = new THREE.PointLight(pk.color, 1.3, 4.2, 2); light.position.set(0, 1.9, 0.75); g.add(light);
+  const light = { intensity: 0 };
   colRect(x, z, 0.95, 0.75, ry);
   PMACH.push({ k, x, z, y: PY, light, marq, bulbM, glowC, t: Math.random() * 20, next: 8 + Math.random() * 20 });
   INTER.push({ t: 'perk', k, x: x + Math.sin(ry) * 0.9, z: z + Math.cos(ry) * 0.9, r: 1.3, y: PY });
@@ -1118,6 +1135,97 @@ function perkMachinesUpdate(dt) {
     if (d < 7.5 && Math.abs(P.y - (m.y > 1 ? UP.y : 0)) < 1.5) { m.next -= dt; if (m.next <= 0) { m.next = 45 + Math.random() * 40; perkJingle(m.k, { x: m.x, y: m.y + 1.6, z: m.z }, 0.55); } }
   }
 }
+// ---- the big sound system (the old generator): two bass-bin stacks, mid-tops, a valve amp rack and a tape deck
+const SOUND = { cones: [], vu: [], reels: [] };
+function buildSoundSystem(x, z) {
+  const g = place(x, z, 0);
+  const cab = mat(TEX.wood, { color: 0x2a2420 }), grill = new THREE.MeshStandardMaterial({ color: 0x0c0c0c, roughness: 0.95 }), cone = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.7 }), cap = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.3, metalness: 0.5 });
+  const bin = (bx, by, w, h, r) => {
+    gb(g, w, h, 1.2, bx, by + h / 2, -0.1, cab);
+    gb(g, w - 0.08, h - 0.08, 0.02, bx, by + h / 2, 0.51, grill, { ray: false });
+    const cg = new THREE.Group(); cg.position.set(bx, by + h / 2, 0.5); g.add(cg);
+    const cm = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.45, 0.14, 28, 1, true), cone); cm.rotation.x = Math.PI / 2; cm.position.z = -0.03; cm.material.side = THREE.DoubleSide; cg.add(cm);
+    const sur = new THREE.Mesh(new THREE.TorusGeometry(r, 0.02, 6, 28), M.leather); cg.add(sur);
+    const dc = new THREE.Mesh(new THREE.SphereGeometry(r * 0.28, 14, 8, 0, TAU, 0, Math.PI / 2), cap); dc.rotation.x = Math.PI / 2; dc.position.z = -0.06; cg.add(dc);
+    SOUND.cones.push(cg);
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) gb(g, 0.06, 0.06, 0.06, bx + sx * (w / 2 - 0.03), by + h / 2 + sy * (h / 2 - 0.03), 0.5, M.darkSteel, { ray: false });
+  };
+  // left and right stacks: bass bin + mid-top
+  for (const sx of [-1, 1]) { bin(sx * 1.1, 0, 1.15, 1.15, 0.42); bin(sx * 1.1, 1.15, 1.0, 0.7, 0.24); gb(g, 1.0, 0.35, 1.0, sx * 1.1, 2.03, -0.1, cab); for (let i = 0; i < 2; i++) { const h = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.14, 0.12, 16, 1, true), cone); h.rotation.x = Math.PI / 2; h.position.set(sx * 1.1 + (i - 0.5) * 0.4, 2.03, 0.42); h.material.side = THREE.DoubleSide; g.add(h); } }
+  // amp rack in the middle
+  gb(g, 1.0, 1.6, 0.9, 0, 0.8, -0.25, M.darkSteel);
+  for (let i = 0; i < 4; i++) { gb(g, 0.92, 0.26, 0.04, 0, 0.3 + i * 0.36, 0.22, M.metal, { ray: false }); for (let k = 0; k < 3; k++) gc(g, 0.025, 0.025, 0.03, -0.3 + k * 0.12, 0.3 + i * 0.36, 0.25, M.brass, { ray: false, seg: 10, rx: Math.PI / 2 }); const vu = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.08), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.4, 0.3), toneMapped: false })); vu.position.set(0.25, 0.3 + i * 0.36, 0.245); g.add(vu); SOUND.vu.push(vu); }
+  // reel-to-reel deck on top (where the master tape goes)
+  gb(g, 0.9, 0.12, 0.6, 0, 1.66, -0.15, M.darkSteel);
+  for (const rx of [-0.22, 0.22]) { const rl = new THREE.Group(); rl.position.set(rx, 1.95, 0.0); g.add(rl); const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.02, 28), M.metal); disc.rotation.x = Math.PI / 2; rl.add(disc); for (let k = 0; k < 3; k++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.26, 0.025), M.darkSteel); sp.rotation.z = k * Math.PI / 3; sp.position.z = 0.015; rl.add(sp); } const tp = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.025, 24), new THREE.MeshStandardMaterial({ color: 0x3a2412, roughness: 0.6 })); tp.rotation.x = Math.PI / 2; tp.position.z = 0.012; tp.visible = false; rl.add(tp); rl.userData.tape = tp; SOUND.reels.push(rl); gb(g, 0.04, 0.3, 0.04, rx, 1.8, -0.02, M.darkSteel, { ray: false }); }
+  // painted name on the stack
+  const nm = textSprite(['DEAD LOCKS SOUND'], { scale: 0.42, size: 64, w: 1024, h: 128, color: '#e8b420', dim: 0.95 }); nm.position.set(0, 2.55, 0.2); g.add(nm);
+}
+function soundSystemUpdate(dt) {
+  if (!SOUND.cones.length) return;
+  const t = A.ctx ? A.ctx.currentTime : T.now, beat = (t * 76 / 60) % 1, kick = Math.exp(-beat * 9) * (APP.screen === 'play' || APP.screen === 'menu' ? 1 : 0.3) * (0.4 + MUS.int);
+  for (let i = 0; i < SOUND.cones.length; i++) SOUND.cones[i].position.z = 0.5 + kick * (i % 2 ? 0.02 : 0.045);
+  for (let i = 0; i < SOUND.vu.length; i++) { const v = 0.4 + kick * 1.4 + Math.sin(T.now * (7 + i)) * 0.15; SOUND.vu[i].material.color.setRGB(2.4 * v, 1.4 * v, 0.3 * v); }
+  const step = storyStep(); for (const rl of SOUND.reels) { rl.userData.tape.visible = step >= 3; if (step === 3) rl.rotation.z -= dt * 4; }
+}
+// ---- party lights: slow red / gold / green washes in every room, and strings of bulbs along the walls
+const PARTY = { lights: [], bulbs: null, n: 0 };
+const RGG = [new THREE.Color(1, 0.12, 0.06), new THREE.Color(1, 0.7, 0.1), new THREE.Color(0.15, 0.85, 0.25)];
+function buildParty() {
+  PARTY.lights = lamps.map(L => L.sp);
+  const pts = [];
+  for (const zz of [-5.68, 5.68]) for (let x = -7.6; x <= 35.6; x += 0.62) { if (Math.abs(x - 8) < 0.4 || Math.abs(x - 24) < 0.4) continue; pts.push([x, 2.86 + Math.sin(x * 2.4) * 0.07, zz]); }
+  const im = new THREE.InstancedMesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), pts.length);
+  const m4 = new THREE.Matrix4(); pts.forEach((q, i) => { m4.makeTranslation(q[0], q[1], q[2]); im.setMatrixAt(i, m4); im.setColorAt(i, RGG[i % 3].clone().multiplyScalar(2)); });
+  im.instanceColor.needsUpdate = true; scene.add(im); PARTY.bulbs = im; PARTY.n = pts.length;
+  for (const zz of [-5.7, 5.7]) { const w = gc(scene, 0.005, 0.005, 44, 14, 2.9, zz, M.wire, { ray: false, cast: false, seg: 4 }); w.rotation.z = Math.PI / 2; }
+}
+const _pc = new THREE.Color();
+function partyUpdate(dt) {
+  if (!PARTY.bulbs) return; const t = T.now;
+  // the room lamps drift between warm white and a soft red / gold / green wash
+  PARTY.lights.forEach((L, i) => { const ph = (t * 0.08 + i * 0.37) % 3, a = Math.floor(ph), f = ph - a; _pc.copy(RGG[a]).lerp(RGG[(a + 1) % 3], f * f * (3 - 2 * f)); L.color.setRGB(1, 0.82, 0.6).lerp(_pc, 0.38); });
+  PARTY.k = (PARTY.k || 0) + dt; if (PARTY.k < 0.12) return; PARTY.k = 0;
+  const chase = Math.floor(t * 3);
+  for (let i = 0; i < PARTY.n; i++) { _pc.copy(RGG[(i + chase) % 3]).multiplyScalar(Math.sin(i * 1.7 + t * 2) > 0.85 ? 0.4 : 2); PARTY.bulbs.setColorAt(i, _pc); }
+  PARTY.bulbs.instanceColor.needsUpdate = true;
+}
+// ---- gig posters (all invented)
+const POSTERS = [
+  { t: 'DEAD LOCKS', s: ['SOUND SYSTEM', 'LIVE IN BUNKER 47', 'EVERY NIGHT TILL THE LAST'], bg: '#1b1410', fg: '#e8b420', ac: '#c8261c' },
+  { t: 'SOUND CLASH', s: ['THE LIVING', 'vs', 'THE DEAD', 'NO REWIND · NO SURRENDER'], bg: '#c8261c', fg: '#f3e6c4', ac: '#1b1410' },
+  { t: 'DUB NIGHT', s: ['BASS SO HEAVY', 'IT WAKES THE DEAD', 'BRING YOUR OWN TORCH'], bg: '#163a1f', fg: '#e8b420', ac: '#c8261c' },
+  { t: 'LOST', s: ['ONE MASTER TAPE', 'THREE REELS', 'ASK THE SELECTOR', 'UPSTAIRS'], bg: '#e9dfc4', fg: '#1b1410', ac: '#c8261c' },
+  { t: 'SELECTA', s: ['WANTED', 'MUST BRING OWN RECORDS', 'NERVES OF STEEL'], bg: '#e8b420', fg: '#1b1410', ac: '#2e8b3e' }
+];
+function posterTex(P) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 360; const x = c.getContext('2d');
+  x.fillStyle = P.bg; x.fillRect(0, 0, 256, 360);
+  for (let i = 0; i < 3; i++) { x.fillStyle = ['#c8261c', '#e8b420', '#2e8b3e'][i]; x.fillRect(0, 300 + i * 12, 256, 12); }
+  x.fillStyle = P.ac; x.beginPath(); x.arc(128, 196, 70, 0, TAU); x.fill(); x.fillStyle = P.bg; x.beginPath(); x.arc(128, 196, 20, 0, TAU); x.fill();
+  x.strokeStyle = P.fg; x.globalAlpha = 0.35; for (let r = 28; r < 70; r += 6) { x.beginPath(); x.arc(128, 196, r, 0, TAU); x.stroke(); } x.globalAlpha = 1;
+  x.fillStyle = P.fg; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = '52px "Rubik Wet Paint", Impact, sans-serif'; x.fillText(P.t, 128, 52);
+  x.font = '600 19px "Oswald", "Arial Narrow", sans-serif'; P.s.forEach((l, i) => { x.fillText(l, 128, 96 + i * 24); });
+  // age: stains, tears, fold lines
+  for (let i = 0; i < 40; i++) { x.fillStyle = 'rgba(40,25,10,' + Math.random() * 0.12 + ')'; x.beginPath(); x.arc(Math.random() * 256, Math.random() * 360, Math.random() * 30, 0, TAU); x.fill(); }
+  x.fillStyle = 'rgba(255,255,255,.08)'; x.fillRect(127, 0, 2, 360); x.fillRect(0, 179, 256, 2);
+  x.globalCompositeOperation = 'destination-out'; x.beginPath(); x.moveTo(256, 0); x.lineTo(206, 0); x.lineTo(256, 44); x.fill();
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+}
+function buildPosters() {
+  const busy = [];
+  for (const w of WINS) busy.push([w.x, w.z]);
+  for (const it of INTER) busy.push([it.x, it.z]);
+  const spots = [[-2.6, -1], [5.6, -1], [10.4, 1], [18.6, 1], [28.6, -1], [-6.8, 1], [35.0, 1], [4.4, 1]];
+  let n = 0;
+  for (const [x, side] of spots) {
+    const z = side < 0 ? -5.83 : 5.83;
+    if (busy.some(([bx, bz]) => Math.abs(bx - x) < 1.3 && Math.abs(bz - z) < 1.6)) continue;
+    const P = POSTERS[n++ % POSTERS.length];
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.87), new THREE.MeshStandardMaterial({ map: posterTex(P), roughness: 0.85, transparent: true, polygonOffset: true, polygonOffsetFactor: -2 }));
+    m.position.set(x, 1.75, z); m.rotation.set(0, side < 0 ? 0 : Math.PI, (Math.random() - 0.5) * 0.08); m.receiveShadow = true; scene.add(m);
+  }
+}
 function buildBench(x, z) {
   const g = place(x, z, -Math.PI / 2);
   gb(g, 1.5, 0.08, 0.75, 0, 0.9, 0, M.woodDark); gb(g, 1.45, 0.05, 0.7, 0, 0.35, 0, M.woodDark, { ray: false });
@@ -1139,16 +1247,17 @@ function buildVault() {
   // a steel plate set into the Armory's east wall; it slides away when the generator reaches full charge
   const g = place(35.78, 2.8, -Math.PI / 2);
   gb(g, 1.25, 2.1, 0.06, 0, 1.05, 0, M.metal); for (const yy of [0.3, 1.05, 1.8]) gb(g, 1.25, 0.08, 0.08, 0, yy, 0.01, M.darkSteel, { ray: false });
-  const lab = textSprite(['47-L'], { scale: 0.18, size: 70, w: 256, h: 96, dim: 0.6 }); lab.position.set(0, 1.55, 0.06); g.add(lab);
+  const lab = textSprite(['MASTER'], { scale: 0.18, size: 70, w: 256, h: 96, dim: 0.6 }); lab.position.set(0, 1.55, 0.06); g.add(lab);
   STORY.panel = g;
   const n = place(35.75, 2.8, -Math.PI / 2); gb(n, 1.1, 1.8, 0.02, 0, 1.0, -0.03, new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 1 }), { ray: false }); gb(n, 0.6, 0.05, 0.3, 0, 0.9, 0.1, M.darkSteel, { ray: false });
-  const vial = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 2.8, 0.6), toneMapped: false })); vial.position.set(0, 1.01, 0.1); n.add(vial);
+  const vial = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.008, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 2.0, 0.5), toneMapped: false })); vial.rotation.x = Math.PI / 2; vial.position.set(0, 1.12, 0.1); n.add(vial);
+  const lbl = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.01, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 0.3, 0.2), toneMapped: false })); lbl.rotation.x = Math.PI / 2; lbl.position.set(0, 1.12, 0.104); n.add(lbl);
   STORY.vial = n; n.visible = false;
-  STORY.vialLight = new THREE.PointLight(0x60ff80, 0, 4, 2); STORY.vialLight.position.set(35.2, 1.2, 2.8); scene.add(STORY.vialLight);
+  STORY.vialLight = new THREE.PointLight(0xffc040, 0, 4, 2); STORY.vialLight.position.set(35.2, 1.2, 2.8); scene.add(STORY.vialLight);
   INTER.push({ t: 'serum', x: 35.0, z: 2.8, r: 1.3, y: 0 });
   INTER.push({ t: 'gentags', x: 17.5, z: -3.0, r: 1.5, y: 0 });
 }
-const STORY_TEXT = "Dr. A. Weiss, 46th night. Lazarus works too well: the garrison will not stay dead. I have hidden the last dose of the serum behind the Armory wall. The seal only breaks with the generator at full charge, and the generator answers only to the Lazarus tags. Three of the men still wear them. You will know them by their eyes.";
+const STORY_TEXT = "Selector's notebook, last night of the dance. The tape we cut down here does something to the dead: it keeps them moving. I cut the master into three reels and gave them to my crew to hide. They never came back up the stairs. You'll know them by their eyes, green like the stage lights. Thread all three reels into the big sound system and let it play it out to the end. When the last note rings, the Record Store wall opens, and the master dubplate is yours. Play it and you'll feel it.";
 function storyStep() { return (V.story && V.story[0]) | 0; }
 function storyAct(act, peer) {
   // host only
@@ -1177,12 +1286,12 @@ let noteTO = 0;
 function showNote(text, ms) { const el = $('note'); el.textContent = text; el.hidden = false; clearTimeout(noteTO); noteTO = setTimeout(() => { el.hidden = true; }, ms || 12000); }
 function storyEvent(e) {
   const step = e[2];
-  if (step === 1) { showNote(STORY_TEXT, 16000); SND.alarm(); banner('Operation Lazarus', 'A secret objective has begun', 3000, true); }
-  else if (step === 2) { banner('Lazarus tag ' + e[4] + ' / 3', e[3] === myPeer ? 'You took it from the dead' : peerName(e[3]) + ' found one', 2400, true); playB('radio', null, 0.8, 0.3); if (e[4] >= 3) setTimeout(() => banner('All three tags', 'Take them to the generator', 2800, true), 2500); }
-  else if (step === 3) { banner('The generator wakes', 'Hold the Generator Hall while it charges', 3200, true); SND.roar(null); }
-  else if (step === 4) { banner('The vault is open', 'Something glows in the Armory wall', 3200, true); SND.door({ x: 35.8, y: 1.2, z: 2.8 }); }
+  if (step === 1) { showNote(STORY_TEXT, 18000); SND.alarm(); banner('The Lost Master Tape', 'A secret objective has begun', 3000, true); }
+  else if (step === 2) { banner('Tape reel ' + e[4] + ' / 3', e[3] === myPeer ? 'You took it from the dead' : peerName(e[3]) + ' found one', 2400, true); playB('radio', null, 0.8, 0.3); if (e[4] >= 3) setTimeout(() => banner('All three reels', 'Thread them into the big sound system', 2800, true), 2500); }
+  else if (step === 3) { banner('The master tape is rolling', 'Hold the Sound System Hall until it plays out', 3200, true); SND.roar(null); if (A.ctx && MUS.bus) dubSiren(MUS.bus, A.ctx.currentTime + 0.2, 0.06); }
+  else if (step === 4) { banner('The wall is open', 'Something glows in the Record Store wall', 3200, true); SND.door({ x: 35.8, y: 1.2, z: 2.8 }); }
   else if (step === 5) {
-    banner('Operation Lazarus complete', e[3] === myPeer ? 'The serum burns through you' : peerName(e[3]) + ' shared the serum', 4200, true); SND.power();
+    banner('The Lost Master Tape · complete', e[3] === myPeer ? 'The dubplate plays through your bones' : peerName(e[3]) + ' dropped the master dubplate', 4200, true); SND.power();
     for (const k of Object.keys(PERKS)) P.perks[k] = 1; P.maxHp = 200; P.hp = 200; P.gren = maxGren(); P.story = 1;
     if (P.down) { P.down = false; P.selfRev = 0; P.revT = 0; P.hp = 200; }
   }
@@ -1192,8 +1301,8 @@ function storyHud() {
   if (step === 0 || (step === 5 && STORY.shown === 5 && T.now - STORY.noteT > 10)) { el.hidden = true; if (step === 5 && STORY.shown !== 5) { STORY.shown = 5; STORY.noteT = T.now; } return; }
   if (step === 5 && STORY.shown !== 5) { STORY.shown = 5; STORY.noteT = T.now; }
   el.hidden = false;
-  const lines = { 1: 'Recover the Lazarus tags from the marked dead · ' + (st[1] | 0) + ' / 3', 2: 'Bring the three tags to the generator', 3: 'Hold the Generator Hall while the generator charges', 4: 'Claim what is behind the Armory wall', 5: 'Complete' };
-  setText('objective', '<b>Operation Lazarus</b>' + lines[step] + (step === 3 ? '<div class="pbar"><i style="width:' + (st[2] | 0) + '%"></i></div>' : ''));
+  const lines = { 1: 'Take the tape reels from the green-eyed dead · ' + (st[1] | 0) + ' / 3', 2: 'Thread the three reels into the big sound system', 3: 'Hold the Sound System Hall while the master tape plays', 4: 'Claim what is behind the Record Store wall', 5: 'Complete' };
+  setText('objective', '<b>The Lost Master Tape</b>' + lines[step] + (step === 3 ? '<div class="pbar"><i style="width:' + (st[2] | 0) + '%"></i></div>' : ''));
 }
 function storyWorld(dt) {
   const step = storyStep();
@@ -1223,7 +1332,7 @@ function buildForge() {
   gb(g, 0.95, 0.16, 0.02, 0, 1.12, 0.505, glow, { ray: false, cast: false });
   for (let i = 0; i < 3; i++) { const r = gc(g, 0.05, 0.05, 0.95, 0, 1.45 + i * 0.22, 0.44, glow, { ray: false, cast: false, seg: 14 }); r.rotation.z = Math.PI / 2; }
   for (const sx of [-1, 1]) { const p = gc(g, 0.06, 0.06, 0.55, sx * 0.48, 2.5, -0.1, M.brass, { ray: false, seg: 10 }); p.rotation.x = 0; }
-  const lab = textSprite(['Upgrade Forge', FORGE.cost + ' points'], { scale: 0.36, size: 58, size2: 42, dim: 0.9, color: '#f2c6ff', color2: '#d6a64a' }); lab.position.set(0, 2.95, 0); g.add(lab);
+  const lab = textSprite(['Remix Desk', FORGE.cost + ' points'], { scale: 0.36, size: 58, size2: 42, dim: 0.9, color: '#f2c6ff', color2: '#d6a64a' }); lab.position.set(0, 2.95, 0); g.add(lab);
   FORGE.show = new THREE.Group(); FORGE.show.position.set(0, 1.12, 0.8); g.add(FORGE.show);
   FORGE.light = new THREE.PointLight(0xb040ff, 1.4, 7, 2); FORGE.light.position.set(0, 1.5, 1.0); g.add(FORGE.light);
   colRect(FORGE.x, FORGE.z, 1.3, 1.0, Math.PI / 2);
@@ -1334,6 +1443,7 @@ function buildUpper() {
   perkMachine('rapid', 14.2, -5.35, 0);
   perkMachine('steady', 16.8, -5.35, 0);
   perkMachine('mule', 23.35, -2.6, -Math.PI / 2);
+  perkMachine('dropbass', 23.35, 2.0, -Math.PI / 2);
   wallBuy('g43', 1500, 20.6, -5.8, 0, 1);
   const tb = table(12.2, 2.4, 1.8, 1.0);
   { const bk = new THREE.Group(); bk.position.set(-0.45, 0.84, 0.15); bk.rotation.y = 0.5; tb.add(bk); const cov = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.035, 0.16), new THREE.MeshStandardMaterial({ color: 0x3a1a12, roughness: 0.8 })); bk.add(cov); const pg = new THREE.Mesh(new THREE.BoxGeometry(0.205, 0.028, 0.15), new THREE.MeshStandardMaterial({ color: 0xd8ccae, roughness: 0.9 })); pg.position.y = 0.006; pg.position.x = 0.004; bk.add(pg); STORY.book = bk; }
@@ -1403,25 +1513,22 @@ function buildMap() {
   wallBuy('mp40', 1000, 1.5, -5.8, 0, 1);
   perkMachine('fleet', -7.4, 2.4, Math.PI / 2);
   perkMachine('revive', -1.2, 5.35, Math.PI);
+  perkMachine('vibes', 0.6, 5.35, Math.PI);
   buildBench(7.35, 2.7);
   buildVault();
   // three hidden radios (song easter egg): top bunk in the Barracks, on the barrels in the Generator Hall, on a crate in the Armory
   buildRadio(0, -6.4, -4.62, 1.5, 0.3); buildRadio(1, 9.62, -4.5, 0.9, 2.2); buildRadio(2, 35.0, -5.0, 0.9, 0.9);
   // Generator hall
-  const gen = place(17.5, -4.15, 0);
-  gb(gen, 3.2, 1.5, 1.4, 0, 0.75, 0, M.metalGreen);
-  gb(gen, 3.4, 0.12, 1.6, 0, 0.06, 0, M.darkSteel);
-  const fly = gc(gen, 0.55, 0.55, 0.18, -1.75, 0.8, 0, M.darkSteel, { rz: Math.PI / 2, seg: 24 }); fly.rotation.z = Math.PI / 2;
-  gc(gen, 0.08, 0.08, 1.9, 1.1, 2.45, -0.3, M.metal, { ray: false });
-  gc(gen, 0.3, 0.3, 1.3, 0.6, 1.55, 0.1, M.metal, { rz: Math.PI / 2, seg: 18 }).rotation.z = Math.PI / 2;
-  for (let i = 0; i < 3; i++) { const gm = new THREE.Mesh(new THREE.CircleGeometry(0.07, 18), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, i === 1 ? 0.25 : 1.4, 0.3), toneMapped: false })); gm.position.set(-0.7 + i * 0.35, 1.15, 0.71); gen.add(gm); }
+  buildSoundSystem(17.5, -4.15);
   colRect(17.5, -4.15, 3.4, 1.6);
-  genLight = new THREE.PointLight(0xff3018, 1.2, 9, 2); genLight.position.set(17.5, 2.2, -3.0); scene.add(genLight);
+  genLight = new THREE.PointLight(0xffa030, 1.0, 9, 2); genLight.position.set(17.5, 2.2, -3.0); scene.add(genLight);
   barrel(9.3, -5.2); barrel(10.05, -5.3); barrel(9.6, -4.5);
   crate(22.2, -5.1, 0.8, 0.1);
   sandbags(10.8, -1.6, 0.5, 2);
   buildBox();
   perkMachine('swift', 23.4, 4.8, -Math.PI / 2);
+  perkMachine('echo', 23.4, -2.6, -Math.PI / 2);
+  perkMachine('nuff', 8.6, 2.6, Math.PI / 2);
   wallBuy('thompson', 1200, 21.6, -5.8, 0, 1);
   wallBuy('dbl', 1100, 14.4, -5.8, 0, 1);
   buildStairs();
@@ -1442,8 +1549,10 @@ function buildMap() {
   wallBuy('bar', 2200, 26.6, -5.8, 0, 1);
   perkMachine('bulwark', 35.4, 4.6, -Math.PI / 2);
   perkMachine('blast', 30.2, 5.35, Math.PI);
-  // Officers' Quarters (upstairs)
+  perkMachine('slap', 35.4, -2.4, -Math.PI / 2);
+  // Studio (upstairs)
   buildUpper();
+  buildParty(); buildPosters();
   // outside
   const tr = rngf(99);
   for (let i = 0; i < 34; i++) {
@@ -1896,6 +2005,7 @@ function aInit() {
     A.rev = c.createConvolver(); A.rev.buffer = ir; const rg = c.createGain(); rg.gain.value = 0.5; A.rev.connect(rg); rg.connect(A.master);
     const nb = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1; A.noise = nb;
     ambient();
+    setTimeout(() => { voLoad(); }, 500);
   } catch (e) { A.ctx = null; }
 }
 function bus(pos, wet = 0.25, vol = 1) {
@@ -2475,7 +2585,7 @@ const T = { now: 0 };
 function zCreate(id, x, z, type, y = 0, rise = 0) {
   const r = rngf(id * 7919 + 13);
   const ci = (r() * ZM.cloth.length) | 0, boss = type === 3;
-  const h = zombieModel({ r, cloth: ZM.cloth[ci], clothTorn: ZM.clothTorn[ci], skin: type === 2 && r() < 0.6 ? ZM.burnt : ZM.skin[(r() * ZM.skin.length) | 0], eyes: ZM.eyes, helm: ZM.helm, helmet: boss || r() < 0.45, ribs: !boss && r() < 0.3, noJaw: !boss && r() < 0.15, armor: boss, scale: boss ? 1.45 : 0.93 + r() * 0.12 });
+  const h = zombieModel({ r, cloth: ZM.cloth[ci], clothTorn: ZM.clothTorn[ci], skin: type === 2 && r() < 0.6 ? ZM.burnt : ZM.skin[(r() * ZM.skin.length) | 0], eyes: ZM.eyes, helm: ZM.helm, hat: boss ? 'bucket' : r() < 0.55 ? ['bucket', 'cap', 'beanie', 'cap'][(r() * 4) | 0] : null, hatMat: boss ? ZM.hats[0] : ZM.hats[(r() * ZM.hats.length) | 0], ribs: !boss && r() < 0.3, noJaw: !boss && r() < 0.15, armor: boss, scale: boss ? 1.45 : 0.93 + r() * 0.12 });
   if (boss) { h.root.traverse(o => { if (o.isMesh && o.material === ZM.eyes) { o.material = ZM.bossEyes; o.scale.setScalar(1.5); } }); }
   h.root.position.set(x, y - (rise > 0 ? 1.8 : 0), z); scene.add(h.root);
   const v = { id, h, x, z, y, ty: y, rise, tx: x, tz: z, yaw: 0, tyaw: 0, st: 0, type, win: -1, phase: r() * 10, k: (r() - 0.5) * 0.7, dying: false, dT: 0, groan: 1 + r() * 6, spd: 0, sw: 0, lx: x, lz: z, hp: 1 };
@@ -2998,7 +3108,7 @@ function handleEvent(e) {
     const v = zv.get(e[2]); const head = !!e[4];
     if (v && e[5] === 2 && v.h.stumps) { const ps = ['armL', 'armR', 'legL', 'legR', 'head']; for (let i = 0; i < 2; i++) if (Math.random() < 0.7) zSever(v, ps[(Math.random() * ps.length) | 0]); }
     if (v) { zKillVis(v, head); SND.flesh({ x: v.x, y: v.y + 1.2, z: v.z }, head); if (Math.random() < 0.5) SND.zdie({ x: v.x, y: v.y + 1.5, z: v.z }); }
-    if (e[3] === myPeer) { const base = e[5] === 1 ? 130 : head ? 100 : 60; addPts(base); P.kills++; if (head) { P.heads++; headPop(); } hitmark(true); }
+    if (e[3] === myPeer) { const base = e[5] === 1 ? 130 : head ? 100 : 60; addPts(base); P.kills++; if (head) { P.heads++; headPop(); } hitmark(true); setTimeout(() => voSay('kill', null, head ? 0.14 : 0.07), 350); }
   } else if (t === 'd') { if (e[2] === myPeer) hurt(e[3], e[4] != null ? e[4] / 10 : undefined, e[5] != null ? e[5] / 10 : undefined); }
   else if (t === 'p') {
     const nm = DROP_TYPES[e[2]] || 'Power-up'; banner(nm, e[3] === myPeer ? 'You grabbed it' : (peerName(e[3]) + ' grabbed it'), 2400, true); SND.power();
@@ -3018,7 +3128,7 @@ function handleEvent(e) {
   else if (t === 'o') { gameOver(e[2]); }
   else if (t === 'sy') storyEvent(e);
   else if (t === 'ra') radioEvent(e);
-  else if (t === 'bs') { if (e[2] === 1) { banner('Deadlock is coming', 'Kill him before the track ends you', 3400); SND.alarm(); setTimeout(() => SND.roar(null), 900); if (!(SONG_EL.radio && !SONG_EL.radio.paused)) { MUS.vol = 0; playSong('deadlock', () => { MUS.vol = OPT.music; }); } } else { banner('Deadlock is enraged', '', 2000); SND.roar(null); } }
+  else if (t === 'bs') { if (e[2] === 1) { banner('Deadlock is coming', 'Kill him before the track ends you', 3400); SND.alarm(); setTimeout(() => SND.roar(null), 900); setTimeout(() => { VO.last = 0; voSay('boss', null); }, 1900); if (!(SONG_EL.radio && !SONG_EL.radio.paused)) { MUS.vol = 0; playSong('deadlock', () => { MUS.vol = OPT.music; }); } } else { banner('Deadlock is enraged', '', 2000); SND.roar(null); } }
   else if (t === 'bd') { banner('Deadlock is dead', e[2] === myPeer ? '+1000 points' : peerName(e[2]) + ' got the kill', 3000, true); if (e[2] === myPeer) addPts(1000); SND.power(); stopSong('deadlock', true); setTimeout(() => { MUS.vol = OPT.music; }, 2100); }
   else if (t === 'sl') {
     const p = new THREE.Vector3(e[3] / 10, e[4] / 10, e[5] / 10), v = zv.get(e[2]); if (v) v.slamT = 0.7;
@@ -3063,12 +3173,14 @@ function addPts(n) {
 const dmgDirs = [];
 function hurt(a, sx, sz) {
   if (P.down || P.dead || APP.screen !== 'play' || APP.paused || holdName()) return; // nothing can hurt you while the game is paused
-  P.hp -= a; P.regenT = 4; P.dmgFx = 1; P.shake = Math.max(P.shake, 0.18); SND.hurt();
+  P.hp -= a; P.regenT = P.perks.vibes ? 2 : 4; P.dmgFx = 1; P.shake = Math.max(P.shake, 0.18); SND.hurt();
   if (sx != null && isFinite(sx)) { dmgDirs.push({ x: sx, z: sz, t: 1.2 }); if (dmgDirs.length > 4) dmgDirs.shift(); }
   if (P.hp <= 0) goDown();
 }
 function goDown() {
   const self = !!P.perks.revive && nPlayers() === 1;
+  voSay('down', null); P.voT = 9;
+  if (P.perks.dropbass) bassDrop();
   P.hp = 0; P.down = true; P.bleed = 30; P.downs++; P.perks = {}; P.maxHp = 100; P.revT = 0; P.adsHeld = false; P.relT = 0;
   P.selfRev = self ? 4 : 0;
   if (P.slots.length > 2) { P.slots.length = 2; if (P.cur > 1) P.cur = 0; }
@@ -3111,7 +3223,7 @@ function muzzleWorld() { const u = VM.gun ? VM.gun.userData.mz : new THREE.Vecto
 function spreadNow(w) { return w.spr * (P.ads > 0.5 ? 0.25 : (P.perks.steady ? 0.6 : 1)) * (P.moving ? 1.5 : 1) + P.bloom * (w.auto ? 1 : 0.4); }
 function fire() {
   const s = curSlot(), w = WS(s);
-  s.mag--; P.fireT = w.rate * (P.perks.rapid ? 0.75 : 1); P.shotN++;
+  if (!(P.perks.nuff && Math.random() < 0.25)) s.mag--; P.fireT = w.rate * (P.perks.rapid ? 0.75 : 1); P.shotN++;
   SND.shot(s.k + (s.pap ? '*' : ''));
   if (s.k === 'garand' && s.mag === 0) SND.ping();
   VM.flash.visible = true; VM.flash.rotation.z = Math.random() * TAU; VM.flash.scale.setScalar(0.8 + Math.random() * 0.5);
@@ -3139,7 +3251,7 @@ function fire() {
     if (!endPt) endPt = h.point.clone();
     const zz = h.object.userData.z;
     if (zz) {
-      const part = h.object.userData.part; const mult = part === 'head' ? w.head * headMul : part === 'limb' ? 0.75 : 1;
+      const part = h.object.userData.part; const mult = (part === 'head' ? w.head * headMul : part === 'limb' ? 0.75 : 1) * (P.perks.echo && Math.random() < 0.2 ? 2 : 1);
       const a = agg.get(zz.id) || { dmg: 0, head: false, v: zz, j: {} }; a.dmg += w.dmg * dmgMul * mult; a.head = a.head || part === 'head'; agg.set(zz.id, a);
       const jn = h.object.userData.joint; if (jn) a.j[jn] = (a.j[jn] || 0) + w.dmg * dmgMul * mult; a.dir = d;
       if (!firstZ) { firstZ = zz; firstPt = h.point.clone(); }
@@ -3169,9 +3281,33 @@ function fire() {
   if (anyHead) SND.dink();
   if (endPt && Math.random() < 0.6) tracer(mw, endPt);
 }
+// ---------- voice lines (the owner's recordings, served next to the page; silent where they can't be loaded)
+const VO = { reload: ['vo-reload-1.mp3', 'vo-reload-2.mp3'], down: ['vo-down-1.mp3'], kill: ['vo-kill-1.mp3', 'vo-kill-2.mp3'], boss: ['vo-boss-1.mp3'], last: 0, loading: false };
+async function voLoad() {
+  if (VO.loading || !A.ctx || !/^https?:$/.test(location.protocol)) return; VO.loading = true;
+  for (const k of ['reload', 'down', 'kill', 'boss']) {
+    const list = [];
+    for (const f of VO[k]) { try { const r = await fetch(f); if (!r.ok) continue; const buf = await A.ctx.decodeAudioData(await r.arrayBuffer()); list.push(buf); } catch (e) {} }
+    if (list.length) BANK.b['vo_' + k] = list;
+  }
+}
+function voSay(k, pos, chance = 1) {
+  if (!BANK.b['vo_' + k] || Math.random() > chance) return;
+  const now = performance.now(); if (now - VO.last < (k === 'down' ? 2500 : k === 'kill' ? 12000 : 7000)) return; VO.last = now;
+  playB('vo_' + k, pos, pos ? 1.3 : 1.0, pos ? 0.25 : 0.08);
+}
+// Drop the Bass: a shockwave where you fall
+function bassDrop() {
+  const at = new THREE.Vector3(P.x, P.y + 0.3, P.z); explosion(at, 0);
+  Q.gxSeq++; Q.gx = [Q.gxSeq, Math.round(at.x * 10), Math.round(at.y * 10), Math.round(at.z * 10), 0];
+  if (A.ctx) { const t = A.ctx.currentTime, d = bus(null, 0.4, 1.2); osc(d, t, 1.4, 'sine', 90, 28, 0.9); osc(d, t, 0.6, 'sawtooth', 60, 30, 0.2); }
+  for (const v of zv.values()) { if (v.dying) continue; const dd = Math.hypot(v.x - P.x, v.z - P.z); if (Math.abs(v.y - P.y) > 1.5 || dd > 6) continue; requestHit(v.id, v.type === 3 ? 2500 + V.round * 150 : dd < 3.5 ? 1e6 : 400 + V.round * 80, false, 2); }
+  banner('Drop the Bass', '', 1400);
+}
 function startReload() {
   const s = curSlot(); if (!s) return; const w = WS(s); if (s.res <= 0 || s.mag >= w.mag || P.relT > 0) return;
   P.relT = P.relTot = w.rel * (P.perks.swift ? 0.5 : 1); SND.reload(P.relT, w.snd);
+  voSay('reload', null, 0.35);
 }
 // projectiles: rockets, ion bolts, hellfire rounds
 function spawnProj(pr, origin, dir, mul) {
@@ -3217,7 +3353,7 @@ function blast(at, pr, mul) {
   if (!P.perks.blast && sd < sr && Math.abs(P.y + 1 - at.y) < 2) hurt(pr.self * (1 - sd / sr));
 }
 function knife() {
-  if (P.knifeT > 0 || P.down) return; P.knifeT = 0.55; P.knifeHit = false; SND.knife();
+  if (P.knifeT > 0 || P.down) return; P.knifeDur = P.knifeT = P.perks.slap ? 0.4 : 0.55; P.knifeHit = false; SND.knife();
 }
 function throwGrenade() {
   if (P.gren <= 0 || P.down) return; P.gren--;
@@ -3291,9 +3427,9 @@ function computeInteract() {
     else if (s.pap) promptText = 'Your ' + WS(s).name + ' is already upgraded';
     else promptText = 'Press <b>F</b> to upgrade the ' + WPN[s.k].name + ' · ' + FORGE.cost + afford(FORGE.cost) + small('Becomes the ' + PAPW[s.k].name + ': far more damage and a bigger magazine');
   }
-  else if (best.t === 'journal') { promptText = storyStep() === 0 ? 'Press <b>F</b> to read the journal' : 'Press <b>F</b> to read Dr. Weiss\'s journal again'; }
-  else if (best.t === 'gentags') { if (storyStep() !== 2) { promptText = ''; promptAct = null; return; } promptText = 'Press <b>F</b> to set the Lazarus tags in the generator'; }
-  else if (best.t === 'serum') { if (storyStep() !== 4) { promptText = ''; promptAct = null; return; } promptText = 'Press <b>F</b> to take the Lazarus serum'; }
+  else if (best.t === 'journal') { promptText = storyStep() === 0 ? 'Press <b>F</b> to read the notebook' : 'Press <b>F</b> to read the selector\'s notebook again'; }
+  else if (best.t === 'gentags') { if (storyStep() !== 2) { promptText = ''; promptAct = null; return; } promptText = 'Press <b>F</b> to thread the tape reels into the sound system'; }
+  else if (best.t === 'serum') { if (storyStep() !== 4) { promptText = ''; promptAct = null; return; } promptText = 'Press <b>F</b> to take the master dubplate'; }
   else if (best.t === 'radio') { promptText = RADIOS[best.i].on ? 'The radio hisses quietly' : 'Press <b>F</b> to tune the radio'; }
   else if (best.t === 'bench') { const s = curSlot(); promptText = !s ? 'Hold a weapon to modify it' : !ATT_FIT[s.k] ? "The bench can't modify the " + WS(s).name : 'Press <b>F</b> to fit attachments to the ' + WS(s).name; }
   else if (best.t === 'win') { promptText = 'Hold <b>F</b> to rebuild the barrier' + (P.repairPts >= 500 ? ' (no more points this round)' : ' · +10 per board'); }
@@ -3443,12 +3579,13 @@ function playerUpdate(dt) {
   const fovT = OPT.fov - P.ads * (curSlot() && curW().scope ? 38 : 20) * OPT.fov / 72 + (P.sprint ? 4 : 0) + (P.slideT > 0 ? 7 : 0);
   if (Math.abs(camera.fov - fovT) > 0.05) { camera.fov = fovT; camera.updateProjectionMatrix(); }
   // health
-  if (!P.down) { P.regenT -= dt; if (P.regenT <= 0 && P.hp < P.maxHp) P.hp = Math.min(P.maxHp, P.hp + 60 * dt); }
+  if (!P.down) { P.regenT -= dt; if (P.regenT <= 0 && P.hp < P.maxHp) P.hp = Math.min(P.maxHp, P.hp + (P.perks.vibes ? 120 : 60) * dt); }
   P.dmgFx = Math.max(0, P.dmgFx - dt * 1.4);
+  if (P.down && nPlayers() > 1 && P.selfRev <= 0) { P.voT = (P.voT || 9) - dt; if (P.voT <= 0) { P.voT = 10; VO.last = 0; voSay('down', null); } }
   if (P.down) { P.hbT = (P.hbT || 0) - dt; if (P.hbT <= 0) { P.hbT = P.selfRev > 0 ? 0.8 : 0.5 + clamp(P.bleed / 30, 0, 1) * 0.5; SND.heart(); } }
   if (P.down && P.selfRev > 0) {
     P.selfRev -= dt; P.revT = (4 - P.selfRev) / 4 * 3;
-    if (P.selfRev <= 0) { P.selfRev = 0; P.down = false; P.hp = 100; P.revT = 0; banner('Second Wind', 'Back on your feet', 1800); SND.gasp(); }
+    if (P.selfRev <= 0) { P.selfRev = 0; P.down = false; P.hp = 100; P.revT = 0; banner('Bless Up', 'Pull up! Back on your feet', 1800); SND.gasp(); }
   } else if (P.down) {
     if (nPlayers() > 1) P.bleed -= dt;
     let rv = 0; for (const p of peers.values()) { const ps = p.pres; if (ps && ps.rv === myPeer && Array.isArray(ps.p) && Math.hypot(ps.p[0] - P.x, ps.p[2] - P.z) < 2.4) rv = Math.max(rv, ps.qr ? 2 : 1); }
@@ -3465,10 +3602,10 @@ function playerUpdate(dt) {
   if (P.relT > 0) { P.relT -= dt; if (P.relT <= 0) { P.relT = 0; const need = w.mag - s.mag, take = Math.min(need, s.res); s.mag += take; s.res -= take; } }
   if (P.knifeT > 0) {
     P.knifeT -= dt;
-    if (!P.knifeHit && P.knifeT < 0.42) {
+    if (!P.knifeHit && P.knifeT < P.knifeDur * 0.76) {
       P.knifeHit = true; camera.getWorldDirection(camDir);
       let best = null, bd = 2.0; for (const v of zv.values()) { if (v.dying || v.rise > 0.5 || Math.abs(v.y - P.y) > 1.2) continue; const dx = v.x - P.x, dz = v.z - P.z, d = Math.hypot(dx, dz); if (d < bd && (dx * camDir.x + dz * camDir.z) / (d || 1) > 0.55) { bd = d; best = v; } }
-      if (best) { requestHit(best.id, 150 + V.round * 15, false, 1); addPts(10); blood(new THREE.Vector3(best.x, best.y + 1.3, best.z), camDir.clone().negate(), 12); SND.flesh({ x: best.x, y: 1.2, z: best.z }, false); hitmark(false); }
+      if (best) { requestHit(best.id, (150 + V.round * 15) * (P.perks.slap ? 3 : 1), false, 1); addPts(10); blood(new THREE.Vector3(best.x, best.y + 1.3, best.z), camDir.clone().negate(), 12); SND.flesh({ x: best.x, y: 1.2, z: best.z }, false); hitmark(false); }
     }
   }
   const busy = P.relT > 0 || P.swapT > 0 || P.knifeT > 0 || P.sprint;
@@ -3575,7 +3712,7 @@ function vmUpdate(dt) {
   if (VM.flash.visible) { VM.flash.userData.t = (VM.flash.userData.t || 0) + dt; if (VM.flash.userData.t > 0.04) { VM.flash.visible = false; VM.flash.userData.t = 0; } }
   VM.light.intensity = Math.max(0, VM.light.intensity - dt * 60); muzzleLight.intensity = Math.max(0, muzzleLight.intensity - dt * 50);
   VM.knife.visible = P.knifeT > 0;
-  if (P.knifeT > 0) { const p = 1 - P.knifeT / 0.55; VM.knife.position.set(0.25 - p * 0.45, -0.12 + Math.sin(p * Math.PI) * 0.06, -0.3 - Math.sin(p * Math.PI) * 0.12); VM.knife.rotation.set(-0.2, 0.6 - p * 1.6, -0.6 + p * 0.8); }
+  if (P.knifeT > 0) { const p = 1 - P.knifeT / (P.knifeDur || 0.55); VM.knife.position.set(0.25 - p * 0.45, -0.12 + Math.sin(p * Math.PI) * 0.06, -0.3 - Math.sin(p * Math.PI) * 0.12); VM.knife.rotation.set(-0.2, 0.6 - p * 1.6, -0.6 + p * 0.8); }
   if (k === 'volt') M.coil.color.setRGB(0.4, 2 + Math.sin(T.now * 12) * 0.5, 2.8);
 }
 
@@ -3712,10 +3849,11 @@ function avatarsUpdate(dt) {
     }
     if (av.dA > 0.01) poseDowned(av.h, av.dA);
     if (av.rA > 0.01) poseKneel(av.h, av.rA);
+    if (s.dn === 1) { av.voT = (av.voT || 9) - dt; if (av.voT <= 0) { av.voT = 10; VO.last = 0; voSay('down', { x: av.x, y: 0.6, z: av.z }); } }
     av.icon.visible = s.dn === 1; if (av.icon.visible) { const pu = 0.42 + Math.sin(T.now * 5) * 0.06; av.icon.scale.set(pu, pu, 1); av.icon.material.opacity = 0.65 + Math.sin(T.now * 5) * 0.3; }
     const nm = String(s.n || 'Soldier').slice(0, 16), col = PCOLORS[(s.c | 0) % PCOLORS.length];
     if (av.name !== nm || av.dn !== s.dn) {
-      if (s.dn === 1 && av.dn !== 1 && av.dn !== -1) { banner(nm + ' is down!', 'Follow the red marker and hold F to revive', 2800); SND.alarm(); }
+      if (s.dn === 1 && av.dn !== 1 && av.dn !== -1) { banner(nm + ' is down!', 'Follow the red marker and hold F to revive', 2800); SND.alarm(); setTimeout(() => voSay('down', { x: av.x, y: 0.6, z: av.z }), 700); av.voT = 9; }
       av.name = nm; av.dn = s.dn; avatarDraw(av, nm, col, s.dn);
     }
     if (typeof s.sh === 'number' && p.lastSh != null && s.sh > p.lastSh) { const wk = WKEYS[s.w | 0] || 'pistol'; SND.shot(wk, { x: av.x, y: 1.4, z: av.z }); av.flashT = 0.05; }
@@ -4208,7 +4346,7 @@ function frame() {
   } else if (APP.screen === 'over') { if (isHost) hostStep(dt); VM.root.visible = false; }
   if (APP.screen === 'play' && APP.paused) VM.root.visible = VM.root.visible;
   const fz = APP.screen === 'play' && (held || (APP.paused && APP.mode === 'solo')) ? 0 : dt;
-  zVisUpdate(fz); gibUpdate(fz); avatarsUpdate(dt); worldUpdate(fz); storyWorld(fz); perkMachinesUpdate(fz);
+  zVisUpdate(fz); gibUpdate(fz); avatarsUpdate(dt); worldUpdate(fz); storyWorld(fz); perkMachinesUpdate(fz); soundSystemUpdate(fz); partyUpdate(fz);
   if (APP.screen === 'play') hudUpdate(dt);
   netTick(dt); listen(); musicTick();
   if (composer) { finalPass.uniforms.time.value = T.now; composer.render(dt); }
