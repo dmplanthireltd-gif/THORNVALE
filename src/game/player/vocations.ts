@@ -26,7 +26,7 @@ export const VOCATIONS: Record<Vocation, VocationDef> = {
   knight: {
     id: 'knight', name: 'Knight', blurb: 'Heavy armour, swords, axes and clubs. Huge health, little mana.',
     hpPerLevel: 15, manaPerLevel: 5, capPerLevel: 25, baseHp: 150, baseMana: 40, baseCap: 450,
-    melee: 1.0, distance: 0.55, magic: 0.6, healing: 0.9,
+    melee: 0.95, distance: 0.55, magic: 0.6, healing: 0.9,
   },
   paladin: {
     id: 'paladin', name: 'Paladin', blurb: 'Bows, crossbows and spears from range, with holy magic.',
@@ -35,13 +35,13 @@ export const VOCATIONS: Record<Vocation, VocationDef> = {
   },
   sorcerer: {
     id: 'sorcerer', name: 'Sorcerer', blurb: 'Wands, fire and energy. Devastating area spells, fragile body.',
-    hpPerLevel: 5, manaPerLevel: 30, capPerLevel: 10, baseHp: 130, baseMana: 80, baseCap: 400,
-    melee: 0.45, distance: 0.45, magic: 1.2, healing: 1.0,
+    hpPerLevel: 8, manaPerLevel: 30, capPerLevel: 10, baseHp: 130, baseMana: 80, baseCap: 400,
+    melee: 0.45, distance: 0.45, magic: 1.35, healing: 1.15,
   },
   druid: {
     id: 'druid', name: 'Druid', blurb: 'Rods, ice and earth. The strongest healer, able to heal others.',
-    hpPerLevel: 5, manaPerLevel: 30, capPerLevel: 10, baseHp: 130, baseMana: 80, baseCap: 400,
-    melee: 0.45, distance: 0.45, magic: 1.1, healing: 1.3,
+    hpPerLevel: 8, manaPerLevel: 30, capPerLevel: 10, baseHp: 130, baseMana: 80, baseCap: 400,
+    melee: 0.45, distance: 0.45, magic: 1.35, healing: 1.3,
   },
 };
 

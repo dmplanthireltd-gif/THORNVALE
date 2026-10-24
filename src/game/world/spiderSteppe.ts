@@ -102,8 +102,8 @@ export function buildSpiderSteppe(main: Gen, seed: number): void {
   // 8. the region (it replaces the Charwood, which the steppe swallowed)
   const old = m.regions.findIndex((r) => r.name === 'Charwood');
   if (old >= 0) m.regions.splice(old, 1);
-  b.region({ name: 'Gravewind Steppe', x0: x0 - 2, y0: y0 - 2, x1: x1 + 2, y1, level: '60+' });
-  b.region({ name: 'The Silk Throne', x0: throne.x - 9, y0: throne.y - 9, x1: throne.x + 9, y1: throne.y + 9, level: '100+' });
+  b.region({ name: 'Gravewind Steppe', x0: x0 - 2, y0: y0 - 2, x1: x1 + 2, y1, level: '55+' });
+  b.region({ name: 'The Silk Throne', x0: throne.x - 9, y0: throne.y - 9, x1: throne.x + 9, y1: throne.y + 9, level: '110+' });
 }
 
 /** The walkable tile just outside Briarwatch's north wall where the road leaves the town. */

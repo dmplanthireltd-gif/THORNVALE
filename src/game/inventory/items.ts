@@ -183,9 +183,9 @@ const defs: ItemDef[] = [
 
   // --- runes (charges) -----------------------------------------------------------
   def({ id: 'spark_rune', name: 'Spark Rune', kind: 'rune', weight: 0.7, value: 3, tint: '#9a7ae0', icon: 'ϟ', rune: { type: 'damage', element: 'energy', radius: 0, min: 12, max: 26, perLevel: 1.2, range: 6 } }),
-  def({ id: 'fireball_rune', name: 'Fireball Rune', kind: 'rune', weight: 0.7, value: 10, level: 20, tint: '#e0602a', icon: '✺', rune: { type: 'damage', element: 'fire', radius: 3, min: 20, max: 45, perLevel: 1.5, range: 6 }, rarity: 'uncommon' }),
-  def({ id: 'avalanche_rune', name: 'Avalanche Rune', kind: 'rune', weight: 0.7, value: 12, level: 30, tint: '#6fc6f0', icon: '❄', rune: { type: 'damage', element: 'ice', radius: 3, min: 25, max: 55, perLevel: 1.7, range: 6 }, rarity: 'uncommon' }),
-  def({ id: 'stoneshower_rune', name: 'Stoneshower Rune', kind: 'rune', weight: 0.7, value: 12, level: 28, tint: '#7fa04a', icon: '✷', rune: { type: 'damage', element: 'earth', radius: 3, min: 25, max: 55, perLevel: 1.7, range: 6 }, rarity: 'uncommon' }),
+  def({ id: 'fireball_rune', name: 'Fireball Rune', kind: 'rune', weight: 0.7, value: 10, level: 20, tint: '#e0602a', icon: '✺', rune: { type: 'damage', element: 'fire', radius: 3, min: 15, max: 38, perLevel: 1.45, range: 6 }, rarity: 'uncommon' }),
+  def({ id: 'avalanche_rune', name: 'Avalanche Rune', kind: 'rune', weight: 0.7, value: 12, level: 20, tint: '#6fc6f0', icon: '❄', rune: { type: 'damage', element: 'ice', radius: 3, min: 15, max: 38, perLevel: 1.45, range: 6 }, rarity: 'uncommon' }),
+  def({ id: 'stoneshower_rune', name: 'Stoneshower Rune', kind: 'rune', weight: 0.7, value: 12, level: 28, tint: '#7fa04a', icon: '✷', rune: { type: 'damage', element: 'earth', radius: 3, min: 15, max: 38, perLevel: 1.45, range: 6 }, rarity: 'uncommon' }),
   def({ id: 'death_rune', name: 'Death Strike Rune', kind: 'rune', weight: 0.7, value: 30, level: 45, tint: '#6a4a8a', icon: '☠', rune: { type: 'damage', element: 'death', radius: 0, min: 90, max: 150, perLevel: 3.2, range: 6 }, rarity: 'rare' }),
   def({ id: 'healing_rune', name: 'Mending Rune', kind: 'rune', weight: 0.7, value: 20, level: 24, tint: '#5ad06a', icon: '✚', rune: { type: 'heal', radius: 0, min: 120, max: 200, perLevel: 3, range: 5 }, rarity: 'uncommon' }),
   // runes of the spells update: conjured from blank runes (see magic/spells) and sold by mage shops
@@ -194,7 +194,7 @@ const defs: ItemDef[] = [
   def({ id: 'ember_rune', name: 'Ember Rune', kind: 'rune', weight: 0.7, value: 8, level: 15, tint: '#f08a3a', icon: '✹', rune: { type: 'damage', element: 'fire', radius: 1, min: 18, max: 34, perLevel: 1.2, range: 6 } }),
   def({ id: 'icicle_rune', name: 'Icicle Rune', kind: 'rune', weight: 0.7, value: 10, level: 20, tint: '#9fe6ff', icon: '❆', rune: { type: 'damage', element: 'ice', radius: 0, min: 40, max: 70, perLevel: 2, range: 6 } }),
   def({ id: 'rockspike_rune', name: 'Rockspike Rune', kind: 'rune', weight: 0.7, value: 9, level: 18, tint: '#6aa040', icon: '▲', rune: { type: 'damage', element: 'earth', radius: 0, min: 34, max: 62, perLevel: 1.9, range: 6 } }),
-  def({ id: 'stormcloud_rune', name: 'Stormcloud Rune', kind: 'rune', weight: 0.7, value: 12, level: 28, tint: '#b07aff', icon: '☁', rune: { type: 'damage', element: 'energy', radius: 3, min: 25, max: 55, perLevel: 1.7, range: 6 }, rarity: 'uncommon' }),
+  def({ id: 'stormcloud_rune', name: 'Stormcloud Rune', kind: 'rune', weight: 0.7, value: 12, level: 28, tint: '#b07aff', icon: '☁', rune: { type: 'damage', element: 'energy', radius: 3, min: 15, max: 38, perLevel: 1.45, range: 6 }, rarity: 'uncommon' }),
   def({ id: 'blast_rune', name: 'Blast Rune', kind: 'rune', weight: 0.7, value: 14, level: 31, tint: '#d8c8a0', icon: '✸', rune: { type: 'damage', element: 'physical', radius: 1, min: 40, max: 80, perLevel: 2, range: 6 }, rarity: 'uncommon' }),
   def({ id: 'sunlance_rune', name: 'Sunlance Rune', kind: 'rune', weight: 0.7, value: 12, level: 27, vocations: PALADIN, tint: '#fff0a0', icon: '✦', rune: { type: 'damage', element: 'holy', radius: 0, min: 45, max: 80, perLevel: 2.2, range: 6 }, rarity: 'uncommon' }),
   def({ id: 'soothing_rune', name: 'Soothing Rune', kind: 'rune', weight: 0.7, value: 8, level: 15, tint: '#8ae08a', icon: '✚', rune: { type: 'heal', radius: 0, min: 60, max: 110, perLevel: 2, range: 5 } }),
@@ -267,12 +267,12 @@ const defs: ItemDef[] = [
   W('shadow_star', 'Shadow Star', 'throwing', 42, 0, 45, 25, 2, { range: 4, vocations: PALADIN, rarity: 'rare' }),
   W('royal_javelin', 'Royal Javelin', 'throwing', 36, 0, 30, 10, 15, { range: 5, vocations: PALADIN, rarity: 'uncommon' }),
   // wands (sorcerer) and rods (druid)
-  W('wand_of_sparks', 'Wand of Sparks', 'wand', 0, 0, 7, 100, 23, { vocations: SORC, range: 4, element: 'energy', magicDamage: [13, 25], manaPerShot: 2 }),
-  W('wand_of_embers', 'Wand of Embers', 'wand', 0, 0, 19, 500, 23, { vocations: SORC, range: 4, element: 'fire', magicDamage: [25, 40], manaPerShot: 4, rarity: 'uncommon' }),
+  W('wand_of_sparks', 'Wand of Sparks', 'wand', 0, 0, 7, 100, 23, { vocations: SORC, range: 4, element: 'energy', magicDamage: [18, 32], manaPerShot: 2 }),
+  W('wand_of_embers', 'Wand of Embers', 'wand', 0, 0, 19, 500, 23, { vocations: SORC, range: 4, element: 'fire', magicDamage: [22, 36], manaPerShot: 4, rarity: 'uncommon' }),
   W('wand_of_storms', 'Wand of Storms', 'wand', 0, 0, 33, 2000, 22, { vocations: SORC, range: 4, element: 'energy', magicDamage: [40, 62], manaPerShot: 7, rarity: 'rare' }),
   W('wand_of_inferno', 'Wand of Inferno', 'wand', 0, 0, 65, 9000, 22, { vocations: SORC, range: 4, element: 'fire', magicDamage: [65, 90], manaPerShot: 11, rarity: 'legendary' }),
-  W('rod_of_frost', 'Rod of Frost', 'rod', 0, 0, 7, 100, 29, { vocations: DRUID, range: 4, element: 'ice', magicDamage: [13, 25], manaPerShot: 2 }),
-  W('rod_of_thorns', 'Rod of Thorns', 'rod', 0, 0, 19, 500, 29, { vocations: DRUID, range: 4, element: 'earth', magicDamage: [25, 40], manaPerShot: 4, rarity: 'uncommon' }),
+  W('rod_of_frost', 'Rod of Frost', 'rod', 0, 0, 7, 100, 29, { vocations: DRUID, range: 4, element: 'ice', magicDamage: [18, 32], manaPerShot: 2 }),
+  W('rod_of_thorns', 'Rod of Thorns', 'rod', 0, 0, 19, 500, 29, { vocations: DRUID, range: 4, element: 'earth', magicDamage: [22, 36], manaPerShot: 4, rarity: 'uncommon' }),
   W('rod_of_glaciers', 'Rod of Glaciers', 'rod', 0, 0, 33, 2000, 29, { vocations: DRUID, range: 4, element: 'ice', magicDamage: [40, 62], manaPerShot: 7, rarity: 'rare' }),
   W('rod_of_wilds', 'Rod of the Wilds', 'rod', 0, 0, 65, 9000, 29, { vocations: DRUID, range: 4, element: 'earth', magicDamage: [65, 90], manaPerShot: 11, rarity: 'legendary' }),
 

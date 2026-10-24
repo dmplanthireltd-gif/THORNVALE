@@ -139,7 +139,7 @@ const AREAS: SeaArea[] = [
 ];
 
 const LEVELS: Record<string, string> = {
-  Kelpwood: '40+', 'Coral Gardens': '50+', 'Saltmaid Shoals': '50+', 'Deepfin Warrens': '60+', 'Graveyard of Keels': '70+', 'Eel Trench': '60+',
+  Kelpwood: '25+', 'Coral Gardens': '25+', 'Saltmaid Shoals': '40+', 'Deepfin Warrens': '35+', 'Graveyard of Keels': '30+', 'Eel Trench': '35+',
 };
 
 /** 3-wide channels between the areas (and the winding Eel Trench, 4 wide). */
@@ -327,15 +327,15 @@ export function buildSunkenReach(m: WorldMap): void {
 
   // ---- regions (later ones win where they overlap)
   const reg = (r: Region) => m.regions.push(r);
-  reg({ name: SEA_BOX.name, x0: B.x0, y0: B.y0, x1: B.x1, y1: B.y1, z0: Z, z1: Z, level: '40+' });
+  reg({ name: SEA_BOX.name, x0: B.x0, y0: B.y0, x1: B.x1, y1: B.y1, z0: Z, z1: Z, level: '25+' });
   for (const a of AREAS) {
     if (a.biome === 'grotto') continue;
-    reg({ name: a.name, x0: a.cx - a.rx - 1, y0: a.cy - a.ry - 1, x1: a.cx + a.rx + 1, y1: a.cy + a.ry + 1, z0: Z, z1: Z, level: LEVELS[a.name] ?? '40+' });
+    reg({ name: a.name, x0: a.cx - a.rx - 1, y0: a.cy - a.ry - 1, x1: a.cx + a.rx + 1, y1: a.cy + a.ry + 1, z0: Z, z1: Z, level: LEVELS[a.name] ?? '25+' });
   }
   const trench = CHANNELS.find((c) => c.trench)!.pts;
   reg({ name: 'Eel Trench', x0: Math.min(...trench.map((p) => p[0])) - 3, y0: 592, x1: 268, y1: Math.max(...trench.map((p) => p[1])) - 3, z0: Z, z1: Z, level: LEVELS['Eel Trench'] });
-  reg({ name: saltmaid.name, x0: saltmaid.x0, y0: saltmaid.y0, x1: saltmaid.x1, y1: saltmaid.y1, z0: Z, z1: Z, level: '50+' });
-  reg({ name: crown.name, x0: crown.x0, y0: crown.y0, x1: crown.x1, y1: crown.y1, z0: Z, z1: Z, level: '80+' });
+  reg({ name: saltmaid.name, x0: saltmaid.x0, y0: saltmaid.y0, x1: saltmaid.x1, y1: saltmaid.y1, z0: Z, z1: Z, level: '40+' });
+  reg({ name: crown.name, x0: crown.x0, y0: crown.y0, x1: crown.x1, y1: crown.y1, z0: Z, z1: Z, level: '30+' });
   const g = AREAS[0];
   reg({ name: SEA_GROTTO, x0: g.cx - g.rx, y0: g.cy - g.ry - 1, x1: g.cx + g.rx, y1: g.cy + g.ry, z0: Z, z1: Z, level: '—', safe: true });
   reg({ name: SEA_PIER, x0: 347, y0: pierTop - 1, x1: 353, y1: SEA_WHIRLPOOL.y + 1, z0: 0, z1: 0, level: '—', safe: true });

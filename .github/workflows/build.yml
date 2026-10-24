@@ -13,3 +13,5 @@ jobs:
           node-version: 22
       - run: npm install --include=dev
       - run: npm run build
+      # balance simulator, quick sanity mode (a few seconds): every vocation deals damage and earns experience
+      - run: npx tsx scripts/balance-sim.ts --quick

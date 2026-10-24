@@ -201,9 +201,9 @@ function buildThornvale(g: Gen, late: Region[]): { gates: Record<Dir, { x: numbe
     gates,
     regions: () => {
       b.region({ name: 'Thornvale', x0: OX, y0: OY, x1: OX + VW - 1, y1: OY + VH - 1, level: '1+', z0: 0, z1: 2, temple: m.temple });
-      b.region({ name: 'Greywood', x0: OX + 2, y0: OY + 2, x1: OX + VW - 3, y1: OY + 10, level: '3+' });
+      b.region({ name: 'Greywood', x0: OX + 2, y0: OY + 2, x1: OX + VW - 3, y1: OY + 10, level: '5+' });
       b.region({ name: "Miller's Farm", x0: OX + 40, y0: OY + 25, x1: OX + 53, y1: OY + 39, level: '1+' });
-      b.region({ name: 'Old Graveyard', x0: OX + 3, y0: OY + 31, x1: OX + 17, y1: OY + 40, level: '5+' });
+      b.region({ name: 'Old Graveyard', x0: OX + 3, y0: OY + 31, x1: OX + 17, y1: OY + 40, level: '10+' });
       b.region({ name: 'Thornvale Sewers', x0: OX + 4, y0: OY + 14, x1: OX + 50, y1: OY + 42, level: '1+', z0: -1, z1: -1 });
       b.region({ name: 'Temple Plaza', x0: OX + 21, y0: OY + 18, x1: OX + 34, y1: OY + 28, level: '—', safe: true, temple: m.temple });
       for (const h of houses) {

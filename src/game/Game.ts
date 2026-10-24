@@ -297,6 +297,19 @@ export const UNJUST_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const UNJUST_KILLS_FOR_RED = 3;
 /** Seconds you cannot enter a protection zone after attacking a player. */
 export const PZ_LOCK_SECONDS = 60;
+/**
+ * Share of damage that lands when a player hurts another player, by the attacker's vocation: [at level 100
+ * and below, at level 200 and above], straight line between. Mages' healing outgrows weapon damage at high
+ * levels, so knights and paladins hit players harder there (balance sim, scripts/balance-sim.ts: duels at
+ * equal level, gear and supplies come out about even for every pair).
+ */
+export const PVP_DAMAGE: Record<Vocation, [number, number]> = { knight: [1.05, 2.2], paladin: [0.81, 1.55], sorcerer: [0.9, 0.9], druid: [0.89, 0.89] };
+
+/** The PvP damage share for an attacker of this vocation and level (see PVP_DAMAGE). */
+export function pvpShare(table: Record<Vocation, [number, number]>, voc: Vocation, level: number): number {
+  const [lo, hi] = table[voc];
+  return lo + (hi - lo) * Math.max(0, Math.min(1, (level - 100) / 100));
+}
 /** Steps take this many times longer while caught in a web (dread weavers, Game.web). */
 export const WEB_SLOW = 1.6;
 /** How long the victim of an attack may hit back without getting a skull. */
@@ -336,6 +349,8 @@ export class Game implements AIContext {
   readonly simulate: boolean;
   /** Player-versus-player combat allowed (mirror games learn it from the server). */
   pvp: boolean;
+  /** Share of damage a player deals to another player (PVP_DAMAGE; the balance sim may try other values). */
+  pvpDamage: Record<Vocation, [number, number]> = { ...PVP_DAMAGE };
   /** Wall clock in ms. */
   now: () => number;
   /** Dug holes that close again: key → seconds left. */
@@ -2329,6 +2344,8 @@ export class Game implements AIContext {
     }
     let manaShield = 0;
     let amount = roll.amount;
+    // player against player: every source (weapons, spells, runes, fields) hits softer, so a fight lasts long enough to answer
+    if (target instanceof Player && source instanceof Player && target !== source && amount > 0) amount = Math.max(1, Math.round(amount * pvpShare(this.pvpDamage, source.vocation, source.level)));
     if (target instanceof Player && roll.result === 'hit' && target.buffs.magicShield > 0) {
       manaShield = Math.min(target.mana, amount);
       target.mana -= manaShield;

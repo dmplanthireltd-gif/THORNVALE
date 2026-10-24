@@ -297,6 +297,8 @@ console.log('Spells & runes');
   g.say(pid, 'exura');
   check(p.hp > 20, 'exura heals');
   p.level = 60; p.exp = 2_000_000; s.skills = legacySkills('sorcerer', 60); g.refreshStats(s); p.mana = p.maxMana;
+  // these checks are about the spells, not about surviving the orcs pulled next to us (monster damage is a balance value)
+  p.god = true;
   const spot = openStrip(g);
   g.teleport(p, spot.x, spot.y, 0);
   const w = enemyNear(g, 'orc', p, 2);

@@ -119,57 +119,57 @@ export const SPELLS: Record<SpellId, SpellDef> = {
     description: 'Heals another player: say exura sio "Name, or it heals the most wounded ally nearby.',
   },
   exori: {
-    id: 'exori', name: 'Berserk', words: 'exori', kind: 'selfArea', group: 'attack', mana: 115, level: 35, vocations: ['knight'],
-    cooldown: 4, element: 'physical', min: 20, max: 40, perLevel: 1.6, weaponScale: 1.4, radius: 1, price: 2500,
+    id: 'exori', name: 'Berserk', words: 'exori', kind: 'selfArea', group: 'attack', mana: 70, level: 15, vocations: ['knight'],
+    cooldown: 4, element: 'physical', min: 47, max: 89, perLevel: 2.26, weaponScale: 2.05, radius: 1, price: 2500,
     description: 'Strikes every enemy around you.',
   },
   exori_gran: {
-    id: 'exori_gran', name: 'Fierce Berserk', words: 'exori gran', kind: 'selfArea', group: 'attack', mana: 340, level: 70, vocations: ['knight'],
-    cooldown: 6, element: 'physical', min: 50, max: 90, perLevel: 2.6, weaponScale: 2.2, radius: 1, price: 7500,
+    id: 'exori_gran', name: 'Fierce Berserk', words: 'exori gran', kind: 'selfArea', group: 'attack', mana: 240, level: 70, vocations: ['knight'],
+    cooldown: 6, element: 'physical', min: 81, max: 142, perLevel: 2.69, weaponScale: 2.46, radius: 1, price: 7500,
     description: 'A devastating blow against every enemy around you.',
   },
   exori_hur: {
-    id: 'exori_hur', name: 'Whirlwind Throw', words: 'exori hur', kind: 'target', group: 'attack', mana: 40, level: 28, vocations: ['knight'],
-    cooldown: 6, element: 'physical', min: 15, max: 35, perLevel: 1.4, weaponScale: 1.1, range: 5, price: 1500,
+    id: 'exori_hur', name: 'Whirlwind Throw', words: 'exori hur', kind: 'target', group: 'attack', mana: 40, level: 12, vocations: ['knight'],
+    cooldown: 6, element: 'physical', min: 32, max: 65, perLevel: 2.34, weaponScale: 2.08, range: 5, price: 1500,
     description: 'Hurls your weapon at a distant target.',
   },
   exori_con: {
-    id: 'exori_con', name: 'Ethereal Spear', words: 'exori con', kind: 'target', group: 'attack', mana: 25, level: 23, vocations: ['paladin'],
-    cooldown: 2, element: 'physical', min: 25, max: 50, perLevel: 1.8, weaponScale: 0.6, range: 7, price: 1100,
+    id: 'exori_con', name: 'Ethereal Spear', words: 'exori con', kind: 'target', group: 'attack', mana: 25, level: 15, vocations: ['paladin'],
+    cooldown: 2, element: 'physical', min: 0, max: 10, perLevel: 2.9, weaponScale: 0.8, range: 7, price: 1100,
     description: 'A spear of light that never misses.',
   },
   exori_san: {
     id: 'exori_san', name: 'Divine Missile', words: 'exori san', kind: 'target', group: 'attack', mana: 20, level: 40, vocations: ['paladin'],
-    cooldown: 2, element: 'holy', min: 40, max: 70, perLevel: 2.2, range: 4, price: 1800,
+    cooldown: 2, element: 'holy', min: 45, max: 80, perLevel: 2.6, range: 4, price: 1800,
     description: 'Holy damage — devastating against the undead and demons.',
   },
   exori_vis: {
     id: 'exori_vis', name: 'Energy Strike', words: 'exori vis', kind: 'target', group: 'attack', mana: 20, level: 12, vocations: MAGES,
-    cooldown: 2, element: 'energy', min: 25, max: 45, perLevel: 1.7, range: 3, price: 800, description: 'Energy damage on one target.',
+    cooldown: 2, element: 'energy', min: 5, max: 18, perLevel: 3.7, range: 4, price: 800, description: 'Energy damage on one target.',
   },
   exori_flam: {
     id: 'exori_flam', name: 'Flame Strike', words: 'exori flam', kind: 'target', group: 'attack', mana: 20, level: 14, vocations: MAGES,
-    cooldown: 2, element: 'fire', min: 25, max: 45, perLevel: 1.7, range: 3, price: 800, description: 'Fire damage on one target.',
+    cooldown: 2, element: 'fire', min: 5, max: 18, perLevel: 3.7, range: 4, price: 800, description: 'Fire damage on one target.',
   },
   exori_frigo: {
     id: 'exori_frigo', name: 'Ice Strike', words: 'exori frigo', kind: 'target', group: 'attack', mana: 20, level: 15, vocations: MAGES,
-    cooldown: 2, element: 'ice', min: 25, max: 45, perLevel: 1.7, range: 3, price: 800, description: 'Ice damage on one target.',
+    cooldown: 2, element: 'ice', min: 5, max: 18, perLevel: 3.7, range: 4, price: 800, description: 'Ice damage on one target.',
   },
   exori_tera: {
     id: 'exori_tera', name: 'Terra Strike', words: 'exori tera', kind: 'target', group: 'attack', mana: 20, level: 13, vocations: MAGES,
-    cooldown: 2, element: 'earth', min: 25, max: 45, perLevel: 1.7, range: 3, price: 800, description: 'Earth damage on one target.',
+    cooldown: 2, element: 'earth', min: 5, max: 18, perLevel: 3.7, range: 4, price: 800, description: 'Earth damage on one target.',
   },
   exevo_gran_mas_vis: {
     id: 'exevo_gran_mas_vis', name: 'Rage of the Skies', words: 'exevo gran mas vis', kind: 'selfArea', group: 'attack', mana: 600, level: 55, vocations: ['sorcerer'],
-    cooldown: 8, element: 'energy', min: 80, max: 160, perLevel: 4, radius: 5, price: 6000, description: 'Lightning strikes everything around you.',
+    cooldown: 8, element: 'energy', min: 90, max: 180, perLevel: 4.9, radius: 5, price: 6000, description: 'Lightning strikes everything around you.',
   },
   exevo_gran_mas_frigo: {
     id: 'exevo_gran_mas_frigo', name: 'Eternal Winter', words: 'exevo gran mas frigo', kind: 'selfArea', group: 'attack', mana: 900, level: 60, vocations: ['druid'],
-    cooldown: 8, element: 'ice', min: 80, max: 160, perLevel: 4, radius: 5, price: 8000, description: 'A blizzard freezes everything around you.',
+    cooldown: 8, element: 'ice', min: 90, max: 180, perLevel: 4.9, radius: 5, price: 8000, description: 'A blizzard freezes everything around you.',
   },
   exevo_mas_san: {
     id: 'exevo_mas_san', name: 'Divine Caldera', words: 'exevo mas san', kind: 'selfArea', group: 'attack', mana: 160, level: 50, vocations: ['paladin'],
-    cooldown: 4, element: 'holy', min: 50, max: 100, perLevel: 2.6, radius: 3, price: 3000, description: 'A ring of holy fire around you.',
+    cooldown: 4, element: 'holy', min: 132, max: 240, perLevel: 6.24, radius: 3, price: 3000, description: 'A ring of holy fire around you.',
   },
   utani_hur: {
     id: 'utani_hur', name: 'Haste', words: 'utani hur', kind: 'buff', group: 'support', mana: 60, level: 14, vocations: ALL,
@@ -185,8 +185,8 @@ export const SPELLS: Record<SpellId, SpellDef> = {
   },
   // --- northlands update ------------------------------------------------------------
   exori_mas_grav: {
-    id: 'exori_mas_grav', name: 'Groundshaker', words: 'exori mas grav', kind: 'selfArea', group: 'attack', mana: 160, level: 33, vocations: ['knight'],
-    cooldown: 8, element: 'physical', min: 18, max: 36, perLevel: 1.3, weaponScale: 0.9, radius: 3, price: 1800,
+    id: 'exori_mas_grav', name: 'Groundshaker', words: 'exori mas grav', kind: 'selfArea', group: 'attack', mana: 110, level: 33, vocations: ['knight'],
+    cooldown: 8, element: 'physical', min: 47, max: 84, perLevel: 1.89, weaponScale: 1.48, radius: 3, price: 1800,
     description: 'Slams the ground: shakes every enemy within three tiles.',
   },
   exevo_con: {
@@ -209,11 +209,11 @@ export const SPELLS: Record<SpellId, SpellDef> = {
   // --- spells update: attack ---------------------------------------------------------
   exori_mort: {
     id: 'exori_mort', name: 'Death Strike', words: 'exori mort', kind: 'target', group: 'attack', mana: 20, level: 16, vocations: ['sorcerer'],
-    cooldown: 2, element: 'death', min: 25, max: 45, perLevel: 1.7, range: 3, price: 800, description: 'Death damage on one target.',
+    cooldown: 2, element: 'death', min: 5, max: 18, perLevel: 3.7, range: 4, price: 800, description: 'Death damage on one target.',
   },
   exori_mas: {
-    id: 'exori_mas', name: 'Sweeping Berserk', words: 'exori mas', kind: 'selfArea', group: 'attack', mana: 220, level: 50, vocations: ['knight'],
-    cooldown: 6, element: 'physical', min: 30, max: 55, perLevel: 1.9, weaponScale: 1.7, radius: 2, price: 4500,
+    id: 'exori_mas', name: 'Sweeping Berserk', words: 'exori mas', kind: 'selfArea', group: 'attack', mana: 160, level: 50, vocations: ['knight'],
+    cooldown: 6, element: 'physical', min: 53, max: 95, perLevel: 1.98, weaponScale: 1.91, radius: 2, price: 4500,
     description: 'A wide sweep of your weapon that strikes every enemy within two tiles.',
   },
   exevo_flam_hur: {
@@ -226,11 +226,11 @@ export const SPELLS: Record<SpellId, SpellDef> = {
   },
   exevo_tera_hur: {
     id: 'exevo_tera_hur', name: 'Terra Wave', words: 'exevo tera hur', kind: 'wave', group: 'attack', mana: 170, level: 38, vocations: ['druid'],
-    cooldown: 4, element: 'earth', min: 50, max: 95, perLevel: 2.4, length: 5, price: 2500, description: 'A wide cone of thorns and stone in front of you.',
+    cooldown: 6, element: 'earth', min: 55, max: 105, perLevel: 2.5, length: 5, price: 2500, description: 'A wide cone of thorns and stone in front of you.',
   },
   exevo_vis_hur: {
     id: 'exevo_vis_hur', name: 'Energy Wave', words: 'exevo vis hur', kind: 'wave', group: 'attack', mana: 170, level: 38, vocations: ['sorcerer'],
-    cooldown: 8, element: 'energy', min: 60, max: 110, perLevel: 2.6, length: 5, price: 2500, description: 'A wide cone of lightning in front of you.',
+    cooldown: 6, element: 'energy', min: 55, max: 105, perLevel: 2.5, length: 5, price: 2500, description: 'A wide cone of lightning in front of you.',
   },
   exevo_vis_lux: {
     id: 'exevo_vis_lux', name: 'Energy Beam', words: 'exevo vis lux', kind: 'beam', group: 'attack', mana: 40, level: 23, vocations: ['sorcerer'],
@@ -242,11 +242,11 @@ export const SPELLS: Record<SpellId, SpellDef> = {
   },
   exevo_gran_mas_flam: {
     id: 'exevo_gran_mas_flam', name: "Hell's Core", words: 'exevo gran mas flam', kind: 'selfArea', group: 'attack', mana: 1100, level: 60, vocations: ['sorcerer'],
-    cooldown: 8, element: 'fire', min: 90, max: 180, perLevel: 4.2, radius: 5, price: 8000, description: 'A storm of fire engulfs everything around you.',
+    cooldown: 8, element: 'fire', min: 90, max: 180, perLevel: 4.9, radius: 5, price: 8000, description: 'A storm of fire engulfs everything around you.',
   },
   exevo_gran_mas_tera: {
     id: 'exevo_gran_mas_tera', name: 'Wrath of Nature', words: 'exevo gran mas tera', kind: 'selfArea', group: 'attack', mana: 700, level: 55, vocations: ['druid'],
-    cooldown: 8, element: 'earth', min: 75, max: 150, perLevel: 3.8, radius: 5, price: 6000, description: 'The ground erupts in thorns all around you.',
+    cooldown: 8, element: 'earth', min: 90, max: 180, perLevel: 4.9, radius: 5, price: 6000, description: 'The ground erupts in thorns all around you.',
   },
   // --- spells update: healing ----------------------------------------------------------
   exura_gran_mas_res: {

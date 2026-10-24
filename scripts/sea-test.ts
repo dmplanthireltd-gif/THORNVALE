@@ -37,8 +37,9 @@ console.log('Sea monsters and loot');
 {
   check(SEA_KINDS.every((k) => ENEMIES[k] && ENEMIES[k].kind === k), `${SEA_KINDS.length} sea monsters defined`);
   const regular = SEA_KINDS.filter((k) => !ENEMIES[k].boss);
-  check(regular.every((k) => ENEMIES[k].exp >= 100 && ENEMIES[k].exp <= 700), 'sea monsters give mid-level experience (100–700)');
-  check(ENEMIES.lantern_jelly.maxHp < 250 && ENEMIES.blight_jelly.maxHp < 250, 'jellies are fragile (made for area damage)');
+  // balance (2026-10-24 tuning): between the orcs and the frost giants on the ladder
+  check(regular.every((k) => ENEMIES[k].exp > ENEMIES.orc.exp && ENEMIES[k].exp < ENEMIES.frost_giant.exp), 'sea monsters give mid-level experience (between orcs and frost giants)');
+  check(ENEMIES.lantern_jelly.maxHp * 4 < ENEMIES.ironshell_crab.maxHp && ENEMIES.blight_jelly.maxHp * 4 < ENEMIES.ironshell_crab.maxHp, 'jellies are fragile (made for area damage)');
   check(ENEMIES.ironshell_crab.armor >= 30 && ENEMIES.ironshell_crab.maxHp >= 900, 'the ironshell crab is a tank');
   check(ENEMIES.gloom_eel.stepTime < 0.3, 'the gloom eel is fast');
   check(ENEMIES.deepfin_harpooner.kite && ENEMIES.deepfin_harpooner.abilities.some((a) => a.kind === 'ranged' && a.range >= 4), 'harpooners throw from range');
