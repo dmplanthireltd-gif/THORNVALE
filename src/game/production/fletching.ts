@@ -28,6 +28,25 @@ export const ARROWS: Array<{ heads: string; arrow: string; level: number; xp: nu
   { heads: 'darkstone_arrowheads', arrow: 'darkstone_arrow', level: 75, xp: 125 },
 ];
 
+/**
+ * Bolts (added with the new trade skills, 2026-10-24): ten at a time. Plain and piercing bolts come from
+ * shafts and arrowheads (the anvil still makes them too); rime and infernal bolts are piercing bolts
+ * dipped in a crystal shard or a fiery heart.
+ */
+export const BOLTS: Array<{ bolt: string; level: number; xp: number; inputs: Array<{ id: string; qty: number }>; knife?: boolean }> = [
+  { bolt: 'bolt', level: 9, xp: 15, inputs: [{ id: ARROW_SHAFT, qty: 10 }, { id: 'bronze_arrowheads', qty: 10 }] },
+  { bolt: 'piercing_bolt', level: 33, xp: 45, inputs: [{ id: ARROW_SHAFT, qty: 10 }, { id: 'steel_arrowheads', qty: 10 }] },
+  { bolt: 'frost_bolt', level: 52, xp: 80, inputs: [{ id: 'piercing_bolt', qty: 10 }, { id: 'crystal_shard', qty: 1 }], knife: true },
+  { bolt: 'infernal_bolt', level: 64, xp: 100, inputs: [{ id: 'piercing_bolt', qty: 10 }, { id: 'fiery_heart', qty: 1 }], knife: true },
+];
+
+/** Throwing weapons (stackable): a log and metal tips make a few at a time. */
+export const THROWING: Array<{ item: string; level: number; xp: number; qty: number; inputs: Array<{ id: string; qty: number }> }> = [
+  { item: 'spear', level: 6, xp: 14, qty: 3, inputs: [{ id: 'logs', qty: 1 }, { id: 'iron_arrowheads', qty: 3 }] },
+  { item: 'royal_spear', level: 24, xp: 40, qty: 3, inputs: [{ id: 'pine_logs', qty: 1 }, { id: 'steel_arrowheads', qty: 3 }] },
+  { item: 'royal_javelin', level: 42, xp: 70, qty: 5, inputs: [{ id: 'palm_logs', qty: 1 }, { id: 'steel_arrowheads', qty: 5 }, { id: FEATHER, qty: 5 }] },
+];
+
 export const FLETCHING_RECIPES: Recipe[] = [
   ...FLETCH_LOGS.flatMap((l): Recipe[] => [
     { id: `fletch:shafts:${l.log}`, skill: 'fletching', station: 'knife', group: 'Shafts', level: l.level, xp: l.xp, inputs: [{ id: l.log, qty: 1 }], output: { id: ARROW_SHAFT, qty: l.shafts }, tool: KNIFE },
@@ -42,5 +61,15 @@ export const FLETCHING_RECIPES: Recipe[] = [
   ...ARROWS.map((a): Recipe => ({
     id: `fletch:${a.arrow}`, skill: 'fletching', station: 'knife', group: 'Arrows', level: a.level, xp: a.xp,
     inputs: [{ id: ARROW_SHAFT, qty: 10 }, { id: FEATHER, qty: 10 }, { id: a.heads, qty: 10 }], output: { id: a.arrow, qty: 10 },
+  })),
+  // bolts for crossbows (short shafts, no feathers): plain and piercing from arrowheads, then elemental tips
+  ...BOLTS.map((b): Recipe => ({
+    id: `fletch:${b.bolt}`, skill: 'fletching', station: 'knife', group: 'Bolts', level: b.level, xp: b.xp,
+    inputs: b.inputs, output: { id: b.bolt, qty: 10 }, ...(b.knife ? { tool: KNIFE } : {}),
+  })),
+  // throwing weapons for paladins: spears and javelins carved from logs and tipped with metal
+  ...THROWING.map((t): Recipe => ({
+    id: `fletch:${t.item}`, skill: 'fletching', station: 'knife', group: 'Throwing', level: t.level, xp: t.xp,
+    inputs: t.inputs, output: { id: t.item, qty: t.qty }, tool: KNIFE,
   })),
 ];

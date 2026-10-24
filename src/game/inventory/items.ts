@@ -4,6 +4,7 @@ import { CAPE_BY_ID, CAPE_ITEM_SPECS, capeSummary } from './capes';
 import { PET_ITEM_SPECS, petForItem } from '../pets/petDefs';
 import { SEA_ITEM_SPECS, SEA_UNIQUES } from './seaItems';
 import { TELEPORT_BY_KEY, TELEPORT_DESTS, teleportRuneId } from '../magic/teleport';
+import { TRADE_ITEM_SPECS } from './tradeItems';
 
 export type ItemKind =
   | 'gold' | 'consumable' | 'rune' | 'tool' | 'material'
@@ -120,7 +121,7 @@ export interface ItemDef {
   heal?: number;
   mana?: number;
   rune?: RuneEffect;
-  tool?: 'rope' | 'shovel' | 'fishing' | 'mining' | 'hammer' | 'knife' | 'needle' | 'chisel' | 'tinderbox';
+  tool?: 'rope' | 'shovel' | 'fishing' | 'mining' | 'hammer' | 'knife' | 'needle' | 'chisel' | 'tinderbox' | 'pestle' | 'lockpick' | 'trowel' | 'trap' | 'boat';
   /** Buff potions: which timed buff drinking it grants. */
   buff?: PotionBuff;
   /** Throwing weapons: chance a throw uses one up (default 0.85). */
@@ -531,6 +532,7 @@ const defs: ItemDef[] = [
   ...PET_ITEM_SPECS.map(def),
   // --- the Sunken Reach (seaItems.ts): sea materials and Ulmaroth's uniques -------------------
   ...SEA_ITEM_SPECS.map(def),
+  ...TRADE_ITEM_SPECS.map(def),
 ];
 
 /** Unique items only bosses drop (bosses/bosses.ts). */

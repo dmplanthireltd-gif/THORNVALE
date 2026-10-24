@@ -3,6 +3,7 @@ import { SPELLS, type SpellDef, type SpellId } from '../game/magic/spells';
 import { drawGear } from './gearIcons';
 import { drawRuneStone } from './runeIcons';
 import { drawPetIcon } from './petIcons';
+import { drawTradeIcon, TRADE_MATERIAL_SHAPES } from './tradeIcons';
 
 /**
  * Hand-drawn item and spell icons, painted once on a canvas and cached as
@@ -306,6 +307,9 @@ export const MATERIAL_SHAPE: Record<string, [string, string]> = {
   pearl: ['pearl', '#f2ede2'], black_pearl: ['pearl', '#4a3a5a'], red_coral: ['coral', '#d8443a'], ironshell_claw: ['claw', '#7a5a44'],
   glowing_jelly: ['jelly', '#8adcff'], deepfin_scale: ['scale', '#3a8a8a'], tide_shell: ['conch', '#e8c8a8'], gloom_eel_skin: ['pelt', '#2a3a4a'],
 };
+
+// herbs, seeds, stolen goods, pelts… of the trade skills (ui/tradeIcons.ts)
+Object.assign(MATERIAL_SHAPE, TRADE_MATERIAL_SHAPES);
 
 function drawMaterial(x: Ctx, d: ItemDef): void {
   const [shape, c] = MATERIAL_SHAPE[d.id] ?? ['orb', d.tint];
@@ -637,6 +641,7 @@ function drawAmmo(x: Ctx, d: ItemDef): void {
 
 function draw(x: Ctx, d: ItemDef): void {
   if (drawGear(x, d)) return;
+  if (drawTradeIcon(x, d)) return;
   switch (d.kind) {
     case 'gold': return drawGold(x);
     case 'consumable':

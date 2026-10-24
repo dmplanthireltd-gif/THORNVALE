@@ -60,6 +60,8 @@ export interface DialogueContext {
   level: number;
   vocation: Vocation;
   knownSpells: Set<string>;
+  /** Extra root-page lines from the trade skills (masters' advice, pickpocketing; trades/TradeSystem.ts). */
+  extra?: DialogueOption[];
 }
 
 /** Builds the current dialogue page from NPC data and the player's state. */
@@ -88,6 +90,7 @@ export function buildDialogue(d: DialogueState, ctx: DialogueContext): DialogueV
     if (npc.bank) options.push({ label: 'I would like to bank.', action: 'page:bank' });
     for (const t of npc.travel ?? []) options.push({ label: `Take me to ${t.name} (${t.price ? `${t.price} gold` : 'free'}).`, action: `travel:${t.key}`, disabled: gold < t.price });
     if (npc.spells?.length) options.push({ label: 'Teach me spells.', action: 'page:spells' });
+    for (const o of ctx.extra ?? []) options.push(o);
     options.push({ label: 'Farewell.', action: 'bye' });
   } else if (d.page === 'trade') {
     view.shop = {

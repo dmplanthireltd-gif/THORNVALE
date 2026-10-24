@@ -38,6 +38,7 @@ import { stationAt } from '../game/production/recipes';
 import { Obj, WorldMap, type EnemyKind } from '../game/world/WorldMap';
 import { WeatherView, type WeatherQuality } from './weather/WeatherView';
 import { TrapView } from './weather/trapView';
+import { TradeView } from './trades/TradeView';
 import { FpsWatch, GRAPHICS, storeGraphics, storedGraphics, type GraphicsQuality } from './graphics';
 import { PAINTED } from './style';
 import { markOutline, markOutlineTree, PaintPass } from './PaintPass';
@@ -107,6 +108,8 @@ export class Renderer {
   private weather!: WeatherView;
   /** Jungle traps: tell-tale leaves and the spring animations. */
   private trapView!: TrapView;
+  /** Agility shortcuts, stalls, strongboxes, herbs (render/trades/TradeView.ts). */
+  private tradeView!: TradeView;
   private baseHemi = 1.15;
   private baseSun = 2.3;
   private stormSky = new THREE.Color(0x3a4048);
@@ -174,6 +177,7 @@ export class Renderer {
     this.overlay = new Overlay(container, this.cam.camera);
     this.weather = new WeatherView(this.scene);
     this.trapView = new TrapView(this.scene, ctl.game, () => this.worldView.floorOffset(0));
+    this.tradeView = new TradeView(this.scene, ctl.game);
     for (const b of ctl.game.bags) this.addBag(b);
 
     ctl.game.events.on((e) => this.onEvent(e));
@@ -1273,6 +1277,7 @@ export class Renderer {
       view.setCastShadow(rp.x >= sx0 && rp.x <= sx1 && rp.z >= sz0 && rp.z <= sz1);
       this.skillAnim.apply(view, dt);
       this.teleFx.apply(view, dt);
+      this.tradeView.adjustCreature(view);
       if (this.underwater.active && c instanceof Player && !c.dead && c.z === pz) this.underwater.swim(view, c.id);
       if (c.dead || c.z !== pz) {
         this.overlay.setLabel(c.id, null, c.name, 0);
@@ -1375,6 +1380,7 @@ export class Renderer {
     // weather: particles, haze, wind, storm light and lightning (nothing of it underground)
     const wl = this.weather.update(dt, g, p, this.cam.camera, this.worldView.floorOffset(pz) ?? 0, f.x, f.z);
     this.trapView.update(dt, p.x, p.y, pz);
+    this.tradeView.update(dt, p.x, p.y, pz, (z) => this.worldView.floorOffset(z));
     if (pz >= 0) {
       this.hemi.intensity = this.baseHemi * wl.hemi;
       this.sun.intensity = this.baseSun * wl.sun;

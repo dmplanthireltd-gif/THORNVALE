@@ -20,6 +20,7 @@ import type { QuestLog } from '../quests/quests';
 import type { TutorialState } from '../tutorial/tutorial';
 import type { ExpStages } from '../progression/stages';
 import { applyPetsView, parsePetLook, petLook, petsView, type PetView } from '../pets/PetSystem';
+import { applyTradeView, type TradeView as TradeSkillView } from '../trades/TradeSystem';
 import { petForItem, petXpForLevel } from '../pets/petDefs';
 import { decodeWeather, encodeWeather, type WeatherSnap } from '../world/weather';
 
@@ -32,7 +33,7 @@ const PET_ACTIONS: PetAction[] = ['dismiss', 'pouch', 'pouchClose', 'put', 'take
  * so rendering and UI code is identical online and offline.
  */
 
-export const PROTOCOL_VERSION = 30;
+export const PROTOCOL_VERSION = 31;
 /** Monsters further than this from a player are not sent to them. */
 export const VIEW_RADIUS = 20;
 
@@ -101,7 +102,10 @@ export type Command =
   /** Leave the tutorial island now (accounts that finished it once). */
   | { c: 'tutorialSkip' }
   /** Pets (protocol 26): send the pet away, open/close the tortoise pouch, put a backpack slot in / take a pouch slot out. */
-  | { c: 'pet'; a: PetAction; i?: number };
+  | { c: 'pet'; a: PetAction; i?: number }
+  /** Trade skills (protocol 29): switch running on/off; try to pick an NPC's pocket. */
+  | { c: 'run'; on: boolean }
+  | { c: 'thieve'; id: number };
 
 export type ClientMessage =
   | { t: 'hello'; v: number; name: string; password?: string; token?: string; ap?: number[]; vocation?: Vocation; skipTutorial?: boolean }
@@ -184,6 +188,8 @@ export interface SelfSnap {
   tu?: { s: TutorialState['state']; st: number; f: number; n: number; cs: 0 | 1 };
   /** Pets: the pet that is out, pet experience, tortoise pouch, pouch window (sent only when changed). */
   pet?: PetView;
+  /** Trade skills (protocol 29): stamina, running, and later the slayer task, farm patches, traps and boat; only when changed. */
+  tw?: TradeSkillView;
 }
 
 export type ServerMessage =
@@ -299,6 +305,7 @@ export function buildSnapshot(game: Game, s: Session): ServerMessage {
     pm: onlyChanged(s, 'pm', game.premiumView(s.id) ?? undefined),
     cos: onlyChanged(s, 'cos', [s.cosmetics.hideCloak ? 0 : 1, s.cosmetics.hideTitle ? 0 : 1] as [0 | 1, 0 | 1]),
     pet: onlyChanged(s, 'pet', petsView(s.pets)),
+    tw: onlyChanged(s, 'tw', game.skillSys.view(s)),
     tu: onlyChanged(s, 'tu', { s: s.tutorial.state, st: s.tutorial.step, f: s.tutorial.flags, n: s.tutorial.count, cs: s.tutorial.canSkip ? 1 as const : 0 as const }),
   };
   // the market list is only sent when something in it (or in your depot or bank) changed
@@ -414,6 +421,8 @@ export function executeCommand(game: Game, pid: number, m: Command): void {
     case 'cosmetics': game.setCosmetics(pid, { cloak: typeof m.cloak === 'boolean' ? m.cloak : undefined, title: typeof m.title === 'boolean' ? m.title : undefined }); break;
     case 'tutorialSkip': game.skipTutorial(pid); break;
     case 'pet': if (PET_ACTIONS.includes(m.a)) game.petCommand(pid, m.a, num(m.i) ? Math.floor(m.i) : -1); break;
+    case 'run': { const s = game.session(pid); if (s) game.skillSys.setRunning(s, m.on === true); break; }
+    case 'thieve': { const s = game.session(pid); if (s && num(m.id)) game.skillSys.pickpocket(s, Math.floor(m.id)); break; }
   }
 }
 
@@ -596,6 +605,7 @@ export function applySnapshot(game: Game, snap: Extract<ServerMessage, { t: 'sna
     ev.emit({ type: 'depotChanged', to: me.id });
   }
   if (me.pet) applyPetsView(s.pets, me.pet);
+  if (me.tw) applyTradeView(s.trades, me.tw);
   if (me.cos) {
     const hideCloak = me.cos[0] === 0;
     s.cosmetics = { hideCloak, hideTitle: me.cos[1] === 0 };

@@ -41,9 +41,9 @@ export const ADMIN_HELP = [
   '/events — world boss, raid and dungeon boss timers (game masters only)',
   '/weather — the weather where you stand; /weather rain|storm|snow|blizzard|dust|sandstorm|mist|downpour|cloudy|clear [0–100] sets it everywhere, /weather off goes back to the real weather (game masters; everyone in test mode)',
   '/tutorial — where you are in the tutorial; /tutorial step N, /tutorial done, /tutorial skip, /tutorial reset (back to the island; game masters)',
-  '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing, fletching, crafting, cooking, firemaking); also /fishing N, /mining N, /smithing N, /fletching N, /crafting N, /cooking N, /firemaking N',
+  '/skill name N — set a skill (fist, club, sword, axe, distance, shielding, magic, woodcutting, fishing, mining, smithing, fletching, crafting, cooking, firemaking, herblore, agility, thieving); also /fishing N, /mining N, /smithing N, /fletching N, /crafting N, /cooking N, /firemaking N',
   '/maxskills [N] — every fighting skill and magic to N (default 100) and every trade to 99, so all skill capes can be worn',
-  '/capes — get all 30 capes and count every boss as slain (deed capes); /pets — get all 8 pet items; /petlevel N — every pet to level N (1–10)',
+  '/capes — get every cape and count every boss as slain (deed capes); /pets — get all 8 pet items; /petlevel N — every pet to level N (1–10)',
   '/premium N — give yourself N days of premium for this session (0 = none; game masters only, never saved)',
   '/founder wayfarer|warden|legend|none [number] — try a founder pack\'s looks for this session (game masters only, never saved)',
 ];

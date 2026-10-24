@@ -1068,8 +1068,9 @@ console.log('Gear sets');
 // ---------------------------------------------------------------- capes
 console.log('Capes');
 {
-  check(CAPES.length === 30 && new Set(CAPE_IDS).size === 30, `30 capes with unique ids (${CAPES.length})`);
-  check(new Set(CAPES.map((c) => c.name)).size === 30, 'every cape has its own name');
+  // 30 capes, plus one skill cape for each trade skill of 2026-10-24
+  check(CAPES.length >= 30 && new Set(CAPE_IDS).size === CAPES.length, `${CAPES.length} capes with unique ids`);
+  check(new Set(CAPES.map((c) => c.name)).size === CAPES.length, 'every cape has its own name');
   // one skill cape per skill, combat and trade
   const allSkills = [...COMBAT_SKILLS, ...NONCOMBAT_SKILLS.map((d) => d.id)];
   for (const sk of allSkills) check(CAPES.filter((c) => c.kind === 'skill' && c.skill === sk).length === 1, `one skill cape for ${sk}`);
@@ -1103,7 +1104,7 @@ console.log('Capes');
       check(fair, `${c.id}: asks ${c.skill} ${c.level}`);
     }
   }
-  check(capeLooks.size === 30, 'all 30 capes look different');
+  check(capeLooks.size === CAPES.length, `all ${CAPES.length} capes look different`);
   check(CAPES.filter((c) => capeLook(c.id).fx !== 'none').length >= 6, 'several capes are animated');
   // the skill bonus is small and only in its own skill
   check(capeTrainingBonus('bladesworn_cape', 'sword') === 1.05 && capeTrainingBonus('bladesworn_cape', 'axe') === 1 && capeTrainingBonus('thornvale_cape', 'sword') === 1 && capeTrainingBonus(null, 'sword') === 1,

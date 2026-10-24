@@ -6,6 +6,10 @@ import { COOKING_RECIPES } from './cooking';
 import { FLETCHING_RECIPES } from './fletching';
 import { CRAFTING_RECIPES } from './crafting';
 import { FIREMAKING_RECIPES } from './firemaking';
+import { HERBLORE_RECIPES } from './herblore';
+import { CLEAN_HERBS, GRIMY_HERBS } from '../trades/herblore';
+
+const HERB_ITEM_IDS = [...GRIMY_HERBS, ...CLEAN_HERBS];
 
 /**
  * Production skills share one model: open a station window, pick a recipe and
@@ -16,7 +20,7 @@ import { FIREMAKING_RECIPES } from './firemaking';
  * stations, worked where you stand). A new production skill adds its station
  * here and its recipes to RECIPES.
  */
-export type Station = 'furnace' | 'anvil' | 'campfire' | 'stove' | 'tanning' | 'knife' | 'needle' | 'chisel' | 'tinderbox';
+export type Station = 'furnace' | 'anvil' | 'campfire' | 'stove' | 'tanning' | 'knife' | 'needle' | 'chisel' | 'tinderbox' | 'pestle';
 
 export interface StationDef {
   id: Station;
@@ -45,6 +49,10 @@ export const STATIONS: Record<Station, StationDef> = {
   needle: { id: 'needle', obj: null, items: ['needle', 'thread', 'leather', 'tanned_fur'], name: 'needle', title: 'Leatherwork', skill: 'crafting', interval: 2.4, note: 'Sewing needs a needle; every piece uses thread.' },
   chisel: { id: 'chisel', obj: null, items: ['chisel'], name: 'chisel', title: 'Gem cutting', skill: 'crafting', interval: 2.4, note: 'Cutting needs a chisel.' },
   tinderbox: { id: 'tinderbox', obj: null, items: ['tinderbox'], name: 'tinderbox', title: 'Firemaking', skill: 'firemaking', interval: 2.4, note: 'Lights a fire where you stand (not in towns); you step aside.' },
+  pestle: {
+    id: 'pestle', obj: null, items: ['pestle', 'empty_vial', ...HERB_ITEM_IDS], name: 'pestle and mortar', title: 'Herblore', skill: 'herblore', interval: 1.8,
+    note: 'Clean grimy herbs, then brew a herb with an empty vial (and a monster part for the stronger brews). Brewing needs a pestle and mortar.',
+  },
 };
 
 const STATION_LIST = Object.values(STATIONS);
@@ -125,7 +133,7 @@ export interface CraftView {
 export const MAX_BATCH = 100;
 
 /** Every recipe of every production skill. */
-export const RECIPES: Recipe[] = [...SMELTING_RECIPES, ...SMITHING_RECIPES, ...COOKING_RECIPES, ...FLETCHING_RECIPES, ...CRAFTING_RECIPES, ...FIREMAKING_RECIPES];
+export const RECIPES: Recipe[] = [...SMELTING_RECIPES, ...SMITHING_RECIPES, ...COOKING_RECIPES, ...FLETCHING_RECIPES, ...CRAFTING_RECIPES, ...FIREMAKING_RECIPES, ...HERBLORE_RECIPES];
 
 const BY_ID = new Map(RECIPES.map((r) => [r.id, r]));
 

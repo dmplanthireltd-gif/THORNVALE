@@ -45,6 +45,7 @@ import { GM_BOSS_LIFETIME, SUMMON_LIFETIME, type WorldMark } from './bosses/boss
 import { WorldEvents } from './bosses/WorldEvents';
 import { migrateSave, SAVE_VERSION } from './save/migrate';
 import { emptyPets, parsePets, PetSystem, savePets, type PetState } from './pets/PetSystem';
+import { emptyTrades, parseTrades, saveTrades, tradeEmptyOf, TradeSystem, type TradeState } from './trades/TradeSystem';
 import { CLASSIC_STAGES, combatSkillRate, expRate, gatheringRate, scaleAmount, stagedGold, type ExpStages } from './progression/stages';
 import { isAppearance, sameAppearance, sanitizeAppearance, type Appearance } from './player/appearance';
 import { TrapSystem, VINE_ROOT_SECONDS, FLOWER_POISON_BASE, FLOWER_POISON_SECONDS } from './world/traps';
@@ -204,6 +205,8 @@ export interface Session {
   tutorial: TutorialState;
   /** Pets (save v12+): the pet that is out, pet experience, tortoise pouch (pets/PetSystem.ts). */
   pets: PetState;
+  /** The trade skills of 2026-10-24 (save v16+: running, slayer task, farm patches; trades/TradeSystem.ts). */
+  trades: TradeState;
 }
 
 export interface Cosmetics {
@@ -276,6 +279,8 @@ export interface SaveData {
   feats?: { bosses?: string[] };
   /** Pets (save v14+): item of the pet that is out, experience per pet, tortoise pouch. */
   pets?: { active: string | null; xp: Record<string, number>; pouch: (ItemStack | null)[] };
+  /** Trade skills (save v16+): running on/off, slayer task and points, farm patches (trades/TradeSystem.ts). */
+  trades?: Record<string, unknown>;
 }
 
 export interface GameOptions {
@@ -437,6 +442,8 @@ export class Game implements AIContext {
   stages: ExpStages;
   /** Pets: calling, perks, pouch, finds (pets/PetSystem.ts). */
   readonly petSys: PetSystem;
+  /** Agility, thieving, herblore and the other trade skills of 2026-10-24 (trades/TradeSystem.ts). */
+  readonly skillSys: TradeSystem;
   /** World bosses and raids (schedule, broadcasts, loot by contribution). */
   readonly worldEvents: WorldEvents;
   /** Online mirror: active world boss / raid markers as last sent by the server. */
@@ -456,6 +463,7 @@ export class Game implements AIContext {
     this.testMode = opts.testMode ?? false;
     this.stages = opts.stages ?? CLASSIC_STAGES;
     this.petSys = new PetSystem(this);
+    this.skillSys = new TradeSystem(this);
     this.worldEvents = new WorldEvents(this);
     // a mirror drops raid monsters, summons and world bosses when the server says they left
     if (!this.simulate) this.events.on((e) => { if (e.type === 'despawn') this.removeEnemyNow(e.id); });
@@ -498,7 +506,7 @@ export class Game implements AIContext {
       bank: 0, spells: new Set(startingSpells()), chests: new Set(), wantsSave: false, admin: false, lostItems: [],
       skills: startSkills(), gathering: emptySkillXp(), craftOpen: null, marketOpen: null, marketClaimed: [],
       // bots, mirror copies and old characters have nothing to do on the island; new ones are sent there by beginTutorial
-      tutorial: finishedTutorial(), pets: emptyPets(),
+      tutorial: finishedTutorial(), pets: emptyPets(), trades: emptyTrades(),
     };
     if (opts.starter !== false) giveStarterKit(session.inventory, voc);
     this.sessions.set(id, session);
@@ -760,6 +768,7 @@ export class Game implements AIContext {
     if (!s.dialogue) return null;
     return buildDialogue(s.dialogue, {
       quests: s.quests, inventory: s.inventory, bank: s.bank, level: s.player.level, vocation: s.player.vocation, knownSpells: s.spells,
+      extra: this.skillSys.dialogueOptions(s, s.dialogue.npcKey),
     });
   }
 
@@ -784,6 +793,11 @@ export class Game implements AIContext {
     c.beginStep(dx, dy);
     // fresh snow and blizzards slow walking on snow ground outside towns (world/weather.ts)
     if (c instanceof Player) c.moveDur *= snowStepFactor(this.world, this.weather.at(c.x, c.y), c.x, c.y, c.z);
+    // running (trades/agility.ts): quicker steps for stamina
+    if (c instanceof Player) {
+      const s = this.sessions.get(c.id);
+      if (s && this.simulate) c.moveDur *= this.skillSys.onStep(s);
+    }
     return true;
   }
 
@@ -847,6 +861,9 @@ export class Game implements AIContext {
   private predictLocalStep(p: Player, left: number, lastDx: number, lastDy: number): void {
     const { dx, dy } = this.predictDir;
     if ((!dx && !dy) || this.predicted || p.dead || p.buffs.rooted > 0 || p.webbed > 0) return;
+    // crossing a shortcut (the server moves you) is never predicted
+    const ps = this.sessions.get(p.id);
+    if (ps && !this.skillSys.mayPredict(ps)) return;
     // a fresh turn may not have reached the server before it chose this step: let the server lead
     if ((dx !== lastDx || dy !== lastDy) && this.predictDirAge < PREDICT_TURN_WAIT) return;
     if (this.world.linkAt(p.x, p.y, p.z)) return;
@@ -861,6 +878,8 @@ export class Game implements AIContext {
     this.predicted = { fx: p.x, fy: p.y, x: p.x + sx, y: p.y + sy, z: p.z, age: 0 };
     p.beginStep(sx, sy);
     p.moveDur *= snowStepFactor(this.world, this.weather.at(p.x, p.y), p.x, p.y, p.z);
+    // running (trades/agility.ts): predicted as quick as the server will make it
+    if (ps) p.moveDur *= this.skillSys.predictFactor(ps);
     this.advanceStep(p, left);
   }
 
@@ -882,6 +901,7 @@ export class Game implements AIContext {
       if (s.marketOpen) this.closeMarket(s.id);
       if (s.craftOpen) this.closeCraft(s.id);
       this.closeDialogue(s.id);
+      this.skillSys.cancel(s);
     }
     stopWork(p);
     this.cancelTrade(p.id, 'moved away');
@@ -1028,6 +1048,7 @@ export class Game implements AIContext {
     this.updateFish(s, dt);
     this.updateMine(s, dt);
     this.updateCraft(s, dt);
+    this.skillSys.updateSession(s, dt);
     this.updatePlayerCombat(s);
     this.updateTutorial(s);
   }
@@ -1035,6 +1056,8 @@ export class Game implements AIContext {
   private decidePlayerStep(s: Session): boolean {
     const p = s.player;
     const queued = s.intent.takeQueued();
+    // crossing an agility shortcut: the crossing moves the player, nothing else does
+    if (this.skillSys.busy(s)) return false;
     const held = s.intent.held();
     const dir = held.dx || held.dy ? held : queued;
     // held by strangling vines: no step (the path is kept for afterwards)
@@ -1169,7 +1192,7 @@ export class Game implements AIContext {
     }
   }
 
-  private hurtPlayerByEnvironment(s: Session, raw: number, el: Element, text: string): void {
+  hurtPlayerByEnvironment(s: Session, raw: number, el: Element, text: string): void {
     const p = s.player;
     const amount = applyResist(raw, this.resist(s, el));
     if (amount <= 0) return;
@@ -1237,7 +1260,8 @@ export class Game implements AIContext {
       }
     } else {
       if (pend.z !== p.z) { p.pending = null; return; }
-      if (isFishingWater(this.world, pend.x, pend.y, pend.z)) {
+      // an agility shortcut over water is crossed, not fished (trades/): walk up to it like any other tile
+      if (isFishingWater(this.world, pend.x, pend.y, pend.z) && !this.skillSys.tileAt(pend.x, pend.y, pend.z)) {
         // fishing needs no walking: cast from where you stand (once the current step is done)
         if (p.moving) return;
         p.pending = null;
@@ -2063,6 +2087,24 @@ export class Game implements AIContext {
     this.events.emit({ type: 'tileChanged', x, y, z });
   }
 
+  /**
+   * Shows `empty` on a tile for a while (a robbed stall, an opened strongbox, picked herbs) and puts
+   * back what was there afterwards. Shared by every player and synced like felled trees; not saved.
+   */
+  holdTile(x: number, y: number, z: number, empty: Obj, seconds: number): void {
+    const k = WorldMap.key(x, y, z);
+    if (this.stumps.has(k)) return;
+    this.stumps.set(k, { obj: this.world.getObj(x, y, z), left: seconds });
+    this.world.setObj(x, y, empty, z);
+    this.events.emit({ type: 'tileChanged', x, y, z });
+  }
+
+  /** Stops every kind of work a player is doing (gathering, a station, trade-skill work). */
+  stopAllWork(s: Session): void {
+    stopWork(s.player);
+    this.skillSys.stopWork(s);
+  }
+
   private updateStumps(dt: number): void {
     for (const [k, st] of this.stumps) {
       st.left -= dt;
@@ -2152,7 +2194,7 @@ export class Game implements AIContext {
       if (this.stumps.has(k)) continue;
       const [sx, sy, sz] = k.split(',').map(Number);
       const o = this.world.getObj(sx, sy, sz);
-      const empty = treeAt(o) ? Obj.Stump : oreAt(o) ? Obj.DepletedRock : null;
+      const empty = treeAt(o) ? Obj.Stump : oreAt(o) ? Obj.DepletedRock : tradeEmptyOf(o);
       if (empty === null) continue;
       this.stumps.set(k, { obj: o, left: Infinity });
       this.world.setObj(sx, sy, empty, sz);
@@ -2669,7 +2711,7 @@ export class Game implements AIContext {
     if (items.length) this.dropBag(x, y, z, items);
   }
 
-  private dropBag(x: number, y: number, z: number, items: ItemStack[]): GroundBag {
+  dropBag(x: number, y: number, z: number, items: ItemStack[]): GroundBag {
     let bag = this.bags.find((b) => b.x === x && b.y === y && b.z === z && !b.corpse);
     if (!bag) {
       bag = { id: this.nextId++, x, y, z, items: [], ttl: BAG_LIFETIME };
@@ -3137,6 +3179,9 @@ export class Game implements AIContext {
 
   /** Whether a tile has something to use (for cursors and clicks). */
   isUsable(x: number, y: number, z: number): boolean {
+    // agility shortcuts, stalls, strongboxes, herbs… (trades/TradeSystem.ts)
+    const tu = this.skillSys.usable(this.session(this.localId), x, y, z);
+    if (tu !== null) return tu;
     const o = this.world.getObj(x, y, z);
     if (treeAt(o)) {
       // trees are "usable" (chop) for whoever carries an axe
@@ -3159,6 +3204,7 @@ export class Game implements AIContext {
 
   private useTileNow(s: Session, x: number, y: number, z: number): void {
     const p = s.player;
+    if (this.skillSys.useTile(s, x, y, z)) return;
     const o = this.world.getObj(x, y, z);
     const link = this.world.linkAt(x, y, z);
     switch (o) {
@@ -3769,7 +3815,7 @@ export class Game implements AIContext {
     const p = s.player;
     if (p.dead) return;
     if (!s.dialogue) {
-      if (kw !== 'hi' && kw !== 'trade' && kw !== 'bank' && kw !== 'spells' && kw !== 'work') return;
+      if (kw !== 'hi' && kw !== 'trade' && kw !== 'bank' && kw !== 'spells' && kw !== 'work' && kw !== 'advice' && kw !== 'steal') return;
       let best: Npc | null = null;
       let bestD = 4;
       for (const n of this.npcs) {
@@ -3799,6 +3845,8 @@ export class Game implements AIContext {
       case 'no': case 'back': action = view.page === 'root' ? undefined : 'page:root'; break;
       case 'deposit': action = view.page === 'bank' ? has('deposit:all')?.action : has('page:bank')?.action; break;
       case 'help': action = has('tutorial:hint')?.action; break;
+      case 'advice': action = has('trades:advice')?.action; break;
+      case 'steal': action = has('trades:pocket')?.action; break;
     }
     if (action) this.dialogueAction(s.id, action);
   }
@@ -3840,6 +3888,8 @@ export class Game implements AIContext {
     if (!st || p.dead) return;
     const d = itemDef(st.id);
     if (d.kind === 'pet') return this.petSys.useSlot(s, slot);
+    // Draught of Vigour, lockpicks, seeds, traps, boats… (trades/TradeSystem.ts)
+    if (this.skillSys.useItem(s, slot, d)) return;
     const eq = equipSlotFor(d);
     if (eq) return this.equipFromSlot(s, slot, eq, d);
     if (d.rune) return this.useRune(pid, slot);
@@ -4813,6 +4863,11 @@ export class Game implements AIContext {
         d.text = st ? `${st.guide} (${st.hint})` : 'You have learned all I can teach. The wide world waits beyond the sea.';
         break;
       }
+      case 'trades': {
+        const line = this.skillSys.dialogueAction(s, rest);
+        if (line && s.dialogue) s.dialogue.text = line;
+        break;
+      }
       case 'bye':
         this.msg(pid, `${d.npcName}: Farewell, ${p.name}.`, 'npc');
         this.closeDialogue(pid);
@@ -5024,7 +5079,8 @@ export class Game implements AIContext {
       version: SAVE_VERSION,
       savedAt: Date.now(),
       player: {
-        name: p.name, vocation: p.vocation, x: p.x, y: p.y, z: p.z, level: p.level, exp: p.exp,
+        // halfway across an agility shortcut: saved at its start, never on the water or in the rock
+        name: p.name, vocation: p.vocation, x: this.skillSys.savePosition(s)?.x ?? p.x, y: this.skillSys.savePosition(s)?.y ?? p.y, z: p.z, level: p.level, exp: p.exp,
         hp: Math.round(p.hp), mana: Math.round(p.mana), facing: p.facing, appearance: { ...p.appearance }, home: p.home, showGear: p.showGear,
         ...(p.legacyOutfit !== undefined ? { outfit: p.legacyOutfit } : {}),
       },
@@ -5044,6 +5100,7 @@ export class Game implements AIContext {
       tutorial: saveTutorial(s.tutorial),
       feats: { bosses: [...s.bossKills] },
       pets: savePets(s.pets),
+      trades: saveTrades(s.trades),
     };
   }
 
@@ -5107,6 +5164,7 @@ export class Game implements AIContext {
     s.lostItems = data.lostItems ?? [];
     // pets: anything the pouch held that no longer exists is kept with the lost items
     s.pets = parsePets(data.pets, s.lostItems);
+    s.trades = parseTrades(data.trades);
     this.refreshStats(s);
     s.friends = Array.isArray(data.friends) ? data.friends.filter((n): n is string => typeof n === 'string').slice(0, 100) : [];
     s.cosmetics = { hideCloak: data.cosmetics?.hideCloak === true, hideTitle: data.cosmetics?.hideTitle === true };
@@ -5159,6 +5217,7 @@ export class Game implements AIContext {
     s.marketOpen = null;
     s.tutorial = { ...finishedTutorial(), canSkip: s.tutorial.canSkip };
     s.pets = emptyPets();
+    s.trades = emptyTrades();
     this.refreshStats(s);
     p.hp = p.maxHp;
     p.mana = p.maxMana;

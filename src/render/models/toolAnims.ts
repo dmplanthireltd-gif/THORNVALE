@@ -227,6 +227,38 @@ export function buildHeldTools(kind: ActivityKind, toolId: string | null, M: Mat
       out.right.add(out.head);
       out.left = workpiece('tinderbox', M);
       break;
+    // the trade skills of 2026-10-24
+    case 'pestle':
+      // the pestle in the right hand, the stone mortar held in the left
+      out.right = group(0, 0, 0, X(scyl(0.022, 0.035, 0.2, M(0x9a948a), 0, 0, 0.06, 6)));
+      out.head = marker(0.16);
+      out.right.add(out.head);
+      out.left = group(0, 0, 0, scyl(0.09, 0.06, 0.08, M(0x7a746a), 0, -0.02, 0.08, 8), scyl(0.07, 0.07, 0.01, M(0x3a5a2a), 0, 0.025, 0.08, 8));
+      break;
+    case 'lockpick':
+      out.right = group(0, 0, 0, X(scyl(0.008, 0.008, 0.14, M(MAT.steel[1]), 0, 0, 0.07, 4)), sbox(0.03, 0.02, 0.04, M(MAT.wood[1]), 0, 0, 0));
+      out.head = marker(0.14);
+      out.right.add(out.head);
+      break;
+    case 'farm':
+      // a gardening trowel
+      out.right = group(0, 0, 0, X(scyl(0.02, 0.02, 0.1, M(MAT.wood[1]), 0, 0, 0.03, 6)), sbox(0.07, 0.015, 0.11, M(MAT.steel[1]), 0, -0.01, 0.13));
+      out.head = marker(0.18);
+      out.right.add(out.head);
+      break;
+    case 'trap':
+      out.left = group(0, 0, 0, sbox(0.18, 0.12, 0.22, M(0x8a6a3a), 0, -0.04, 0.12), sbox(0.19, 0.02, 0.23, M(0x5a4426), 0, 0.03, 0.12));
+      break;
+    case 'sail':
+      // an oar, held across the body
+      out.right = group(0, 0, 0, X(scyl(0.022, 0.022, 1.1, M(MAT.wood[1]), 0, 0, 0.2, 6)), sbox(0.12, 0.02, 0.3, M(MAT.wood[2] ?? MAT.wood[1]), 0, 0, 0.82));
+      break;
+    case 'salvage':
+      // a boathook: a long pole with an iron hook
+      out.right = group(0, 0, 0, X(scyl(0.02, 0.02, 1.0, M(MAT.wood[1]), 0, 0, 0.3, 6)), sbox(0.03, 0.12, 0.03, M(MAT.steel[1]), 0, -0.05, 0.82));
+      out.head = marker(0.84);
+      out.right.add(out.head);
+      break;
     case 'tanning':
       // a two-handed scraper
       out.right = group(0, 0, 0, X(scyl(0.03, 0.03, 0.16, M(MAT.wood[1]), 0, 0, 0, 6)), sbox(0.3, 0.02, 0.08, M(MAT.steel[1]), 0.12, -0.02, 0.12));

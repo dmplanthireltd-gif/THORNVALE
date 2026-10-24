@@ -52,6 +52,12 @@ export type GameEvent =
   | { type: 'mine'; id: number; x: number; y: number; z: number; got: boolean; depleted: boolean }
   /** Work at a production station (furnace, anvil); `made` = an item came out. */
   | { type: 'craft'; id: number; x: number; y: number; z: number; station: string; made: boolean }
+  /** An agility shortcut (trades/agility.ts): a player starts, finishes or slips off obstacle `ob`. */
+  | { type: 'agility'; id: number; ob: number; kind: string; phase: 'start' | 'done' | 'fail' }
+  /** A thieving try (pocket, stall, strongbox) at a tile; `got` = it worked, else the thief was caught or fumbled. */
+  | { type: 'thieving'; id: number; x: number; y: number; z: number; got: boolean }
+  /** A pick at a patch of wild herbs; `got` = a herb came away. */
+  | { type: 'herbs'; id: number; x: number; y: number; z: number; got: boolean }
   /** A player sprang a jungle trap (world/traps.ts): `i` = trap index, `id` = the player. */
   | { type: 'trap'; kind: 'vines' | 'flower'; i: number; x: number; y: number; z: number; id: number }
   /** The station window (smithing etc.) opened, closed or changed. */

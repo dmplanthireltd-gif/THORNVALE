@@ -5,7 +5,7 @@
  * and so on. The dialogue window (clicking the options) works exactly as before; this only adds the
  * old way of typing to NPCs. Pure data and helpers: Game.say() acts on them.
  */
-export type NpcKeyword = 'hi' | 'bye' | 'trade' | 'bank' | 'spells' | 'yes' | 'no' | 'work' | 'deposit' | 'balance' | 'help' | 'back';
+export type NpcKeyword = 'hi' | 'bye' | 'trade' | 'bank' | 'spells' | 'yes' | 'no' | 'work' | 'deposit' | 'balance' | 'help' | 'back' | 'advice' | 'steal';
 
 /** Every accepted word (lower case, without accents or punctuation) → the keyword it means. */
 const WORDS: Record<NpcKeyword, string[]> = {
@@ -21,6 +21,10 @@ const WORDS: Record<NpcKeyword, string[]> = {
   balance: ['balance', 'saldo', 'stan konta'],
   help: ['help', 'hint', 'what now', 'pomoc', 'podpowiedz', 'co teraz', 'ajuda', 'dica', 'e agora'],
   back: ['back', 'wroc', 'cofnij', 'voltar'],
+  // trade-skill masters (trades/tradeNpcs.ts): how to train their skill
+  advice: ['advice', 'train', 'training', 'skill', 'tips', 'rada', 'porada', 'trening', 'trenuj', 'umiejetnosc', 'conselho', 'treinar', 'treino', 'habilidade'],
+  // townsfolk: try to pick their pocket (trades/thieving.ts)
+  steal: ['steal', 'pickpocket', 'pick pocket', 'ukradnij', 'kradziez', 'okradnij', 'roubar', 'furtar', 'bater carteira'],
 };
 
 const BY_WORD = new Map<string, NpcKeyword>();

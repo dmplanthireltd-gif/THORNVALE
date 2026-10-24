@@ -1041,6 +1041,8 @@ export class HUD {
     items.push({ label: t('Follow {name}', { name: who }), run: () => this.ctl.send({ c: 'follow', id }) });
     items.push({ label: kind === 'player' ? t('Inspect {name}', { name: who }) : t('Look at {name}', { name: who }), run: () => this.inspect(id) });
     if (kind === 'npc') items.push({ label: t('Talk to {name}', { name: who }), run: () => this.ctl.send({ c: 'talk', id }) });
+    // thieving (trades/): townsfolk whose pockets can be picked
+    if (kind === 'npc' && g.npcs.find((n) => n.id === id && NPCS[n.key]?.thieve)) items.push({ label: t('Pick the pocket of {name}', { name: who }), run: () => this.ctl.send({ c: 'thieve', id }) });
     if (kind === 'player') {
       if (g.pvp) items.push({ label: t('Attack {name}', { name: who }), run: () => this.ctl.send({ c: 'attack', id }) });
       items.push({ label: t('Trade with {name}', { name: who }), run: () => this.ctl.send({ c: 'tradeRequest', id }) });
@@ -1702,7 +1704,7 @@ export class HUD {
       row(trName(SKILL_NAMES[k]), p.level, skillProgress(k, p, voc), `${trName(SKILL_NAMES[k])} ${p.level} — ${t('{pct}% to the next level', { pct })} (${how})`);
     }
     // gathering and production skills come from the registry (gathering/skills.ts)
-    for (const [kind, head] of [['gathering', k('Gathering')], ['production', k('Production')]] as const) {
+    for (const [kind, head] of [['gathering', k('Gathering')], ['production', k('Production')], ['adventure', k('Adventure')]] as const) {
       el('div', 'skill-head', box, t(head));
       for (const d of NONCOMBAT_SKILLS) {
         if (d.kind !== kind) continue;

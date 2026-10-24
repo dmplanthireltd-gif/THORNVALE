@@ -2,6 +2,7 @@ import type { TilePos } from '../core/types';
 import type { DepotHall } from './depotHalls';
 import type { SpawnPlaza } from './spawnPlaza';
 import type { SeaKind, SeaLayout } from './sea';
+import { cloneTradeLayout, type TradeLayout } from '../trades/layout';
 
 /** Ground layer — what the tile floor is made of. */
 export enum Ground {
@@ -131,6 +132,27 @@ export enum Obj {
   Rails = 71,
   /** Spider egg sacs in a nest (walk over them). */
   EggSacs = 72,
+  // trade skills (trades/, world/tradeSpots.ts); drawn by render/trades/TradeView.ts, placed after the whole world
+  /** A market stall with goods on it (thieving: steal from it); `TradeStallEmpty` while it is restocked. */
+  TradeStall = 73,
+  TradeStallEmpty = 74,
+  /** A locked strongbox (thieving: pick its lock); `StrongBoxOpen` while it is empty. */
+  StrongBox = 75,
+  StrongBoxOpen = 76,
+  /** Wild herbs growing on a tile (herblore: pick them; walk over them); `WildHerbsPicked` while they grow back. */
+  WildHerbs = 77,
+  WildHerbsPicked = 78,
+  /** A tilled farm patch (farming: plant seeds; what grows on it is each player's own). */
+  FarmPatch = 79,
+  /** A creature burrow (hunter: set a box trap beside it). */
+  Burrow = 80,
+  /** A bird nesting bush (hunter: set a snare in it). */
+  BirdNest = 81,
+  /** A mooring post on the water by a dock (sailing: board and leave your boat). */
+  Mooring = 82,
+  /** Floating wreckage on the sea (sailing: salvage it from a boat); `FlotsamGone` while the sea brings more. */
+  Flotsam = 83,
+  FlotsamGone = 84,
 }
 
 const SOLID = new Set<number>([
@@ -141,6 +163,7 @@ const SOLID = new Set<number>([
   Obj.CopperRock, Obj.TinRock, Obj.IronRock, Obj.CoalRock, Obj.SilverRock, Obj.GoldRock, Obj.StarsteelRock, Obj.DarkstoneRock, Obj.DepletedRock,
   Obj.Furnace, Obj.Anvil, Obj.Stove, Obj.TanningRack, Obj.FoundersStone, Obj.Fountain, Obj.PlazaDecor, Obj.Coral, Obj.Hull,
   Obj.Crystals, Obj.Brazier,
+  Obj.TradeStall, Obj.TradeStallEmpty, Obj.StrongBox, Obj.StrongBoxOpen, Obj.FarmPatch, Obj.Burrow, Obj.BirdNest,
 ]);
 
 /** Objects that stop arrows and spells. Trees and fences do not. */
@@ -275,6 +298,8 @@ export class WorldMap {
   readonly depotHalls: DepotHall[] = [];
   /** The Sunken Reach under the sea (props, wrecks, whirlpool) for the renderer; null = none. */
   sea: SeaLayout | null = null;
+  /** Trade-skill places (agility shortcuts, stalls, herbs, patches, hunting grounds, moorings, map spots; world/tradeSpots.ts). */
+  trades: TradeLayout | null = null;
 
   constructor(readonly width: number, readonly height: number) {
     this.floors.set(0, new Floor(0, width, height, Ground.Grass));
@@ -440,6 +465,7 @@ export class WorldMap {
     m.temple = { ...this.temple };
     m.plaza = this.plaza ? { ...this.plaza, props: this.plaza.props.map((p) => ({ ...p })), grand: this.plaza.grand ? { ...this.plaza.grand, hall: { ...this.plaza.grand.hall } } : undefined } : null;
     for (const d of this.depotHalls) m.depotHalls.push({ ...d, doors: d.doors.map((p) => ({ ...p })), lockers: d.lockers.map((p) => ({ ...p })), props: d.props.map((p) => ({ ...p })) });
+    m.trades = this.trades ? cloneTradeLayout(this.trades) : null;
     m.sea = this.sea ? { ...this.sea, props: this.sea.props.map((p) => ({ ...p })), wrecks: this.sea.wrecks.map((w) => ({ ...w })), areas: this.sea.areas.map((a) => ({ ...a })) } : null;
     return m;
   }

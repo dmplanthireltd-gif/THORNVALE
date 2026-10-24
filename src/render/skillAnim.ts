@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { GameEvent } from '../game/core/events';
 import type { Game } from '../game/Game';
-import { activityInterval, activityKey, activityStartPhase, currentActivity, type Activity, type ActivityKind } from '../game/gathering/activity';
+import { activityInterval, activityKey, activityStartPhase, currentActivity, MOVING_ACTIVITIES, type Activity, type ActivityKind } from '../game/gathering/activity';
 import { Player } from '../game/player/Player';
 import type { CreatureView } from './CreatureView';
 import type { Effects } from './Effects';
@@ -30,6 +30,9 @@ const NP = 14;
 const FACES_TARGET: Record<ActivityKind, boolean> = {
   chop: true, fish: true, mine: true, furnace: true, anvil: true, campfire: true, stove: true, tanning: true,
   knife: false, needle: false, chisel: false, tinderbox: false,
+  // the trade skills of 2026-10-24: crossings face where they lead, thieving and herbs face their target
+  pestle: false, balance: true, climb: true, swim: true, squeeze: true, pickpocket: true, steal: true, lockpick: true, herbs: true,
+  farm: true, trap: true, sail: false, salvage: true,
 };
 
 const WATER_Y = -0.17;
@@ -143,7 +146,9 @@ export class SkillAnimator {
     const rig = view.rig;
     if (rig.type !== 'biped' || !rig.gear || rig.prop) return;
     let wk = this.workers.get(c.id);
-    const act = c.moving || c.dead ? null : currentActivity(this.ctx.game(), c.id);
+    // most work stops while walking; crossing a shortcut or sailing is done on the move
+    const cur = c.dead ? null : currentActivity(this.ctx.game(), c.id);
+    const act = cur && (!c.moving || MOVING_ACTIVITIES.has(cur.kind)) ? cur : null;
     if (wk && wk.rig !== rig) {
       // the model was rebuilt (outfit or illusion change): start over on the new one
       this.release(wk, false);
@@ -496,6 +501,129 @@ export class SkillAnimator {
         p[TX] = 0.38;
         p[HX] = 0.42;
         p[BY] = -0.06;
+        return;
+      }
+      // ---- the trade skills of 2026-10-24
+      case 'balance': {
+        // arms out wide, wobbling, small careful steps
+        const s = Math.sin(t * 5.2);
+        p[ARZ] = 1.35 + s * 0.18;
+        p[ALZ] = -1.35 + s * 0.18;
+        p[ARX] = -0.2;
+        p[ALX] = -0.2;
+        p[TY] = s * 0.12;
+        p[TX] = 0.08;
+        return;
+      }
+      case 'climb': {
+        // hand over hand up the rock face, leaning in
+        const v = Math.sin(u * TAU);
+        p[ARX] = -2.55 + v * 0.45;
+        p[ALX] = -2.55 - v * 0.45;
+        p[ARZ] = 0.25;
+        p[ALZ] = -0.25;
+        p[TX] = 0.32;
+        p[HX] = -0.25;
+        p[BY] = 0.1 + Math.abs(v) * 0.08;
+        return;
+      }
+      case 'swim': {
+        // low in the water, a slow breaststroke
+        const v = Math.sin(u * TAU);
+        p[ARX] = -1.9 + v * 0.5;
+        p[ALX] = -1.9 + v * 0.5;
+        p[ARZ] = 0.5 + v * 0.35;
+        p[ALZ] = -0.5 - v * 0.35;
+        p[TX] = 0.55;
+        p[HX] = -0.45;
+        p[BY] = -0.62;
+        return;
+      }
+      case 'squeeze': {
+        // turned side-on, arms in, shuffling through the gap
+        const v = Math.sin(t * 6);
+        p[ARX] = -0.3;
+        p[ALX] = -0.9;
+        p[ARZ] = 0.1;
+        p[ALZ] = -0.6;
+        p[TY] = 1.2;
+        p[TX] = 0.18 + v * 0.04;
+        p[BY] = -0.18;
+        return;
+      }
+      case 'pickpocket':
+      case 'steal': {
+        // a quick, low reach and the hand drawn back in
+        const v = u < 0.55 ? smooth(u / 0.55) : 1 - easeOut((u - 0.55) / 0.45);
+        p[ARX] = -0.35 - v * (kind === 'steal' ? 1.15 : 0.85);
+        p[ARZ] = 0.15;
+        p[ALX] = 0.2;
+        p[TX] = 0.18 + v * 0.12;
+        p[HX] = 0.25;
+        p[BY] = -0.08;
+        return;
+      }
+      case 'lockpick': {
+        // crouched at the box, both hands at the lock, the pick jiggling
+        const j = Math.sin(t * 22) * 0.06;
+        p[ARX] = -1.15 + j;
+        p[ALX] = -1.05;
+        p[ARZ] = 0.2;
+        p[ALZ] = -0.2;
+        p[TRX] = 1.1;
+        p[TX] = 0.4;
+        p[HX] = 0.4;
+        p[BY] = -0.3;
+        return;
+      }
+      case 'herbs':
+      case 'farm':
+      case 'trap': {
+        // kneeling to the ground: pull, dig or set
+        const v = kind === 'farm' ? Math.abs(Math.sin(u * TAU * 1.5)) : u < 0.6 ? smooth(u / 0.6) : 1 - smooth((u - 0.6) / 0.4);
+        p[ARX] = -0.55 - v * 0.5;
+        p[ALX] = kind === 'trap' ? -0.75 : -0.4 - v * 0.2;
+        p[ARZ] = 0.2;
+        p[ALZ] = -0.2;
+        p[TRX] = 1.3;
+        p[TX] = 0.55;
+        p[HX] = 0.35;
+        p[BY] = -0.36;
+        return;
+      }
+      case 'pestle': {
+        // the mortar held to the chest, the pestle grinding round
+        p[ARX] = -0.95 + Math.sin(u * TAU * 2) * 0.12;
+        p[ARY] = Math.cos(u * TAU * 2) * 0.12;
+        p[ARZ] = 0.32;
+        p[TRX] = 1.5;
+        p[ALX] = -0.9;
+        p[ALZ] = -0.42;
+        p[TLX] = 0.9;
+        p[TX] = 0.12;
+        p[HX] = 0.42;
+        return;
+      }
+      case 'sail': {
+        // sitting in the boat, pulling the oar
+        const v = Math.sin(t * 2.6);
+        p[ARX] = -1.25 + v * 0.35;
+        p[ALX] = -1.25 + v * 0.35;
+        p[ARZ] = 0.15;
+        p[ALZ] = -0.15;
+        p[TRX] = 1.45;
+        p[TX] = 0.1 - v * 0.12;
+        p[BY] = -0.42;
+        return;
+      }
+      case 'salvage': {
+        // leaning over the side with the boathook
+        const v = u < 0.5 ? smooth(u / 0.5) : 1 - smooth((u - 0.5) / 0.5);
+        p[ARX] = -1.2 - v * 0.6;
+        p[ALX] = -1.1 - v * 0.5;
+        p[TRX] = 0.9;
+        p[TX] = 0.35 + v * 0.2;
+        p[BY] = -0.42;
         return;
       }
       case 'tanning': {

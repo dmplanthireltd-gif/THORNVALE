@@ -18,7 +18,7 @@ import { inRebuiltThornvale } from '../world/grandCity';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 16;
+export const SAVE_VERSION = 17;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -97,6 +97,15 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
     const x = Number(pl.x), y = Number(pl.y), z = typeof pl.z === 'number' ? pl.z : 0;
     if (!Number.isFinite(x) || !Number.isFinite(y) || !inRebuiltThornvale(x, y, z)) return { ...d, version: 16 };
     return { ...d, player: { ...pl, x: -1, y: -1, z: 0 }, version: 16 };
+  },
+  // v16 → v17: the new trade skills. Agility, herblore, thieving, slayer, farming, hunter and sailing start at
+  // level 1 (every other skill is kept), and an empty `trades` block holds their state: walking (not running),
+  // no slayer task or points, no farm patches planted. Nothing is taken away.
+  16: (d) => {
+    const g = { ...((d.gathering ?? {}) as Record<string, unknown>) };
+    for (const id of ['agility', 'herblore', 'thieving', 'slayer', 'farming', 'hunter', 'sailing']) if (typeof g[id] !== 'number') g[id] = 0;
+    const old = d.trades && typeof d.trades === 'object' ? (d.trades as Record<string, unknown>) : {};
+    return { ...d, gathering: g, trades: { run: false, slayer: null, points: 0, streak: 0, farm: {}, ...old }, version: 17 };
   },
 };
 

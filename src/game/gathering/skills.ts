@@ -10,10 +10,20 @@
  * NonCombatSkill and a row to NONCOMBAT_SKILLS, bump SAVE_VERSION with a
  * migration that sets it to 0, then write the activity (gathering/ or production/).
  */
-export type NonCombatSkill = 'woodcutting' | 'fishing' | 'mining' | 'smithing' | 'fletching' | 'crafting' | 'cooking' | 'firemaking';
+export type NonCombatSkill = 'woodcutting' | 'fishing' | 'mining' | 'smithing' | 'fletching' | 'crafting' | 'cooking' | 'firemaking'
+  | 'agility' | 'herblore' | 'thieving';
 
-/** Gathering skills take from the world; production skills turn materials into items at a station. */
-export type SkillKind = 'gathering' | 'production';
+/**
+ * Skills the save already makes room for (save v16 sets them all to 0) but whose activity ships in a
+ * later stage: they appear in NONCOMBAT_SKILLS as they are built. Their saved experience is kept.
+ */
+export const RESERVED_SKILL_IDS = ['slayer', 'farming', 'hunter', 'sailing'] as const;
+
+/**
+ * Gathering skills take from the world; production skills turn materials into items at a station;
+ * adventure skills are about getting around and getting away with it (agility, thieving, slayer, sailing).
+ */
+export type SkillKind = 'gathering' | 'production' | 'adventure';
 
 export interface NonCombatSkillDef {
   id: NonCombatSkill;
@@ -36,6 +46,9 @@ export const NONCOMBAT_SKILLS: NonCombatSkillDef[] = [
   { id: 'crafting', name: 'Crafting', kind: 'production', icon: 'needle', hint: 'Tan hides at a tanning rack, sew leather with a needle and thread, cut gems with a chisel, make jewellery at a furnace.', aliases: ['craft', 'cr', 'leatherwork', 'jewellery'] },
   { id: 'cooking', name: 'Cooking', kind: 'production', icon: 'meat', hint: 'Cook raw fish and meat on a campfire or a stove (every depot has one). Burns less as you level.', aliases: ['cook', 'ck'] },
   { id: 'firemaking', name: 'Firemaking', kind: 'production', icon: 'tinderbox', hint: 'Use a tinderbox to light logs on open ground outside towns. Better logs need a higher level.', aliases: ['fire', 'fm'] },
+  { id: 'herblore', name: 'Herblore', kind: 'production', icon: 'pestle', hint: 'Pick wild herbs, clean them and brew potions with a pestle and mortar and empty vials.', aliases: ['herb', 'herbs', 'hb', 'potions'] },
+  { id: 'agility', name: 'Agility', kind: 'adventure', icon: 'rope', hint: 'Cross shortcuts across the world: balance logs, climbing rocks, swims and squeezes. Agility also gives you more running stamina.', aliases: ['agi', 'ag', 'run'] },
+  { id: 'thieving', name: 'Thieving', kind: 'adventure', icon: 'lockpick', hint: 'Pick the pockets of townsfolk, steal from market stalls and pick the locks of strongboxes. Get caught and you are stunned.', aliases: ['thief', 'th', 'steal'] },
 ];
 
 export const NONCOMBAT_IDS: NonCombatSkill[] = NONCOMBAT_SKILLS.map((d) => d.id);

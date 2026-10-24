@@ -1,3 +1,4 @@
+import { buildTradeSpots } from './tradeSpots';
 import { hash2, Rng } from '../core/rng';
 import { buildAreas } from './areas';
 import { Gen, SOFT } from './genKit';
@@ -87,6 +88,10 @@ function generate(seed: number): WorldMap {
   buildTutorialIsle(m);
   // the Sunken Reach under the bay west of Millbrook: fixed layout, only open sea (world/sea.ts)
   buildSunkenReach(m);
+  // the trade skills last of all (agility shortcuts, stalls, herbs, masters…): own random numbers,
+  // so every tile, spawn, chest and NPC placed before stays the same (world/tradeSpots.ts)
+  buildTradeSpots(m);
+  T('trades');
   return m;
 }
 

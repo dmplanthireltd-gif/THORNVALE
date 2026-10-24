@@ -12,6 +12,7 @@ import { SEASON_STAGES } from './game/progression/stages';
 import { previewPlazaStyle } from './game/world/spawnPlaza';
 import { PetsView } from './render/PetsView';
 import { PetsUi } from './ui/petsUi';
+import { TradesUi } from './ui/tradesUi';
 import { initLang } from './ui/lang';
 import { t } from './i18n/i18n';
 
@@ -61,6 +62,7 @@ function run(container: HTMLElement, ctl: Controller, music: Music): void {
   // pets: models that follow their owners, the pet window and the tortoise pouch
   const pets = new PetsView(renderer, ctl);
   const petsUi = new PetsUi(ctl, hud.root);
+  const tradesUi = new TradesUi(ctl, hud.root);
   new Input(ctl, renderer, hud);
   hud.applyStoredPixelSetting();
   const first = (() => {
@@ -89,6 +91,7 @@ function run(container: HTMLElement, ctl: Controller, music: Music): void {
     pets.update(dt);
     hud.update(dt);
     petsUi.update(dt);
+    tradesUi.update(dt);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

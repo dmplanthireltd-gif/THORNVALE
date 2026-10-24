@@ -63,9 +63,15 @@ const skill = (id: string, name: string, sk: CapeSkill, seller: string, tint: st
   return { id, name, kind: 'skill', skill: sk, level, seller, price: SKILL_CAPE_PRICE, value: 5000, rarity: 'rare', tint, note };
 };
 
+/**
+ * The eight trades the Grandmaster's Mantle asks for (unchanged when the skills of 2026-10-24 came,
+ * so nobody who earned it loses the right to wear it).
+ */
 const TRADE: NonCombatSkill[] = ['woodcutting', 'fishing', 'mining', 'smithing', 'fletching', 'crafting', 'cooking', 'firemaking'];
+const COMBAT_CAPE_SKILLS: string[] = ['fist', 'club', 'sword', 'axe', 'distance', 'shielding', 'magic'];
+/** Every non-combat skill (all on the 1–99 curve: their capes ask for 99). */
 function isTrade(s: CapeSkill): s is NonCombatSkill {
-  return (TRADE as string[]).includes(s);
+  return !COMBAT_CAPE_SKILLS.includes(s);
 }
 
 const town = (id: string, name: string, seller: string, tint: string, note: string): CapeDef =>
@@ -89,6 +95,10 @@ export const CAPES: CapeDef[] = [
   skill('artisan_cape', "Artisan's Cape", 'crafting', 'brunhild', '#5a1e4a', 'Stitched, tanned, set and polished by the wearer\'s own hand.'),
   skill('hearthcook_cape', "Hearthcook's Cape", 'cooking', 'brann', '#e8e0d0', 'Not one burnt meal in a long, long time.'),
   skill('flamekeeper_cape', "Flamekeeper's Cape", 'firemaking', 'brann', '#7a1e08', 'Never quite stops smouldering.'),
+  // the trade skills of 2026-10-24, each sold by its master (trades/tradeNpcs.ts)
+  skill('windstride_cape', 'Windstride Cape', 'agility', 'agility_master', '#4a7aa8', 'Light as a breath of wind. It never snags on a branch.'),
+  skill('apothecary_cape', "Apothecary's Cape", 'herblore', 'herb_master', '#3a6a3a', 'Its pockets smell of a hundred herbs at once.'),
+  skill('shadowpurse_cape', 'Shadowpurse Cape', 'thieving', 'thief_master', '#2a2630', 'Somehow, nobody ever remembers seeing it.'),
   // --- mastery ---------------------------------------------------------------------------------
   {
     id: 'grandmaster_mantle', name: "Grandmaster's Mantle", kind: 'mastery', seller: 'elias', price: MASTERY_CAPE_PRICE, value: 25000, rarity: 'legendary', tint: '#e8c040',
@@ -178,6 +188,7 @@ function seasonOpen(c: CapeDef, now: number): boolean {
 const SKILL_LABEL: Record<CapeSkill, string> = {
   fist: 'fist fighting', club: 'club fighting', sword: 'sword fighting', axe: 'axe fighting', distance: 'distance fighting', shielding: 'shielding', magic: 'magic level',
   woodcutting: 'woodcutting', fishing: 'fishing', mining: 'mining', smithing: 'blacksmithing', fletching: 'fletching', crafting: 'crafting', cooking: 'cooking', firemaking: 'firemaking',
+  agility: 'agility', herblore: 'herblore', thieving: 'thieving',
 };
 
 /**
@@ -216,7 +227,7 @@ export function capeTrainingBonus(capeId: string | null | undefined, sk: CapeSki
   const c = capeId ? CAPE_BY_ID[capeId] : undefined;
   if (!c) return 1;
   if (c.kind === 'skill' && c.skill === sk) return 1 + CAPE_TRAINING_BONUS;
-  if (c.kind === 'mastery' && isTrade(sk)) return 1 + CAPE_TRAINING_BONUS;
+  if (c.kind === 'mastery' && (TRADE as string[]).includes(sk)) return 1 + CAPE_TRAINING_BONUS;
   return 1;
 }
 

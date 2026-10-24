@@ -50,6 +50,10 @@ export const CAPE_LOOK: Record<string, CapeLook> = {
   quillwright_cape: L(0xd2c49c, 0x7a6c4c, 0x3c6c34, 'chevron', 0xb8a87c, 'feather', 0x3c6c34, 'swallow', 'plain'),
   artisan_cape: L(0x5c1e4c, 0x2a0a22, 0xe8b232, 'rays', 0x6e2a5c, 'needle', 0xf0d070, 'scalloped', 'gold'),
   hearthcook_cape: L(0xece4d4, 0x9a8e7a, 0xb8302a, 'check', 0xd8cdb8, 'pot', 0xb8302a, 'straight', 'plain'),
+  // the trade skills of 2026-10-24
+  windstride_cape: L(0x4a7aa8, 0x1e3a5a, 0xe8eef4, 'waves', 0x5a8ab8, 'feather', 0xf0f4f8, 'swallow', 'plain'),
+  apothecary_cape: L(0x3a6a3a, 0x18321a, 0xd8c890, 'leaves', 0x2c582c, 'leaf', 0xe0d8a0, 'scalloped', 'plain'),
+  shadowpurse_cape: L(0x2a2630, 0x100e14, 0x8a7a5a, 'speckle', 0x3a3442, 'moon', 0xb8a878, 'tattered', 'plain'),
   flamekeeper_cape: L(0x7a1e08, 0x3a0a02, 0xffc040, 'plain', 0x7a1e08, 'flame', 0xffe070, 'tattered', 'plain', 'flames', 0xffa020),
   // mastery
   grandmaster_mantle: L(0xf2ecdc, 0xa89a78, 0xe8b232, 'rays', 0xe8dcc0, 'sun', 0xe8b232, 'pointed', 'gold', 'glint', 0xfff0a0),

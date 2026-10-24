@@ -8,6 +8,7 @@ import { PET_ITEMS, PET_KEEPER, PET_KEEPER_ROLE, PET_SELLS } from '../pets/petDe
 import { FISH_ITEMS, FISHING_ROD, RAW_FISH_ITEMS } from '../gathering/fishing';
 import { applyCapeStock } from '../inventory/capes';
 import { SEA_MATERIAL_IDS } from '../inventory/seaItems';
+import { applyTradeNpcs } from '../trades/tradeNpcs';
 
 export interface ShopEntry {
   id: string;
@@ -39,6 +40,12 @@ export interface NpcDef {
   quests?: boolean;
   /** Tutorial guide: offers "What should I do now?" with the current tutorial step. */
   tutor?: boolean;
+  /** Trade-skill masters: what they say when asked how to train (dialogue "How do I train?", keyword "advice"). */
+  advice?: string;
+  /** Townsfolk whose pockets can be picked: their tier (trades/thieving.ts MARK_TIERS). */
+  thieve?: string;
+  /** Slayer masters: their tier (trades/slayer.ts). */
+  slayer?: number;
 }
 
 const s = (id: string, price?: number): ShopEntry => ({ id, price: price ?? Math.max(1, Math.round(ITEMS[id].value * 2.5)) });
@@ -328,6 +335,9 @@ for (const n of Object.values(NPCS)) {
   if (harbour && !(n.sells ?? []).some((e) => e.id === FISHING_ROD)) n.sells = [...(n.sells ?? []), s(FISHING_ROD, 55)];
   if (harbour || n.buys?.includes('logs')) n.buys = [...new Set([...(n.buys ?? []), ...FISH_ITEMS, ...RAW_FISH_ITEMS])];
 }
+
+// the trade-skill masters and the townsfolk you can pick pockets from (trades/tradeNpcs.ts); vials and pestles where potions are sold
+applyTradeNpcs(NPCS);
 
 // capes (inventory/capes.ts): skill masters, town quest givers and seasonal sellers; every banker buys them
 applyCapeStock(NPCS);
