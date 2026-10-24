@@ -4,6 +4,7 @@ import { legacySkills } from '../player/skills';
 import { isVocation } from '../player/vocations';
 import { appearanceFromOutfit } from '../player/appearance';
 import { PALETTE } from '../player/outfits';
+import { inRebuiltThornvale } from '../world/grandCity';
 
 /**
  * Save-data versioning. Every save records the version that wrote it, and old
@@ -17,7 +18,7 @@ import { PALETTE } from '../player/outfits';
  * do nothing: players keep it in `lostItems` (stored with their save) and get it
  * back automatically as soon as an item with that id, or a rename for it, exists.
  */
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 16;
 
 /** Item ids that were renamed in an update: old id → new id. */
 export const ITEM_RENAMES: Record<string, string> = {
@@ -86,6 +87,16 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
     if (!ap || typeof ap !== 'object') return { ...d, version: 15 };
     const a = ap as Record<string, unknown>;
     return { ...d, player: { ...pl, appearance: { ...a, scar: typeof a.scar === 'string' ? a.scar : 'none' } }, version: 15 };
+  },
+  // v15 → v16 (Grand Thornvale, world/grandCity.ts): the spawn city was rebuilt round the great
+  // fountain, so a spot saved inside the rebuilt box (old streets, the depot loft, the old houses)
+  // may now be a wall, the fountain or open air. Those characters wake at the Thornvale temple
+  // (x = −1, as in the v2 → v3 move); everyone else stays where they were. Nothing else changes.
+  15: (d) => {
+    const pl = (d.player ?? {}) as Record<string, unknown>;
+    const x = Number(pl.x), y = Number(pl.y), z = typeof pl.z === 'number' ? pl.z : 0;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !inRebuiltThornvale(x, y, z)) return { ...d, version: 16 };
+    return { ...d, player: { ...pl, x: -1, y: -1, z: 0 }, version: 16 };
   },
 };
 

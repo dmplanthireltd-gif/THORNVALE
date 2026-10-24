@@ -386,6 +386,8 @@ export class WorldView {
       this.plaza = buildPlazaView(world, world.plaza, (c, o) => f0.m(c, o));
       f0.group.add(this.plaza.group);
       this.flameMats.push(...this.plaza.flameMats);
+      // the Gilded Exchange's dome fades while you are inside, like a house roof
+      for (const r of this.plaza.roofs) f0.roofs.push({ ...r, opacity: 1 });
     }
     if (world.depotHalls.length && f0) {
       this.depotHalls = buildDepotHallsView(world.depotHalls, (c, o) => f0.m(c, o));

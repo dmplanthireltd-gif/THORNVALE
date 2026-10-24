@@ -394,6 +394,11 @@ export class WorldMap {
   /** Protection-zone mask per floor, rebuilt whenever regions are added (regions are append-only). */
   private safeCache: { n: number; floors: Map<number, Uint8Array> } | null = null;
 
+  /** Forget the protection-zone mask (after regions were moved in place, e.g. the Grand Thornvale rebuild). */
+  invalidateSafeZones(): void {
+    this.safeCache = null;
+  }
+
   isSafe(x: number, y: number, z: number): boolean {
     if (!this.inBounds(x, y)) return false;
     if (!this.safeCache || this.safeCache.n !== this.regions.length) {
@@ -433,7 +438,7 @@ export class WorldMap {
     for (const [k, d] of Object.entries(this.destinations)) m.destinations[k] = { ...d };
     m.playerSpawn = { ...this.playerSpawn };
     m.temple = { ...this.temple };
-    m.plaza = this.plaza ? { ...this.plaza, props: this.plaza.props.map((p) => ({ ...p })) } : null;
+    m.plaza = this.plaza ? { ...this.plaza, props: this.plaza.props.map((p) => ({ ...p })), grand: this.plaza.grand ? { ...this.plaza.grand, hall: { ...this.plaza.grand.hall } } : undefined } : null;
     for (const d of this.depotHalls) m.depotHalls.push({ ...d, doors: d.doors.map((p) => ({ ...p })), lockers: d.lockers.map((p) => ({ ...p })), props: d.props.map((p) => ({ ...p })) });
     m.sea = this.sea ? { ...this.sea, props: this.sea.props.map((p) => ({ ...p })), wrecks: this.sea.wrecks.map((w) => ({ ...w })), areas: this.sea.areas.map((a) => ({ ...a })) } : null;
     return m;

@@ -340,6 +340,33 @@ export class Mesher {
     return this;
   }
 
+  /**
+   * Like build, but one geometry per square of `cell` world units (by each part's centre),
+   * so a big merged model (Grand Thornvale's plaza) is frustum-culled square by square.
+   */
+  buildChunks(which: 'base' | 'glow', cell: number): THREE.BufferGeometry[] {
+    const list = which === 'base' ? this.base : this.glow;
+    const groups = new Map<string, Piece[]>();
+    for (const p of list) {
+      const P = p.geo.attributes.position.array as ArrayLike<number>;
+      let sx = 0, sz = 0;
+      for (let i = 0; i < P.length; i += 3) { sx += P[i]; sz += P[i + 2]; }
+      const n = Math.max(1, P.length / 3);
+      const k = `${Math.floor(sx / n / cell)},${Math.floor(sz / n / cell)}`;
+      let g = groups.get(k);
+      if (!g) groups.set(k, (g = []));
+      g.push(p);
+    }
+    const out: THREE.BufferGeometry[] = [];
+    for (const g of groups.values()) {
+      if (which === 'base') this.base = g; else this.glow = g;
+      const geo = this.build(which);
+      if (geo) out.push(geo);
+    }
+    if (which === 'base') this.base = []; else this.glow = [];
+    return out;
+  }
+
   build(which: 'base' | 'glow'): THREE.BufferGeometry | null {
     const list = which === 'base' ? this.base : this.glow;
     if (!list.length) return null;

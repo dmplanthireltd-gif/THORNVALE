@@ -8,6 +8,7 @@ import { buildSpiderSteppe } from './spiderSteppe';
 import { deepenUnderground } from './underground';
 import { buildTutorialIsle } from './tutorialIsle';
 import { buildSunkenReach } from './sea';
+import { buildGrandThornvale } from './grandCity';
 import { FLOOR_MAX, FLOOR_MIN, Ground, Obj, SOLID_OBJ, UNWALKABLE_GROUND, WorldMap, type House } from './WorldMap';
 
 /**
@@ -75,6 +76,12 @@ function generate(seed: number): WorldMap {
   settleSpawns(m);
   ensureConnected(m);
   T('connect');
+  // Grand Thornvale: the spawn city rebuilt round the great fountain and the Exchange
+  // (world/grandCity.ts; no random numbers, only the city's own box changes)
+  buildGrandThornvale(m, (houses) => { placeMarketBoards(m, houses); placeSmithies(m, houses); });
+  settleSpawns(m);
+  ensureConnected(m);
+  T('grand city');
   // the tutorial island last: it uses no random numbers and touches only open sea, so the rest
   // of the world stays exactly as it was; it is reached through its destination (new characters)
   buildTutorialIsle(m);
@@ -231,8 +238,8 @@ function carveRivers(g: Gen): void {
  * is only taken when the room stays fully walkable around it: every locker, NPC,
  * stair and door can still be reached from the entrance.
  */
-function placeMarketBoards(m: WorldMap): void {
-  for (const h of m.houses) {
+function placeMarketBoards(m: WorldMap, houses: House[] = m.houses): void {
+  for (const h of houses) {
     if (h.z !== 0 || !/depot/i.test(h.name)) continue;
     let has = false;
     for (let y = h.y; y < h.y + h.h && !has; y++) for (let x = h.x; x < h.x + h.w; x++) if (m.getObj(x, y, 0) === Obj.MarketBoard) { has = true; break; }
@@ -278,14 +285,14 @@ function placeFoundersStone(m: WorldMap): void {
  * A furnace and, beside it, an anvil in every smithy (blacksmithing), plus a
  * tanning rack (crafting); a cooking stove in every depot (there are no taverns).
  */
-function placeSmithies(m: WorldMap): void {
-  for (const h of m.houses) {
+function placeSmithies(m: WorldMap, houses: House[] = m.houses): void {
+  for (const h of houses) {
     if (h.z !== 0 || !/smithy/i.test(h.name)) continue;
     const f = placeAgainstWall(m, h, Obj.Furnace);
     if (f) placeAgainstWall(m, h, Obj.Anvil, f);
     placeAgainstWall(m, h, Obj.TanningRack);
   }
-  for (const h of m.houses) {
+  for (const h of houses) {
     if (h.z !== 0 || !/depot/i.test(h.name)) continue;
     if (placeAgainstWall(m, h, Obj.Stove)) continue;
     // a crowded depot: the stove goes into the nearest house that has room

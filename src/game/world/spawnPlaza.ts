@@ -67,6 +67,23 @@ export interface SpawnPlaza {
   /** Where the Founders' Stone stands (null = worldGen picks a spot near the altar). */
   founders: { x: number; y: number } | null;
   props: PlazaProp[];
+  /** Grand Thornvale (world/grandCity.ts): the 40-tile fountain with the Exchange on its island. */
+  grand?: GrandFountain;
+}
+
+/** The great fountain's shape, in tiles from the plaza centre (cx, cy). */
+export interface GrandFountain {
+  /** Basin radius. */
+  r: number;
+  /** Island radius. */
+  island: number;
+  /** The Exchange rotunda's wall, inner and outer radius. */
+  wallIn: number;
+  wallOut: number;
+  /** Bridge half-width (tiles either side of each axis). */
+  bridge: number;
+  /** The Exchange house rectangle (inclusive), whose dome fades while you are inside. */
+  hall: { x0: number; y0: number; x1: number; y1: number };
 }
 
 /** Moves a plaza laid out on the village map into world coordinates. */

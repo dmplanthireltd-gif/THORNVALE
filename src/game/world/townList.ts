@@ -25,7 +25,7 @@ export interface TownInfo {
 
 export const TOWNS: TownInfo[] = [
   {
-    key: 'thornvale', name: 'Thornvale', x: 204, y: 312, travel: 'ship', flavour: 'the old village of Thornvale',
+    key: 'thornvale', name: 'Thornvale', x: 210, y: 326, travel: 'ship', flavour: 'the old village of Thornvale',
     staff: {
       smith: { key: 'brunhild', name: 'Brunhild' }, mage: { key: 'mirella', name: 'Mirella' }, outfit: { key: 'garrick', name: 'Garrick' },
       bank: { key: 'orwin', name: 'Orwin' }, travel: { key: 'hask', name: 'Ferryman Hask' }, quest: { key: 'aldric', name: 'Captain Aldric' },

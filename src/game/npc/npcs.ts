@@ -95,6 +95,27 @@ export const NPCS: Record<string, NpcDef> = {
     look: { type: 'noble', head: 4, body: 125, legs: 107, feet: 99 },
     buys: ['small_ruby', 'small_sapphire', 'small_emerald', 'small_diamond', 'golden_goblet'],
   },
+  // the Gilded Exchange (Grand Thornvale, on the island in the great fountain): four clerks behind the counters
+  exchange_odile: {
+    key: 'exchange_odile', name: 'Clerk Odile', role: 'Exchange clerk', prop: 'ledger',
+    greeting: 'Welcome to the Gilded Exchange, {name}. Our ledgers open soon: come back to buy and sell with every hero of the realm.',
+    look: { type: 'noble', head: 58, body: 125, legs: 107, feet: 99 },
+  },
+  exchange_benedek: {
+    key: 'exchange_benedek', name: 'Clerk Benedek', role: 'Exchange clerk', prop: 'ledger',
+    greeting: 'Welcome to the Gilded Exchange, {name}. Our ledgers open soon: come back to buy and sell with every hero of the realm.',
+    look: { type: 'noble', head: 2, body: 46, legs: 107, feet: 99 },
+  },
+  exchange_sabine: {
+    key: 'exchange_sabine', name: 'Clerk Sabine', role: 'Exchange clerk', prop: 'ledger',
+    greeting: 'Welcome to the Gilded Exchange, {name}. Our ledgers open soon: come back to buy and sell with every hero of the realm.',
+    look: { type: 'noble', head: 78, body: 31, legs: 107, feet: 99 },
+  },
+  exchange_wendel: {
+    key: 'exchange_wendel', name: 'Clerk Wendel', role: 'Exchange clerk', prop: 'ledger',
+    greeting: 'Welcome to the Gilded Exchange, {name}. Our ledgers open soon: come back to buy and sell with every hero of the realm.',
+    look: { type: 'noble', head: 0, body: 62, legs: 107, feet: 99 },
+  },
   elias: {
     key: 'elias', name: 'Master Elias', role: 'Spell trainer', prop: 'book',
     greeting: 'Knowledge is the sharpest blade, {name}. Which words would you learn?',

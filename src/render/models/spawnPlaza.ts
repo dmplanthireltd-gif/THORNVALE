@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Rng } from '../../game/core/rng';
-import { Ground, type WorldMap } from '../../game/world/WorldMap';
+import { Ground, Obj, type House, type WorldMap } from '../../game/world/WorldMap';
 import type { PlazaProp, SpawnPlaza } from '../../game/world/spawnPlaza';
 import { Mesher, type V3 } from './darkRigsCore';
 import type { Mat } from './parts';
@@ -9,6 +9,7 @@ import { PAINTED } from '../style';
 import { paintDetail } from '../paint/detail';
 import { useBuiltAtlas } from '../paint/builtAtlas';
 import { GlowSprites } from '../paint/glowSprites';
+import { addExchange, addGrandFountain } from './grandFountain';
 
 /** Makes a cel material; WorldView passes its floor-tracked factory so the plaza dims with its floor. */
 export type MatFn = (color: number, opts?: { emissive?: number; map?: THREE.Texture | null }) => Mat;
@@ -26,6 +27,8 @@ export interface PlazaView {
   group: THREE.Group;
   /** Materials whose glow should flicker like fire (WorldView animates them). */
   flameMats: Mat[];
+  /** Roofs that fade while you are inside (the Gilded Exchange's dome); WorldView fades them like house roofs. */
+  roofs: Array<{ house: House; group: THREE.Group; materials: Mat[] }>;
   update(dt: number): void;
 }
 
@@ -212,6 +215,70 @@ function templeFloor(): Painter {
   };
 }
 
+/**
+ * Grand Thornvale's plaza (world coordinates; dx, dy from the fountain centre): marble
+ * slabs two tiles square, a dark green-stone band with gold lines round the basin, crimson
+ * runners with gold edges on the four axes, a green and gold border, and on the island a
+ * sixteen-point star round the Exchange with a compass rose inside the hall.
+ */
+function grandFloor(pz: SpawnPlaza): Painter {
+  const g = pz.grand!;
+  return (wx, wy, dx, dy) => {
+    const r = Math.hypot(dx, dy);
+    const th = ANG(dx, dy);
+    // under the water nobody sees the floor
+    const ax = Math.min(Math.abs(dx), Math.abs(dy));
+    if (r > g.island + 0.3 && r < g.r - 0.3 && ax > g.bridge + 0.1) return 0x3a4a44;
+    const edge = Math.min(wx - (pz.x0 - 0.5), pz.x1 + 0.5 - wx, wy - (pz.y0 - 0.5), pz.y1 + 0.5 - wy);
+    if (edge < 0.55) return grain(edge > 0.38 && edge < 0.45 ? 0xd8b04a : 0x2f4a3e, wx, wy, 0.1);
+    if (r < g.island + 0.3) {
+      // the island and the hall's floor
+      if (r < 0.95) return 0x2f4a3e;
+      if (r < g.wallIn) {
+        const k = 8;
+        const a = ((th * k) / (2 * Math.PI)) % 1;
+        const rose = 1.3 + 3.2 * Math.pow(Math.abs(a - 0.5) * 2, 2.2);
+        if (r < rose) {
+          if (r > rose - 0.1) return 0xe6c25a;
+          return grain(Math.floor(a * 2) % 2 ? 0xe9e2d2 : 0xcfc6b5, wx, wy, 0.05);
+        }
+        if (r > g.wallIn - 0.7 && r < g.wallIn - 0.55) return 0xd8b04a;
+        if (r > g.wallIn - 0.55) return grain(0x8a2420, wx, wy, 0.05);
+      } else {
+        const k = 16;
+        const a = ((th * k) / (2 * Math.PI)) % 1;
+        const star = g.wallOut + 0.2 + 1.1 * Math.pow(Math.abs(a - 0.5) * 2, 1.4);
+        if (r < star) {
+          if (r > star - 0.1) return 0xe6c25a;
+          return grain(Math.floor(a * 2) % 2 ? 0xe9e2d2 : 0xd8cfbc, wx, wy, 0.05);
+        }
+      }
+    }
+    // the band round the basin
+    if (r >= g.r - 0.3 && r < g.r + 1.9) {
+      if ((r > g.r + 0.32 && r < g.r + 0.4) || (r > g.r + 1.72 && r < g.r + 1.8)) return 0xd8b04a;
+      return ringCobbles(r, th, g.r - 0.3, 0.36, [0xb4ab9b, 0xbdb4a3, 0xa99f8f], 0x6e675c);
+    }
+    // crimson runners from the plaza's gates to the bridges
+    if (ax < 1.55 && r >= g.r + 1.9) {
+      if (ax > 1.38) return 0xd8b04a;
+      const along = Math.abs(dx) < Math.abs(dy) ? wy : wx;
+      const st = Math.floor(along * 3) % 3 === 0 && ax < 0.9 ? 0xa83a2a : 0x8a2420;
+      return grain(st, wx, wy, 0.06);
+    }
+    // marble slabs, two tiles square, laid like a chessboard, with a thin gold grid every eight tiles
+    const gx = wx + 0.5 - pz.x0, gy = wy + 0.5 - pz.y0;
+    const fx8 = ((gx % 8) + 8) % 8, fy8 = ((gy % 8) + 8) % 8;
+    if (fx8 < 0.05 || fy8 < 0.05) return 0xc9a24a;
+    const tx = Math.floor(gx / 2), ty = Math.floor(gy / 2);
+    const fx = gx / 2 - tx, fy = gy / 2 - ty;
+    if (fx < 0.02 || fy < 0.02) return 0xa8a090;
+    // every slab a shade of its own (no repeating pattern across the big square)
+    const base = lerpC((tx + ty) % 2 ? 0xe4ded2 : 0xd2cbbd, hash(tx, ty, 12) > 0.5 ? 0xf4f0e6 : 0xb9b1a2, hash(tx, ty, 13) * 0.18);
+    return grain(base, wx, wy, 0.04);
+  };
+}
+
 function gardenFloor(): Painter {
   const gravel = [0xc8b48c, 0xbfa981, 0xd2c09a, 0xb39d76];
   return (wx, wy, dx, dy) => {
@@ -290,9 +357,23 @@ function ashenFloor(glow: (c: number) => void): Painter {
 
 /** Paints the paving under the whole plaza; grass beds and houses stay see-through. */
 function paintFloor(world: WorldMap, pz: SpawnPlaza): { map: THREE.CanvasTexture; glow: THREE.CanvasTexture | null } {
-  const W = (pz.x1 - pz.x0 + 1) * TILE, H = (pz.y1 - pz.y0 + 1) * TILE;
+  // the grand plaza is 60 tiles across: half the texels per tile keeps the canvas under 2048 px
+  const TX = pz.grand ? 32 : TILE;
+  const tw = pz.x1 - pz.x0 + 1, th = pz.y1 - pz.y0 + 1;
+  const W = tw * TX, H = th * TX;
   let glowC = 0;
-  const painter: Painter = (() => {
+  // which tiles get paving: worked out once per tile (houseAt is a scan over every house)
+  const hall = pz.grand?.hall;
+  const paved = new Uint8Array(tw * th);
+  for (let ty = 0; ty < th; ty++) for (let tx = 0; tx < tw; tx++) {
+    const x = pz.x0 + tx, y = pz.y0 + ty;
+    const g = world.getGround(x, y, 0), o = world.getObj(x, y, 0);
+    const inHall = !!hall && x >= hall.x0 && x <= hall.x1 && y >= hall.y0 && y <= hall.y1;
+    if ((world.houseAt(x, y, 0) && !inHall) || g === Ground.Grass || g === Ground.DarkGrass) continue;
+    if (o === Obj.StairsDown || o === Obj.StairsUp || o === Obj.Hole || o === Obj.Ladder) continue;
+    paved[ty * tw + tx] = 1;
+  }
+  const painter: Painter = pz.grand ? grandFloor(pz) : (() => {
     switch (pz.style) {
       case 2: return templeFloor();
       case 3: return gardenFloor();
@@ -301,8 +382,8 @@ function paintFloor(world: WorldMap, pz: SpawnPlaza): { map: THREE.CanvasTexture
       default: return classicFloor();
     }
   })();
-  // painters are written in village coordinates (fountain at 27.5, 22.5)
-  const vx = pz.cx - 27.5, vy = pz.cy - 22.5;
+  // painters are written in village coordinates (fountain at 27.5, 22.5); the grand one in world coordinates
+  const vx = pz.grand ? 0 : pz.cx - 27.5, vy = pz.grand ? 0 : pz.cy - 22.5;
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
@@ -314,11 +395,9 @@ function paintFloor(world: WorldMap, pz: SpawnPlaza): { map: THREE.CanvasTexture
   const gimg = gctx ? gctx.createImageData(W, H) : null;
   for (let py = 0; py < H; py++) {
     for (let px = 0; px < W; px++) {
-      const wx = pz.x0 - 0.5 + (px + 0.5) / TILE, wy = pz.y0 - 0.5 + (py + 0.5) / TILE;
-      const tx = Math.round(wx), ty = Math.round(wy);
+      const wx = pz.x0 - 0.5 + (px + 0.5) / TX, wy = pz.y0 - 0.5 + (py + 0.5) / TX;
       const i = (py * W + px) * 4;
-      const g = world.getGround(tx, ty, 0);
-      if (world.houseAt(tx, ty, 0) || g === Ground.Grass || g === Ground.DarkGrass) continue;
+      if (!paved[Math.floor(py / TX) * tw + Math.floor(px / TX)]) continue;
       glowC = 0;
       const col = painter(wx - vx, wy - vy, wx - pz.cx, wy - pz.cy);
       img.data[i] = (col >> 16) & 255;
@@ -428,7 +507,8 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   // --- water materials (shared by every basin, curtain and stream)
   const tint = pz.style === 5 ? 0x4a7a78 : pz.style === 3 ? 0x5f9a96 : pz.style === 2 ? 0x6aaee0 : 0x5a96cc;
   const wTex = waterTexture(pz.style * 13 + 5);
-  wTex.repeat.set(2, 2);
+  // the great fountain is 40 tiles across: the ripples keep about the same size as in a small basin
+  wTex.repeat.set(pz.grand ? 18 : 2, pz.grand ? 18 : 2);
   animTex.push({ t: wTex, vx: 0.02, vy: 0.05 });
   const waterMat = M(tint, { map: wTex, emissive: pz.style === 5 ? 0x0a2422 : 0x0c2236 });
   const sTex = streakTexture();
@@ -1226,8 +1306,31 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
     S.pop();
   };
 
+  // Grand Thornvale: the Exchange's dome is its own mesh, so it can fade like a roof
+  const D = new Mesher();
+  D.ao = 0.08;
+  const grandOut = {
+    water: (geo: THREE.BufferGeometry, x: number, y: number, z: number) => water(geo, x, y, z),
+    fall: fallParts,
+    emitters,
+  };
   for (const p of pz.props) {
     switch (p.k) {
+      case 'grand_fountain':
+        if (!pz.grand) break;
+        S.push([X, 0, Z]);
+        addGrandFountain(S, pz.grand, X, Z, grandOut);
+        S.pop();
+        break;
+      case 'exchange_hall':
+        if (!pz.grand) break;
+        S.push([X, 0, Z]);
+        D.push([X, 0, Z]);
+        addExchange(S, D, pz.grand);
+        D.pop();
+        S.pop();
+        break;
+      case 'exchange_centre': break; // drawn with the hall
       case 'fountain_tiered': case 'fountain_statue': case 'fountain_pond': case 'fountain_well': case 'fountain_gargoyle':
         fountain(p);
         break;
@@ -1291,17 +1394,22 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
     }
   }
 
-  const base = S.build('base');
-  const glow = S.build('glow');
-  if (base) {
+  // the grand plaza is 60 tiles across: its props are baked per 16-tile square so the camera
+  // (and the shadow camera) only draw the squares in view (performance rules, BIBLE §6)
+  const bases = pz.grand ? S.buildChunks('base', 16) : [S.build('base')].filter((g): g is THREE.BufferGeometry => !!g);
+  const glows = pz.grand ? S.buildChunks('glow', 16) : [S.build('glow')].filter((g): g is THREE.BufferGeometry => !!g);
+  if (bases.length) {
     const bm = M(0xffffff);
     bm.vertexColors = true;
-    // painted style: hand-painted wear (grain, chips, moss, rust) from the built atlas, same vertex colours
-    if (PAINTED) { paintDetail(base); useBuiltAtlas(bm); }
-    const me = new THREE.Mesh(base, bm);
-    me.castShadow = true;
-    me.receiveShadow = true;
-    group.add(me);
+    if (PAINTED) useBuiltAtlas(bm);
+    for (const base of bases) {
+      // painted style: hand-painted wear (grain, chips, moss, rust) from the built atlas, same vertex colours
+      if (PAINTED) paintDetail(base);
+      const me = new THREE.Mesh(base, bm);
+      me.castShadow = true;
+      me.receiveShadow = true;
+      group.add(me);
+    }
   }
   for (const k of ['column', 'pole', 'wall'] as const) {
     const geo = CLOTH[k].build('base');
@@ -1318,9 +1426,37 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   }
   // flames, lantern glass and runes are unlit (full colour) and flicker together
   const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
-  if (glow) group.add(new THREE.Mesh(glow, glowMat));
+  for (const glow of glows) group.add(new THREE.Mesh(glow, glowMat));
 
-  const spray = emitters.length ? new Particles(emitters, Math.min(110, emitters.length * 18), pz.style === 5 ? 0xb8d8d4 : 0xf4fbff, 0.048, 4.2, 1.4) : null;
+  // the Exchange's dome, fading while someone stands inside (WorldView treats it as a roof)
+  const roofs: PlazaView['roofs'] = [];
+  const domeBase = D.build('base'), domeGlow = D.build('glow');
+  if (pz.grand && (domeBase || domeGlow)) {
+    const dg = new THREE.Group();
+    dg.name = 'exchangeDome';
+    const mats: Mat[] = [];
+    if (domeBase) {
+      const dm = M(0xffffff);
+      dm.vertexColors = true;
+      if (PAINTED) { paintDetail(domeBase); useBuiltAtlas(dm); }
+      const me = new THREE.Mesh(domeBase, dm);
+      me.castShadow = true;
+      me.receiveShadow = true;
+      dg.add(me);
+      mats.push(dm);
+    }
+    if (domeGlow) {
+      const gm = new THREE.MeshBasicMaterial({ vertexColors: true });
+      dg.add(new THREE.Mesh(domeGlow, gm));
+      mats.push(gm as unknown as Mat);
+    }
+    group.add(dg);
+    const h = pz.grand.hall;
+    const house: House = { id: -1, x: h.x0, y: h.y0, w: h.x1 - h.x0 + 1, h: h.y1 - h.y0 + 1, z: 0, roofColor: 0x4f8a7a, wallColor: 0xe6dfcc, name: 'The Gilded Exchange', stone: true, noRoof: true };
+    roofs.push({ house, group: dg, materials: mats });
+  }
+
+  const spray = emitters.length ? new Particles(emitters, Math.min(pz.grand ? 260 : 110, emitters.length * (pz.grand ? 7 : 18)), pz.style === 5 ? 0xb8d8d4 : 0xf4fbff, 0.048, 4.2, 1.4) : null;
   if (spray) group.add(spray.mesh);
   // painted style: a soft halo over every brazier / fire bowl
   const halos = PAINTED && embers.length ? new GlowSprites() : null;
@@ -1362,6 +1498,7 @@ export function buildPlazaView(world: WorldMap, pz: SpawnPlaza, M: MatFn): Plaza
   return {
     group,
     flameMats,
+    roofs,
     update(dt: number): void {
       time += dt;
       glowMat.color.setScalar(0.86 + Math.sin(time * 9) * 0.08 + Math.sin(time * 23) * 0.06);
