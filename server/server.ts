@@ -67,6 +67,12 @@ const MAX_CHARACTERS_PER_ACCOUNT = Number(process.env.MAX_CHARACTERS ?? 5);
 /** Game masters: the owner's characters (always) plus any names in the ADMINS env var. */
 const OWNER_CHARACTERS = ['ouriolis', 'dawid'];
 const ADMINS = new Set([...OWNER_CHARACTERS, ...(process.env.ADMINS ?? '').split(',')].map((n) => n.trim().toLowerCase()).filter(Boolean));
+/**
+ * Testers (owner, 2026-10-24): these characters get the test console and test commands (like test mode:
+ * everything except /god, /kill and the GM-only commands), but are not game masters. TESTERS env adds names.
+ */
+const TESTER_CHARACTERS = ['akasha', 'gilbert the killer'];
+const TESTERS = new Set([...TESTER_CHARACTERS, ...(process.env.TESTERS ?? '').split(',')].map((n) => n.trim().toLowerCase()).filter(Boolean));
 /** Game masters' accounts always have premium (shown with the premium tick), whatever the store says. */
 const STAFF_PREMIUM_UNTIL = Date.UTC(2100, 0, 1);
 function staffPerks(name: string, perks: AccountPerks): AccountPerks {
@@ -450,7 +456,7 @@ async function finishLogin(c: Client, m: Extract<ClientMessage, { t: 'hello' }>,
   game.setPerks(s.id, perks, true);
   perksSeen.set(s.id, JSON.stringify(perks));
   sessionAccount.set(s.id, account);
-  s.admin = ALLOW_ADMIN || ADMINS.has(key);
+  s.admin = ALLOW_ADMIN || ADMINS.has(key) || TESTERS.has(key);
   // test mode (ALLOW_ADMIN) gives every test command except god mode and /kill; names in ADMINS get everything
   s.testOnly = !ADMINS.has(key);
   const saved = !!stored;
