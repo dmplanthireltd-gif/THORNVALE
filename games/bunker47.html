@@ -995,8 +995,8 @@ const FORGE = { x: YARD ? -11 : 8.95, z: YARD ? -12 : 0, ry: Math.PI / 2, g: nul
 
 const WPN = {
   pistol:   { name: '9mm Compact',      auto: 0, rate: 0.15, dmg: 45,   head: 3.2, mag: 8,  res: 80,  rel: 1.5, spr: 0.014, pel: 1, kick: 0.022, snd: 'pistol' },
-  carbine:  { name: 'M1 Carbine', auto: 0, rate: 0.11, dmg: 120,  head: 3.0, mag: 15, res: 150, rel: 2.0, spr: 0.008, pel: 1, kick: 0.02,  snd: 'rifle' },
-  thompson: { name: 'Thompson',   auto: 1, rate: 0.085, dmg: 80,  head: 2.6, mag: 30, res: 240, rel: 2.3, spr: 0.03,  pel: 1, kick: 0.016, snd: 'smg' },
+  carbine:  { name: 'M4A1',       auto: 1, rate: 0.09, dmg: 110,  head: 3.0, mag: 15, res: 150, rel: 2.0, spr: 0.008, pel: 1, kick: 0.02,  snd: 'rifle' },
+  thompson: { name: 'Grease Gun', auto: 1, rate: 0.085, dmg: 80,  head: 2.6, mag: 30, res: 240, rel: 2.3, spr: 0.03,  pel: 1, kick: 0.016, snd: 'smg' },
   trench:   { name: 'Pump Shotgun', auto: 0, rate: 0.8,  dmg: 75,   head: 2.0, mag: 6,  res: 54,  rel: 2.8, spr: 0.075, pel: 8, kick: 0.07,  snd: 'shotgun' },
   stg:      { name: 'AK-47',     auto: 1, rate: 0.1,  dmg: 120,  head: 2.8, mag: 30, res: 300, rel: 2.3, spr: 0.02,  pel: 1, kick: 0.02,  snd: 'rifle' },
   bar:      { name: 'BAR',        auto: 1, rate: 0.13, dmg: 160,  head: 2.8, mag: 20, res: 220, rel: 2.6, spr: 0.018, pel: 1, kick: 0.028, snd: 'lmg' },
@@ -1004,21 +1004,24 @@ const WPN = {
   volt:     { name: 'Volt Rifle', auto: 0, rate: 0.55, dmg: 6000, head: 1.0, mag: 4,  res: 28,  rel: 3.0, spr: 0.004, pel: 1, kick: 0.04,  snd: 'volt', chain: 6 },
   mp40:     { name: 'MAC-10',       auto: 1, rate: 0.1,  dmg: 70,   head: 2.6, mag: 32, res: 192, rel: 2.2, spr: 0.028, pel: 1, kick: 0.015, snd: 'smg' },
   garand:   { name: 'M1 Garand',  auto: 0, rate: 0.16, dmg: 170,  head: 3.4, mag: 8,  res: 128, rel: 2.1, spr: 0.006, pel: 1, kick: 0.03,  snd: 'rifle' },
-  g43:      { name: 'Gewehr 43',  auto: 0, rate: 0.14, dmg: 150,  head: 3.2, mag: 10, res: 150, rel: 2.4, spr: 0.007, pel: 1, kick: 0.028, snd: 'rifle' },
+  g43:      { name: 'Hunting Rifle', auto: 0, rate: 0.14, dmg: 150,  head: 3.2, mag: 10, res: 150, rel: 2.4, spr: 0.007, pel: 1, kick: 0.028, snd: 'rifle' },
   dbl:      { name: 'Double Barrel', auto: 0, rate: 0.3, dmg: 95, head: 2.0, mag: 2,  res: 60,  rel: 2.3, spr: 0.085, pel: 8, kick: 0.08,  snd: 'shotgun' },
-  ppsh:     { name: 'PPSh-41',    auto: 1, rate: 0.055, dmg: 70,  head: 2.6, mag: 71, res: 284, rel: 2.8, spr: 0.034, pel: 1, kick: 0.012, snd: 'smg' },
+  ppsh:     { name: 'Suomi KP',   auto: 1, rate: 0.055, dmg: 70,  head: 2.6, mag: 71, res: 284, rel: 2.8, spr: 0.034, pel: 1, kick: 0.012, snd: 'smg' },
   mg42:     { name: 'MG42',       auto: 1, rate: 0.06, dmg: 130,  head: 2.6, mag: 125, res: 375, rel: 4.4, spr: 0.03, pel: 1, kick: 0.02,  snd: 'lmg' },
   panzer:   { name: 'RPG-7', auto: 0, rate: 1.2, dmg: 0,  head: 1.0, mag: 1,  res: 14,  rel: 2.6, spr: 0.004, pel: 1, kick: 0.08,  snd: 'rocket', proj: { spd: 30, rad: 4.8, dmg: 1800, self: 70, style: 3 } },
   ion:      { name: 'Ion Pistol', auto: 0, rate: 0.32, dmg: 0,    head: 1.0, mag: 20, res: 160, rel: 2.2, spr: 0.006, pel: 1, kick: 0.025, snd: 'ion', proj: { spd: 46, rad: 2.4, dmg: 1100, self: 30, style: 1 }, hand: 1 },
+  luger:    { name: 'Luger',      auto: 0, rate: 0.13, dmg: 60,   head: 3.4, mag: 8,  res: 96,  rel: 1.6, spr: 0.012, pel: 1, kick: 0.024, snd: 'pistol', hand: 1 },
+  makarov:  { name: 'Makarov',    auto: 0, rate: 0.11, dmg: 50,   head: 3.0, mag: 8,  res: 96,  rel: 1.4, spr: 0.013, pel: 1, kick: 0.02,  snd: 'pistol', hand: 1 },
+  aks:      { name: 'AKS-74U',    auto: 1, rate: 0.075, dmg: 95,  head: 2.7, mag: 30, res: 270, rel: 2.1, spr: 0.026, pel: 1, kick: 0.018, snd: 'rifle' },
   sub:      { name: 'Sub-Woofer', auto: 0, rate: 0.75, dmg: 1400, head: 1.0, mag: 6,  res: 36,  rel: 3.0, spr: 0,     pel: 1, kick: 0.09,  snd: 'sub', sonic: { range: 10, cos: Math.cos(0.42) } }
 };
-WPN.pistol.hand = 1; WPN.kar.scope = 1;
+WPN.pistol.hand = 1; WPN.kar.scope = 1; WPN.g43.scope = 1; WPN.g43.scope = 1;
 const WKEYS = Object.keys(WPN);
 // upgraded (Upgrade Forge) versions
 const PAP_MOD = {
   pistol:   { name: 'Fyah Starter',   mag: 12, res: 120, rate: 0.2, proj: { spd: 55, rad: 2.2, dmg: 1000, self: 25, style: 2 } },
-  carbine:  { name: 'Crusader M1',     dmg: 380, mag: 30, res: 300 },
-  thompson: { name: 'Chicago Typewriter', dmg: 230, mag: 50, res: 400 },
+  carbine:  { name: 'Rude Bwoy M4',     dmg: 380, mag: 30, res: 300 },
+  thompson: { name: 'Greasy Riddim', dmg: 230, mag: 50, res: 400 },
   trench:   { name: 'Soundboy Killer',       dmg: 210, mag: 10, res: 80, rate: 0.6 },
   stg:      { name: 'Kalash Riddim',    dmg: 330, mag: 45, res: 450 },
   bar:      { name: 'Iron Widow',      dmg: 460, mag: 30, res: 360 },
@@ -1026,11 +1029,14 @@ const PAP_MOD = {
   volt:     { name: 'Storm Caller',    dmg: 12000, mag: 8, res: 56, chain: 12, rate: 0.45 },
   mp40:     { name: 'Mac Attack',  dmg: 210, mag: 64, res: 384 },
   garand:   { name: 'Iron Saint',      dmg: 470, mag: 12, res: 192 },
-  g43:      { name: 'Gravedigger 43',  dmg: 420, mag: 15, res: 225 },
+  g43:      { name: 'Rockers Rifle',  dmg: 420, mag: 15, res: 225 },
   dbl:      { name: 'Twin Reapers',    dmg: 240, mag: 2, res: 120, spr: 0.05 },
-  ppsh:     { name: 'Red Harvest',     dmg: 200, mag: 115, res: 460 },
+  ppsh:     { name: 'Drum & Bass',     dmg: 200, mag: 115, res: 460 },
   mg42:     { name: 'Buzzsaw 42',      dmg: 330, mag: 125, res: 625, rel: 3.4 },
   panzer:   { name: 'Big Tune',   mag: 3, res: 30, rate: 0.7, proj: { spd: 36, rad: 6.2, dmg: 4200, self: 70, style: 3 } },
+  luger:    { name: 'Duppy Shot',      dmg: 220, mag: 16, res: 160, rate: 0.1 },
+  makarov:  { name: 'Rub-a-Dub',       dmg: 190, mag: 16, res: 160, rate: 0.08 },
+  aks:      { name: 'Shorty Sound',    dmg: 280, mag: 45, res: 450 },
   sub:      { name: 'Bass Cannon',     dmg: 4200, mag: 10, res: 60, rate: 0.6, sonic: { range: 14, cos: Math.cos(0.55) } },
   ion:      { name: 'Ion Tempest',     mag: 40, res: 240, rate: 0.22, proj: { spd: 55, rad: 3.0, dmg: 3000, self: 30, style: 1 } }
 };
@@ -1049,7 +1055,8 @@ const ATTS = {
 const ATT_FIT = {
   pistol: ['ext', 'fast', 'hollow', 'brake'], mp40: ['ext', 'fast', 'grip', 'hollow', 'brake'], thompson: ['ext', 'fast', 'grip', 'hollow', 'brake'], ppsh: ['fast', 'grip', 'hollow', 'brake'], stg: ['ext', 'fast', 'grip', 'scope', 'hollow', 'brake'],
   carbine: ['ext', 'fast', 'scope', 'hollow', 'brake'], garand: ['fast', 'scope', 'hollow', 'brake'], g43: ['ext', 'fast', 'scope', 'hollow', 'brake'], kar: ['ext', 'fast', 'scope', 'hollow'],
-  bar: ['ext', 'fast', 'grip', 'scope', 'hollow', 'brake'], mg42: ['fast', 'grip', 'scope', 'hollow'], trench: ['ext', 'fast', 'choke', 'hollow'], dbl: ['fast', 'choke', 'hollow']
+  bar: ['ext', 'fast', 'grip', 'scope', 'hollow', 'brake'], mg42: ['fast', 'grip', 'scope', 'hollow'], trench: ['ext', 'fast', 'choke', 'hollow'], dbl: ['fast', 'choke', 'hollow'],
+  luger: ['ext', 'fast', 'hollow', 'brake'], makarov: ['ext', 'fast', 'hollow', 'brake'], aks: ['ext', 'fast', 'grip', 'hollow', 'brake']
 };
 const WSC = new Map();
 function WS(s) {
@@ -1069,8 +1076,8 @@ function WS(s) {
   }
   WSC.set(key, w); return w;
 }
-const BOX_POOL = ['thompson', 'trench', 'stg', 'bar', 'kar', 'volt', 'carbine', 'mp40', 'garand', 'g43', 'dbl', 'ppsh', 'mg42', 'panzer', 'ion', 'sub'];
-const BOX_WT = { volt: 0.6, ion: 0.6, panzer: 0.8, carbine: 0.6, mp40: 0.8, sub: 0.55 };
+const BOX_POOL = ['thompson', 'trench', 'stg', 'kar', 'carbine', 'mp40', 'g43', 'ppsh', 'aks', 'luger', 'panzer', 'sub'];
+const BOX_WT = { panzer: 0.8, mp40: 0.8, luger: 0.7, sub: 0.55 };
 const PERKS = {
   bulwark: { name: 'Heavy Bass', cost: 2500, color: 0xb3261e, css: '#b3261e', ab: 'B', desc: 'take twice the hits before going down' },
   swift:   { name: 'Rewind Selecta', cost: 3000, color: 0x2f7fbf, css: '#2f7fbf', ab: 'S', desc: 'reload twice as fast' },
@@ -1365,7 +1372,7 @@ function buildYard() {
   table(-6.5, -10, 1.0, 1.0); plasticChair(-7.3, -10, Math.PI / 2); plasticChair(-5.7, -10, -Math.PI / 2); table(-2, -14.5, 1.0, 1.0); plasticChair(-2, -13.7, Math.PI);
   crate(-10.6, -16.2, 0.8, 0.2);
   perkMachine('bulwark', -11.4, -9.6, Math.PI / 2); perkMachine('nuff', -11.4, -13.4, Math.PI / 2); perkMachine('vibes', -3.6, -16.4, 0);
-  wallBuy('kar', 1000, -11.2 + 0.0, -7, 0, -1); wallBuy('dbl', 1100, -5.6, -7, 0, -1);
+  wallBuy('kar', 1000, -11.2 + 0.0, -7, 0, -1); wallBuy('makarov', 500, -5.6, -7, 0, -1);
   // ----- Rooftop Studio
   PY = UP.y;
   buildForge();
@@ -1398,7 +1405,7 @@ function buildYard() {
   fence('x', -7, 4.2, 12, []);
   fence('z', -12, 8.2, 9, []); fence('z', -12, -7, -6.2, []);
   perkMachine('revive', -11.4, -3.6, Math.PI / 2); perkMachine('fleet', -11.4, 6.2, Math.PI / 2);
-  wallBuy('carbine', 600, 0, 9, 0, -1); wallBuy('mp40', 1000, 8, -7, 0, 1);
+  wallBuy('carbine', 1600, 0, 9, 0, -1); wallBuy('mp40', 1000, 8, -7, 0, 1);
   buildBench(11.3, -2.4);
   dominoTable(2.5, 3.2); jerkDrum(6.5, -5.4); yTree(-7.5, 5.5, 6.5); plasticChair(-5.6, 2.2, 0.6); plasticChair(-4.6, 2.6, -0.4);
   crate(10.9, 8.0, 0.8, 0.2); crate(10.9, 7.2, 0.6, -0.4, 0.8); barrel(-1.8, 8.4); barrel(-1.1, 8.5);
@@ -1407,7 +1414,7 @@ function buildYard() {
   // ----- the Lane (asphalt alley between zinc fences)
   fence('x', -3, 12, 36, winsOn('x', -3)); fence('x', 3, 12, 36, winsOn('x', 3));
   perkMachine('rapid', 20, 2.45, Math.PI); perkMachine('echo', 28, -2.45, 0);
-  wallBuy('g43', 1500, 22.5, -3, 0, 1); wallBuy('garand', 1400, 14.6, 3, 0, -1);
+  wallBuy('g43', 1500, 22.5, -3, 0, 1); wallBuy('luger', 750, 14.6, 3, 0, -1);
   barrel(33.6, 2.4); barrel(34.3, 2.5); crate(14.2, -2.4, 0.7, 0.3);
   streetLamp(18, -2.2, false); streetLamp(30, -2.2, true);
   bulbString([12, 2.9, -2.9], [36, 2.9, 2.9], 0.4); bulbString([12, 2.9, 2.9], [36, 2.9, -2.9], 0.4);
@@ -1422,7 +1429,7 @@ function buildYard() {
   for (const z of [-7.5, -5.2, 5.2, 7.5]) crowdBarrier(53.5, z, Math.PI / 2);
   van(44.5, 9.4, 0.15); crate(59.4, 12.4, 0.9, 0.2);
   perkMachine('blast', 38.0, -13.4, 0); perkMachine('dropbass', 38.0, 13.4, Math.PI);
-  wallBuy('bar', 2200, 48.5, -14, 0, 1); wallBuy('stg', 2000, 51.5, 14, 0, -1); wallBuy('ppsh', 1800, 62, -11, -1, 0);
+  wallBuy('aks', 2200, 48.5, -14, 0, 1); wallBuy('stg', 2000, 51.5, 14, 0, -1); wallBuy('ppsh', 1800, 62, -11, -1, 0);
   yTree(41, -9, 7); streetLamp(42, -6, true); streetLamp(52.5, 10.5, false); streetLamp(52.5, -10.5, false);
   bulbString([36.2, 3.4, -13.8], [61.8, 3.4, 13.8], 1.2); bulbString([36.2, 3.4, 13.8], [61.8, 3.4, -13.8], 1.2); bulbString([36.2, 3.2, 0], [61.8, 3.2, 0], 0.8);
   { const sg = textSprite(['DEAD LOCKS SOUND', 'live every night till the last'], { scale: 0.6, size: 72, size2: 34, w: 1024, h: 200, color: '#e8b420', color2: '#c8261c' }); sg.position.set(58.4, 4.2, 0); scene.add(sg); }
@@ -2210,7 +2217,7 @@ function buildMap() {
   chair(0.4, -1.45, Math.PI); chair(1.6, -2.95, 0.1); chair(1.9, -1.4, Math.PI + 0.3);
   crate(-4.6, -5.1, 0.6); crate(6.7, 4.9, 0.9, 0.2); crate(6.6, 4.9, 0.55, 0.6, 0.9); crate(6.9, -4.8, 0.8, -0.3);
   sandbags(-5.5, -2.2, 0, 2);
-  wallBuy('carbine', 600, -4.6, 5.8, 0, -1);
+  wallBuy('carbine', 1600, -4.6, 5.8, 0, -1);
   wallBuy('mp40', 1000, 1.5, -5.8, 0, 1);
   perkMachine('fleet', -7.4, 2.4, Math.PI / 2);
   perkMachine('revive', -1.2, 5.35, Math.PI);
@@ -2229,7 +2236,7 @@ function buildMap() {
   buildBox();
   perkMachine('swift', 23.4, 4.8, -Math.PI / 2);
   wallBuy('thompson', 1200, 21.6, -5.8, 0, 1);
-  wallBuy('dbl', 1100, 14.4, -5.8, 0, 1);
+  wallBuy('makarov', 500, 14.4, -5.8, 0, 1);
   buildStairs();
   // Armory
   for (const zz of [-4, 4]) {
@@ -2244,8 +2251,8 @@ function buildMap() {
   crate(35.0, -5.0, 0.9, 0.4); crate(34.9, -4.0, 0.6, 0.1); crate(25.8, 5.1, 0.8, -0.2);
   sandbags(32.2, 3.0, 0.3, 2);
   wallBuy('trench', 1500, 33.2, -5.8, 0, 1);
-  wallBuy('garand', 1400, 32.6, 5.8, 0, -1);
-  wallBuy('bar', 2200, 26.6, -5.8, 0, 1);
+  wallBuy('luger', 750, 32.6, 5.8, 0, -1);
+  wallBuy('aks', 2200, 26.6, -5.8, 0, 1);
   perkMachine('bulwark', 35.4, 4.6, -Math.PI / 2);
   perkMachine('blast', 30.2, 5.35, Math.PI);
   perkMachine('slap', 35.4, -2.4, -Math.PI / 2);
@@ -2356,7 +2363,10 @@ async function glbLoad(url) {
   const root = new THREE.Group(); for (const i of j.scenes[j.scene || 0].nodes) root.add(mk(i)); return root;
 }
 // real gun models (Styloo Guns Asset Pack, CC0) served next to the page as gun-*.glb. Muzzle points +X in the files.
-const STYG = { pistol: { f: 'pew', len: 0.2 }, stg: { f: 'ak47', len: 0.86 }, mp40: { f: 'mac10', len: 0.3 }, trench: { f: 'shotgun', len: 0.98, bolt: 'pomp' }, kar: { f: 'awp', len: 1.12, scope: 1 }, panzer: { f: 'rocketlaucher', len: 0.98, mag: 'rocketbullet' } };
+const STYG = { pistol: { f: 'pew', len: 0.2 }, stg: { f: 'ak47', len: 0.86 }, mp40: { f: 'mac10', len: 0.3 }, trench: { f: 'shotgun', len: 0.98, bolt: 'pomp' }, kar: { f: 'awp', len: 1.12, scope: 1 }, panzer: { f: 'rocketlaucher', len: 0.98, mag: 'rocketbullet' },
+  // Guns & Explosives pack (CC0, converted from FBX; muzzle already points -Z)
+  carbine: { f: 'm4a1', len: 0.84, rot: 0, top: 1 }, thompson: { f: 'greasegun', len: 0.66, rot: 0, top: 1, off: [0, -0.035, -0.14] }, ppsh: { f: 'suomi_kp', len: 0.87, rot: 0, top: 1 }, g43: { f: 'sniper', len: 1.1, rot: 0, scope: 1, top: 1 },
+  luger: { f: 'luger', len: 0.22, rot: 0 }, makarov: { f: 'pistol_mk', len: 0.17, rot: 0 }, aks: { f: 'ak47variant', len: 0.62 } };
 function loadGunModels(ms = 9000) {
   const all = Promise.all(Object.entries(STYG).map(([k, d]) => glbLoad('gun-' + d.f + '.glb').then(o => { o.traverse(c => { if (c.isMesh) { c.castShadow = true; c.material.envMapIntensity = 1; } }); d.obj = o; }).catch(() => {})));
   return Promise.race([all, new Promise(r => setTimeout(r, ms))]);
@@ -2366,12 +2376,13 @@ function styFit(k, g, pap) {
   const d = STYG[k]; if (!d || !d.obj) return null;
   g.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(g); if (bb.isEmpty()) return null;
   for (const c of g.children.slice()) g.remove(c);
-  const m = d.obj.clone(true), h = new THREE.Group(); h.add(m); h.rotation.y = Math.PI / 2; g.add(h); h.updateMatrixWorld(true);
+  const m = d.obj.clone(true), h = new THREE.Group(); h.add(m); h.rotation.y = d.rot != null ? d.rot : Math.PI / 2; g.add(h); h.updateMatrixWorld(true);
   let b2 = new THREE.Box3().setFromObject(h); const s = d.len / Math.max(1e-4, b2.max.z - b2.min.z); h.scale.setScalar(s); h.updateMatrixWorld(true);
   // line the model's trigger up with where the hand holds the procedural gun (its trigger guard); otherwise front-align
   b2 = new THREE.Box3().setFromObject(h); const tg = g.userData.tg; let trg = null; m.traverse(c => { if (!trg && c.isGroup && /trigger/.test(c.name)) trg = c; });
-  if (tg && trg) { const tb = new THREE.Box3().setFromObject(trg), tc = tb.getCenter(new THREE.Vector3()); h.position.set(-(b2.min.x + b2.max.x) / 2, tg[0] + 0.012 - tc.y, tg[1] - tc.z); }
+  if (tg && trg) { const tb = new THREE.Box3().setFromObject(trg), tc = tb.getCenter(new THREE.Vector3()); h.position.set(-(b2.min.x + b2.max.x) / 2, d.top ? bb.max.y - b2.max.y : tg[0] + 0.012 - tc.y, tg[1] - tc.z); }
   else h.position.set(-(b2.min.x + b2.max.x) / 2, (bb.min.y + bb.max.y) / 2 - (b2.min.y + b2.max.y) / 2, bb.min.z - b2.min.z);
+  if (d.off) h.position.add(new THREE.Vector3(...d.off));
   h.updateMatrixWorld(true);
   if (pap) m.traverse(c => { if (c.isMesh) c.material = /magazine|bullet/.test(c.name) ? M.papB : M.papA; });
   // muzzle: centre of the front-most slice of the mesh; sight: top of the gun over its middle
@@ -2381,7 +2392,9 @@ function styFit(k, g, pap) {
   const mag = part(new RegExp(d.mag || 'magazine')), bolt = d.bolt ? part(new RegExp(d.bolt)) : null;
   return { mz: [0, mn ? my / mn : (fb.min.y + fb.max.y) / 2, fb.min.z], sy: d.scope ? top - 0.02 : top + 0.004, mag, bolt };
 }
-function gunModel(k, sc = 1, pap = false) {
+const PROC_ALIAS = { luger: 'pistol', makarov: 'pistol', aks: 'stg' };
+function gunModel(kk, sc = 1, pap = false) {
+  const k = PROC_ALIAS[kk] || kk;
   const g = new THREE.Group(), S = pap ? M.papA : M.gSteel, W = pap ? M.papB : M.gWood, D = pap ? M.papA : M.gDark, BR = M.brass;
   const B = (w, h, d, x, y, z, m, rx = 0, parent = g) => { const me = new THREE.Mesh(bevelBox(w, h, d), m); me.position.set(x, y, z); me.rotation.x = rx; parent.add(me); return me; };
   const C = (r1, r2, len, x, y, z, m, seg = 14, parent = g) => { const me = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, seg), m); me.rotation.x = Math.PI / 2; me.position.set(x, y, z); parent.add(me); return me; };
@@ -2459,16 +2472,37 @@ function gunModel(k, sc = 1, pap = false) {
     TG(-0.01, 0.03); mag = grp(0, 0, 0); C(0.02, 0.02, 0.07, 0, -0.025, -0.12, BR, 12, mag);
     mz = [0, 0.03, -0.55]; sy = 0.11; hl = [0, -0.03, -0.24];
   } else if (k === 'sub') {
-    // the Sub-Woofer: a speaker cabinet cannon with a pistol grip, carry handle, glowing ring and a battery pack
-    const cabM = new THREE.MeshStandardMaterial({ color: pap ? 0x2a1030 : 0x1c1814, roughness: 0.7 }), grill = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.95, side: THREE.DoubleSide });
-    B(0.15, 0.15, 0.26, 0, 0.03, -0.13, cabM); for (const sx of [-1, 1]) for (const sy2 of [-1, 1]) B(0.02, 0.02, 0.27, sx * 0.07, 0.03 + sy2 * 0.07, -0.13, D);
-    const cn = C(0.068, 0.026, 0.05, 0, 0.03, -0.27, grill, 22); cn.material = grill; C(0.022, 0.022, 0.012, 0, 0.03, -0.25, D, 14);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.007, 6, 28), new THREE.MeshBasicMaterial({ color: pap ? new THREE.Color(2.0, 0.4, 2.6) : new THREE.Color(2.6, 0.35, 0.15), toneMapped: false })); ring.position.set(0, 0.03, -0.262); g.add(ring);
-    B(0.02, 0.025, 0.16, 0, 0.125, -0.13, D); B(0.016, 0.04, 0.016, 0, 0.105, -0.06, D); B(0.016, 0.04, 0.016, 0, 0.105, -0.2, D);
-    for (let i = 0; i < 3; i++) B(0.152, 0.006, 0.12, 0, -0.02 + i * 0.03, -0.05, BR);
-    B(0.03, 0.09, 0.036, 0, -0.08, 0.0, W); TG(-0.05, -0.04);
-    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.007, 6, 16), M.leather); coil.position.set(0.05, 0.0, 0.03); coil.rotation.y = Math.PI / 2; g.add(coil);
-    mag = grp(0, 0, 0); B(0.08, 0.05, 0.1, 0, -0.07, -0.18, BR, 0, mag);
+    // the Sub-Woofer: a battered boombox turned sound cannon. Big glowing woofer muzzle, tricolour panels,
+    // chrome handle, VU meters, a vinyl spinning behind a window, pistol grip and a battery-pack magazine
+    const cabM = new THREE.MeshStandardMaterial({ color: pap ? 0x2a1030 : 0x16130f, roughness: 0.55, metalness: 0.1 }), chrome = new THREE.MeshStandardMaterial({ color: 0xd8d8d8, roughness: 0.18, metalness: 1 });
+    const grill = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 0.9, side: THREE.DoubleSide }), coneM = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6, side: THREE.DoubleSide });
+    const triM = [0xb3261e, 0xe8b420, 0x2e8b3e].map(c => new THREE.MeshStandardMaterial({ color: pap ? 0x7a2a9a : c, roughness: 0.5, metalness: 0.2 }));
+    const glow = new THREE.MeshBasicMaterial({ color: pap ? new THREE.Color(2.0, 0.4, 2.6) : new THREE.Color(2.6, 0.55, 0.12), toneMapped: false });
+    // body and chrome edging
+    B(0.2, 0.15, 0.3, 0, 0.03, -0.13, cabM);
+    for (const sx of [-1, 1]) for (const sy2 of [-1, 1]) B(0.014, 0.014, 0.31, sx * 0.1, 0.03 + sy2 * 0.075, -0.13, chrome);
+    // tricolour bands down both sides
+    for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) B(0.004, 0.03, 0.26, sx * 0.101, 0.07 - i * 0.04, -0.13, triM[i]);
+    // front: speaker grille ring, deep cone, dust cap and the glowing surround
+    const fr = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.012, 8, 32), chrome); fr.position.set(0, 0.03, -0.285); g.add(fr);
+    C(0.066, 0.03, 0.06, 0, 0.03, -0.27, coneM, 28); C(0.024, 0.024, 0.014, 0, 0.03, -0.25, chrome, 18);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.006, 6, 32), glow); ring.position.set(0, 0.03, -0.29); g.add(ring);
+    // tweeter above the woofer
+    C(0.016, 0.01, 0.02, 0.07, 0.085, -0.28, grill, 12); C(0.016, 0.01, 0.02, -0.07, 0.085, -0.28, grill, 12);
+    // carry handle
+    const hd = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.009, 8, 20, Math.PI), chrome); hd.rotation.y = Math.PI / 2; hd.position.set(0, 0.105, -0.13); g.add(hd);
+    // VU meters on the back face
+    for (const sx of [-1, 1]) { B(0.05, 0.03, 0.006, sx * 0.045, 0.07, 0.022, M.gDark); B(0.04, 0.02, 0.004, sx * 0.045, 0.07, 0.026, glow); }
+    // vinyl spinning behind a side window
+    const vin = new THREE.Group(); vin.position.set(0.104, 0.02, -0.12); vin.rotation.y = Math.PI / 2; g.add(vin);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.003, 28), new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.25, metalness: 0.3 })); disc.rotation.x = Math.PI / 2; vin.add(disc);
+    const lab = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.004, 16), triM[0]); lab.rotation.x = Math.PI / 2; vin.add(lab);
+    const win = new THREE.Mesh(new THREE.RingGeometry(0.052, 0.058, 28), chrome); win.position.set(0.106, 0.02, -0.12); win.rotation.y = Math.PI / 2; g.add(win);
+    g.userData.vinyl = vin; g.userData.subRing = ring;
+    // coiled cable, grip, trigger and the battery pack (reloads like a magazine)
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.006, 6, 16), M.leather); coil.position.set(-0.104, -0.02, 0.0); coil.rotation.y = Math.PI / 2; g.add(coil);
+    B(0.034, 0.1, 0.04, 0, -0.09, 0.0, W, 0.18); TG(-0.06, -0.04);
+    mag = grp(0, 0, 0); B(0.1, 0.05, 0.12, 0, -0.07, -0.19, BR, 0, mag); B(0.06, 0.012, 0.04, 0, -0.04, -0.19, triM[1], 0, mag);
     mz = [0, 0.03, -0.3]; sy = 0.16; hl = [0, -0.06, -0.2];
   } else if (k === 'mp40') {
     C(0.021, 0.021, 0.3, 0, 0.03, -0.08, S); C(0.011, 0.011, 0.2, 0, 0.033, -0.33, D); C(0.014, 0.012, 0.03, 0, 0.033, -0.44, D);
@@ -2534,8 +2568,8 @@ function gunModel(k, sc = 1, pap = false) {
     mag = grp(0, 0, 0); B(0.022, 0.05, 0.03, 0, -0.06, 0.02, M.ionGlow, 0.22, mag);
     mz = [0, 0.04, -0.28]; sy = 0.088; hl = [-0.012, -0.045, 0.01];
   }
-  const sf = styFit(k, g, pap); if (sf) { mz = sf.mz; sy = sf.sy; mag = sf.mag; bolt = sf.bolt; if (!mag && kind === 'rocket') magDir = 0; }
-  const at = Object.assign({}, gunModel.att || {}); gunModel.att = null; if (sf && STYG[k].scope) at.scope = false;
+  const sf = styFit(kk, g, pap); if (sf) { mz = sf.mz; sy = sf.sy; mag = sf.mag; bolt = sf.bolt; if (!mag && kind === 'rocket') magDir = 0; }
+  const at = Object.assign({}, gunModel.att || {}); gunModel.att = null; if (sf && STYG[kk].scope) at.scope = false;
   if (at.ext && mag) mag.scale.y = 1.35;
   if (at.scope) { const sz = (k === 'kar' || k === 'garand' || k === 'g43' || k === 'carbine') ? -0.12 : -0.08; C(0.014, 0.014, 0.2, 0, sy + 0.035, sz, D, 14); C(0.019, 0.016, 0.04, 0, sy + 0.035, sz - 0.11, D, 14); C(0.017, 0.019, 0.035, 0, sy + 0.035, sz + 0.11, D, 14); B(0.012, 0.03, 0.012, 0, sy + 0.012, sz - 0.05, D); B(0.012, 0.03, 0.012, 0, sy + 0.012, sz + 0.05, D); const lens = new THREE.Mesh(new THREE.CircleGeometry(0.015, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.15, 0.3, 0.35) })); lens.position.set(0, sy + 0.035, sz - 0.131); lens.rotation.y = Math.PI; g.add(lens); sy += 0.035; }
   if (at.grip) { B(0.022, 0.07, 0.026, 0, hl[1] - 0.045, hl[2], W); hl = [hl[0], hl[1] - 0.05, hl[2]]; }
@@ -2547,7 +2581,7 @@ function gunModel(k, sc = 1, pap = false) {
   // dark bore at the muzzle
   if (!WPN[k] || WPN[k].snd !== 'volt') { const bore = new THREE.Mesh(new THREE.CircleGeometry(k === 'panzer' ? 0.04 : WPN[k] && WPN[k].snd === 'shotgun' ? 0.009 : 0.0055, 12), M.gBore); bore.position.set(mz[0], mz[1], mz[2] - 0.001); bore.rotation.y = Math.PI; g.add(bore); }
   const gs = sc * (k === 'sub' ? 0.64 : 1); g.scale.setScalar(gs);
-  g.userData = { mz: new THREE.Vector3(...mz).multiplyScalar(gs), sy: sy * gs, hl: new THREE.Vector3(...hl).multiplyScalar(gs), mag, bolt, magDir, kind };
+  g.userData = { vinyl: g.userData.vinyl, subRing: g.userData.subRing, mz: new THREE.Vector3(...mz).multiplyScalar(gs), sy: sy * gs, hl: new THREE.Vector3(...hl).multiplyScalar(gs), mag, bolt, magDir, kind };
   return g;
 }
 
@@ -2943,6 +2977,9 @@ function L_click(c, o, t, f, a) { L_n(c, o, t, { type: 'bandpass', f, q: 6, a, d
 // weapon voices: crack (supersonic snap), body (powder bang), boom (low thump), tail (room), mechanism timings
 const GUNS = {
   pistol:   { crack: 2600, body: 950, boom: 125, tail: 0.18, sat: 2.5, mech: [[0.035, 3200, 0.25]] },
+  luger:    { crack: 2800, body: 1000, boom: 118, tail: 0.18, sat: 2.6, mech: [[0.035, 3400, 0.25]] },
+  makarov:  { crack: 2500, body: 900, boom: 130, tail: 0.16, sat: 2.4, mech: [[0.03, 3000, 0.25]] },
+  aks:      { crack: 3300, body: 1250, boom: 112, tail: 0.2, sat: 3, mech: [[0.03, 3300, 0.2]] },
   carbine:  { crack: 4200, body: 1350, boom: 95, tail: 0.24, sat: 3, mech: [[0.04, 3600, 0.2]] },
   thompson: { crack: 2200, body: 760, boom: 105, tail: 0.14, sat: 3, ba: 1.1, od: 0.06 },
   trench:   { crack: 1800, body: 520, boom: 68, tail: 0.42, sat: 3.5, bd: 0.12, od: 0.16, ba: 1.2, mech: [[0.42, 1500, 0.5], [0.56, 1900, 0.55]] },
@@ -4840,6 +4877,7 @@ function vmUpdate(dt) {
     if (VM.ktrail) VM.ktrail.material.opacity = tr * 0.35;
   }
   if (k === 'volt') M.coil.color.setRGB(0.4, 2 + Math.sin(T.now * 12) * 0.5, 2.8);
+  if (k === 'sub' && VM.gun) { const u = VM.gun.userData; if (u.vinyl) u.vinyl.rotation.x += 0.12; if (u.subRing) u.subRing.scale.setScalar(1 + Math.max(0, Math.sin(T.now * 9)) * 0.05 + (P.vmKick || 0) * 2.5); }
 }
 
 // =====================================================================

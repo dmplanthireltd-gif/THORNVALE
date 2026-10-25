@@ -32,7 +32,14 @@ export const BUNKER_FILE = resolve(join(HERE, '..', 'games', 'bunker47.html'));
 export const BUNKER_WS = '/b47ws';
 /** The owner's songs and voice lines, served next to the page: <BUNKER_PATH>song.mp3 (radio easter egg), deadlock.mp3 (boss theme), vo-*.mp3 (voice lines). */
 export const BUNKER_SONGS: Record<string, string> = {
-  // gun models (Styloo Guns Asset Pack, CC0; textures recompressed to JPEG)
+  // gun models (Styloo Guns Asset Pack + Guns & Explosives pack by 3dmodelscc0, both CC0; textures recompressed to JPEG)
+  'gun-ak47variant.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-ak47variant.glb')),
+  'gun-greasegun.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-greasegun.glb')),
+  'gun-luger.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-luger.glb')),
+  'gun-m4a1.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-m4a1.glb')),
+  'gun-pistol_mk.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-pistol_mk.glb')),
+  'gun-sniper.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-sniper.glb')),
+  'gun-suomi_kp.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-suomi_kp.glb')),
   'gun-ak47.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-ak47.glb')),
   'gun-awp.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-awp.glb')),
   'gun-mac10.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-mac10.glb')),
