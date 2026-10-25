@@ -2,6 +2,8 @@
 
 **Read `BIBLE.md` first, every session.** It is the single source of truth for this project. If the code and the Bible disagree, fix one of them in the same change.
 
+**Working on Dead Locks (the zombie game in `games/bunker47*`)? Read `DEAD-LOCKS-CONTEXT.md` first.**
+
 **Read `BRAND.md` before any visual, sound or wording work** (UI, HUD, login, website, artifacts, mockups, images, trailers, store text). It is the brand rulebook: crest, wordmark, colours, fonts, building blocks, layout, imagery, motion, sound and voice. Use its exact values; don't invent a new look. Brand changes need the owner's OK.
 
 ## Non-negotiables
