@@ -32,6 +32,28 @@ export const BUNKER_FILE = resolve(join(HERE, '..', 'games', 'bunker47.html'));
 export const BUNKER_WS = '/b47ws';
 /** The owner's songs and voice lines, served next to the page: <BUNKER_PATH>song.mp3 (radio easter egg), deadlock.mp3 (boss theme), vo-*.mp3 (voice lines). */
 export const BUNKER_SONGS: Record<string, string> = {
+  // photo textures (CC0 Poly Haven sets, baked to 1K JPG)
+  'tex-asphalt_02_diff.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-asphalt_02_diff.jpg')),
+  'tex-asphalt_02_nor.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-asphalt_02_nor.jpg')),
+  'tex-asphalt_02_rough.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-asphalt_02_rough.jpg')),
+  'tex-concrete_wall_007_diff.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-concrete_wall_007_diff.jpg')),
+  'tex-concrete_wall_007_nor.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-concrete_wall_007_nor.jpg')),
+  'tex-concrete_wall_007_rough.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-concrete_wall_007_rough.jpg')),
+  'tex-damaged_concrete_floor_diff.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-damaged_concrete_floor_diff.jpg')),
+  'tex-damaged_concrete_floor_nor.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-damaged_concrete_floor_nor.jpg')),
+  'tex-damaged_concrete_floor_rough.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-damaged_concrete_floor_rough.jpg')),
+  'tex-dark_wooden_planks_diff.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-dark_wooden_planks_diff.jpg')),
+  'tex-dark_wooden_planks_nor.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-dark_wooden_planks_nor.jpg')),
+  'tex-dark_wooden_planks_rough.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-dark_wooden_planks_rough.jpg')),
+  'tex-red_brick_diff.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-red_brick_diff.jpg')),
+  'tex-red_brick_nor.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-red_brick_nor.jpg')),
+  'tex-red_brick_rough.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-red_brick_rough.jpg')),
+  'tex-rocky_terrain_02_diff.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-rocky_terrain_02_diff.jpg')),
+  'tex-rocky_terrain_02_nor.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-rocky_terrain_02_nor.jpg')),
+  'tex-rocky_terrain_02_rough.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-rocky_terrain_02_rough.jpg')),
+  'tex-rusty_corrugated_iron_diff.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-rusty_corrugated_iron_diff.jpg')),
+  'tex-rusty_corrugated_iron_nor.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-rusty_corrugated_iron_nor.jpg')),
+  'tex-rusty_corrugated_iron_rough.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-rusty_corrugated_iron_rough.jpg')),
   'song.mp3': resolve(join(HERE, '..', 'games', 'bunker47-song.mp3')),
   'deadlock.mp3': resolve(join(HERE, '..', 'games', 'bunker47-deadlock.mp3')),
   // voice lines
