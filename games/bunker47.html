@@ -473,7 +473,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
       <div class="fp-maps" id="mapPick">
         <button data-v="bunker"><b>The Bunker</b><small>Concrete halls, a rum bar and a dancehall underground</small></button>
         <button data-v="yard"><b>Yard Night</b><small>Open-air street block: zinc fences, rooftop, the big sound system</small></button>
-        <button data-v="studio"><b>Studio Lot</b><small>Daytime film backlot: street set, Sound Stage 1, trailers, the premiere stage</small></button>
+        <button data-v="studio"><b>Dead Lock Records</b><small>Abandoned Kingston recording studio: live room, control room, loft, tape archive, loading dock</small></button>
         <button class="soon" disabled aria-disabled="true"><b>Carnival Day</b><small>Float parade, food stalls and a steel band</small></button>
       </div>
       <div class="lb" id="lb" hidden><div class="lbl">Top survivors</div><table class="stats lbt" id="lbTable"></table></div>
@@ -901,8 +901,8 @@ const MD = YLIKE ? {
   shadowBox: { left: -40, right: 40, top: 22, bottom: -22, cx: 14, cz: 0 }
 };
 // upstairs: the bunker's Studio floor, or Yard Night's rooftop over the Rum Shop (with a balcony along its front)
-const UP = YLIKE ? { y: 3.72, x0: -11.8, x1: 3.8, z0: -16.8, z1: -5.3 } : { y: 3.72, x0: 8.2, x1: 23.8, z0: -5.8, z1: 5.8 };
-const STAIR = YLIKE ? { x0: -6.0, x1: 1.6, z0: -6.75, z1: -5.35, rail: 'z1' } : { x0: 13.4, x1: 18.6, z0: 4.4, z1: 5.8, rail: 'z0' };
+const UP = LOT ? { y: 3.4, x0: -999, x1: -998, z0: -999, z1: -998 } : YLIKE ? { y: 3.72, x0: -11.8, x1: 3.8, z0: -16.8, z1: -5.3 } : { y: 3.72, x0: 8.2, x1: 23.8, z0: -5.8, z1: 5.8 };
+const STAIR = LOT ? { x0: -999, x1: -998.9, z0: -999, z1: -998.9, rail: 'z1' } : YLIKE ? { x0: -6.0, x1: 1.6, z0: -6.75, z1: -5.35, rail: 'z1' } : { x0: 13.4, x1: 18.6, z0: 4.4, z1: 5.8, rail: 'z0' };
 const underRoof = (x, z) => MD.roofs.some(r => x > r[0] && x < r[1] && z > r[2] && z < r[3]);
 const inRamp = (x, z) => x >= STAIR.x0 && x <= STAIR.x1 && z >= STAIR.z0 && z <= STAIR.z1;
 const rampY = x => clamp((x - STAIR.x0) / (STAIR.x1 - STAIR.x0), 0, 1) * UP.y;
@@ -968,7 +968,14 @@ function limb(a, b, r, m) {
 // =====================================================================
 // world data
 // =====================================================================
-const DOORS = YLIKE ? [
+const DOORS = LOT ? [
+  { x: 12, z: -3.0, w: 2.2, h: 2.55, cost: 750, name: 'the Live Room', lab: 'Open the studio door', sides: [-1, 1], open: false, anim: 0, mesh: null },
+  { x: 6, z: -8, ax: 'x', w: 2.2, h: 2.55, cost: 1000, name: 'the Control Room', lab: 'Open the control room', sides: [-1, 1], open: false, anim: 0, mesh: null },
+  { x: 2.0, z: 4.9, w: 1.4, h: 2.4, cost: 1250, name: 'the stairs to the Loft', lab: 'Clear the stairs', sides: [-1], sink: true, open: false, anim: 0, mesh: null },
+  { x: 30, z: 0, w: 2.2, h: 2.55, cost: 1000, name: 'the Tape Archive', lab: 'Open the back door', sides: [-1, 1], open: false, anim: 0, mesh: null },
+  { x: 42, z: 0, w: 3.0, h: 2.8, cost: 1500, name: 'the Loading Dock', lab: 'Raise the shutter', sides: [-1, 1], open: false, anim: 0, mesh: null },
+  { x: 20.0, z: 4.9, w: 1.4, h: 2.4, cost: 1000, name: 'the catwalk stairs', lab: 'Clear the stairs', sides: [1], sink: true, open: false, anim: 0, mesh: null }
+] : YLIKE ? [
   { x: -9, z: -7, ax: 'x', w: 2.2, h: 2.55, cost: 750, name: 'the Rum Shop', lab: 'Open the shop', sides: [-1, 1], open: false, anim: 0, mesh: null },
   { x: -12, z: 2, w: 2.2, h: 2.55, cost: 1000, name: 'the Record Shack', lab: 'Open the shack', sides: [-1, 1], open: false, anim: 0, mesh: null },
   { x: STAIR.x0, z: (STAIR.z0 + STAIR.z1) / 2, w: 1.4, h: 2.4, cost: 1250, name: 'the stairs to the Rooftop Studio', lab: 'Clear the stairs', sides: [-1], sink: true, open: false, anim: 0, mesh: null },
@@ -982,13 +989,37 @@ const DOORS = YLIKE ? [
   { x: -8, z: -2.6, w: 2.2, h: 2.55, cost: 750, name: 'the Rum Bar', lab: 'Clear the door', sides: [-1, 1], open: false, anim: 0, mesh: null }
 ];
 if (LOT) {
-  Object.assign(MD, { name: 'Studio Lot', menuCam: [-11.0, 2.9, -0.4, -1.72], shadowBox: { left: -55, right: 55, top: 34, bottom: -34, cx: 18, cz: 0 },
-    story: Object.assign({}, MD.story, { vaultRoom: 'Wardrobe', genRoom: 'the Premiere Stage' }) });
-  const nm = [['Sound Stage 1', 'Open the stage door'], ['Wardrobe', 'Open Wardrobe'], ['the gantry stairs', 'Clear the stairs'], ['Trailer Row', 'Open the gate'], ['the Car Park', 'Open the gate']];
-  DOORS.forEach((d, i) => { d.name = nm[i][0]; d.lab = nm[i][1]; });
+  // Dead Lock Records: an abandoned reggae studio in Kingston. Rooms: 0 Lobby, 1 Live Room, 2 Control Room, 3 Tape Archive + back hallway,
+  // 4 Loading Dock courtyard, 5 the Loft (lounge over the lobby and control room, plus the catwalk round the live room; either staircase opens it)
+  Object.assign(MD, { name: 'Dead Lock Records', bounds: [0.3, 61.7, -17.7, 9.7], roofs: [[0, 42, -18, 6]],
+    nav: { x0: -12, z0: -30, nx: 172, nz: 102 }, spawn: [9.6, 0.4], cust: { x: 9.4, z: -0.6 }, menuCam: [1.2, 2.1, 3.6, -0.95], puddles: [],
+    roomReq: [0, 1, 2, 8, 16, 36],
+    story: { gen: [55, -1], genR: 7.5, vault: [41.75, -12.5, -Math.PI / 2], vaultRoom: 'the Tape Archive', genRoom: 'the Loading Dock' },
+    radios: [[7.0, 2.65, 1.05, 0.3], [1.2, -9.0, 0.8, 1.2], [31.2, -16.6, 1.25, 0.2]],
+    shadowBox: { left: -48, right: 48, top: 32, bottom: -32, cx: 30, cz: -4 },
+    setPieces: [
+      // [room, x, z, y, wake radius, patrol]
+      [0, 6.0, 3.6, 0, 3], [0, 1.6, -1.0, 0, 7, [[1.6, -5.0], [1.6, 2.0]]],
+      [1, 20.6, -6.2, 0.5, 7], [1, 27.6, -14.6, 0, 5], [1, 26.0, -2.0, 0, 8, [[26, -3.5], [26, 3.0], [16.5, 3.0]]],
+      [2, 9.2, -13.0, 0, 6], [2, 2.2, -10.0, 0, 7, [[2.2, -10], [2.2, -16.5]]],
+      [3, 34.0, -12.6, 0, 8], [3, 35.4, -13.4, 0, 8], [3, 36.8, -12.2, 0, 8], [3, 37.6, -13.6, 0, 8],
+      [4, 49.0, 4.0, 0, 8], [4, 51.0, 6.2, 0, 8], [4, 57.0, -11.0, 0, 9, [[57, -11], [48, -11], [48, -4]]],
+      [5, 5.0, -5.2, 3.4, 6], [5, 7.2, -6.0, 3.4, 6]
+    ] });
 }
 const doorMask = () => DOORS.reduce((m, d, i) => m | (d.open ? 1 << i : 0), 0);
-const WINS = YLIKE ? [
+const WINS = LOT ? [
+  // Lobby (start): the smashed glass shopfront on the street, and the side alley
+  { x: 0, z: -6.4, nx: 1, nz: 0, room: 0 }, { x: 0, z: -2.2, nx: 1, nz: 0, room: 0 }, { x: 0, z: 2.6, nx: 1, nz: 0, room: 0 },
+  // Live Room: the north wall and the south alley
+  { x: 17, z: -18, nx: 0, nz: 1, room: 1 }, { x: 22, z: -18, nx: 0, nz: 1, room: 1 }, { x: 23, z: 6, nx: 0, nz: -1, room: 1 }, { x: 27.5, z: 6, nx: 0, nz: -1, room: 1 },
+  // Control Room
+  { x: 0, z: -14, nx: 1, nz: 0, room: 2 }, { x: 7.5, z: -18, nx: 0, nz: 1, room: 2 },
+  // Tape Archive and the back hallway
+  { x: 39, z: -18, nx: 0, nz: 1, room: 3 }, { x: 36, z: 6, nx: 0, nz: -1, room: 3 },
+  // Loading Dock courtyard
+  { x: 45, z: -18, nx: 0, nz: 1, room: 4 }, { x: 59.5, z: -18, nx: 0, nz: 1, room: 4 }, { x: 62, z: -8, nx: -1, nz: 0, room: 4 }, { x: 62, z: 3, nx: -1, nz: 0, room: 4 }, { x: 50, z: 10, nx: 0, nz: -1, room: 4 }
+] : YLIKE ? [
   // the Yard (start): south and east zinc fences
   { x: -5, z: 9, nx: 0, nz: -1, room: 0 }, { x: 4, z: 9, nx: 0, nz: -1, room: 0 }, { x: 12, z: -4.5, nx: -1, nz: 0, room: 0 }, { x: 12, z: 6, nx: -1, nz: 0, room: 0 },
   // Rum Shop (room 1): north wall and west wall
@@ -1664,7 +1695,7 @@ function streetSign(x, z, a, b) { const g = place(x, z, 0); gc(g, 0.04, 0.05, 3.
 function canopy(x, z, ry, w, d, col, label) { const g = place(x, z, ry), m = new THREE.MeshStandardMaterial({ color: col, roughness: 0.9, side: THREE.DoubleSide }); for (const sx of [-1, 1]) for (const sz of [-1, 1]) { gc(g, 0.03, 0.03, 2.5, sx * w / 2, 1.25, sz * d / 2, M.chrome, { ray: false, seg: 6 }); colliders.push({ x0: x + (sx * w / 2) * Math.cos(ry) - 0.1, x1: x + (sx * w / 2) * Math.cos(ry) + 0.1, z0: z + sz * d / 2 - 0.1, z1: z + sz * d / 2 + 0.1 }); } const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.hypot(w, d) / 2, 0.7, 4, 1, true), m); roof.rotation.y = Math.PI / 4; roof.scale.set(w / Math.hypot(w, d) * 1.414, 1, d / Math.hypot(w, d) * 1.414); roof.position.y = 2.85; roof.castShadow = true; g.add(roof); gb(g, w, 0.25, 0.02, 0, 2.4, d / 2, m, { ray: false }); if (label) { const s = textSprite([label], { scale: 0.18, size: 60, color: '#1b1410' }); s.position.set(0, 2.4, d / 2 + 0.02); g.add(s); } return g; }
 function jibCrane(x, z, ry) { const g = place(x, z, ry); for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + 0.4; const l = gb(g, 0.05, 0.05, 1.3, Math.sin(a) * 0.5, 0.08, Math.cos(a) * 0.5, M.darkSteel, { ray: false }); l.rotation.y = a; } gc(g, 0.08, 0.1, 1.5, 0, 0.8, 0, M.darkSteel, { seg: 10 }); const arm = new THREE.Group(); arm.position.set(0, 1.6, 0); arm.rotation.z = 0.32; g.add(arm); gb(arm, 6.2, 0.16, 0.16, 1.2, 0, 0, M.chrome); gb(arm, 0.6, 0.5, 0.5, -1.7, 0, 0, M.black); for (let i = 0; i < 3; i++) gb(arm, 0.12, 0.5, 0.5, -1.25 - i * 0.14, -0.05, 0, M.darkSteel, { ray: false }); const cam = new THREE.Group(); cam.position.set(4.3, -0.2, 0); cam.rotation.z = -0.32; arm.add(cam); gb(cam, 0.28, 0.3, 0.45, 0, -0.2, 0, M.black); gc(cam, 0.08, 0.1, 0.3, 0.28, -0.2, 0, M.black, { rz: Math.PI / 2, seg: 14 }); colRect(x, z, 1.2, 1.2); return g; }
 function sofa(x, z, ry, col) { const g = place(x, z, ry), m = new THREE.MeshStandardMaterial({ color: col, roughness: 0.95 }); gb(g, 2.0, 0.42, 0.85, 0, 0.21, 0, m); gb(g, 2.0, 0.55, 0.2, 0, 0.6, -0.33, m); for (const sx of [-1, 1]) gb(g, 0.2, 0.62, 0.85, sx * 0.95, 0.31, 0, m); colRect(x, z, 2.1, 0.9, ry); }
-function sandbags(x, z, ry, n = 3) { const g = place(x, z, ry), m = new THREE.MeshStandardMaterial({ color: 0x8a7a58, roughness: 1 }); for (let r2 = 0; r2 < 2; r2++) for (let i = 0; i < n - r2; i++) { const b = new THREE.Mesh(new THREE.CapsuleGeometry ? new THREE.SphereGeometry(0.22, 10, 8) : new THREE.SphereGeometry(0.22, 10, 8), m); b.scale.set(1.4, 0.6, 0.9); b.position.set((i - (n - r2 - 1) / 2) * 0.58, 0.14 + r2 * 0.24, 0); b.castShadow = true; g.add(b); } colRect(x, z, n * 0.6, 0.45, ry); }
+function sandbags(x, z, ry, n = 3) { const g = place(x, z, ry), m = new THREE.MeshStandardMaterial({ color: 0x8a7a58, roughness: 1 }); for (let r2 = 0; r2 < 2; r2++) for (let i = 0; i < n - r2; i++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), m); b.scale.set(1.4, 0.6, 0.9); b.position.set((i - (n - r2 - 1) / 2) * 0.58, 0.14 + r2 * 0.24, 0); b.castShadow = true; g.add(b); } colRect(x, z, n * 0.6, 0.45, ry); }
 function golfCart(x, z, ry) { const g = place(x, z, ry), w = new THREE.MeshStandardMaterial({ color: 0xe9e4d8, roughness: 0.4 }); gb(g, 2.3, 0.45, 1.2, 0, 0.5, 0, w); gb(g, 0.7, 0.5, 1.1, 0.3, 0.95, 0, M.canvasR); gb(g, 2.0, 0.06, 1.25, 0.1, 2.0, 0, w); for (const sx of [-0.85, 0.95]) for (const sz of [-0.5, 0.5]) gc(g, 0.04, 0.04, 1.3, sx, 1.35, sz * 1.05, M.chrome, { ray: false, seg: 6 }); for (const sx of [-0.8, 0.8]) for (const sz of [-0.62, 0.62]) gc(g, 0.22, 0.22, 0.16, sx, 0.22, sz, M.tyre, { rx: Math.PI / 2, seg: 12 }); colRect(x, z, 2.4, 1.3, ry); }
 function flightCase(x, z, ry, w = 1.0, h = 0.7, y = 0) { const g = place(x, z, ry, y); gb(g, w, h, 0.6, 0, h / 2, 0, M.black); for (const sx of [-1, 1]) gb(g, 0.04, h + 0.01, 0.62, sx * w / 2, h / 2, 0, M.chrome, { ray: false }); gb(g, w + 0.01, 0.04, 0.62, 0, h * 0.7, 0, M.chrome, { ray: false }); colRect(x, z, w, 0.6, ry); }
 function billboard(x, z, ry, y, lines) { const g = place(x, z, ry, y); for (const sx of [-1.8, 1.8]) gc(g, 0.08, 0.08, 1.6, sx, 0.8, 0, M.darkSteel, { seg: 8, ray: false }); gb(g, 6.4, 3.0, 0.15, 0, 3.1, 0, M.black); const s = textSprite(lines, { scale: 1.45, size: 96, size2: 40, w: 1024, h: 480, color: '#e8b420', color2: '#f3e6c4', bg: '#1b1410' }); s.position.set(0, 3.1, 0.1); g.add(s); for (let i = 0; i < 4; i++) { const l = gb(g, 0.1, 0.1, 0.5, -2.4 + i * 1.6, 4.75, 0.3, M.darkSteel, { ray: false }); l.rotation.x = 0.5; } return g; }
@@ -1672,177 +1703,295 @@ function stepRepeat(x, z, ry, w, h) { const g = place(x, z, ry), c = document.cr
 function hillLetters(text, cx, cz, r, y) { const m = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.8 }); const ch = [...text]; ch.forEach((c, i) => { if (c === ' ') return; const s = textSprite([c], { scale: 7, size: 220, w: 240, h: 260, color: '#f6f2e8', font: 'Verdana' }); const a = (i - (ch.length - 1) / 2) * 0.05; s.position.set(cx + Math.sin(a) * r, y, cz - Math.cos(a) * r); scene.add(s); }); }
 function lightTower(x, z) { const g = place(x, z, 0); gb(g, 1.6, 0.9, 1.0, 0, 0.6, 0, new THREE.MeshStandardMaterial({ color: 0xe8b420, roughness: 0.5 })); gc(g, 0.08, 0.1, 7, 0, 4.0, 0, M.darkSteel, { seg: 8 }); const lm = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 2.8, 2.3), toneMapped: false }); for (let i = 0; i < 4; i++) { gb(g, 0.5, 0.4, 0.2, -0.75 + i * 0.5, 7.4, 0, M.black, { ray: false }); gb(g, 0.42, 0.32, 0.02, -0.75 + i * 0.5, 7.4, 0.11, lm, { ray: false }); } for (const sx of [-1, 1]) { const o = gb(g, 1.8, 0.08, 0.12, sx * 1.1, 0.12, 0, M.darkSteel, { ray: false }); o.rotation.y = 0; } colRect(x, z, 1.7, 1.1); }
 
+// =====================================================================
+// Dead Lock Records: an abandoned reggae studio in Kingston, overrun the night the dead rose.
+// Lobby (start) -> Live Room / Control Room -> Loft (lounge + catwalk) -> Tape Archive -> Loading Dock courtyard
+// =====================================================================
+// --- small models (palms, plants, props) loaded like the guns; each is fitted to a height when placed
+const PROPG = {};
+// first-person arms (PSX First Person Arms, rigged, 18 animations): used for melee swings, with the knife or the guitar in the right hand
+const ARMS = { obj: null, mix: null, clips: {}, hand: null, knife: null, gtr: null, ready: false, n: 0 };
+function loadArms() { return glbLoad('arms.glb').then(o => { ARMS.obj = o; for (const c of o.userData.clips || []) ARMS.clips[c.name] = c; }).catch(() => {}); }
+function armsSetup() {
+  if (ARMS.ready || !ARMS.obj || !VM.knife) return; ARMS.ready = true; const o = ARMS.obj;
+  o.rotation.y = Math.PI; o.position.set(0.02, -1.5, 0.12); o.visible = false; wScene.add(o);
+  o.traverse(q => { if (q.isMesh) { q.frustumCulled = false; q.castShadow = false; q.renderOrder = 2; } });
+  ARMS.mix = new THREE.AnimationMixer(o); ARMS.hand = o.getObjectByName('hand_R');
+  if (ARMS.hand) { const k = new THREE.Group(); VM.knife.children.forEach((c, i) => { if (i < 7) k.add(c.clone()); }); k.rotation.set(0, Math.PI, Math.PI / 2); k.position.set(0, 0.09, 0.02); k.scale.setScalar(1.2); ARMS.hand.add(k); ARMS.knife = k;
+    const g = guitarModel(0xb3261e); g.scale.setScalar(0.55); g.rotation.set(Math.PI / 2, 0, 0); g.position.set(0, 0.1, 0.05); g.visible = false; ARMS.hand.add(g); ARMS.gtr = g; }
+  if (ARMS.clips.knife_idle) ARMS.mix.clipAction(ARMS.clips.knife_idle).play();
+}
+function armsSwing() {
+  if (!ARMS.ready) return; const c = ARMS.clips[(ARMS.n++ % 2) ? 'knife_hit_02' : 'knife_hit_01']; if (!c) return;
+  const a = ARMS.mix.clipAction(c); a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.timeScale = c.duration / Math.max(0.2, P.knifeDur || 0.55); a.setEffectiveWeight(1); a.play();
+  const idle = ARMS.clips.knife_idle && ARMS.mix.clipAction(ARMS.clips.knife_idle); if (idle) idle.crossFadeTo(a, 0.05, false);
+}
+const PROP_FILES = ['palm01', 'palm02', 'palm03', 'palm08', 'palm09', 'palm10', 'palm11', 'palm12', 'palm13', 'n-palmtree_1', 'n-palmtree_3', 'n-plant_1', 'n-plant_3', 'n-plant_4', 'n-plant_5', 'n-bush_1', 'n-bushberries_1', 'n-grass', 'n-grass_2', 'n-flowers', 'n-rock_moss_1', 'n-woodlog_moss', 'n-treestump_moss', 'frag', 'smokeg', 'nuke', 'ammobox_low', 'quadrocket', 'molotov', 'flaregun', 'c4'];
+function loadProps(ms = 9000) {
+  const all = Promise.all(PROP_FILES.map(f => glbLoad('prop-' + f + '.glb').then(o => { o.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } }); PROPG[f] = o; }).catch(() => {})));
+  return Promise.race([all, new Promise(r => setTimeout(r, ms))]);
+}
+// a placed copy of a loaded model, scaled so its height is h (or its longest side, when long), base on the floor
+function prop(name, x, z, ry, h, y = 0, o = {}) {
+  const src = PROPG[name]; if (!src) return null;
+  const m = src.clone(true), g = place(x, z, ry, y); g.add(m);
+  const bb = new THREE.Box3().setFromObject(m), sz = bb.getSize(new THREE.Vector3()), dim = o.long ? Math.max(sz.x, sz.y, sz.z) : sz.y, s = h / Math.max(1e-4, dim);
+  m.scale.setScalar(s); const c = bb.getCenter(new THREE.Vector3()).multiplyScalar(s); m.position.set(-c.x, -bb.min.y * s, -c.z);
+  if (o.tint) m.traverse(q => { if (q.isMesh) { q.material = q.material.clone(); q.material.color.multiply(new THREE.Color(o.tint)); } });
+  if (o.col) colRect(x, z, o.col[0], o.col[1], ry);
+  if (o.ray) m.traverse(q => { if (q.isMesh) rayWorld.push(q); });
+  return g;
+}
+// a tall wall whose colliders cover its full height (plain walls stop at 3.6 m, which the loft would walk straight over)
+function twall(axis, fixed, a0, a1, ops, m, h) {
+  const n0 = colliders.length; WALLX.h = h; WALLX.m = m; wall(axis, fixed, a0, a1, ops); WALLX.h = 0; WALLX.m = null;
+  const n1 = colliders.length;
+  for (let i = n0; i < n1; i++) {
+    const c = colliders[i];
+    if (c.win != null) { colliders.push(Object.assign({}, c, { win: undefined, y0: 2.2, y1: h })); delete colliders[colliders.length - 1].win; continue; }
+    if (!('door' in c)) { c.y1 = h; continue; }
+    if (c.door != null) { colliders.push({ x0: c.x0, x1: c.x1, z0: c.z0, z1: c.z1, y0: 2.6, y1: h }); continue; }
+    const a = axis === 'x' ? (c.x0 + c.x1) / 2 : (c.z0 + c.z1) / 2, op = ops.find(q => Math.abs(q.c - a) < 0.05);
+    if (op && op.y0 >= 3) c.y1 = op.y0; else c.y1 = h;
+  }
+}
+const LOTFX = { neon: [], emer: [], t: 0, hum: 0, speakers: [], glass: [] };
+function lotMats() {
+  M.foam = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) { const g = x.createLinearGradient(i * 16, j * 16, i * 16 + 16, j * 16 + 16); g.addColorStop(0, '#3a3a3e'); g.addColorStop(0.5, '#1c1c20'); g.addColorStop(1, '#101012'); x.fillStyle = g; x.beginPath(); x.moveTo(i * 16, j * 16); x.lineTo(i * 16 + 16, j * 16); x.lineTo(i * 16 + 8, j * 16 + 8); x.fill(); x.fillStyle = '#16161a'; x.beginPath(); x.moveTo(i * 16, j * 16 + 16); x.lineTo(i * 16 + 16, j * 16 + 16); x.lineTo(i * 16 + 8, j * 16 + 8); x.fill(); x.fillStyle = '#26262a'; x.beginPath(); x.moveTo(i * 16, j * 16); x.lineTo(i * 16, j * 16 + 16); x.lineTo(i * 16 + 8, j * 16 + 8); x.fill(); }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3); t.encoding = THREE.sRGBEncoding; return new THREE.MeshStandardMaterial({ map: t, roughness: 1 }); })();
+  M.lobbyTile = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) { x.fillStyle = (i + j) % 2 ? '#1b1712' : '#c9bfa6'; x.fillRect(i * 32, j * 32, 32, 32); } for (let i = 0; i < 900; i++) { x.fillStyle = 'rgba(40,25,10,' + Math.random() * 0.25 + ')'; x.fillRect(Math.random() * 128, Math.random() * 128, 2, 2); }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; const m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.55 }); m.userData.m = 1.6; return m; })();
+  M.carpet2 = new THREE.MeshStandardMaterial({ color: 0x2a1a14, roughness: 1 });
+  M.studioWall = mat(TEX.wall, { color: 0xa89a7e }); M.studioDark = mat(TEX.wall, { color: 0x4a4036 }); M.plaster = mat(TEX.wall, { color: 0xd2c6a6 });
+  M.glass = new THREE.MeshStandardMaterial({ color: 0x8fb4c4, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide });
+  M.wallRed = mat(TEX.wall, { color: 0xa8281e }); M.wallGold = mat(TEX.wall, { color: 0xd9a51e }); M.wallGreen = mat(TEX.wall, { color: 0x2c7a36 });
+  photoTex(['conc', [M.studioWall, M.studioDark, M.plaster, M.wallRed, M.wallGold, M.wallGreen], 1.0]);
+}
+// ---------- canvas art: posters (invented artists), the lion mural, blood drawn as musical notes
+function canvasMat(draw, w = 256, h = 256, o = {}) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return new THREE.MeshStandardMaterial(Object.assign({ map: t, roughness: 0.85, transparent: !!o.alpha, depthWrite: !o.alpha, polygonOffset: !!o.alpha, polygonOffsetFactor: -2 }, o.extra || {})); }
+const GIGS = [['KING SELAH', 'live at Dead Lock Records', '#b3261e'], ['IRATION DUB', 'sound clash · bring your crew', '#2e8b3e'], ['SISTER NYAH', 'new 45 out now', '#e8b420'], ['ROOTS ARMY HI-FI', 'every Friday · Waterhouse', '#1b1410'], ['LION HEART', 'the album · on Dead Lock', '#7a2a9a'], ['BASS MOUNTAIN', 'dub session · midnight', '#235a7a']];
+function posterMat(i, torn) {
+  const [a, b, col] = GIGS[i % GIGS.length];
+  return canvasMat((x, w, h) => { x.fillStyle = '#e9dfc4'; x.fillRect(0, 0, w, h); x.fillStyle = col; x.fillRect(0, 0, w, h * 0.62);
+    for (let k = 0; k < 3; k++) { x.fillStyle = ['#b3261e', '#e8b420', '#2e8b3e'][k]; x.fillRect(0, h * 0.62 + k * 6, w, 6); }
+    x.fillStyle = '#f3e6c4'; x.globalAlpha = 0.9; x.beginPath(); x.arc(w / 2, h * 0.32, w * 0.2, 0, Math.PI * 2); x.fill(); x.globalAlpha = 1; x.fillStyle = col; x.beginPath(); x.arc(w / 2, h * 0.32, w * 0.06, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#1b1410'; x.font = 'bold ' + (w * 0.11) + 'px Impact, sans-serif'; x.textAlign = 'center'; x.fillText(a, w / 2, h * 0.79); x.font = (w * 0.055) + 'px Verdana'; x.fillText(b, w / 2, h * 0.9);
+    for (let k = 0; k < 500; k++) { x.fillStyle = 'rgba(60,40,10,' + Math.random() * 0.18 + ')'; x.fillRect(Math.random() * w, Math.random() * h, 3, 3); }
+    if (torn) { x.globalCompositeOperation = 'destination-out'; x.beginPath(); x.moveTo(w, h * 0.3); for (let k = 0; k < 9; k++) x.lineTo(w * (0.55 + Math.random() * 0.2), h * (0.3 + k * 0.09)); x.lineTo(w, h); x.fill(); }
+  }, 256, 360, { alpha: !!torn });
+}
+function poster(x, y, z, ry, i, torn, s = 1) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.62 * s, 0.87 * s), posterMat(i, torn)); m.position.set(x, y, z); m.rotation.y = ry; scene.add(m); return m; }
+function lionMural(x, y, z, ry, w = 3.2) {
+  const m = canvasMat((c, W, H) => {
+    const bands = ['#b3261e', '#e8b420', '#2e8b3e']; bands.forEach((col, i) => { c.fillStyle = col; c.fillRect(0, i * H / 3, W, H / 3); });
+    c.fillStyle = 'rgba(0,0,0,0.25)'; for (let i = 0; i < 2600; i++) c.fillRect(Math.random() * W, Math.random() * H, 2, 2);
+    // a crowned lion in silhouette, walking, holding a staff with a pennant
+    c.fillStyle = '#16110c'; c.save(); c.translate(W * 0.5, H * 0.58); c.scale(W / 512, H / 256);
+    c.beginPath(); c.ellipse(-20, 10, 95, 42, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(78, -26, 44, 0, Math.PI * 2); c.fill(); for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2; c.beginPath(); c.moveTo(78, -26); c.lineTo(78 + Math.cos(a) * 66, -26 + Math.sin(a) * 66); c.lineTo(78 + Math.cos(a + 0.22) * 50, -26 + Math.sin(a + 0.22) * 50); c.fill(); }
+    for (const lx of [-90, -50, 20, 55]) c.fillRect(lx, 30, 18, 62); c.beginPath(); c.moveTo(-112, 0); c.quadraticCurveTo(-170, -10, -160, -60); c.lineWidth = 9; c.strokeStyle = '#16110c'; c.stroke(); c.beginPath(); c.arc(-160, -64, 10, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#e8b420'; c.beginPath(); c.moveTo(52, -78); for (let k = 0; k < 5; k++) { c.lineTo(58 + k * 13, -100); c.lineTo(64 + k * 13, -78); } c.closePath(); c.fill();
+    c.strokeStyle = '#16110c'; c.lineWidth = 7; c.beginPath(); c.moveTo(110, -4); c.lineTo(132, -128); c.stroke(); c.fillStyle = '#e8b420'; c.beginPath(); c.moveTo(132, -128); c.lineTo(190, -112); c.lineTo(132, -96); c.fill(); c.restore();
+    c.fillStyle = '#16110c'; c.font = 'bold ' + (W * 0.05) + 'px Impact'; c.textAlign = 'center'; c.fillText('ONE LOVE · ONE SOUND', W / 2, H * 0.95);
+  }, 512, 256);
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 2), m); p.position.set(x, y, z); p.rotation.y = ry; scene.add(p); return p;
+}
+function bloodNotes(x, y, z, ry, s = 1.4, seed = 1) {
+  const r = rngf(seed);
+  const m = canvasMat((c, W, H) => { c.fillStyle = 'rgba(95,8,6,0.88)'; c.strokeStyle = 'rgba(95,8,6,0.88)'; c.lineWidth = 7;
+    for (let k = 0; k < 5; k++) { const nx = 30 + k * 44 + r() * 10, ny = 90 + Math.sin(k * 1.4) * 40 + r() * 20; c.beginPath(); c.ellipse(nx, ny, 15, 11, -0.4, 0, Math.PI * 2); c.fill(); c.beginPath(); c.moveTo(nx + 13, ny - 4); c.lineTo(nx + 13, ny - 62); c.stroke(); if (k % 2) { c.beginPath(); c.moveTo(nx + 13, ny - 62); c.quadraticCurveTo(nx + 38, ny - 48, nx + 30, ny - 30); c.stroke(); }
+      for (let d = 0; d < 2; d++) { const dx = nx - 8 + r() * 20; c.fillRect(dx, ny + 8, 3, 20 + r() * 60); } }
+    for (let k = 0; k < 40; k++) { c.beginPath(); c.arc(r() * W, r() * H, 1 + r() * 4, 0, Math.PI * 2); c.fill(); }
+  }, 256, 200, { alpha: true });
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(s, s * 0.78), m); p.position.set(x, y, z); p.rotation.y = ry; scene.add(p); return p;
+}
+function neonSign(x, y, z, ry, lines, col, s = 0.8) { const t = textSprite(lines, { scale: s, size: 96, size2: 44, w: 1024, h: 260, color: col, color2: '#f3e6c4', font: 'Impact, "Arial Black", sans-serif' }); t.position.set(x, y, z); scene.add(t); LOTFX.neon.push({ s: t, ph: Math.random() * 10 }); return t; }
+// ---------- studio furniture and gear
+function mixingConsole(x, z, ry) {
+  const g = place(x, z, ry), body = new THREE.MeshStandardMaterial({ color: 0x2b2b2e, roughness: 0.5, metalness: 0.4 }), led = [new THREE.Color(0.2, 2.2, 0.4), new THREE.Color(2.4, 1.6, 0.1), new THREE.Color(2.6, 0.2, 0.1)].map(c => new THREE.MeshBasicMaterial({ color: c, toneMapped: false }));
+  gb(g, 4.2, 0.8, 1.3, 0, 0.4, 0, M.woodDark); const top = gb(g, 4.3, 0.1, 1.45, 0, 0.88, 0, body); top.rotation.x = -0.18;
+  const r = rngf(7); for (let i = 0; i < 32; i++) { const cx = -2 + i * 0.13; for (let j = 0; j < 4; j++) gc(g, 0.018, 0.018, 0.03, cx, 0.95 + j * 0.035, -0.4 + j * 0.2, M.chrome, { ray: false, seg: 6, cast: false }); gb(g, 0.02, 0.02, 0.14, cx, 0.92, 0.36 + r() * 0.1, led[(r() * 3) | 0], { ray: false, cast: false }); }
+  gb(g, 4.3, 0.55, 0.12, 0, 1.25, -0.72, body); for (let i = 0; i < 12; i++) gb(g, 0.22, 0.12, 0.01, -1.8 + i * 0.33, 1.3, -0.65, led[i % 3 === 0 ? 1 : 0], { ray: false, cast: false });
+  for (const sx of [-1.6, 1.6]) { gb(g, 0.6, 0.42, 0.04, sx, 1.75, -0.6, M.black, { ray: false }); gb(g, 0.54, 0.34, 0.01, sx, 1.75, -0.575, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.5, 0.9), toneMapped: false }), { ray: false, cast: false }); gb(g, 0.04, 0.3, 0.04, sx, 1.4, -0.62, M.black, { ray: false }); }
+  for (const sx of [-2.4, 2.4]) { gb(g, 0.42, 0.62, 0.4, sx, 1.25, -0.4, M.black); gc(g, 0.13, 0.13, 0.02, sx, 1.18, -0.19, M.studioDark, { rx: Math.PI / 2, ray: false, seg: 16 }); gc(g, 0.06, 0.06, 0.02, sx, 1.42, -0.19, M.studioDark, { rx: Math.PI / 2, ray: false, seg: 12 }); }
+  colRect(x, z, 4.6, 1.5, ry); return g;
+}
+function rack(x, z, ry, n = 8) { const g = place(x, z, ry); gb(g, 0.6, 0.12 + n * 0.18, 0.6, 0, (0.12 + n * 0.18) / 2, 0, M.black); const r = rngf(Math.round(x * 31 + z)); for (let i = 0; i < n; i++) { gb(g, 0.56, 0.15, 0.02, 0, 0.18 + i * 0.18, 0.31, new THREE.MeshStandardMaterial({ color: [0x9a9a9a, 0x2a2a2a, 0x8a6a3a, 0x3a4a6a][(r() * 4) | 0], roughness: 0.4, metalness: 0.6 }), { ray: false }); for (let k = 0; k < 3; k++) gb(g, 0.02, 0.02, 0.01, -0.15 + k * 0.08, 0.18 + i * 0.18, 0.325, new THREE.MeshBasicMaterial({ color: r() < 0.5 ? new THREE.Color(2.4, 0.4, 0.1) : new THREE.Color(0.2, 2.2, 0.4), toneMapped: false }), { ray: false, cast: false }); } colRect(x, z, 0.62, 0.62, ry); return g; }
+function tapeMachine(x, z, ry) { const g = place(x, z, ry); gb(g, 0.9, 1.0, 0.7, 0, 0.5, 0, new THREE.MeshStandardMaterial({ color: 0x8a8070, roughness: 0.5, metalness: 0.3 })); gb(g, 0.9, 0.5, 0.12, 0, 1.25, -0.25, new THREE.MeshStandardMaterial({ color: 0x5a5448, roughness: 0.5 })); for (const sx of [-0.24, 0.24]) { const rl = gc(g, 0.18, 0.18, 0.02, sx, 1.32, -0.18, M.chrome, { rx: Math.PI / 2, seg: 22, ray: false }); LOTFX.speakers.push(rl); } colRect(x, z, 0.9, 0.7, ry); return g; }
+function studioMonitor(x, z, ry, y, big) { const s = big ? 2.2 : 1, g = place(x, z, ry, y); gb(g, 0.42 * s, 0.68 * s, 0.38 * s, 0, 0.34 * s, 0, M.black); gc(g, 0.15 * s, 0.15 * s, 0.03, 0, 0.24 * s, 0.19 * s, M.studioDark, { rx: Math.PI / 2, seg: 18, ray: false }); gc(g, 0.05 * s, 0.05 * s, 0.03, 0, 0.52 * s, 0.19 * s, M.studioDark, { rx: Math.PI / 2, seg: 12, ray: false }); if (big) colRect(x, z, 0.95, 0.85, ry); return g; }
+function drumKit(x, z, ry, y = 0) {
+  const g = place(x, z, ry, y), shell = new THREE.MeshStandardMaterial({ color: 0x8e1a16, roughness: 0.3, metalness: 0.3 }), head = new THREE.MeshStandardMaterial({ color: 0xe9e4d8, roughness: 0.7 }), cym = new THREE.MeshStandardMaterial({ color: 0xc9a33c, roughness: 0.25, metalness: 1 });
+  gc(g, 0.28, 0.28, 0.45, 0, 0.3, 0.25, shell, { rx: Math.PI / 2, seg: 20 }); gc(g, 0.27, 0.27, 0.01, 0, 0.3, 0.48, head, { rx: Math.PI / 2, seg: 20, ray: false });
+  for (const [dx, dz, r, h] of [[-0.45, 0.05, 0.17, 0.2], [0.42, 0.0, 0.2, 0.25], [-0.15, -0.1, 0.13, 0.18], [0.15, -0.1, 0.13, 0.18]]) { const yy = 0.6 + h / 2; gc(g, r, r, h, dx, yy, dz, shell, { seg: 18 }); gc(g, r - 0.005, r - 0.005, 0.01, dx, yy + h / 2, dz, head, { seg: 18, ray: false }); gc(g, 0.012, 0.012, yy - h / 2, dx, (yy - h / 2) / 2, dz, M.chrome, { seg: 6, ray: false }); }
+  for (const [dx, dz, yy, tilt] of [[-0.75, 0.1, 1.15, 0.25], [0.7, -0.2, 1.3, -0.2], [-0.6, -0.4, 0.95, 0.1]]) { gc(g, 0.012, 0.012, yy, dx, yy / 2, dz, M.chrome, { seg: 6, ray: false }); const c = gc(g, 0.26, 0.26, 0.01, dx, yy, dz, cym, { seg: 22, ray: false }); c.rotation.z = tilt; }
+  gc(g, 0.2, 0.22, 0.45, 0, 0.23, -0.6, M.black, { seg: 14 });
+  colRect(x, z, 1.8, 1.4, ry); return g;
+}
+function ampStack(x, z, ry, tall = 2) { const g = place(x, z, ry), tol = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.85 }), cloth = new THREE.MeshStandardMaterial({ color: 0x3a3226, roughness: 1 }); for (let i = 0; i < tall; i++) { gb(g, 0.78, 0.74, 0.38, 0, 0.37 + i * 0.76, 0, tol); gb(g, 0.68, 0.62, 0.01, 0, 0.37 + i * 0.76, 0.195, cloth, { ray: false }); } gb(g, 0.78, 0.28, 0.32, 0, 0.14 + tall * 0.76, 0, tol); for (let k = 0; k < 6; k++) gc(g, 0.018, 0.018, 0.02, -0.25 + k * 0.1, 0.18 + tall * 0.76, 0.17, M.chrome, { rx: Math.PI / 2, ray: false, seg: 8 }); colRect(x, z, 0.8, 0.42, ry); return g; }
+function micStand(x, z, ry, y = 0, tall = 1.55) { const g = place(x, z, ry, y); for (let i = 0; i < 3; i++) { const a = i / 3 * TAU, l = gb(g, 0.02, 0.02, 0.35, Math.sin(a) * 0.15, 0.04, Math.cos(a) * 0.15, M.black, { ray: false }); l.rotation.y = a; l.rotation.x = 0.2; } gc(g, 0.012, 0.012, tall, 0, tall / 2, 0, M.black, { ray: false, seg: 6 }); const boom = gb(g, 0.6, 0.016, 0.016, 0.22, tall, 0, M.black, { ray: false }); boom.rotation.z = 0.25; const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, 0.14, 10), M.chrome); mic.position.set(0.5, tall + 0.08, 0); mic.rotation.z = -1.2; g.add(mic); return g; }
+function piano(x, z, ry) { const g = place(x, z, ry), wood = new THREE.MeshStandardMaterial({ color: 0x2a140c, roughness: 0.35, metalness: 0.2 }); gb(g, 1.5, 1.3, 0.6, 0, 0.65, 0, wood); gb(g, 1.5, 0.08, 0.32, 0, 0.75, 0.42, wood); gb(g, 1.4, 0.04, 0.2, 0, 0.8, 0.45, new THREE.MeshStandardMaterial({ color: 0xe9e4d8, roughness: 0.4 }), { ray: false }); for (let i = 0; i < 20; i++) gb(g, 0.025, 0.02, 0.11, -0.65 + i * 0.07, 0.825, 0.41, M.black, { ray: false, cast: false }); gb(g, 0.9, 0.5, 0.35, 0, 0.25, 0.95, wood); colRect(x, z, 1.55, 1.3, ry); return g; }
+function gobo(x, z, ry, w = 1.4) { const g = place(x, z, ry); gb(g, w, 1.8, 0.12, 0, 1.0, 0, M.foam); gb(g, w + 0.06, 0.06, 0.14, 0, 1.92, 0, M.woodDark, { ray: false }); for (const sx of [-1, 1]) gb(g, 0.06, 0.06, 0.6, sx * (w / 2 - 0.1), 0.05, 0, M.woodDark, { ray: false }); colRect(x, z, w, 0.3, ry); return g; }
+function guitarModel(col) { const g = new THREE.Group(), body = new THREE.MeshStandardMaterial({ color: col, roughness: 0.3, metalness: 0.2 }), dark = new THREE.MeshStandardMaterial({ color: 0x1a1210, roughness: 0.6 });
+  const b1 = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.06, 18), body); b1.rotation.x = Math.PI / 2; g.add(b1); const b2 = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.06, 18), body); b2.rotation.x = Math.PI / 2; b2.position.y = 0.24; g.add(b2);
+  const nk = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.62, 0.025), dark); nk.position.y = 0.66; g.add(nk); const hd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.03), dark); hd.position.y = 1.03; g.add(hd);
+  const hole = new THREE.Mesh(new THREE.CircleGeometry(0.06, 14), new THREE.MeshBasicMaterial({ color: 0x050505 })); hole.position.set(0, 0.12, 0.032); g.add(hole); g.traverse(q => { if (q.isMesh) q.castShadow = true; }); return g; }
+function vinylShelf(x, z, ry, w = 2.4, h = 2.2) {
+  const g = place(x, z, ry); gb(g, w, h, 0.42, 0, h / 2, -0.02, M.woodDark); const r = rngf(Math.round(x * 17 + z * 5)), sleeve = [0xb3261e, 0xe8b420, 0x2e8b3e, 0x1b1410, 0xe9e4d8, 0x5a2a4a, 0x235a7a, 0x8a5a2a];
+  const rows = Math.floor(h / 0.36); for (let j = 0; j < rows; j++) { gb(g, w, 0.03, 0.4, 0, 0.05 + j * 0.36, 0.02, M.woodDark, { ray: false }); let px = -w / 2 + 0.06; while (px < w / 2 - 0.08) { if (r() < 0.15) { px += 0.12; continue; } const th = 0.012 + r() * 0.02; gb(g, th, 0.31, 0.31, px, 0.22 + j * 0.36, 0.04, new THREE.MeshStandardMaterial({ color: sleeve[(r() * sleeve.length) | 0], roughness: 0.8 }), { ray: false, cast: false }); px += th + 0.004; } }
+  colRect(x, z, w, 0.45, ry); return g;
+}
+function tapeRack(x, z, ry) { const g = place(x, z, ry); gb(g, 1.6, 1.9, 0.5, 0, 0.95, 0, M.darkSteel); const r = rngf(Math.round(x * 13 - z * 7)); for (let j = 0; j < 4; j++) for (let i = 0; i < 6; i++) { if (r() < 0.25) continue; gc(g, 0.11, 0.11, 0.04, -0.62 + i * 0.25, 0.25 + j * 0.45, 0.2, new THREE.MeshStandardMaterial({ color: r() < 0.5 ? 0x8a5a2a : 0x2a2a2a, roughness: 0.6 }), { rx: Math.PI / 2, ray: false, cast: false, seg: 14 }); } colRect(x, z, 1.6, 0.5, ry); return g; }
+function cassettes(x, z, y, n = 8) { const r = rngf(Math.round(x * 3 + z * 11)), m = [0x1b1410, 0xe9e4d8, 0xb3261e].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 })); for (let i = 0; i < n; i++) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.016, 0.064), m[(r() * 3) | 0]); c.position.set(x + (r() - 0.5) * 0.7, y + 0.01 + (i % 3) * 0.016, z + (r() - 0.5) * 0.5); c.rotation.y = r() * TAU; scene.add(c); } }
+function vinylPile(x, z, y = 0, n = 7) { const r = rngf(Math.round(x * 7 + z * 13)), blk = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.25, metalness: 0.2 }); for (let i = 0; i < n; i++) { const d = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.006, 22), blk); d.position.set(x + (r() - 0.5) * 1.2, y + 0.004 + i * 0.002, z + (r() - 0.5) * 1.0); d.rotation.set((r() - 0.5) * 0.1, 0, (r() - 0.5) * 0.1); scene.add(d); const lb = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.008, 12), new THREE.MeshStandardMaterial({ color: [0xb3261e, 0xe8b420, 0x2e8b3e][i % 3] })); lb.position.copy(d.position); scene.add(lb); } }
+function ashtray(x, z, y) { const g = place(x, z, 0, y); gc(g, 0.09, 0.07, 0.03, 0, 0.015, 0, new THREE.MeshStandardMaterial({ color: 0x8a8a80, roughness: 0.4, metalness: 0.5 }), { ray: false, seg: 14 }); const ash = new THREE.MeshStandardMaterial({ color: 0x3a3632, roughness: 1 }), paper = new THREE.MeshStandardMaterial({ color: 0xe9e4d8, roughness: 0.9 }); gc(g, 0.07, 0.07, 0.01, 0, 0.03, 0, ash, { ray: false, seg: 12 }); for (let i = 0; i < 4; i++) { const b = gc(g, 0.007, 0.004, 0.06, Math.cos(i * 1.7) * 0.04, 0.04, Math.sin(i * 1.7) * 0.04, paper, { ray: false, seg: 6, cast: false }); b.rotation.set(Math.PI / 2 - 0.3, i * 1.7, 0); } }
+function frontDesk(x, z, ry) { const g = place(x, z, ry); gb(g, 4.0, 1.05, 0.7, 0, 0.525, 0, M.woodDark); gb(g, 4.2, 0.06, 0.9, 0, 1.08, 0.05, new THREE.MeshStandardMaterial({ color: 0x1b1410, roughness: 0.3, metalness: 0.3 })); for (let i = 0; i < 3; i++) gb(g, 4.0, 0.12, 0.02, 0, 0.3 + i * 0.12, 0.36, [M.wallRed, M.wallGold, M.wallGreen][i], { ray: false }); gb(g, 0.42, 0.36, 0.06, 1.2, 1.3, -0.1, M.black, { ray: false }); colRect(x, z, 4.1, 0.8, ry); return g; }
+function vending(x, z, ry) { const g = place(x, z, ry); gb(g, 0.95, 1.95, 0.8, 0, 0.975, 0, new THREE.MeshStandardMaterial({ color: 0x9a1a14, roughness: 0.4, metalness: 0.3 })); gb(g, 0.6, 1.2, 0.02, -0.1, 1.15, 0.41, new THREE.MeshStandardMaterial({ color: 0x1c2a36, roughness: 0.05, metalness: 0.5, emissive: 0x0a2030 }), { ray: false }); const s = textSprite(['ICE COLD'], { scale: 0.08, size: 60, color: '#f3e6c4' }); s.position.set(0, 1.85, 0.42); g.add(s); colRect(x, z, 0.95, 0.8, ry); return g; }
+function container(x0, x1, z0, z1, h, col) { const m = mat(TEX.zinc, { color: col, metalness: 0.4, ns: 1.6 }); gb(scene, x1 - x0, h, z1 - z0, (x0 + x1) / 2, h / 2, (z0 + z1) / 2, m); for (let x = x0 + 0.3; x < x1; x += 0.6) for (const z of [z0 - 0.01, z1 + 0.01]) gb(scene, 0.05, h - 0.1, 0.02, x, h / 2, z, M.darkSteel, { ray: false, cast: false }); colliders.push({ x0, x1, z0, z1, y0: 0, y1: h - 0.25 }); }
+function pallets(x, z, ry, n = 1) { const g = place(x, z, ry); for (let k = 0; k < n; k++) { for (let i = 0; i < 5; i++) gb(g, 1.2, 0.03, 0.14, 0, 0.13 + k * 0.15, -0.45 + i * 0.225, M.wood, { ray: false }); for (const sz of [-0.45, 0, 0.45]) gb(g, 1.2, 0.1, 0.1, 0, 0.06 + k * 0.15, sz, M.woodDark, { ray: false }); } }
+function breakGlass(x0, x1, z0, z1, y0, y1) { const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.02, x1 - x0), y1 - y0, Math.max(0.02, z1 - z0)), M.glass); m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); m.userData.glass = true; scene.add(m); rayWorld.push(m); LOTFX.glass.push(m); return m; }
+function vines(x, y, z, ry, len = 3, n = 5) { const r = rngf(Math.round(x * 5 + z * 9)), lm = new THREE.MeshStandardMaterial({ color: 0x2f6a2a, roughness: 0.9, side: THREE.DoubleSide }); for (let i = 0; i < n; i++) { const pts = []; const ox = (r() - 0.5) * 1.6; for (let k = 0; k <= 6; k++) pts.push(new THREE.Vector3(ox + Math.sin(k * 1.3 + i) * 0.12, -k / 6 * len * (0.5 + r() * 0.5), 0.02 + k * 0.01)); const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.012, 4), lm); const g = place(x, z, ry, y); g.add(tube); for (let k = 1; k < 6; k++) { const lf = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.1), lm); lf.position.copy(pts[k]); lf.rotation.set(r(), r(), r()); g.add(lf); } } }
+function foamWall(axis, fixed, a0, a1, y0, y1, side, torn = 0.15) { const r = rngf(Math.round(fixed * 13 + a0 * 7)); for (let a = a0; a < a1 - 0.3; a += 0.62) for (let y = y0; y < y1 - 0.3; y += 0.62) { if (r() < torn) continue; const p = new THREE.Mesh(new THREE.BoxGeometry(axis === 'x' ? 0.6 : 0.06, 0.6, axis === 'x' ? 0.06 : 0.6), M.foam); p.position.set(axis === 'x' ? a + 0.3 : fixed + side * 0.04, y + 0.3, axis === 'x' ? fixed + side * 0.04 : a + 0.3); if (r() < 0.08) p.rotation.z = (r() - 0.5) * 0.6; scene.add(p); } }
+
 function buildStudio() {
-  yardTextures(); studioMats();
-  M.deckPlate = mat(TEX.metal, { color: 0x6c6f72, metalness: 0.6 }); M.sidewalk = mat(TEX.floor, { color: 0xb4ada0, ns: 0.6 }); M.curb = mat(TEX.floor, { color: 0xd8d2c4 });
-  M.deckConc = mat(TEX.wall, { color: 0xa8a49c }); photoTex(['conc', [M.sidewalk, M.curb, M.deckConc], 1.0], ['iron', [M.deckPlate], 1, { metalness: 0.35 }]);
-  // ----- ground: asphalt street and lane, stage floor, wooden wardrobe, a big car park
-  gb(scene, 24.4, 0.2, 16.4, 0, -0.1, 1, M.asphalt, { cast: false });
-  gb(scene, 24.4, 0.2, 6.4, 24, -0.1, 0, M.asphalt, { cast: false });
-  gb(scene, 26.4, 0.2, 28.4, 49, -0.1, 0, M.asphalt, { cast: false });
-  gb(scene, 16.4, 0.2, 10.4, -4, -0.1, -12, mat(TEX.floor, { color: 0x5f5d58, ns: 0.5 }), { cast: false });
-  gb(scene, 12.4, 0.2, 14.4, -18, -0.1, 1, M.floorWood, { cast: false });
-  for (let x = -8; x < 9; x += 3) gb(scene, 1.4, 0.012, 0.14, x, 0.006, 1.6, M.lineW, { ray: false, cast: false });
-  for (let x = 13; x < 35; x += 3) gb(scene, 1.4, 0.012, 0.12, x, 0.006, 0, M.lineW, { ray: false, cast: false });
-  for (let x = 48; x < 54; x += 2.6) for (const z of [-11.2]) gb(scene, 0.1, 0.012, 5.4, x, 0.006, z, M.lineW, { ray: false, cast: false });
+  yardTextures(); studioMats(); lotMats();
+  M.deckPlate = mat(TEX.metal, { color: 0x6c6f72, metalness: 0.6 }); M.deckConc = mat(TEX.wall, { color: 0xa8a49c });
+  photoTex(['conc', [M.deckConc], 1.0], ['iron', [M.deckPlate], 1, { metalness: 0.35 }]);
+  // ===== floors and roofs
+  gb(scene, 12.2, 0.2, 14.2, 6, -0.1, -1, M.lobbyTile, { cast: false });
+  gb(scene, 12.2, 0.2, 10.2, 6, -0.1, -13, M.carpet2, { cast: false });
+  gb(scene, 18.2, 0.2, 24.2, 21, -0.1, -6, M.floorWood, { cast: false });
+  gb(scene, 12.2, 0.2, 24.2, 36, -0.1, -6, mat(TEX.floor, { color: 0x6a665e }), { cast: false });
+  gb(scene, 20.4, 0.2, 28.4, 52, -0.1, -4, M.asphalt, { cast: false });
+  gb(scene, 12.4, 0.3, 24.4, 6, 6.95, -6, M.ceil, {}); gb(scene, 18.4, 0.3, 24.4, 21, 6.15, -6, M.ceil, {}); gb(scene, 12.4, 0.3, 24.4, 36, WALL_H + 0.15, -6, M.ceil, {});
+  // ===== walls (two storeys at the west end, a tall live room, single storey at the back)
+  const W = w => ({ c: w.nz !== 0 ? w.x : w.z, w: 1.75, y0: 0.95, y1: 2.15, win: w.i });
+  const winsAt = (ax, f) => WINS.filter(w => ax === 'x' ? w.z === f && w.nz !== 0 : w.x === f && w.nx !== 0).map(W);
+  twall('z', 0, -18, 6, winsAt('z', 0), M.studioWall, 6.8);
+  twall('x', 6, 0, 12, [], M.studioWall, 6.8);
+  twall('x', -18, 0, 12, winsAt('x', -18).filter(o => o.c < 12), M.studioWall, 6.8);
+  twall('x', -8, 0, 12, [{ c: 6, w: 2.2, y0: 0, y1: 2.55, door: 1 }], M.studioDark, 3.4);
+  twall('z', 12, -18, 6, [{ c: -3.0, w: 2.2, y0: 0, y1: 2.55, door: 0 }, { c: -6.6, w: 1.8, y0: 3.4, y1: 5.6 }, { c: -13, w: 6.0, y0: 1.0, y1: 2.4 }], M.studioWall, 6.8);
+  breakGlass(11.96, 12.04, -16, -10, 1.0, 2.4); LOTFX.glassCol = colliders.find(c => 'door' in c && c.door == null && Math.abs((c.z0 + c.z1) / 2 + 13) < 0.1 && c.x0 < 12.1 && c.x1 > 11.9);
+  twall('x', -18, 12, 30, winsAt('x', -18).filter(o => o.c > 12 && o.c < 30), M.studioWall, 6.0);
+  twall('x', 6, 12, 30, winsAt('x', 6).filter(o => o.c > 12 && o.c < 30), M.studioWall, 6.0);
+  twall('z', 30, -18, 6, [{ c: 0, w: 2.2, y0: 0, y1: 2.55, door: 3 }], M.studioWall, 6.0);
+  twall('x', -18, 30, 42, winsAt('x', -18).filter(o => o.c > 30 && o.c < 42), M.studioWall, 3.4);
+  twall('x', 6, 30, 42, winsAt('x', 6).filter(o => o.c > 30 && o.c < 42), M.studioWall, 3.4);
+  twall('z', 42, -18, 6, [{ c: 0, w: 3.0, y0: 0, y1: 2.8, door: 4 }], M.studioWall, 3.4);
+  twall('x', -6, 30, 34.5, [], M.studioDark, 3.4); twall('x', -6, 37.5, 42, [], M.studioDark, 3.4); gb(scene, 3.0, 0.8, WT, 36, 3.0, -6, M.studioDark);
+  // courtyard compound walls (painted block, red / gold / green bands)
+  const yardWall = (ax, f, a0, a1) => { WALLX.h = 2.8; WALLX.m = M.wallGold; wall(ax, f, a0, a1, winsAt(ax, f).filter(o => o.c > a0 && o.c < a1)); WALLX.h = 0; WALLX.m = null; };
+  yardWall('x', -18, 42, 62); yardWall('z', 62, -18, 10); yardWall('x', 10, 42, 62); yardWall('z', 42, 6, 10);
+  for (const [ax, f, a0, a1] of [['x', -18, 42, 62], ['x', 10, 42, 62], ['z', 62, -18, 10]]) for (let i = 0; i < 3; i++) { const yy = 0.2 + i * 0.25, m = [M.wallGreen, M.wallGold, M.wallRed][i]; if (ax === 'x') { gb(scene, a1 - a0, 0.24, 0.02, (a0 + a1) / 2, yy, f + (f > 0 ? -0.21 : 0.21), m, { ray: false, cast: false }); } else gb(scene, 0.02, 0.24, a1 - a0, f - 0.21, yy, (a0 + a1) / 2, m, { ray: false, cast: false }); }
+  // ===== levels: the loft (over control room and the back of the lobby), its stairs, the live-room catwalk and stairs
+  xDeck(0.4, 11.6, -17.6, -1.0, 3.4, { top: M.floorWood, span: 3.6, braces: false, rails: [{ e: 's', gap: [9.0, 11.6] }], skipPost: (x, z) => z < -7.7 || x < 1 || (x > 5.3 && x < 6.7 && z > -8.5 && z < -7.5) || (x > 10.9 && z > -4.2 && z < -1.8) });
+  xDeck(9.0, 11.6, -1.0, 5.6, 3.4, { top: M.floorWood, span: 3.2, braces: false, rails: [{ e: 'w', gap: [4.2, 5.6] }], skipPost: (x, z) => x > 11 });
+  xRamp(2.0, 9.0, 4.2, 5.6, 'x', 1, 0, 3.4, { m: M.woodDark, noRail: ['b'] });
+  xDeck(12.2, 14.0, -17.6, 5.6, 3.4, { top: M.deckPlate, span: 4, rails: [{ e: 'e', gap: [4.2, 5.6] }], skipPost: (x, z) => x < 13 });
+  xRamp(14.0, 20.0, 4.2, 5.6, 'x', -1, 0, 3.4, { m: M.deckPlate, noRail: ['b'] });
+  // courtyard: a shipping container you can climb by a stack of pallets, and a low loading dock outside the shutter
+  container(51, 57, -16.6, -14.2, 2.6, 0x8e2a1c); xDeck(51, 57, -16.6, -14.2, 2.6, { top: mat(TEX.zinc, { color: 0x8e2a1c }), rails: [{ e: 'n' }, { e: 's' }, { e: 'e' }, { e: 'w', gap: [-16.6, -15.2] }], skipPost: () => true });
+  xRamp(47.2, 51.0, -16.6, -15.2, 'x', 1, 0, 2.6, { m: M.wood });
+  xDeck(42.2, 45.6, -3.4, 3.4, 0.45, { top: M.deckConc, curb: M.studioDark });
 
-  // ===== Sound Stage 1 (shell, roof gantry, balcony) =====
-  bwall('x', -17, -12.2, 4.2, winsOn('x', -17), M.stage);
-  bwall('z', 4, -17, -7, [], M.stage);
-  bwall('z', -12, -17, -7, [], M.stage);
-  bwall('x', -7, -12.2, 4.2, [{ c: -9, w: 2.2, y0: 0, y1: 2.55, door: 0 }], M.stage);
-  gb(scene, 16.4, 0.32, 10.4, -4, WALL_H + 0.16, -12, M.ceil, {});
-  gb(scene, 6.0, 0.12, 1.75, -9.0, UP.y - 0.06, -6.1, M.deckPlate, {}); gb(scene, 2.4, 0.12, 1.75, 2.8, UP.y - 0.06, -6.1, M.deckPlate, {});
-  gb(scene, 16.4, 0.02, 10.0, -4, UP.y + 0.0, -12, mat(TEX.floor, { color: 0x6c6a64 }), { cast: false });
-  for (const x of [-11.7, -6.2, 3.7]) gc(scene, 0.07, 0.07, UP.y, x, UP.y / 2, -5.45, M.darkSteel, { seg: 8 });
-  const par = (x0, x1, z0, z1) => { gb(scene, Math.max(0.12, x1 - x0), 0.9, Math.max(0.12, z1 - z0), (x0 + x1) / 2, UP.y + 0.45, (z0 + z1) / 2, M.stage); colliders.push({ x0, x1, z0, z1, y0: 3.7, y1: 7.4 }); };
-  par(-12.2, 4.2, -17.2, -16.9); par(-12.2, -11.9, -17, -5.2); par(3.9, 4.2, -17, -5.2);
-  colliders.push({ x0: -12, x1: STAIR.x0, z0: -5.45, z1: -5.2, y0: 3.7, y1: 7.4 }); gb(scene, STAIR.x0 + 12, 0.06, 0.06, (STAIR.x0 - 12) / 2, UP.y + 1.0, -5.32, M.chrome, { ray: false });
-  for (let x = -11.8; x < STAIR.x0; x += 0.9) gb(scene, 0.04, 1.0, 0.04, x, UP.y + 0.5, -5.32, M.chrome, { ray: false });
-  colliders.push({ x0: STAIR.x1, x1: 4, z0: -5.45, z1: -5.2, y0: 3.7, y1: 7.4 }); gb(scene, 4 - STAIR.x1, 0.06, 0.06, (4 + STAIR.x1) / 2, UP.y + 1.0, -5.32, M.chrome, { ray: false });
-  colliders.push({ x0: STAIR.x0, x1: STAIR.x1, z0: STAIR.z0 - 0.12, z1: STAIR.z0, y0: 3.0, y1: 7.4 });
-  buildStairs();
-  { const sg = textSprite(['STAGE 1', 'closed set · red light means rolling'], { scale: 0.45, size: 76, size2: 30, color: '#1b1410', color2: '#b3261e', bg: '#e8b420' }); sg.position.set(-9, 2.95, -6.75); scene.add(sg); }
-  { const rl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 0.25, 0.15), toneMapped: false })); rl.position.set(-7.4, 2.7, -6.75); scene.add(rl); }
-  // giant painted stage number on the street side, and loading-door outline
-  { const n = textSprite(['1'], { scale: 2.2, size: 200, w: 220, h: 260, color: '#1b1410' }); n.position.set(1.6, 1.9, -6.78); scene.add(n); gb(scene, 3.0, 2.9, 0.04, -3.4, 1.45, -6.77, M.stageDark, { ray: false }); }
-  lamp(-4, -12, true, false); lamp(-9, -10, false, false); lamp(-9, -15, false, false);
-  // --- inside the stage: the living-room set on a riser, the green-screen cyc, camera, lights, video village
-  xDeck(-4.6, 2.4, -15.2, -11.6, 0.42, { top: mat(TEX.wood, { color: 0x7a5a3a }) });
-  PY = 0.42; sofa(-1.2, -14.4, 0, 0x5a2a2a); PY = 0;
-  { const rug = gb(scene, 3.2, 0.012, 2.0, -1.2, 0.43, -13.2, new THREE.MeshStandardMaterial({ color: 0x7a3a1a, roughness: 1 }), { ray: false, cast: false });
-    const fl = place(-4.5, -13.4, Math.PI / 2, 0.42); gb(fl, 3.6, 2.8, 0.1, 0, 1.4, 0, mat(TEX.wall, { color: 0x9a8a6a })); gb(fl, 1.0, 1.2, 0.12, 0.6, 1.6, 0, new THREE.MeshStandardMaterial({ color: 0x8ab6d6, roughness: 0.2 }), { ray: false }); colRect(-4.5, -13.4, 0.15, 3.6);
-    const lmp = place(1.8, -14.8, 0, 0.42); gc(lmp, 0.02, 0.02, 1.4, 0, 0.7, 0, M.chrome, { ray: false }); gc(lmp, 0.12, 0.22, 0.3, 0, 1.45, 0, new THREE.MeshStandardMaterial({ color: 0xe8d8a8, emissive: 0x6a5020, roughness: 0.8 }), { ray: false, open: true }); }
-  gb(scene, 0.06, 3.1, 4.6, 3.76, 1.75, -9.8, M.green, { ray: false, cast: false }); gb(scene, 1.4, 0.02, 4.6, 3.0, 0.012, -9.8, M.green, { ray: false, cast: false });
-  filmCamera(0.4, -9.4, Math.PI / 2); lightStand(2.8, -7.8, -2.6, 0, true); lightStand(-2.2, -9.0, 0.9, 0, true); lightStand(1.6, -16.3, 0.2);
-  directorChair(-6.4, -10.6, Math.PI / 2, M.canvasR, 'DIRECTOR'); directorChair(-6.4, -11.6, Math.PI / 2, M.canvasG, 'CAST');
-  { const vv = place(-7.4, -13.4, Math.PI / 2); gb(vv, 1.4, 0.06, 0.6, 0, 0.85, 0, M.darkSteel); for (const sx of [-0.4, 0.4]) { gb(vv, 0.6, 0.38, 0.06, sx, 1.1, 0, M.black, { ray: false }); gb(vv, 0.54, 0.32, 0.01, sx, 1.1, 0.035, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 0.75, 0.3), toneMapped: false }), { ray: false }); } colRect(-7.4, -13.4, 0.6, 1.4); }
-  for (let x = -11; x <= 3; x += 3.5) gb(scene, 0.25, 0.25, 9.6, x, WALL_H - 0.3, -12, M.darkSteel, { ray: false, cast: false });
-  for (let z = -16; z <= -8; z += 2.6) gb(scene, 15, 0.12, 0.12, -4, WALL_H - 0.45, z, M.chrome, { ray: false, cast: false });
-  crate(-10.6, -16.2, 0.8, 0.2); flightCase(-9.0, -16.4, 0, 1.2, 0.8); flightCase(2.8, -12.6, Math.PI / 2, 1.0, 0.6);
-  perkMachine('bulwark', -11.4, -9.6, Math.PI / 2); perkMachine('nuff', -11.4, -13.4, Math.PI / 2); perkMachine('vibes', -3.4, -16.4, 0);
-  wallBuy('kar', 1000, -11.2, -7, 0, -1); wallBuy('makarov', 500, -5.6, -7, 0, -1);
-  // --- the roof gantry: Remix Desk, two machines, the script (story journal), a billboard over the street
-  PY = UP.y;
-  buildForge();
-  perkMachine('steady', 3.4, -10.5, -Math.PI / 2); perkMachine('mule', 3.4, -14.2, -Math.PI / 2);
-  { const tb = table(-5, -14, 1.8, 1.0); const bk = new THREE.Group(); bk.position.set(-0.45, 0.84, 0.15); bk.rotation.y = 0.5; tb.add(bk); bk.add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.035, 0.3), new THREE.MeshStandardMaterial({ color: 0xe9e4d8, roughness: 0.9 })));
-    INTER.push({ t: 'journal', x: -5, z: -13.1, r: 1.35, y: UP.y }); directorChair(-5.6, -13.2, Math.PI, M.canvasY, 'WRITER'); }
-  { const tk = place(-9.5, -15.6, 0); gb(tk, 2.4, 1.4, 1.4, 0, 0.7, 0, M.stageDark); for (let i = 0; i < 5; i++) gb(tk, 2.42, 0.04, 1.42, 0, 0.2 + i * 0.25, 0, M.darkSteel, { ray: false }); colRect(-9.5, -15.6, 2.4, 1.4); }
-  { const ac = place(-1.5, -16.0, 0); gb(ac, 1.6, 0.9, 1.0, 0, 0.45, 0, M.stageDark); gc(ac, 0.36, 0.36, 0.05, 0, 0.92, 0, M.black, { ray: false }); colRect(-1.5, -16.0, 1.6, 1.0); }
-  lightStand(1.2, -16.2, 0.6); lightStand(-11.2, -10.5, -1.6); sandbags(-8.0, -7.6, 0, 3);
-  truss(-11.6, -16.5, 3.6, -16.5, 3.0); truss(-11.6, -16.5, -11.6, -7.0, 3.0);
+  // ===== LOBBY: boarded glass shopfront, reception desk, the neon sign, waiting area, gold records, plants pushing in
+  frontDesk(6.0, 2.6, Math.PI); ashtray(4.6, 2.5, 1.11); cassettes(7.2, 2.4, 1.11, 6);
+  neonSign(11.75, 4.6, -3.0, -Math.PI / 2, ['DEAD LOCK RECORDS', 'est. Kingston 1974'], '#ff3a2a', 0.95);
+  sofa(1.0, -4.6, Math.PI / 2, 0x6a2a1a); sofa(9.6, -7.3, 0, 0x2a4a2a); table(2.4, -4.6, 0.6, 1.2); ashtray(2.4, -4.6, 0.81); vinylPile(5.2, -4.6, 0, 6);
+  vending(11.4, -6.6, -Math.PI / 2 + 0.1);
+  for (let i = 0; i < 6; i++) { const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.01, 24), new THREE.MeshStandardMaterial({ color: 0xd8b04a, roughness: 0.2, metalness: 1 })); disc.rotation.x = Math.PI / 2; disc.position.set(1.4 + i * 1.6, 2.4, 5.78); scene.add(disc); const fr = gb(scene, 0.6, 0.6, 0.03, 1.4 + i * 1.6, 2.4, 5.8, M.black, { ray: false }); }
+  lionMural(0.06, 4.9, 0.2, Math.PI / 2, 4.2);
+  for (const [px, pz, i, t] of [[0.04, -0.4, 0, 1], [0.04, 4.6, 1, 0], [11.96, 1.2, 2, 1], [8.4, 5.96, 3, 0]]) poster(px, 1.55, pz, px < 1 ? Math.PI / 2 : px > 11 ? -Math.PI / 2 : Math.PI, i, t);
+  prop('palm11', 0.9, 4.0, 0.4, 1.3); prop('palm12', 11.2, 0.4, 2, 1.5); prop('n-plant_3', 0.9, -1.1, 0.2, 0.9); vines(0.25, 3.1, -4.0, Math.PI / 2, 2.4, 4); vines(0.25, 3.1, 2.5, Math.PI / 2, 2.2, 4);
+  bloodNotes(11.95, 1.6, -0.6, -Math.PI / 2, 1.3, 3);
+  lamp(6, 3.0, true, true, 3.4); lamp(4, -4.5, false, true);
+  perkMachine('revive', 11.4, 3.4, -Math.PI / 2); perkMachine('fleet', 11.4, -5.0, -Math.PI / 2);
+  wallBuy('carbine', 1600, 12, 0.9, -1, 0); wallBuy('mp40', 1000, 3.0, -8, 0, 1);
+  // ===== CONTROL ROOM: the big console looking through the glass, racks, tape machine, the Remix Desk, the speaker switch
+  mixingConsole(9.4, -13.0, -Math.PI / 2); directorChair(8.0, -13.0, -Math.PI / 2, M.canvasR, 'PRODUCER');
+  rack(0.7, -9.2, Math.PI / 2, 9); rack(0.7, -10.0, Math.PI / 2, 7); tapeMachine(4.2, -17.2, 0); tapeMachine(5.4, -17.2, 0);
+  FORGE.x = 3.4; FORGE.z = -12.6; FORGE.ry = Math.PI / 2; buildForge();
+  { const ttb = place(1.2, -9.0, 0); gb(ttb, 0.7, 0.75, 0.5, 0, 0.375, 0, M.woodDark); colRect(1.2, -9.0, 0.7, 0.5); }
+  sofa(3.0, -8.9, Math.PI, 0x3a2a24); ashtray(9.0, -14.6, 0.95); cassettes(10.4, -11.0, 0.95, 5);
+  foamWall('x', -18, 0.5, 11.5, 0.4, 3.2, 1, 0.2); foamWall('z', 0, -17.5, -8.5, 0.4, 3.2, 1, 0.25);
+  poster(11.4, 2.6, -8.08, Math.PI, 4, 0); bloodNotes(0.06, 1.4, -11.4, Math.PI / 2, 1.2, 9);
+  lamp(6, -13, true, true); lamp(2, -10, false, true);
+  INTER.push({ t: 'lure', x: 9.0, z: -15.6, r: 1.4, y: 0 }); { const sw = place(9.6, -16.1, 0); gb(sw, 0.5, 0.35, 0.12, 0, 1.2, 0, M.black, { ray: false }); gb(sw, 0.1, 0.18, 0.04, 0, 1.2, 0.07, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 0.3, 0.1), toneMapped: false }), { ray: false }); const s = textSprite(['PLAYBACK'], { scale: 0.06, size: 60, color: '#e8b420' }); s.position.set(0, 1.5, 0.08); sw.add(s); }
+  perkMachine('bulwark', 2.0, -17.3, 0); perkMachine('nuff', 11.4, -8.9, -Math.PI / 2);
+  wallBuy('kar', 1000, 0, -10.6, 1, 0); wallBuy('makarov', 500, 9.6, -8, 0, -1);
+  // ===== LIVE ROOM: drum riser, amps, piano, mic stands, baffles, the vocal booth, big speakers, a guitar on the wall
+  xDeck(17.6, 23.4, -9.0, -4.6, 0.5, { top: mat(TEX.wood, { color: 0x6a4a2a }) });
+  PY = 0.5; drumKit(20.5, -6.8, Math.PI); micStand(19.0, -5.4, 0.5); PY = 0;
+  ampStack(24.6, -5.0, -0.4, 2); ampStack(25.6, -6.4, -0.3, 1); piano(28.8, -1.5, -Math.PI / 2); micStand(16.0, -2.0, 0.8); micStand(19.5, 0.0, 2.1); micStand(22.4, -1.2, -0.5);
+  gobo(15.8, -9.6, 0.4); gobo(18.4, -12.0, -0.2, 1.8); gobo(23.0, 1.2, 1.2); gobo(16.6, 2.4, -0.4);
+  // the vocal booth: glass front, foam, one mic, a door gap
+  twall('x', -12, 25.4, 25.8, [], M.studioDark, 2.8); twall('x', -12, 27.0, 30, [], M.studioDark, 2.8); gb(scene, 1.2, 0.4, WT, 26.4, 2.6, -12, M.studioDark);
+  { const g = gb(scene, 3.0, 1.2, 0.04, 28.4, 1.6, -11.98, M.glass, { ray: false, cast: false }); }
+  twall('z', 25.4, -18, -12, [], M.studioDark, 2.8); gb(scene, 4.6, 0.12, 6.0, 27.7, 2.86, -15, M.studioDark);
+  foamWall('x', -17.95, 25.6, 29.8, 0.3, 2.6, 1, 0.3); foamWall('z', 29.95, -17.6, -12.2, 0.3, 2.6, -1, 0.25); micStand(27.6, -15.6, 0); lamp(27.7, -15, false, true, -0.6);
+  { const s = textSprite(['VOCAL BOOTH', 'quiet please'], { scale: 0.2, size: 60, size2: 30, color: '#1b1410', bg: '#e8b420' }); s.position.set(28.4, 2.55, -11.9); scene.add(s); }
+  for (const [x, z, ry] of [[13.0, -16.6, 0.5], [13.0, 4.2, 2.6]]) { studioMonitor(x + 1.2, z, ry, 0, true); LOTFX.speakers.push({ x: x + 1.2, z }); }
+  { const gw = guitarModel(0xb3261e); gw.position.set(29.92, 1.6, -9.6 + 2.4); gw.rotation.set(0, -Math.PI / 2, 0.25); scene.add(gw); LOTFX.guitar = gw; INTER.push({ t: 'guitar', x: 29.2, z: -7.2, r: 1.3, y: 0 }); }
+  { const ga = guitarModel(0x2e8b3e); ga.position.set(24.0, 0.05, 2.2); ga.rotation.set(-0.4, 0.5, 0); scene.add(ga); }
+  lionMural(21.0, 4.4, -17.94, 0, 5.0); for (let i = 0; i < 4; i++) poster(13 + i * 0.01, 1.7, -14.5 + i * 1.6, Math.PI / 2, i + 1, i % 2 === 0, 1.1);
+  bloodNotes(29.94, 1.9, -3.2, -Math.PI / 2, 1.6, 21); bloodNotes(18.2, 0.012, -2.5, 0, 1.4, 22).rotation.set(-Math.PI / 2, 0, 0.6);
+  vinylPile(19.0, -1.0, 0, 9); cassettes(25.5, 2.8, 0, 9);
+  prop('palm09', 29.2, 5.2, 2.2, 3.4); vines(29.75, 5.8, 4.0, -Math.PI / 2, 4.5, 6); prop('n-plant_5', 12.9, -0.4, 0, 1.0); prop('palm13', 15.0, -17.2, 0.3, 2.4);
+  for (const [x, z] of [[17, -12], [24, -12], [17, 0], [24, 0]]) lamp(x, z, x === 17 && z === -12, true, 2.6);
+  perkMachine('rapid', 29.4, -3.6, -Math.PI / 2); perkMachine('echo', 12.8, -0.8, Math.PI / 2);
+  wallBuy('thompson', 1200, 30, -6.6, -1, 0); wallBuy('g43', 1500, 30, -9.6 + 0.0, -1, 0); wallBuy('trench', 1500, 19.5, -18, 0, 1);
+  // ===== THE LOFT: lounge, storage, the selector's journal, two machines, a view over the lobby and down into the live room
+  PY = 3.4;
+  sofa(4.6, -4.2, Math.PI, 0x5a2a2a); sofa(7.4, -5.4, -Math.PI / 2, 0x2a3a5a); table(5.6, -2.8, 1.2, 0.7); ashtray(5.4, -2.8, 0.81); vinylPile(3.0, -2.4, 0, 6);
+  { const tb = table(8.4, -15.6, 1.8, 1.0); const bk = new THREE.Group(); bk.position.set(-0.45, 0.84, 0.15); bk.rotation.y = 0.5; tb.add(bk); bk.add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.035, 0.3), new THREE.MeshStandardMaterial({ color: 0xe9e4d8, roughness: 0.9 })));
+    INTER.push({ t: 'journal', x: 8.4, z: -14.7, r: 1.35, y: 3.4 }); }
+  vinylShelf(1.0, -12.0, Math.PI / 2, 3.0, 2.2); tapeRack(1.0, -15.6, Math.PI / 2); crate(3.2, -16.8, 0.8, 0.3); crate(4.0, -16.7, 0.6, -0.2); flightCase(10.4, -11.0, 0.2, 1.2, 0.8);
+  perkMachine('steady', 6.0, -17.3, 0); perkMachine('mule', 0.9, -8.6, Math.PI / 2); perkMachine('vibes', 11.2, -9.6, -Math.PI / 2);
   PY = 0;
-  billboard(-4.5, -16.9, 0, UP.y + 0.1, ['DEAD LOCKS', 'in cinemas · bring a crew']);
-
-  // ===== Wardrobe =====
-  bwall('z', -24, -6.2, 8.2, winsOn('z', -24), M.paintPink);
-  bwall('x', -6, -24, -12, winsOn('x', -6), M.paintPink);
-  bwall('x', 8, -24, -12, [], M.paintPink);
-  bwall('z', -12, -6, 8, [{ c: 2, w: 2.2, y0: 0, y1: 2.55, door: 1 }], M.paintPink);
-  gb(scene, 12.4, 0.32, 14.4, -18, WALL_H + 0.16, 1, M.ceil, {});
-  { const sg = textSprite(['WARDROBE', 'costume · hair · make-up'], { scale: 0.4, size: 64, size2: 30, color: '#e8b420', color2: '#f3e6c4', bg: '#1b1410' }); sg.position.set(-11.75, 2.95, 5.2); scene.add(sg); }
-  lamp(-18, 1, true, true); lamp(-18, -3.5, false, false); lamp(-18, 5.5, false, false);
-  wardrobeRack(-19.5, 4.6, 0); wardrobeRack(-19.5, -1.4, Math.PI); wardrobeRack(-16.5, -2.6, Math.PI / 2);
-  mannequin(-15.2, 0.6, Math.PI / 2, M.canvasR); mannequin(-15.2, 2.6, Math.PI / 2, M.canvasG); mannequin(-22.6, 2.0, Math.PI / 2, M.canvasY);
-  makeupStation(-21.2, 7.4, Math.PI);
-  { const st = table(-15.0, 5.0, 1.6, 0.8); for (let i = 0; i < 4; i++) { const hb = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.22, 14), new THREE.MeshStandardMaterial({ color: [0xb3261e, 0xe8b420, 0x2e8b3e, 0xe9e4d8][i], roughness: 0.8 })); hb.position.set(-0.55 + i * 0.37, 0.92, 0); st.add(hb); } }
-  crate(-21.5, -5.4, 0.8, 0.3);
-  BOX.x = -16; BOX.z = -5.25; BOX.ry = 0; buildBox();
-  perkMachine('swift', -23.4, -4.6, Math.PI / 2); perkMachine('slap', -14.2, 7.4, Math.PI);
-  wallBuy('thompson', 1200, -17.2, 8, 0, -1); wallBuy('trench', 1500, -13.4, -6, 0, 1);
+  { const sk = gb(scene, 3.0, 0.05, 3.0, 4.0, 6.82, 1.6, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.2, 0.9), toneMapped: false }), { ray: false, cast: false }); }
+  lamp(6, -12, true, true, 3.4); lamp(5, -4.6, false, true, 3.4);
+  // ===== TAPE ARCHIVE + back hallway: shelves of vinyl and tape, crates, the mystery crate, the vault wall
+  for (const z of [-15.6, -12.4, -9.2]) { vinylShelf(33.2, z, 0, 3.2, 2.2); }
+  tapeRack(39.2, -9.4, 0); tapeRack(39.2, -12.4, Math.PI); tapeRack(39.8, -16.8, 0);
+  for (let i = 0; i < 6; i++) crate(31.0 + (i % 3) * 0.9, -7.2 + Math.floor(i / 3) * 0.0, 0.8, i * 0.3, (i >= 3 ? 0.8 : 0));
+  cassettes(35.6, -10.8, 0, 14); vinylPile(36.0, -14.0, 0, 10); flightCase(31.0, -17.0, 0, 1.4, 1.0);
+  { const sh = place(31.2, -16.6, 0); gb(sh, 1.2, 1.2, 0.5, 0, 0.6, 0, M.darkSteel); colRect(31.2, -16.6, 1.2, 0.5); }
+  BOX.x = 35.4; BOX.z = -17.25; BOX.ry = 0; buildBox();
   buildVault();
-
-  // ===== Backlot Street (start): sidewalks, a scaffold tower to climb, a period street mid-shoot =====
-  fence('x', 9, -12, 12, winsOn('x', 9));
-  fence('z', 12, -7, 9, winsOn('z', 12).concat([{ c: 0, w: 2.6, y0: 0, y1: 2.4, door: 3 }]));
-  fence('x', -7, 4.2, 12, []);
-  fence('z', -12, 8.2, 9, []); fence('z', -12, -7, -6.2, []);
-  xDeck(-11.8, 11.8, 7.3, 8.85, 0.16, { top: M.sidewalk, curb: M.curb });
-  xDeck(-11.8, -6.4, -5.25, -4.1, 0.16, { top: M.sidewalk, curb: M.curb }); xDeck(1.8, 8.6, -5.25, -4.1, 0.16, { top: M.sidewalk, curb: M.curb });
-  // the scaffold tower: climb the steps by the gate, look down over the whole street
-  xRamp(9.0, 10.3, -1.8, 3.6, 'z', 1, 0, 2.7, { m: M.deckPlate });
-  xDeck(4.6, 10.4, 3.6, 8.7, 2.7, { span: 2.9, rails: [{ e: 'n', gap: [9.0, 10.3] }, { e: 's' }, { e: 'e' }, { e: 'w' }] });
-  scaffoldDress(4.6, 10.4, 3.6, 8.7, 2.7, ['QUIET ON SET', 'Dead Locks · scene 47 · take 3']);
-  PY = 2.7; lightStand(5.4, 4.3, 0.7, 0, true); filmCamera(7.4, 7.6, Math.PI * 0.85); flightCase(9.4, 8.0, 0, 1.0, 0.6); sandbags(5.6, 8.1, 0, 3); PY = 0;
-  perkMachine('revive', -11.4, -3.2, Math.PI / 2); perkMachine('fleet', -11.4, 5.9, Math.PI / 2);
-  wallBuy('carbine', 1600, 0, 9, 0, -1); wallBuy('mp40', 1000, 8, -7, 0, 1);
-  buildBench(11.3, -2.4);
-  setFacade(-8.5, 11.4, 0, 6.5, 6.2, 0x9a5a3a, 'DINER', 'open 24 hours'); setFacade(0.5, 11.6, 0, 7, 7.0, 0x51708a, 'GRAND HOTEL', 'rooms · bar · dancing');
-  setFacade(9.2, 11.4, 0, 6, 5.6, 0xc9a24a, 'SAVINGS BANK', 'est. 1962');
-  // the shot: dolly track, camera on the dolly, a jib crane, lights, chairs, the video-village tent
-  for (const z of [-2.35, -1.65]) gb(scene, 9, 0.05, 0.06, -1.5, 0.03, z, M.chrome, { ray: false, cast: false });
-  for (let x = -5.8; x <= 2.8; x += 0.6) gb(scene, 0.1, 0.04, 0.95, x, 0.02, -2, M.woodDark, { ray: false, cast: false });
-  { const dl = place(-0.5, -2, 0); gb(dl, 1.0, 0.25, 0.9, 0, 0.3, 0, M.darkSteel); gc(dl, 0.12, 0.14, 0.6, 0, 0.7, 0, M.darkSteel, { seg: 10 }); colRect(-0.5, -2, 1.0, 0.9); }
-  filmCamera(-0.5, -2, Math.PI / 2, 0.6);
-  jibCrane(-6.4, 1.6, -0.4);
-  lightStand(-8.6, -3.2, 0.8, 0, true); lightStand(6.6, -3.0, 0.4); lightStand(2.6, 6.2, -2.8, 0, true);
-  canopy(-6.5, 5.6, 0, 3.2, 2.4, 0xe9e4d8, 'VIDEO VILLAGE'); table(-6.5, 5.4, 1.6, 0.7);
-  directorChair(-7.4, 4.5, Math.PI + 0.3, M.canvasR, 'DIRECTOR'); directorChair(-5.6, 4.5, Math.PI - 0.3, M.canvasY, '');
-  classicCar(3.8, -0.4, 0.05, 0x2a6a8a); phoneBooth(-2.0, 8.0, Math.PI); hydrant(6.0, 7.9); mailbox(-10.6, 8.0, Math.PI); newsBox(1.4, 8.1, Math.PI, 0xb3261e); newsBox(2.0, 8.1, Math.PI, 0x235a2e);
-  streetSign(-11.2, -4.6, 'MAIN ST', 'STUDIO AVE'); streetSign(8.2, 8.0, '5TH AVE');
-  crate(-9.8, 7.95, 0.5, 0.2, 0.16); cone(10.6, 1.8); cone(10.6, -1.6); cone(-4.2, -4.6);
-  { const cb = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.03, 6, 24), M.black); cb.rotation.x = Math.PI / 2; cb.position.set(7.4, 0.03, 2.4); scene.add(cb); }
-  streetLamp(-3.5, 7.6, false, 0.16); streetLamp(4.0, -4.6, false, 0.16);
-
-  // ===== Trailer Row =====
-  fence('x', -3, 12, 36, winsOn('x', -3)); fence('x', 3, 12, 36, winsOn('x', 3));
-  perkMachine('rapid', 20, 2.45, Math.PI); perkMachine('echo', 28, -2.45, 0);
-  wallBuy('g43', 1500, 22.5, -3, 0, 1); wallBuy('luger', 750, 14.6, 3, 0, -1);
-  trailer(25, -5.6, 0, 'STAR'); trailer(30.2, 5.6, Math.PI, 'MAKE-UP', 0xd8d0e8);
-  { const gt = place(35.6, -8.6, 0); gb(gt, 3.4, 1.6, 1.8, 0, 1.0, 0, new THREE.MeshStandardMaterial({ color: 0xe8b420, roughness: 0.5 })); gc(gt, 0.08, 0.08, 0.8, 1.2, 2.2, 0.4, M.darkSteel, { ray: false }); YARDFX.smoke.push([36.8, 2.7, -8.2]); const s = textSprite(['GENNY'], { scale: 0.12, size: 64, color: '#1b1410' }); s.position.set(0, 1.4, 0.92); gt.add(s); }
-  golfCart(16.6, -1.4, 0.1); flightCase(27.8, 2.3, 0.1, 1.2, 0.8); flightCase(27.8, 2.3, 0.1, 1.0, 0.6, 0.8); flightCase(31.2, -2.3, 0, 1.2, 0.7);
-  { const cc = place(32.8, 2.3, Math.PI); gb(cc, 1.6, 1.0, 0.8, 0, 0.6, 0, M.canvasR); gb(cc, 1.8, 0.05, 1.0, 0, 1.12, 0, M.woodDark); gc(cc, 0.03, 0.03, 1.4, -0.7, 1.8, 0, M.chrome, { ray: false }); const um = new THREE.Mesh(new THREE.ConeGeometry(1.1, 0.4, 8, 1, true), M.canvasY); um.position.set(-0.7, 2.55, 0); cc.add(um); colRect(32.8, 2.3, 1.6, 0.9); }
-  crate(14.2, -2.4, 0.7, 0.3); cone(34.6, 1.0); cone(34.0, -2.3); sandbags(22.4, 2.4, 0, 2);
-  bulbString([12, 2.9, -2.9], [36, 2.9, 2.9], 0.4); bulbString([12, 2.9, 2.9], [36, 2.9, -2.9], 0.4);
-
-  // ===== the Car Park: a two-level parking deck, the red carpet, the premiere stage (Deadlock's arena) =====
-  fence('z', 36, -14, -3, []); fence('z', 36, 3, 14, []);
-  colliders.push({ x0: 35.8, x1: 36.2, z0: -3, z1: 3, door: 4 });
-  fence('x', -14, 36, 62, winsOn('x', -14)); fence('x', 14, 36, 62, winsOn('x', 14)); fence('z', 62, -14, 14, winsOn('z', 62));
-  // parking deck (level 2) over the south bays, reached by a ramp of steps from the red carpet side
-  xRamp(46.5, 52.6, 5.2, 6.9, 'x', -1, 0, 3.1, { m: M.deckConc });
-  xDeck(38.2, 46.5, 5.2, 13.8, 3.1, { top: M.deckConc, pillar: M.deckConc, span: 4.1, grid: true, rails: [{ e: 'n' }, { e: 'e', gap: [5.2, 6.9] }, { e: 'w' }], skipPost: (x, z) => x > 46 && (z < 7.2 || z > 13) });
-  gb(scene, 8.3, 0.012, 0.12, 42.35, 3.11, 9.5, M.lineW, { ray: false, cast: false });
-  { const s = textSprite(['LEVEL 2', 'crew parking'], { scale: 0.34, size: 70, size2: 30, color: '#1b1410', color2: '#1b1410', bg: '#e8b420' }); s.position.set(46.45, 2.6, 9.5); s.material.rotation = 0; scene.add(s); }
-  van(41.8, 9.6, Math.PI / 2 + 0.05); classicCar(44.6, 11.0, Math.PI / 2, 0x8a1a16);
-  PY = 3.1; classicCar(41.0, 11.2, Math.PI / 2, 0xe8b420); sandbags(45.6, 12.6, Math.PI / 2, 3); lightStand(39.2, 6.0, 2.4, 0, true); flightCase(39.6, 12.9, 0, 1.2, 0.7); PY = 0;
-  perkMachine('dropbass', 40.2, 13.4, Math.PI);
-  PY = 3.1; perkMachine('blast', 39.0, 13.2, Math.PI); PY = 0;
-  // red carpet (a low step-up), stanchions, the step-and-repeat and the photographers' riser
-  xDeck(46.0, 55.0, -1.25, 1.25, 0.1, { top: M.carpet });
-  for (const x of [46.5, 49, 51.5, 54]) for (const z of [-1.45, 1.45]) { gc(scene, 0.04, 0.05, 1.0, x, 0.5, z, M.chrome, { ray: false, seg: 8 }); const k = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), M.chrome); k.position.set(x, 1.02, z); scene.add(k); }
-  for (const z of [-1.45, 1.45]) for (const x of [47.75, 50.25, 52.75]) gc(scene, 0.025, 0.025, 2.5, x, 0.82, z, M.carpet, { rz: Math.PI / 2, ray: false, seg: 6, cast: false });
-  stepRepeat(50.5, -3.4, 0, 6.5, 2.6);
-  xDeck(47.0, 53.5, 2.4, 3.9, 0.45, { top: M.deckPlate });
-  PY = 0.45; for (const x of [48.2, 50.4, 52.6]) lightStand(x, 3.2, Math.PI + 0.2); PY = 0;
-  // the premiere stage: the big sound system under a truss with a banner, flanked by speaker stacks
-  buildSoundSystem(58, 0, -Math.PI / 2); colRect(58, 0, 3.4, 1.6, -Math.PI / 2);
-  genLight = new THREE.PointLight(0xffa030, 1.2, 16, 2); genLight.position.set(55, 3.2, 0); scene.add(genLight);
-  speakerStack(58.6, -4.8, -Math.PI / 2, 0.8); speakerStack(58.6, 4.8, -Math.PI / 2, 0.8);
-  truss(55.5, -6.5, 55.5, 6.5, 5.6); for (const z of [-6.5, 6.5]) gc(scene, 0.12, 0.12, 5.6, 55.5, 2.8, z, M.chrome, { seg: 8 });
-  { const ban = textSprite(['DEAD LOCKS', 'world premiere · tonight'], { scale: 0.75, size: 84, size2: 36, w: 1024, h: 220, color: '#e8b420', color2: '#f3e6c4', bg: '#1b1410' }); ban.position.set(56.0, 4.6, 0); scene.add(ban); }
-  for (const z of [-7.5, -5.2]) crowdBarrier(53.5, z, Math.PI / 2); crowdBarrier(55.6, 8.6, 0);
-  crate(59.4, 12.4, 0.9, 0.2);
-  // catering truck with its hatch up, tables, and a light tower
-  { van(44.5, -9.6, Math.PI); const aw = gb(scene, 4.2, 0.06, 1.6, 44.5, 2.55, -8.0, M.canvasY, { ray: false }); aw.rotation.x = 0.25;
-    const s = textSprite(['CRAFT SERVICES', 'coffee · patties · jerk'], { scale: 0.32, size: 60, size2: 28, color: '#1b1410', color2: '#b3261e', bg: '#e8b420' }); s.position.set(44.5, 2.9, -8.5); scene.add(s);
-    table(42.4, -6.4, 1.2, 0.8); table(46.6, -6.4, 1.2, 0.8); plasticChair(42.4, -5.6, Math.PI); plasticChair(46.6, -5.6, Math.PI); }
-  classicCar(51.2, -11.2, Math.PI / 2, 0x1d1d1f); van(57.4, -11.0, Math.PI / 2);
-  lightTower(39.4, -2.6); lightTower(60.2, 9.6);
-  { const bk = place(36.9, -6.2, 0); gb(bk, 1.6, 2.3, 1.6, 0, 1.15, 0, new THREE.MeshStandardMaterial({ color: 0xe9e4d8, roughness: 0.5 })); gb(bk, 1.62, 0.6, 1.4, 0, 1.5, 0.12, new THREE.MeshStandardMaterial({ color: 0x1c2a36, roughness: 0.05, metalness: 0.6 }), { ray: false }); const s = textSprite(['SECURITY'], { scale: 0.11, size: 64, color: '#f3e6c4', bg: '#b3261e' }); s.position.set(0, 2.15, 0.82); bk.add(s); colRect(36.9, -6.2, 1.6, 1.6); }
-  wallBuy('aks', 2200, 48.5, -14, 0, 1); wallBuy('stg', 2000, 51.5, 14, 0, -1); wallBuy('ppsh', 1800, 62, -11, -1, 0);
-  cone(38.8, -1.0); cone(38.8, 1.0); cone(41.6, 0);
-  // ----- radios for the song easter egg
+  bloodNotes(41.94, 1.5, -8.4, -Math.PI / 2, 1.3, 31); poster(30.05, 1.6, -8.0, Math.PI / 2, 5, 1);
+  lamp(36, -12, true, true); lamp(36, 0, false, true);
+  prop('molotov', 31.9, -7.2, 0.2, 0.32, 1.6); prop('molotov', 32.2, -7.1, 1.4, 0.32, 1.6);
+  // hallway to the dock
+  gb(scene, 0.06, 1.0, 5.8, 41.7, 1.2, 3.0, M.studioDark, { ray: false }); buildBench(41.3, 4.0);
+  for (let i = 0; i < 4; i++) poster(41.96, 1.6, -4.6 + i * 0.9, -Math.PI / 2, i + 2, i === 1);
+  perkMachine('swift', 41.4, -8.0, -Math.PI / 2); perkMachine('slap', 30.6, -14.0, Math.PI / 2);
+  wallBuy('luger', 750, 30, 3.4, 1, 0); wallBuy('aks', 2200, 42, -16.0, -1, 0);
+  // ===== LOADING DOCK courtyard: overgrown, the crashed tour van, the yard session sound system (story finale + Deadlock)
+  buildSoundSystem(55, -1, -Math.PI / 2); colRect(55, -1, 3.4, 1.6, -Math.PI / 2);
+  genLight = new THREE.PointLight(0xffa030, 1.4, 16, 2); genLight.position.set(52, 3.2, -1); scene.add(genLight);
+  speakerStack(55.6, -5.8, -Math.PI / 2, 0.8); speakerStack(55.6, 3.8, -Math.PI / 2, 0.8);
+  { const g = place(49.6, 5.6, 0.55); g.rotation.z = 0.04; scene.remove(g); van(49.6, 5.6, 0.55); prop('palm03', 52.6, 7.4, -2.4, 4.2); }
+  pallets(46.2, -8.6, 0.3, 3); pallets(46.4, -10.2, -0.2, 2); barrel(44.0, 8.4); barrel(44.8, 8.6, 0.6); crate(60.4, -16.6, 0.9, 0.2);
+  { const gt = place(60.2, 8.2, 0); gb(gt, 2.6, 1.4, 1.4, 0, 0.9, 0, new THREE.MeshStandardMaterial({ color: 0xe8b420, roughness: 0.5 })); gc(gt, 0.08, 0.08, 0.8, 0.9, 1.9, 0.3, M.darkSteel, { ray: false }); YARDFX.smoke.push([61.1, 2.4, 8.5]); colRect(60.2, 8.2, 2.6, 1.4); }
+  prop('n-palmtree_1', 44.2, -15.6, 0.3, 5.6); prop('n-palmtree_3', 60.6, -12.2, 2.0, 6.2); prop('palm01', 60.0, 1.4, 1.2, 5.2); prop('palm08', 43.6, 7.6, 0.4, 3.6); prop('palm10', 59.8, -4.8, 0, 3.2);
+  for (const [x, z, n] of [[46.4, 2.6, 'n-bush_1'], [58.6, 6.8, 'n-bushberries_1'], [43.2, -11.4, 'n-plant_4'], [61.0, -16.4, 'n-plant_1'], [48.6, 8.8, 'n-flowers'], [53.4, 8.8, 'n-plant_5'], [57.6, -16.8, 'n-woodlog_moss'], [44.2, -6.2, 'n-treestump_moss'], [61.2, -1.8, 'n-rock_moss_1']]) prop(n, x, z, (x * 7) % TAU, n.includes('palm') ? 4 : n.includes('log') ? 0.6 : 1.0);
+  { const r = rngf(551); for (let i = 0; i < 40; i++) { const x = 43 + r() * 18.5, z = -17.4 + r() * 27; if (Math.hypot(x - 55, z + 1) < 4.5 || (x > 50.5 && x < 57.5 && z < -13.8)) continue; prop(r() < 0.5 ? 'n-grass' : 'n-grass_2', x, z, r() * TAU, 0.45 + r() * 0.5); } }
+  vines(42.25, 3.2, 4.8, Math.PI / 2, 2.6, 6); vines(61.75, 2.6, -2.0, -Math.PI / 2, 2.2, 5);
+  bloodNotes(52.0, 1.4, -17.75, 0, 1.6, 41); lionMural(61.78, 1.5, 6.4, -Math.PI / 2, 3.0);
+  for (const [x, z, f] of [[46, -16.6, 1], [58, 9.6, 0]]) streetLamp(x, z, false, 0, 4.0);
+  perkMachine('blast', 43.4, -17.3, 0); perkMachine('dropbass', 61.3, 6.4, -Math.PI / 2);
+  wallBuy('stg', 2000, 62, -13.0, -1, 0); wallBuy('ppsh', 1800, 56, 10, 0, -1);
+  PY = 2.6; sandbags(53.2, -15.4, 0, 3); PY = 0;
+  { const s = textSprite(['DEAD LOCK SOUND', 'yard session · tonight'], { scale: 0.62, size: 76, size2: 34, w: 1024, h: 220, color: '#e8b420', color2: '#ff3a2a', bg: '#1b1410' }); s.position.set(55.4, 4.2, -1); scene.add(s); }
+  // ----- radios, the street outside and the city around
   for (let i = 0; i < 3; i++) { const [x, z, y, ry] = MD.radios[i]; buildRadio(i, x, z, y, ry); }
-  // ----- the lot around: giant sound stages, two water towers, palms, the hills with the letters
-  stageBuilding(-6, -36, 30, 18, 13, 3); stageBuilding(28, -38, 26, 18, 14, 4); stageBuilding(58, -36, 22, 16, 12, 5);
-  stageBuilding(-2, 36, 26, 16, 12, 6); stageBuilding(30, 38, 24, 16, 13, 7); stageBuilding(64, 34, 20, 16, 11, 8);
-  waterTower(-34, -24, 'DEAD LOCKS'); waterTower(84, 20, 'DL');
-  const tr = rngf(4242);
-  for (let i = 0; i < 26; i++) { let x, z; do { x = -55 + tr() * 150; z = -55 + tr() * 110; } while (x > -30 && x < 72 && z > -27 && z < 26); yTree(x, z, 7 + tr() * 6); }
-  { const hm = new THREE.MeshStandardMaterial({ color: 0x8a9a6a, roughness: 1 }); for (let i = 0; i < 11; i++) { const a = -1.5 + i * 0.3, hl = new THREE.Mesh(new THREE.SphereGeometry(42 + (i % 3) * 14, 18, 10, 0, TAU, 0, Math.PI / 2), hm); hl.position.set(14 + Math.sin(a) * 140, -6, -Math.cos(a) * 140); hl.scale.y = 0.5; scene.add(hl); } }
-  hillLetters('DEAD LOCKS', 14, 0, 118, 18);
+  gb(scene, 30, 0.12, 60, -15, -0.06, -6, M.asphalt, { cast: false, ray: false });
+  { const tr = rngf(888); for (let i = 0; i < 16; i++) { const x = -40 + i * 7 + tr() * 3, z = tr() < 0.5 ? -30 - tr() * 8 : 20 + tr() * 8, w = 6 + tr() * 4, h = 3 + tr() * 5; gb(scene, w, h, 6, x, h / 2, z, [M.paintTeal, M.paintYellow, M.paintPink, M.paintGreen][i % 4], { ray: false }); }
+    for (let i = 0; i < 14; i++) { let x, z; do { x = -40 + tr() * 120; z = -45 + tr() * 80; } while (x > -6 && x < 66 && z > -24 && z < 14); prop(tr() < 0.5 ? 'n-palmtree_1' : 'palm02', x, z, tr() * TAU, 5 + tr() * 4); } }
+  for (const [x, z] of [[-6, -9], [-6, 3]]) streetLamp(x, z, false, 0, 4.4);
+  classicCar(-5.4, -14.0, Math.PI / 2, 0x2a6a8a); van(-5.6, 9.6, Math.PI / 2);
+  // emergency strip lights (red, flickering) along the corridors
+  for (const [x, y, z] of [[11.6, 2.9, -7.4], [29.6, 2.6, -11], [36, 3.2, 5.6], [41.6, 3.1, -3]]) { const l = new THREE.PointLight(0xff2a14, 0.9, 7, 2); l.position.set(x, y, z); scene.add(l); const b = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 0.3, 0.2), toneMapped: false })); b.position.set(x, y + 0.08, z); scene.add(b); LOTFX.emer.push({ l, b, ph: Math.random() * 10 }); }
   // boarded gaps (the zombies' way in)
   const boardGeo = worldUV(new THREE.BoxGeometry(1.95, 0.17, 0.045), 1.2);
   for (const w of WINS) {
@@ -1852,9 +2001,22 @@ function buildStudio() {
     const r = rngf(w.i * 31 + 5);
     for (let k = 0; k < 6; k++) { const b = new THREE.Mesh(boardGeo, M.wood); b.position.set(w.x + w.nx * 0.26, 1.06 + k * 0.19, w.z + w.nz * 0.26); b.rotation.set(0, ry, (r() - 0.5) * 0.4); b.castShadow = true; b.receiveShadow = true; scene.add(b); b.userData.rest = { p: b.position.clone(), r: b.rotation.clone() }; w.boards.push(b); }
   }
-  clampUnderDecks();
   DOORS.forEach((d, i) => buildDoor(i));
+  clampUnderDecks();
   finishBulbs();
+}
+// neon flicker, emergency strobes, humming speakers
+function lotUpdate(dt) {
+  LOTFX.t += dt;
+  for (const n of LOTFX.neon) { const f = Math.sin(LOTFX.t * 7 + n.ph) > 0.97 || Math.random() < 0.01 ? 0.25 : 1; n.s.material.opacity = f; }
+  for (const e of LOTFX.emer) { const on = Math.sin(LOTFX.t * 2.2 + e.ph) > -0.2 && Math.random() > 0.02; e.l.intensity = on ? 0.9 : 0.05; e.b.visible = on; }
+  for (const s of LOTFX.speakers) if (s.rotation) s.rotation.y += dt * 2;
+  LOTFX.hum -= dt;
+  if (LOTFX.hum <= 0 && A.ctx && APP.screen === 'play') {
+    LOTFX.hum = 5 + Math.random() * 6;
+    for (const s of LOTFX.speakers) { if (s.rotation) continue; const d = Math.hypot(s.x - P.x, s.z - P.z); if (d > 16) continue; const t = A.ctx.currentTime, b = bus({ x: s.x, y: 1.4, z: s.z }, 0.5, 0.5); nz(b, t, 1.6, 'bandpass', 2400, 0.8, 0.05, 0.001); for (let k = 0; k < 4; k++) osc(b, t + k * 0.42, 0.34, 'sine', 55, 48, 0.22, 0.02); }
+  }
+  if (LOTFX.guitar) LOTFX.guitar.visible = !P.guitar;
 }
 
 function yardDecor() {
@@ -2323,6 +2485,7 @@ function storyStep() { return (V.story && V.story[0]) | 0; }
 function storyAct(act, peer) {
   // host only
   const st = G.st;
+  if (LOT && act === 'lu') { if (G.lureCd > 0 || G.phase !== 'play') return; G.lure = { x: 21, z: -6, y: 0, t: 12, lure: 1 }; G.lureCd = 45; for (const q of sim) if (q.dorm && Math.hypot(q.x - 21, q.z + 6) < 16) q.dorm = 0; pushEv(['lu', 1]); return; }
   if (YARD && /^h[0-3]$/.test(act)) { const e = G.ee, i = +act[1]; if (e.step === 0 && !(e.horns >> i & 1)) { e.horns |= 1 << i; let n = 0; for (let b = 0; b < 4; b++) n += e.horns >> b & 1; pushEv(['eh', i, peer, n]); if (n >= 4) { e.step = 1; pushEv(['ee', 1]); } } return; }
   if (YARD && act === 'v') { const e = G.ee; if (e.step === 1 && G.phase === 'play') { e.step = 2; e.t = 90; e.k = 0; e.need = 24; G.toSpawn += 24; G.spawnT = Math.min(G.spawnT, 0.5); pushEv(['ee', 2, peer]); } return; }
   if (/^r[0-2]$/.test(act)) { const i = +act[1]; if (!((G.radios | 0) >> i & 1)) { G.radios = (G.radios | 0) | (1 << i); let n = 0; for (let b = 0; b < 3; b++) n += G.radios >> b & 1; pushEv(['ra', i, peer, n]); } return; }
@@ -2562,7 +2725,7 @@ function buildUpper() {
   PY = 0;
 }
 function buildMap() {
-  if (YLIKE) { if (LOT) buildStudio(); else buildYard(); PARTY.lights = lamps.map(L => L.sp); buildDust(); buildContactAO(); const gg = new THREE.PlaneGeometry(260, 260, 1, 1); const uv = gg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 52, uv.getY(i) * 52); const ground = new THREE.Mesh(gg, M.ground); ground.rotation.x = -Math.PI / 2; ground.position.set(15, -0.02, 0); ground.receiveShadow = true; scene.add(ground); rayWorld.push(ground); scene.fog.density = LOT ? 0.0065 : 0.03; buildWorldCommon(); return; }
+  if (YLIKE) { if (LOT) buildStudio(); else buildYard(); PARTY.lights = lamps.map(L => L.sp); buildDust(); buildContactAO(); const gg = new THREE.PlaneGeometry(260, 260, 1, 1); const uv = gg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 52, uv.getY(i) * 52); const ground = new THREE.Mesh(gg, M.ground); ground.rotation.x = -Math.PI / 2; ground.position.set(15, -0.02, 0); ground.receiveShadow = true; scene.add(ground); rayWorld.push(ground); scene.fog.density = LOT ? 0.016 : 0.03; buildWorldCommon(); return; }
   gb(scene, 67.8, 0.2, 12.8, 16.6, -0.1, 0, M.floor, { cast: false });
   gb(scene, 14.4, 0.3, 12.8, 43.2, WALL_H + 0.15, 0, M.ceil, {}); gb(scene, 9.4, 0.3, 12.8, -12.7, WALL_H + 0.15, 0, M.ceil, {});
   // ceiling (with a stairwell hole above the stairs)
@@ -2684,18 +2847,18 @@ function buildWorldCommon() {
   const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
   if (LOT) {
     // daylight: a gradient sky dome, the sun, a few soft clouds, warm key light and a bright sky fill
-    scene.background = new THREE.Color(0xa9c6e4); scene.fog.color.setHex(0xc4d4e2);
+    scene.background = new THREE.Color(0x2a2236); scene.fog.color.setHex(0x3a2e36);
     const sky = new THREE.Mesh(new THREE.SphereGeometry(190, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false,
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'varying vec3 vP; void main(){ float h = max(vP.y, 0.0); vec3 top = vec3(0.16, 0.36, 0.72), hor = vec3(0.72, 0.8, 0.88); gl_FragColor = vec4(mix(hor, top, pow(h, 0.55)), 1.0); }' }));
+      fragmentShader: 'varying vec3 vP; void main(){ float h = max(vP.y, 0.0); vec3 top = vec3(0.04, 0.05, 0.14), mid = vec3(0.32, 0.14, 0.2), hor = vec3(0.9, 0.42, 0.18); vec3 c = mix(hor, mid, smoothstep(0.0, 0.18, h)); c = mix(c, top, smoothstep(0.15, 0.7, h)); gl_FragColor = vec4(c, 1.0); }' }));
     sky.position.set(14, 0, 0); sky.renderOrder = -10; sky.frustumCulled = false; sky.onBeforeRender = (r, sc, cam) => { cam.getWorldPosition(sky.position); sky.updateMatrixWorld(); }; scene.add(sky);
-    const sun = new THREE.Mesh(new THREE.CircleGeometry(4.5, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.0, 1.7), fog: false, toneMapped: false }));
-    sun.position.set(70, 95, -95); sun.lookAt(14, 0, 0); scene.add(sun);
+    const sun = new THREE.Mesh(new THREE.CircleGeometry(6, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 1.3, 0.5), fog: false, toneMapped: false }));
+    sun.position.set(-120, 14, 40); sun.lookAt(14, 0, 0); scene.add(sun);
     { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); for (let i = 0; i < 14; i++) { const gx = 20 + tr() * 88, gy = 40 + tr() * 50, r = 18 + tr() * 22, gr = x.createRadialGradient(gx, gy, 0, gx, gy, r); gr.addColorStop(0, 'rgba(255,255,255,0.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 128, 128); }
-      const ct = new THREE.CanvasTexture(c); for (let i = 0; i < 12; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: ct, transparent: true, depthWrite: false, fog: false, opacity: 0.85 })); const a = tr() * TAU, d = 110 + tr() * 50; s.position.set(14 + Math.cos(a) * d, 55 + tr() * 30, Math.sin(a) * d); s.scale.set(60 + tr() * 45, 22 + tr() * 14, 1); scene.add(s); } }
-    scene.add(new THREE.HemisphereLight(0xcfe2ff, 0x6a5a44, 0.95));
-    moon = new THREE.DirectionalLight(0xfff0d8, 2.6);
-    moon.position.set(38, 46, -34);
+      const ct = new THREE.CanvasTexture(c); for (let i = 0; i < 12; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: ct, transparent: true, depthWrite: false, fog: false, opacity: 0.55, color: 0xd98a6a })); const a = tr() * TAU, d = 110 + tr() * 50; s.position.set(14 + Math.cos(a) * d, 55 + tr() * 30, Math.sin(a) * d); s.scale.set(60 + tr() * 45, 22 + tr() * 14, 1); scene.add(s); } }
+    scene.add(new THREE.HemisphereLight(0x6a6a9a, 0x2a1a12, 0.42));
+    moon = new THREE.DirectionalLight(0xff9a5a, 1.25);
+    moon.position.set(-40, 16, 14);
   } else {
   scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0x9aa6c0, size: 0.6, fog: false })));
   const md = new THREE.Mesh(new THREE.CircleGeometry(7, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.65, 1.9), fog: false, toneMapped: false }));
@@ -2760,7 +2923,7 @@ async function glbLoad(url) {
   const b = await (await fetch(url)).arrayBuffer(), dv = new DataView(b);
   if (dv.getUint32(0, true) !== 0x46546C67) throw new Error('not glb');
   const jl = dv.getUint32(12, true), j = JSON.parse(new TextDecoder().decode(new Uint8Array(b, 20, jl))), bin = 20 + jl + 8;
-  const CT = { 5126: Float32Array, 5125: Uint32Array, 5123: Uint16Array, 5121: Uint8Array }, NC = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
+  const CT = { 5126: Float32Array, 5125: Uint32Array, 5123: Uint16Array, 5121: Uint8Array }, NC = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
   const acc = i => { const a = j.accessors[i], bv = j.bufferViews[a.bufferView], T = CT[a.componentType], n = NC[a.type];
     const off = bin + (bv.byteOffset || 0) + (a.byteOffset || 0), st = bv.byteStride || 0;
     if (!st || st === n * T.BYTES_PER_ELEMENT) return new T(b.slice(off, off + a.count * n * T.BYTES_PER_ELEMENT));
@@ -2773,13 +2936,30 @@ async function glbLoad(url) {
     if (m.doubleSided) mm.side = THREE.DoubleSide; mm.name = m.name || ''; return mm; });
   const meshes = j.meshes.map(me => me.primitives.map(p => { const g = new THREE.BufferGeometry(); const A = p.attributes;
     g.setAttribute('position', new THREE.BufferAttribute(acc(A.POSITION), 3)); if (A.NORMAL != null) g.setAttribute('normal', new THREE.BufferAttribute(acc(A.NORMAL), 3)); if (A.TEXCOORD_0 != null) g.setAttribute('uv', new THREE.BufferAttribute(acc(A.TEXCOORD_0), 2));
+    if (A.JOINTS_0 != null) { const jt = acc(A.JOINTS_0); g.setAttribute('skinIndex', new THREE.BufferAttribute(jt instanceof Float32Array ? jt : new Uint16Array(jt), 4)); const wt = acc(A.WEIGHTS_0); g.setAttribute('skinWeight', new THREE.BufferAttribute(wt instanceof Float32Array ? wt : Float32Array.from(wt, v => v / (wt instanceof Uint8Array ? 255 : 65535)), 4)); }
     if (p.indices != null) g.setIndex(new THREE.BufferAttribute(acc(p.indices), 1)); if (A.NORMAL == null) g.computeVertexNormals(); if (A.TANGENT == null && p.material != null && j.materials[p.material].normalTexture) { /* three computes per-pixel tangents from uv derivatives */ }
     return { g, m: p.material != null ? mats[p.material] : new THREE.MeshStandardMaterial({ color: 0x888888 }) }; }));
-  const mk = i => { const n = j.nodes[i], o = new THREE.Group(); o.name = n.name || '';
+  const objs = [], skinned = [];
+  const mk = i => { const n = j.nodes[i], o = new THREE.Group(); o.name = n.name || ''; objs[i] = o;
     if (n.matrix) { o.matrix.fromArray(n.matrix); o.matrix.decompose(o.position, o.quaternion, o.scale); } else { if (n.translation) o.position.fromArray(n.translation); if (n.rotation) o.quaternion.fromArray(n.rotation); if (n.scale) o.scale.fromArray(n.scale); }
-    if (n.mesh != null) for (const pr of meshes[n.mesh]) { const m = new THREE.Mesh(pr.g, pr.m); m.name = o.name; o.add(m); }
+    if (n.mesh != null) for (const pr of meshes[n.mesh]) { const sk = n.skin != null && pr.g.attributes.skinIndex; const m = sk ? new THREE.SkinnedMesh(pr.g, pr.m) : new THREE.Mesh(pr.g, pr.m); m.name = o.name; o.add(m); if (sk) { pr.m.skinning = true; skinned.push([m, n.skin]); } }
     for (const c of n.children || []) o.add(mk(c)); return o; };
-  const root = new THREE.Group(); for (const i of j.scenes[j.scene || 0].nodes) root.add(mk(i)); return root;
+  const root = new THREE.Group(); for (const i of j.scenes[j.scene || 0].nodes) root.add(mk(i));
+  root.updateMatrixWorld(true);
+  for (const [m, si] of skinned) { const sk = j.skins[si], bones = sk.joints.map(ji => { const o = objs[ji]; const b = new THREE.Bone(); b.name = o.name; return b; });
+    // swap the joint groups for real bones in place, keeping the hierarchy
+    sk.joints.forEach((ji, k) => { const o = objs[ji], b = bones[k]; b.position.copy(o.position); b.quaternion.copy(o.quaternion); b.scale.copy(o.scale); const par = o.parent; if (par) { par.add(b); for (const ch of o.children.slice()) b.add(ch); par.remove(o); } objs[ji] = b; });
+    const ibm = sk.inverseBindMatrices != null ? acc(sk.inverseBindMatrices) : null, inv = bones.map((b, k) => ibm ? new THREE.Matrix4().fromArray(ibm, k * 16) : new THREE.Matrix4());
+    root.updateMatrixWorld(true); m.bind(new THREE.Skeleton(bones, inv), m.matrixWorld); }
+  const clips = [];
+  for (const an of j.animations || []) { const tracks = [];
+    for (const ch of an.channels) { const smp = an.samplers[ch.sampler], o = objs[ch.target.node]; if (!o) continue; const times = acc(smp.input), vals = acc(smp.output), nm = o.name.replace(/[\[\].:\/]/g, '_');
+      o.name = nm; const path = ch.target.path, interp = smp.interpolation === 'STEP' ? THREE.InterpolateDiscrete : THREE.InterpolateLinear;
+      if (path === 'rotation') tracks.push(new THREE.QuaternionKeyframeTrack(nm + '.quaternion', Array.from(times), Array.from(vals), interp));
+      else if (path === 'translation') tracks.push(new THREE.VectorKeyframeTrack(nm + '.position', Array.from(times), Array.from(vals), interp));
+      else if (path === 'scale') tracks.push(new THREE.VectorKeyframeTrack(nm + '.scale', Array.from(times), Array.from(vals), interp)); }
+    clips.push(new THREE.AnimationClip(an.name || 'clip', -1, tracks)); }
+  root.userData.clips = clips; return root;
 }
 // real gun models (Styloo Guns Asset Pack, CC0) served next to the page as gun-*.glb. Muzzle points +X in the files.
 const STYG = { pistol: { f: 'pew', len: 0.2 }, stg: { f: 'ak47', len: 0.86 }, mp40: { f: 'mac10', len: 0.3 }, trench: { f: 'shotgun', len: 0.98, bolt: 'pomp' }, kar: { f: 'awp', len: 1.12, scope: 1 }, panzer: { f: 'rocketlaucher', len: 0.98, mag: 'rocketbullet' },
@@ -2792,7 +2972,7 @@ function loadGunModels(ms = 9000) {
 }
 // swaps a procedural gun's body for the real model, fitted to the same length and front; returns the new muzzle / sight / parts
 function styFit(k, g, pap) {
-  const d = STYG[k]; if (!d || !d.obj) return null;
+  let d = STYG[k]; if (pap && k === 'panzer' && PROPG.quadrocket) d = { obj: PROPG.quadrocket, len: 1.0, mag: 'zzz' }; if (!d || !d.obj) return null;
   g.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(g); if (bb.isEmpty()) return null;
   for (const c of g.children.slice()) g.remove(c);
   const m = d.obj.clone(true), h = new THREE.Group(); h.add(m); h.rotation.y = d.rot != null ? d.rot : Math.PI / 2; g.add(h); h.updateMatrixWorld(true);
@@ -3289,7 +3469,7 @@ function aInit() {
     A.rev = c.createConvolver(); A.rev.buffer = ir; const rg = c.createGain(); rg.gain.value = 0.5; A.rev.connect(rg); rg.connect(A.master);
     const nb = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1; A.noise = nb;
     ambient();
-    setTimeout(() => { voLoad(); }, 50);
+    setTimeout(() => { voLoad(); zsLoad(); }, 50);
   } catch (e) { A.ctx = null; }
 }
 function bus(pos, wet = 0.25, vol = 1) {
@@ -3598,10 +3778,10 @@ const SND = {
     }
     SYN.shot(WPN[base] ? WPN[base].snd : k, pos);
   },
-  groan(pos, loud) { if (groanBudget > 3) return; if (BANK.b.groan) { groanBudget++; playB(loud ? 'shriek' : 'groan', pos, 0.8, 0.35); } else SYN.groan(pos, loud); },
-  snarl(pos) { if (groanBudget > 4) return; groanBudget++; playB('snarl', pos, 0.85, 0.3); },
-  zdie(pos) { playB('zdie', pos, 0.6, 0.35); },
-  flesh(pos, head) { playB(head ? 'head' : 'flesh', pos, 0.85, 0.15) || SYN.flesh(pos, head); },
+  groan(pos, loud) { if (groanBudget > 3) return; if (BANK.b.zgroan) { groanBudget++; playB(loud ? 'zattack' : 'zgroan', pos, 0.9, 0.35, 0.92 + Math.random() * 0.16); } else if (BANK.b.groan) { groanBudget++; playB(loud ? 'shriek' : 'groan', pos, 0.8, 0.35); } else SYN.groan(pos, loud); },
+  snarl(pos) { if (groanBudget > 4) return; groanBudget++; playB(BANK.b.zattack ? 'zattack' : 'snarl', pos, 0.9, 0.3); },
+  zdie(pos) { if (BANK.b.zfall) { playB('zhurt', pos, 0.7, 0.3); setTimeout(() => playB('zfall', pos, 0.8, 0.25), 380); } else playB('zdie', pos, 0.6, 0.35); },
+  flesh(pos, head) { if (BANK.b.zimpact) { playB('zimpact', pos, 0.75, 0.15); if (head) playB('zblood', pos, 0.7, 0.15); return; } playB(head ? 'head' : 'flesh', pos, 0.85, 0.15) || SYN.flesh(pos, head); },
   tear(pos) { playB('tear', pos, 0.9, 0.35) || SYN.tear(pos); },
   nail(pos) { if (!playB('nail', pos, 0.8, 0.3)) SYN.nail(pos); },
   step(wood) { playB(wood ? 'stepW' : 'stepC', null, 0.55, 0.12) || SYN.step(); },
@@ -4206,7 +4386,7 @@ function navFix(u) {
 }
 function navField(players) {
   const D = NAV.dist, W = NAV.walk, nx = NAV.nx, nz = NAV.nz; D.fill(1e9); HEAP.n = 0;
-  for (const p of players) { const u = navFix(navNode(p.x, p.z, p.y)); if (u >= 0) { D[u] = 0; hpush(u, 0); } }
+  for (const p of players) { const u = navFix(navNode(p.x, p.z, p.y)); if (u >= 0) { const d0 = p.lure ? -36 : 0; if (d0 < D[u]) { D[u] = d0; hpush(u, d0); } } }
   while (HEAP.n > 0) {
     const u = hpop(), d = HEAP.top; if (d > D[u]) continue;
     const L = u >= NN ? 1 : 0, base = L * NN, id = u - base, i = id % nx, j = (id - i) / nx;
@@ -4280,7 +4460,7 @@ function hostReset() {
   G.ep = (G.ep || 0) + 1; G.nextZid = G.ep * 10000 + 1;
   WINS.forEach(w => { w.count = 6; });
   G.ee = { step: 0, horns: 0, t: 0, k: 0, need: 24 };
-  G.st = { step: 0, tags: 0, charge: 0, tagCd: 15 }; G.lastSa = {}; G.radios = 0; G.chills = [];
+  G.st = { step: 0, tags: 0, charge: 0, tagCd: 15 }; G.lastSa = {}; G.radios = 0; G.chills = []; G.spRooms = 0; G.lure = null; G.lureCd = 0;
   startRound(1);
 }
 function activeWins() { return WINS.filter(w => w.room === 0 || (G.doors & MD.roomReq[w.room])); }
@@ -4296,6 +4476,22 @@ function spawnPoint(players) {
   let r = Math.random() * tot, w = ws[0]; for (let i = 0; i < ws.length; i++) { r -= wts[i]; if (r <= 0) { w = ws[i]; break; } }
   const lat = (Math.random() - 0.5) * 4, out = 6 + Math.random() * 2.5;
   return { w, x: w.x - w.nx * out + w.nz * lat, z: w.z - w.nz * out + w.nx * lat };
+}
+function placeSetPieces() {
+  for (let r = 0; r < MD.roomReq.length; r++) {
+    if (G.spRooms >> r & 1) continue; if (r !== 0 && !(G.doors & MD.roomReq[r])) continue; G.spRooms |= 1 << r;
+    for (const [room, x, z, y, wake, pat] of MD.setPieces) { if (room !== r) continue; const hp = zHp(G.round);
+      sim.push({ kind: 0, leapCd: 2, shoutCd: 3, id: G.nextZid++, x, z, y, yaw: Math.random() * TAU, hp, hpMax: hp, crawl: 0, spd: 1.0 + Math.random() * 0.5, type: 0, st: 'in', win: 0, tearT: 1, atkCd: 0, swing: 0, rise: 0, navT: 0, ngx: null, ngz: null, cx: x, cz: z, chkT: 1, stuck: 0, dorm: wake, pat: pat || null, pi: 0 }); }
+  }
+}
+// a dormant set-piece zombie: sways in place or shuffles its patrol; wakes when a player comes near or it gets hurt, and wakes the ones beside it
+function dormIdle(s, players, dt) {
+  let wake = s.hp < s.hpMax;
+  for (const p of players) if (Math.hypot(p.x - s.x, p.z - s.z) < s.dorm && Math.abs(p.y - s.y) < 2.5) wake = true;
+  if (wake) { s.dorm = 0; pushEv(['zw', s.id]); for (const q of sim) if (q.dorm && Math.hypot(q.x - s.x, q.z - s.z) < 5 && Math.abs(q.y - s.y) < 2) q.dorm = 0; return false; }
+  if (s.pat) { const t = s.pat[s.pi]; if (Math.hypot(t[0] - s.x, t[1] - s.z) < 0.4) s.pi = (s.pi + 1) % s.pat.length; s.dgx = t[0]; s.dgz = t[1]; s.dspd = 0.55; }
+  else { s.dgx = s.x + Math.sin(s.yaw) * 0.1; s.dgz = s.z + Math.cos(s.yaw) * 0.1; s.dspd = 0; s.yaw += Math.sin(T.now * 0.7 + s.id) * dt * 0.3; }
+  return true;
 }
 function spawnZombie(players) {
   const sp = spawnPoint(players); if (!sp) return false; const w = sp.w;
@@ -4350,6 +4546,7 @@ function zThink(s, dt, players) {
     if (tgt && tgt.y < 1.3 && Math.hypot(tgt.x - w.x, tgt.z - w.z) < 1.6) attackLogic(s, tgt, dt, 1.95);
   }
   else if (s.st === 'enter') { gx = w.ix; gz = w.iz; spd = Math.min(spd, 1.4); if (Math.hypot(gx - s.x, gz - s.z) < 0.3) { s.st = 'in'; s.navT = 0; } }
+  else if (s.dorm && dormIdle(s, players, dt)) { gx = s.dgx; gz = s.dgz; spd = s.dspd; }
   else {
     if (!tgt) { gx = s.x + Math.sin(s.yaw); gz = s.z + Math.cos(s.yaw); spd *= 0.3; }
     else {
@@ -4394,10 +4591,12 @@ function hostStep(dt) {
   G.insta = Math.max(0, G.insta - dt); G.dbl = Math.max(0, G.dbl - dt);
   const players = livePlayers();
   if (doorMask() !== NAV.mask) navBuild();
-  NAV.t -= dt; if (NAV.t <= 0) { NAV.t = 0.25; navField(players); }
+  if (G.lureCd > 0) G.lureCd -= dt; if (G.lure) { G.lure.t -= dt; if (G.lure.t <= 0) { G.lure = null; pushEv(['lu', 0]); } }
+  NAV.t -= dt; if (NAV.t <= 0) { NAV.t = 0.25; navField(G.lure ? players.concat([G.lure]) : players); }
   if (G.phase === 'inter') { G.interT -= dt; if (G.interT <= 0) startRound(G.round + 1); }
   else if (G.phase === 'play') {
     if (G.boss === 1) { G.bossT -= dt; if (G.bossT <= 0 && spawnBoss(players)) G.boss = 2; }
+    if (MD.setPieces) placeSetPieces();
     if (G.toSpawn > 0) { G.spawnT -= dt; if (G.spawnT <= 0 && sim.length < 24) { if (spawnZombie(players)) G.toSpawn--; G.spawnT = Math.max(0.45, 2.2 - G.round * 0.12) * (0.6 + Math.random() * 0.8); } }
     else if (sim.length === 0 && G.boss !== 1) { G.phase = 'inter'; G.interT = 10; pushEv(['e', G.round]); }
   }
@@ -4424,7 +4623,7 @@ function hostStep(dt) {
       s.chkT = 1;
       const moved = Math.hypot(s.x - s.cx, s.z - s.cz); s.cx = s.x; s.cz = s.z;
       const near = players.some(p => Math.hypot(p.x - s.x, p.z - s.z) < 2.4 && Math.abs(p.y - s.y) < 1.5);
-      if (s.st !== 'tear' && s.swing <= 0 && !near && moved < 0.25) s.stuck++; else s.stuck = 0;
+      if (s.st !== 'tear' && s.swing <= 0 && !near && moved < 0.25 && !s.dorm) s.stuck++; else s.stuck = 0;
       if (s.stuck >= 6) respawnStuck(s, players);
     }
   }
@@ -4453,7 +4652,7 @@ const ST_CODE = { out: 0, tear: 1, enter: 2, in: 3 }, ST_NAME = ['out', 'tear', 
 function applyHit(peer, zid, dmg, head, kind) {
   const i = sim.findIndex(s => s.id === zid); if (i < 0) return; const s = sim[i];
   if (G.insta > 0) dmg = s.type === 3 ? dmg * 3 : s.hp + 1;
-  s.hp -= clamp(dmg, 0, 50000);
+  s.hp -= clamp(dmg, 0, 50000); if (s.dorm) s.dorm = 0;
   if (kind === 5) { s.burn = 5; s.burnBy = peer; } else if (kind === 6) { s.chillT = 4.5; } else if (kind === 7 && !s.dropped) { s.dropped = 1; pushEv(['sx', Math.round(s.x * 10), Math.round((s.y || 0) * 10 + 10), Math.round(s.z * 10)]); for (const q of sim.slice()) { if (q === s || q.type === 3) continue; const d = Math.hypot(q.x - s.x, q.z - s.z); if (d < 3.4) applyHit(peer, q.id, 600 + G.round * 60, false, 2); } s.dropped = 0; }
   if (kind === 4 && s.type !== 3) {
     // knock away from whoever fired, and stun for a moment
@@ -4575,6 +4774,8 @@ function handleEvent(e) {
   else if (t === 'o') { gameOver(e[2]); }
   else if (t === 'sy') storyEvent(e);
   else if (t === 'ra') radioEvent(e);
+  else if (t === 'lu') { if (e[2]) { banner('Playback', 'The speakers boom. The dead go to the music', 2600, true); if (A.ctx && MUS.bus) { dubSiren(MUS.bus, A.ctx.currentTime + 0.1, 0.05); const t0 = A.ctx.currentTime; for (const sp of LOTFX.speakers) { if (sp.rotation) continue; const b = bus({ x: sp.x, y: 1.6, z: sp.z }, 0.5, 1.4); for (let k = 0; k < 24; k++) { osc(b, t0 + k * 0.5, 0.42, 'sine', 62, 46, 0.5, 0.02); if (k % 2) nz(b, t0 + k * 0.5 + 0.25, 0.12, 'highpass', 6000, 1, 0.25, 0.001); } } } } }
+  else if (t === 'zw') { const v = zv.get(e[2]); if (v) SND.snarl({ x: v.x, y: v.y + 1.6, z: v.z }); }
   else if (t === 'eh') { const H = HORNS[e[2]]; if (H) { H.on = true; H.m.material = HORNS.lit; if (A.ctx) dubSiren(bus({ x: H.x, y: H.y, z: H.z }, 0.4, 1.4), A.ctx.currentTime, 0.12); } banner(e[4] + ' / 4', (e[3] === myPeer ? 'You' : peerName(e[3])) + ' set a siren wailing', 2200, true); }
   else if (t === 'ee') eeEvent(e);
   else if (t === 'sx') { const p = new THREE.Vector3(e[2] / 10, e[3] / 10, e[4] / 10); explosion(p, 0); if (A.ctx) { const t0 = A.ctx.currentTime, d = bus(p, 0.5, 1.4); osc(d, t0, 1.0, 'sine', 70, 30, 1.0); osc(d, t0, 0.4, 'square', 55, 40, 0.15); } }
@@ -4627,7 +4828,7 @@ function addPts(n) {
 const dmgDirs = [];
 function hurt(a, sx, sz) {
   if (P.down || P.dead || APP.screen !== 'play' || APP.paused || holdName()) return; // nothing can hurt you while the game is paused
-  P.hp -= a; P.regenT = P.perks.vibes ? 2 : 4; P.dmgFx = 1; P.shake = Math.max(P.shake, 0.18); SND.hurt();
+  P.hp -= a; P.regenT = P.perks.vibes ? 2 : 4; P.dmgFx = 1; P.shake = Math.max(P.shake, 0.18); SND.hurt(); if (BANK.b.zbite && sx != null) playB('zbite', { x: sx, y: P.y + 1.4, z: sz }, 0.8, 0.2);
   if (sx != null && isFinite(sx)) { dmgDirs.push({ x: sx, z: sz, t: 1.2 }); if (dmgDirs.length > 4) dmgDirs.shift(); }
   if (P.hp <= 0) goDown();
 }
@@ -4701,6 +4902,13 @@ function shown(o) { for (let c = o; c; c = c.parent) if (!c.visible) return fals
 function hitmark(kill, head) { const h = $('hitm'); h.classList.add('on'); h.classList.toggle('kill', !!kill); h.classList.toggle('head', !!head && !kill); hitT = head ? 0.2 : 0.12; }
 function muzzleWorld() { const u = VM.gun ? VM.gun.userData.mz : new THREE.Vector3(0, 0, -0.5); return camera.localToWorld(u.clone().add(VM.root.position)); }
 function spreadNow(w) { return w.spr * (P.ads > 0.5 ? 0.25 : (P.perks.steady ? 0.6 : 1)) * (P.moving ? 1.5 : 1) + P.bloom * (w.auto ? 1 : 0.4); }
+// shot glass shatters: the pane goes, shards fall, and the control-room window becomes a way through for players (a sill to vault)
+function shatterGlass(m, pt) {
+  if (!m.visible) return; m.visible = false; const i = rayWorld.indexOf(m); if (i >= 0) rayWorld.splice(i, 1);
+  for (let k = 0; k < 26; k++) PN.emit(pt.x + (Math.random() - 0.5) * 1.5, pt.y + (Math.random() - 0.5) * 0.8, pt.z + (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, Math.random() * 1.2, (Math.random() - 0.5) * 1.5, 1.2, 0.04, 0.75, 0.85, 0.9, 0.8, -6, 0.2);
+  if (A.ctx) { const t = A.ctx.currentTime, b = bus(pt, 0.3, 0.9); nz(b, t, 0.5, 'highpass', 3000, 1, 0.6, 0.001); for (let k = 0; k < 6; k++) osc(b, t + k * 0.05, 0.12, 'sine', 3000 + Math.random() * 3000, 0, 0.05); }
+  if (LOT && LOTFX.glassCol) { LOTFX.glassCol.y1 = 0.85; LOTFX.glassCol.y0 = 0; }
+}
 // how many zombies one round can pass through (pistols/SMGs/shotgun pellets 2, rifles/LMGs 3, snipers 4); wonder weapons don't
 function penOf(w) { return w.pen || ({ pistol: 2, smg: 2, shotgun: 2, rifle: 3, lmg: 3, bolt: 4 })[w.snd] || 1; }
 function fire() {
@@ -4736,6 +4944,7 @@ function fire() {
       if (!endPt) endPt = h.point.clone();
       const zz = h.object.userData.z;
       if (h.object.userData.horn != null) { hornShot(h.object.userData.horn); stopped = true; break; }
+      if (h.object.userData.glass) { shatterGlass(h.object, h.point); continue; }
       if (!zz) {
         const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : d.clone().negate();
         decal(h.point, n, 0.07 + Math.random() * 0.03, M.hole); sparks(h.point, n); stopped = true; break;
@@ -4779,6 +4988,16 @@ function fire() {
 // ---------- voice lines (the owner's recordings, served next to the page; silent where they can't be loaded)
 const VO = { reload: ['vo-reload-1.mp3', 'vo-reload-2.mp3'], down: ['vo-down-1.mp3'], kill: ['vo-kill-1.mp3', 'vo-kill-2.mp3'], boss: ['vo-boss-1.mp3', 'vo-boss-2.mp3'], mate: ['vo-mate-down.mp3'], revive: ['vo-revive-1.mp3'], round: ['vo-round-1.mp3', 'vo-round-2.mp3'], miseh: ['vo-miseh.mp3'], hungry: ['vo-hungry.mp3'], nuhave: ['vo-nuhave.mp3'], insta: ['vo-insta.mp3'], start: ['vo-start.mp3'], last: 0, loading: false };
 const VO_PERKS = ['bulwark', 'fleet', 'rapid', 'revive', 'swift', 'mule', 'steady', 'blast', 'echo', 'dropbass', 'vibes', 'slap', 'nuff']; for (const k of VO_PERKS) VO['perk_' + k] = ['vo-perk-' + k + '.mp3'];
+// real zombie recordings (Catastic's free Zombie Horror pack), served next to the page as zs-*.mp3; the synth sounds stay as fallback
+const ZS = { zgroan: ['z1-idle-001', 'z1-idle-002', 'z1-idle-003', 'z3-idle-001', 'z3-idle-002', 'z3-idle-003'], zattack: ['z1-attack-001', 'z1-attack-002', 'z1-attack-003', 'z3-attack-001', 'z3-attack-002', 'z3-attack-003'],
+  zhurt: ['z1-hurt-001', 'z1-hurt-002', 'z1-hurt-003', 'z3-hurt-001', 'z3-hurt-002', 'z3-hurt-003'], zbite: ['bite-001', 'bite-002'], zblood: ['blood-splash-001', 'blood-splash-002', 'blood-splash-003'],
+  zfall: ['fall-001', 'fall-002', 'fall-003'], zimpact: ['impact-001', 'impact-002', 'impact-003', 'gore-001', 'gore-002'], zeat: ['eat-001', 'eat-002', 'eat-003'] };
+async function zsLoad() {
+  if (ZS.loading || !A.ctx || !/^https?:$/.test(location.protocol)) return; ZS.loading = true;
+  for (const [k, files] of Object.entries(ZS)) { if (!Array.isArray(files)) continue; const list = [];
+    for (const f of files) { try { const r = await fetch('zs-' + f + '.mp3'); if (!r.ok) continue; list.push(await A.ctx.decodeAudioData(await r.arrayBuffer())); } catch (e) {} }
+    if (list.length) BANK.b[k] = list; }
+}
 async function voLoad() {
   if (VO.loading || !A.ctx || !/^https?:$/.test(location.protocol)) return; VO.loading = true;
   for (const k of ['start', 'reload', 'down', 'kill', 'boss', 'mate', 'revive', 'round', 'miseh', 'hungry', 'nuhave', 'insta'].concat(VO_PERKS.map(q => 'perk_' + q))) {
@@ -4853,7 +5072,7 @@ function startSlide() {
   if (A.ctx) { const t = A.ctx.currentTime, d = bus(null, 0.1, 0.7); nz(d, t, 0.7, 'bandpass', 900, 0.8, 0.35, 0.001, 380); nz(d, t, 0.25, 'lowpass', 400, 1, 0.4, 0.001); }
 }
 function knife() {
-  if (P.knifeT > 0 || P.down) return; P.knifeDur = P.knifeT = P.perks.slap ? 0.42 : 0.58; P.knifeHit = false; SND.knife();
+  if (P.knifeT > 0 || P.down) return; P.knifeDur = P.knifeT = P.perks.slap ? 0.42 : 0.58; P.knifeHit = false; armsSwing(); SND.knife();
   camera.getWorldDirection(camDir); let best = null, bd = 3.0;
   for (const v of zv.values()) { if (v.dying || v.rise > 0.5 || Math.abs(v.y - P.y) > 1.2) continue; const dx = v.x - P.x, dz = v.z - P.z, d = Math.hypot(dx, dz); if (d < bd && d > 1.2 && (dx * camDir.x + dz * camDir.z) / (d || 1) > 0.7) { bd = d; best = v; } }
   if (best) { const L = (bd - 1.0), T0 = 0.16; P.lungeT = T0; P.lungeVX = (best.x - P.x) / bd * L / T0; P.lungeVZ = (best.z - P.z) / bd * L / T0; }
@@ -4861,7 +5080,8 @@ function knife() {
 function throwGrenade() {
   if (P.gren <= 0 || P.down) return; P.gren--;
   camera.getWorldDirection(camDir);
-  const m = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), M.metalGreen); m.castShadow = true;
+  let m = null; if (PROPG.frag) { m = new THREE.Group(); const f = PROPG.frag.clone(true); const bb = new THREE.Box3().setFromObject(f), sc = 0.11 / Math.max(1e-4, bb.getSize(new THREE.Vector3()).y); f.scale.setScalar(sc); f.position.copy(bb.getCenter(new THREE.Vector3()).multiplyScalar(-sc)); m.add(f); }
+  else { m = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), M.metalGreen); m.castShadow = true; }
   m.position.copy(camera.position).addScaledVector(camDir, 0.5); scene.add(m);
   grenades.push({ m, vx: camDir.x * 13, vy: camDir.y * 13 + 3, vz: camDir.z * 13, t: 2.3 });
 }
@@ -4979,6 +5199,8 @@ function computeInteract() {
   else if (best.t === 'gentags') { if (storyStep() !== 2) { promptText = ''; promptAct = null; return; } promptText = 'Press <b>F</b> to thread the tape reels into the sound system'; }
   else if (best.t === 'van') { if (!V.ee || V.ee[0] !== 1) { promptText = ''; promptAct = null; return; } promptText = 'Press <b>F</b> to drop the clash dubplate'; }
   else if (best.t === 'serum') { if (storyStep() !== 4) { promptText = ''; promptAct = null; return; } promptText = 'Press <b>F</b> to take the master dubplate'; }
+  else if (best.t === 'lure') { promptText = 'Press <b>F</b> to switch on the playback speakers'; }
+  else if (best.t === 'guitar') { if (P.guitar) { promptText = ''; promptAct = null; return; } promptText = 'Press <b>F</b> to take the guitar (melee)'; }
   else if (best.t === 'radio') { promptText = RADIOS[best.i].on ? 'The radio hisses quietly' : 'Press <b>F</b> to tune the radio'; }
   else if (best.t === 'bench') { const s = curSlot(); promptText = !s ? 'Hold a weapon to modify it' : !ATT_FIT[s.k] ? "The bench can't modify the " + WS(s).name : 'Press <b>F</b> to fit attachments to the ' + WS(s).name; }
   else if (best.t === 'win') { promptText = 'Hold <b>F</b> to rebuild the barrier' + (P.repairPts >= 500 ? ' (no more points this round)' : ' · +10 per board'); }
@@ -5073,6 +5295,8 @@ function doInteract(dt, pressed) {
   else if (a.t === 'box') { if (buy(950)) { BOX.state = 'spin'; BOX.t = 0; BOX.k = pickBoxWeapon(); SND.box(); } }
   else if (a.t === 'boxtake') { give(BOX.k); BOX.state = 'idle'; for (const m of Object.values(BOX.models)) m.visible = false; }
   else if (a.t === 'radio') { tuneRadio(a.i); }
+  else if (a.t === 'lure') { requestStory('lu'); }
+  else if (a.t === 'guitar') { if (!P.guitar) { P.guitar = 1; banner('Guitar', 'Your melee swing hits three times harder', 2400); SND.buy(); } }
   else if (a.t === 'journal') { if (storyStep() === 0) requestStory('j'); else showNote(STORY_TEXT, 14000); }
   else if (a.t === 'gentags') { if (storyStep() === 2) requestStory('g'); }
   else if (a.t === 'van') { if (V.ee && V.ee[0] === 1) requestStory('v'); }
@@ -5181,7 +5405,7 @@ function playerUpdate(dt) {
     if (!P.knifeHit && P.knifeT < P.knifeDur * 0.58) {
       P.knifeHit = true; camera.getWorldDirection(camDir);
       let best = null, bd = 2.0; for (const v of zv.values()) { if (v.dying || v.rise > 0.5 || Math.abs(v.y - P.y) > 1.2) continue; const dx = v.x - P.x, dz = v.z - P.z, d = Math.hypot(dx, dz); if (d < bd && (dx * camDir.x + dz * camDir.z) / (d || 1) > 0.55) { bd = d; best = v; } }
-      if (best) { requestHit(best.id, (150 + V.round * 15) * (P.perks.slap ? 3 : 1), false, 1); addPts(10); blood(new THREE.Vector3(best.x, best.y + 1.3, best.z), camDir.clone().negate(), 18); SND.flesh({ x: best.x, y: 1.2, z: best.z }, false); hitmark(false); P.shake = Math.max(P.shake, 0.12); P.knifeStop = 0.06; }
+      if (best) { requestHit(best.id, (150 + V.round * 15) * (P.perks.slap ? 3 : 1) * (P.guitar ? 3 : 1), false, 1); addPts(10); blood(new THREE.Vector3(best.x, best.y + 1.3, best.z), camDir.clone().negate(), 18); SND.flesh({ x: best.x, y: 1.2, z: best.z }, false); hitmark(false); P.shake = Math.max(P.shake, 0.12); P.knifeStop = 0.06; }
     }
   }
   const busy = P.relT > 0 || P.swapT > 0 || P.knifeT > 0 || P.sprint;
@@ -5288,6 +5512,9 @@ function vmUpdate(dt) {
   if (VM.flash.visible) { VM.flash.userData.t = (VM.flash.userData.t || 0) + dt; if (VM.flash.userData.t > 0.04) { VM.flash.visible = false; VM.flash.userData.t = 0; } }
   VM.light.intensity = Math.max(0, VM.light.intensity - dt * 60); muzzleLight.intensity = Math.max(0, muzzleLight.intensity - dt * 50);
   VM.knife.visible = P.knifeT > 0;
+  if (!ARMS.ready) armsSetup();
+  if (ARMS.ready) { VM.knife.visible = false; ARMS.obj.visible = P.knifeT > 0; ARMS.mix.update(dt); if (ARMS.knife) ARMS.knife.visible = !P.guitar; if (ARMS.gtr) ARMS.gtr.visible = !!P.guitar; }
+  if (P.guitar && VM.knife && !VM.knife.userData.gtr) { VM.knife.userData.gtr = 1; VM.knife.children.forEach((c, i) => { if (i < 7) c.visible = false; }); const gt = guitarModel(0xb3261e); gt.scale.setScalar(0.42); gt.rotation.set(-Math.PI / 2, 0, 0); gt.position.set(0, -0.02, -0.06); VM.knife.add(gt); }
   if (P.knifeT > 0) {
     // wind-up (blade drawn back by the right shoulder) → fast diagonal slash across → recover off-screen
     const p = 1 - P.knifeT / (P.knifeDur || 0.55), K0 = VM.knife; let tr = 0;
@@ -5535,7 +5762,9 @@ function worldUpdate(dt) {
   for (const d of V.drops) {
     seen.add(d[0]); let m = dropVis.get(d[0]);
     if (!m) {
-      m = new THREE.Group(); const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.5, 2.6, 0.6), toneMapped: false })); m.add(core);
+      m = new THREE.Group(); const pk = { ammo: 'ammobox_low', nuke: 'nuke' }[d[1]];
+      let core; if (pk && PROPG[pk]) { core = new THREE.Group(); const f = PROPG[pk].clone(true), bb = new THREE.Box3().setFromObject(f), sz = bb.getSize(new THREE.Vector3()), sc = 0.55 / Math.max(sz.x, sz.y, sz.z); f.scale.setScalar(sc); f.position.copy(bb.getCenter(new THREE.Vector3()).multiplyScalar(-sc)); core.add(f); const halo = new THREE.Mesh(new THREE.OctahedronGeometry(0.34, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 1.6, 0.4), toneMapped: false, wireframe: true })); core.add(halo); }
+      else core = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.5, 2.6, 0.6), toneMapped: false })); m.add(core);
       const lab = textSprite([DROP_LABEL[d[1]] || ''], { scale: 0.22, size: 64, w: 512, h: 96, color: '#b8ffb0' }); lab.position.y = 0.55; m.add(lab);
       m.position.set(d[2], (d[5] || 0) + 1, d[3]); scene.add(m); dropVis.set(d[0], m);
     }
@@ -5714,7 +5943,7 @@ function setLobbyPresence() {
 }
 function renderGames(list) {
   const rows = []; const seen = new Set();
-  for (const p of list) { const s = p.presence; if (!s || p.sameTab || !s.g || !s.h || seen.has(s.g)) continue; seen.add(s.g); rows.push('<div class="game-row"><span>' + esc(String(s.n || 'Selector').slice(0, 16)) + '’s squad · ' + ({ yard: 'Yard Night', studio: 'Studio Lot' }[s.mp] || 'The Bunker') + ' · ' + (s.pc | 0) + ' in · ' + (s.r ? 'round ' + (s.r | 0) : 'not started') + '</span><button class="btn" data-code="' + esc(String(s.g).slice(0, 4)) + '" data-map="' + (MAP_IDS.includes(s.mp) ? s.mp : 'bunker') + '">Join</button></div>'); }
+  for (const p of list) { const s = p.presence; if (!s || p.sameTab || !s.g || !s.h || seen.has(s.g)) continue; seen.add(s.g); rows.push('<div class="game-row"><span>' + esc(String(s.n || 'Selector').slice(0, 16)) + '’s squad · ' + ({ yard: 'Yard Night', studio: 'Dead Lock Records' }[s.mp] || 'The Bunker') + ' · ' + (s.pc | 0) + ' in · ' + (s.r ? 'round ' + (s.r | 0) : 'not started') + '</span><button class="btn" data-code="' + esc(String(s.g).slice(0, 4)) + '" data-map="' + (MAP_IDS.includes(s.mp) ? s.mp : 'bunker') + '">Join</button></div>'); }
   $('gamesList').innerHTML = rows.join('');
 }
 
@@ -5951,7 +6180,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && APP
 // =====================================================================
 const ldSet = (pct, txt) => { const f = $('ldFill'); if (f) f.style.width = pct + '%'; if (txt) $('ldStep').textContent = txt; };
 { let ti = (Math.random() * TIPS.length) | 0; const t = () => { const el = $('ldTip'); if (el) el.textContent = TIPS[ti++ % TIPS.length]; }; t(); var ldTipT = setInterval(t, 3200); }
-ldSet(8, 'Tuning the sound system…'); const gunLoad = loadGunModels();
+ldSet(8, 'Tuning the sound system…'); const gunLoad = Promise.all([loadGunModels(), loadProps(), loadArms()]);
 try { await Promise.race([document.fonts.load('40px "Special Elite"'), new Promise(r => setTimeout(r, 2500))]); } catch (e) {}
 await nextFrame();
 ldSet(18, 'Painting the walls…'); await nextFrame();
@@ -5994,7 +6223,7 @@ function frame() {
   } else if (APP.screen === 'over') { if (isHost) hostStep(dt); VM.root.visible = false; }
   if (APP.screen === 'play' && APP.paused) VM.root.visible = VM.root.visible;
   const fz = APP.screen === 'play' && (held || (APP.paused && APP.mode === 'solo')) ? 0 : dt;
-  zVisUpdate(fz); gibUpdate(fz); avatarsUpdate(dt); worldUpdate(fz); storyWorld(fz); perkMachinesUpdate(fz); soundSystemUpdate(fz); partyUpdate(fz); discoUpdate(fz); chillUpdate(fz); fxUpdate(fz); sonicUpdate(fz); if (YARD) yardFxUpdate(fz);
+  zVisUpdate(fz); gibUpdate(fz); avatarsUpdate(dt); worldUpdate(fz); storyWorld(fz); perkMachinesUpdate(fz); soundSystemUpdate(fz); partyUpdate(fz); discoUpdate(fz); chillUpdate(fz); fxUpdate(fz); sonicUpdate(fz); if (YLIKE) yardFxUpdate(fz); if (LOT) lotUpdate(fz);
   if (APP.screen === 'play') hudUpdate(dt);
   netTick(dt); listen(); musicTick();
   if (composer) { finalPass.uniforms.time.value = T.now; composer.render(dt); }
