@@ -48,6 +48,10 @@ export const BUNKER_SONGS: Record<string, string> = {
   'gun-shotgun.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-shotgun.glb')),
   // props (palms/plants: Quaternius Ultimate Nature Pack CC0 + a free tropical palm pack; grenades etc: Styloo / Guns & Explosives CC0), FPS arms (PSX First Person Arms), zombie sounds (Catastic Zombie Horror pack, free)
   'arms.glb': resolve(join(HERE, '..', 'games', 'bunker47-arms.glb')),
+  // skinned zombies: "Polyart Zombies with Animations Free Pack" by Denys Almaral (Sketchfab Standard licence; showcase animation stripped)
+  'zombies.glb': resolve(join(HERE, '..', 'games', 'bunker47-zombies.glb')),
+  // "Short Dreadlocks (Toon/Low Poly Style)" by Tiko, CC BY 4.0 (credited in the game's Options > Controls)
+  'dreads.glb': resolve(join(HERE, '..', 'games', 'bunker47-dreads.glb')),
   'prop-ammobox_low.glb': resolve(join(HERE, '..', 'games', 'bunker47-prop-ammobox_low.glb')),
   'prop-c4.glb': resolve(join(HERE, '..', 'games', 'bunker47-prop-c4.glb')),
   'prop-flaregun.glb': resolve(join(HERE, '..', 'games', 'bunker47-prop-flaregun.glb')),

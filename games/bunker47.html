@@ -549,6 +549,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
         <kbd>Tab</kbd><span>Scoreboard and leaderboard</span>
         <kbd>Esc</kbd><span>Pause (pauses the whole squad in co-op)</span>
       </div>
+      <p class="note" style="margin-top:14px;font-size:12px;opacity:.75;line-height:1.5">Credits: zombie models "Polyart Zombies" by Denys Almaral (Sketchfab) · dreadlocks "Short Dreadlocks (Toon/Low Poly Style)" by Tiko, CC BY 4.0 · guns from the Styloo Guns pack and Guns &amp; Explosives pack (CC0) · nature by Quaternius (CC0) · first-person arms from PSX First Person Arms.</p>
     </div>
     <div class="opane" data-p="gfx" hidden>
       <div class="orow"><label>Preset</label><div class="seg" id="oQual"><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button></div></div>
@@ -3101,7 +3102,7 @@ function profileGeo(pts, thick) {
   g.translate(0, 0, -(thick - 2 * b) / 2); g.applyMatrix4(PROF_M); g.computeVertexNormals(); GEOC.set(key, g); return g;
 }
 // minimal GLB reader (static meshes, PBR base colour + normal maps, node TRS hierarchy) — no extra library
-async function glbLoad(url) {
+async function glbLoad(url, opt = {}) {
   const b = await (await fetch(url)).arrayBuffer(), dv = new DataView(b);
   if (dv.getUint32(0, true) !== 0x46546C67) throw new Error('not glb');
   const jl = dv.getUint32(12, true), j = JSON.parse(new TextDecoder().decode(new Uint8Array(b, 20, jl))), bin = 20 + jl + 8;
@@ -3128,11 +3129,11 @@ async function glbLoad(url) {
     for (const c of n.children || []) o.add(mk(c)); return o; };
   const root = new THREE.Group(); for (const i of j.scenes[j.scene || 0].nodes) root.add(mk(i));
   root.updateMatrixWorld(true);
-  for (const [m, si] of skinned) { const sk = j.skins[si], bones = sk.joints.map(ji => { const o = objs[ji]; const b = new THREE.Bone(); b.name = o.name; return b; });
+  for (const [m, si] of skinned) { const sk = j.skins[si], bones = sk.joints.map(ji => { const o = objs[ji]; if (o.isBone) return o; const b = new THREE.Bone(); b.name = o.name; return b; }); // skins can share joints: reuse bones made for an earlier skin
     // swap the joint groups for real bones in place, keeping the hierarchy
-    sk.joints.forEach((ji, k) => { const o = objs[ji], b = bones[k]; b.position.copy(o.position); b.quaternion.copy(o.quaternion); b.scale.copy(o.scale); const par = o.parent; if (par) { par.add(b); for (const ch of o.children.slice()) b.add(ch); par.remove(o); } objs[ji] = b; });
+    sk.joints.forEach((ji, k) => { const o = objs[ji], b = bones[k]; if (o === b) return; b.position.copy(o.position); b.quaternion.copy(o.quaternion); b.scale.copy(o.scale); const par = o.parent; if (par) { par.add(b); for (const ch of o.children.slice()) b.add(ch); par.remove(o); } objs[ji] = b; });
     const ibm = sk.inverseBindMatrices != null ? acc(sk.inverseBindMatrices) : null, inv = bones.map((b, k) => ibm ? new THREE.Matrix4().fromArray(ibm, k * 16) : new THREE.Matrix4());
-    root.updateMatrixWorld(true); m.bind(new THREE.Skeleton(bones, inv), m.matrixWorld); }
+    root.updateMatrixWorld(true); m.bind(new THREE.Skeleton(bones, inv), opt.spec ? new THREE.Matrix4() : m.matrixWorld); } // spec: glTF skins ignore the mesh node's own transform
   const clips = [];
   for (const an of j.animations || []) { const tracks = [];
     for (const ch of an.channels) { const smp = an.samplers[ch.sampler], o = objs[ch.target.node]; if (!o) continue; const times = acc(smp.input), vals = acc(smp.output), nm = o.name.replace(/[\[\].:\/]/g, '_');
@@ -3605,6 +3606,139 @@ function zombieModel(o) {
   for (const [g, j] of [[aL, 'aL'], [eL, 'eL'], [hL, 'eL'], [aR, 'aR'], [eR, 'eR'], [hR, 'eR'], [lL, 'lL'], [kL, 'kL'], [lR, 'lR'], [kR, 'kR']]) zMerge(g, 'limb', j, meshes, true);
   root.scale.setScalar(o.scale || 1);
   return { root, hips, torso, head, jaw, locks, aL, eL, aR, eR, lL, kL, lR, kR, meshes, stumps: { aL: sL, aR: sR, kL: kSL, kR: kSR, head: neckStump } };
+}
+// =====================================================================
+// skinned zombies: Polyart Zombies (Denys Almaral, Sketchfab Standard licence) + Short Dreadlocks (Tiko, CC-BY 4.0).
+// The procedural zombie above stays as an invisible driver and hitbox (camera layer 1, still hit by every raycast);
+// each frame the skinned model's bones are aimed along the driver's limbs, so every walk, lunge, climb, crawl and death pose
+// carries over. Severed limbs collapse the matching bone. Clothes are recoloured on the shared palette texture.
+// =====================================================================
+const ZPA = { tpl: [], ready: false, dread: null, tam: null };
+function loadZombiePack() {
+  return Promise.all([glbLoad('zombies.glb', { spec: 1 }), glbLoad('dreads.glb').catch(() => null)])
+    .then(([z, d]) => { if (d) ZPA.dread = prepDreads(d); zBuildTemplates(z); ZPA.ready = ZPA.tpl.length > 0; })
+    .catch(e => console.warn('zombie pack not loaded, using built-in zombies', e));
+}
+// bone names carry per-character counters ('bip Head001_046'): match on the name with them stripped; the spine by hierarchy
+const ZB = { pelvis: 'Pelvis', neck: 'Neck', head: 'Head', headNub: 'HeadNub', lClav: 'L Clavicle', rClav: 'R Clavicle', lUA: 'L UpperArm', lFA: 'L Forearm', lHand: 'L Hand',
+  rUA: 'R UpperArm', rFA: 'R Forearm', rHand: 'R Hand', lTh: 'L Thigh', lCalf: 'L Calf', lFoot: 'L Foot', rTh: 'R Thigh', rCalf: 'R Calf', rFoot: 'R Foot', lToe: 'L Toe0Nub', rToe: 'R Toe0Nub' };
+const zBase = n => n.replace(/^bip\s*/, '').replace(/_\d+$/, '').replace(/(\D)\d{3}$/, '$1');
+function zFindBones(rootBone) {
+  const b = {}, want = {}; for (const k in ZB) want[ZB[k]] = k;
+  rootBone.traverse(o => { if (!o.isBone) return; const k = want[zBase(o.name)]; if (k && !b[k]) b[k] = o; });
+  if (b.pelvis) { b.spine = b.pelvis.children.find(c => /Spine/.test(c.name)); if (b.spine) b.spine1 = b.spine.children.find(c => /Spine/.test(c.name)) || b.spine; }
+  return b;
+}
+// the dreads file is a head with locks on it: keep the locks (merged), remember the skull box to fit them to each zombie's head
+function prepDreads(root) {
+  root.updateMatrixWorld(true); let head = null; const parts = [];
+  root.traverse(o => { if (!o.isMesh) return; if (/Head/.test(o.name)) head = o; else { const g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld); for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k); parts.push(g.index ? g.toNonIndexed() : g); } });
+  if (!head || !parts.length || !BGU()) return null;
+  const hb = new THREE.Box3().setFromObject(head), geo = THREE.BufferGeometryUtils.mergeBufferGeometries(parts, false); if (!geo) return null; geo.computeVertexNormals();
+  // skull reference: top of the head, centred left-right and front-back; skull height ~ top to jaw line
+  const top = new THREE.Vector3((hb.min.x + hb.max.x) / 2, hb.max.y, (hb.min.z + hb.max.z) / 2), skull = (hb.max.y - hb.min.y) * 0.62;
+  geo.translate(-top.x, -top.y, -top.z); geo.scale(1 / skull, 1 / skull, 1 / skull); geo.computeBoundingSphere();
+  return geo; // unit skull height, origin at the top of the head, facing +z
+}
+// brightness of the zombie palette at a uv (read once from the texture image)
+function zAtlasLum(img) {
+  if (!img || !img.width) return null; const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height).data, W = c.width, H = c.height;
+  return (u, v) => { const px = clamp(Math.floor(u * W), 0, W - 1), py = clamp(Math.floor(v * H), 0, H - 1), i = (py * W + px) * 4; return (0.3 * d[i] + 0.55 * d[i + 1] + 0.15 * d[i + 2]) / 255; };
+}
+function zBuildTemplates(root) {
+  root.updateMatrixWorld(true);
+  const chars = new Map(); root.traverse(o => { if (o.isSkinnedMesh) { const k = o.skeleton.bones[0]; if (!chars.has(k)) chars.set(k, []); chars.get(k).push(o); } });
+  const D = deadlockMats();
+  for (const [rj, meshes] of chars) {
+    const G = new THREE.Group(), A = new THREE.Group(), F = new THREE.Group(); G.add(A); A.add(F);
+    rj.parent.updateMatrixWorld(true); F.matrix.copy(rj.parent.matrixWorld); F.matrix.decompose(F.position, F.quaternion, F.scale); F.add(rj);
+    for (const m of meshes) { G.add(m); m.position.set(0, 0, 0); m.quaternion.identity(); m.scale.set(1, 1, 1); m.frustumCulled = false; m.castShadow = ZSHADOW; m.receiveShadow = false; }
+    // the file's node transforms are a standing pose already (frame 0 of the showcase idle); limbs are re-aimed below
+    G.updateMatrixWorld(true);
+    const B = zFindBones(rj); if (!B.pelvis || !B.head || !B.lClav || !B.rClav || !B.lUA || !B.lTh) continue;
+    const wp = o => o.getWorldPosition(new THREE.Vector3());
+    // stand it up, facing +z (its left side on +x), 1.72 m tall, feet on y = 0, pelvis over the origin
+    const up = wp(B.headNub || B.head).sub(wp(B.pelvis)).normalize(), left = wp(B.lClav).sub(wp(B.rClav)); left.addScaledVector(up, -left.dot(up)).normalize();
+    const fwd = new THREE.Vector3().crossVectors(left, up), basis = new THREE.Matrix4().makeBasis(left, up, fwd); A.quaternion.setFromRotationMatrix(basis).invert(); G.updateMatrixWorld(true);
+    const feetY = Math.min(wp(B.lToe || B.lFoot).y, wp(B.rToe || B.rFoot).y), H = wp(B.headNub || B.head).y - feetY; A.scale.setScalar(1.72 / H); G.updateMatrixWorld(true);
+    const pp = wp(B.pelvis), fy = Math.min(wp(B.lToe || B.lFoot).y, wp(B.rToe || B.rFoot).y); A.position.set(-pp.x, -fy, -pp.z); G.updateMatrixWorld(true);
+    // rest pose: arms hanging a little out from the body, legs straight down
+    const aim = (bn, child, dir) => { if (!bn || !child) return; const cur = wp(child).sub(wp(bn)).normalize(), q = new THREE.Quaternion().setFromUnitVectors(cur, dir.clone().normalize()), wq = bn.getWorldQuaternion(new THREE.Quaternion()).premultiply(q); bn.quaternion.copy(bn.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(wq)); bn.updateMatrixWorld(true); };
+    aim(B.lUA, B.lFA, new THREE.Vector3(0.12, -1, 0)); aim(B.lFA, B.lHand, new THREE.Vector3(0.1, -1, 0.08)); aim(B.rUA, B.rFA, new THREE.Vector3(-0.12, -1, 0)); aim(B.rFA, B.rHand, new THREE.Vector3(-0.1, -1, 0.08));
+    aim(B.lTh, B.lCalf, new THREE.Vector3(0, -1, 0)); aim(B.lCalf, B.lFoot, new THREE.Vector3(0, -1, 0)); aim(B.rTh, B.rCalf, new THREE.Vector3(0, -1, 0)); aim(B.rCalf, B.rFoot, new THREE.Vector3(0, -1, 0));
+    G.updateMatrixWorld(true);
+    const rest = {}, restDir = {}, child = { lUA: 'lFA', lFA: 'lHand', rUA: 'rFA', rFA: 'rHand', lTh: 'lCalf', lCalf: 'lFoot', rTh: 'rCalf', rCalf: 'rFoot' };
+    for (const k in B) { rest[k] = B[k].getWorldQuaternion(new THREE.Quaternion()); if (child[k] && B[child[k]]) restDir[k] = wp(B[child[k]]).sub(wp(B[k])).normalize(); }
+    // head fitting for dreads / tam: skull height = head bone to head nub; a hat-and-locks group is parked under the head bone
+    const headH = B.headNub ? wp(B.headNub).distanceTo(wp(B.head)) : 0.2, topW = wp(B.headNub || B.head);
+    const hatAt = new THREE.Group(); B.head.add(hatAt); { const inv = B.head.matrixWorld.clone().invert(), m = new THREE.Matrix4().compose(topW, new THREE.Quaternion(), new THREE.Vector3(headH, headH, headH)); m.premultiply(inv); m.decompose(hatAt.position, hatAt.quaternion, hatAt.scale); }
+    hatAt.name = 'zHat';
+    const hair = meshes.filter(m => /hair|beannie|Hat/i.test(m.geometry.name || m.name) || meshes.indexOf(m) > 0);
+    // palette variants: every clothing patch (anything outside the skin strips at the lower left of the atlas) is moved onto the
+    // saturated hue strip at red / gold / green, at a height that keeps its old brightness; some variants also darken the skin
+    const body = meshes[0], uv = body.geometry.attributes.uv, variants = [], lum = zAtlasLum(body.material.map && body.material.map.image);
+    const isSkin = (u, v) => v > 0.56 && u < 0.55;
+    // body region of each vertex from the bone it follows most: only the top (spine, shoulders, arms) and legs (pelvis, thighs, calves) are dyed
+    const si = body.geometry.attributes.skinIndex, sw = body.geometry.attributes.skinWeight, region = new Uint8Array(uv.count);
+    const regOf = n => { const b = zBase(n); return /Spine|Clavicle|UpperArm|Forearm/.test(b) ? 1 : /Pelvis|Thigh|Calf/.test(b) ? 2 : 0; };
+    for (let i = 0; i < uv.count; i++) { let bi = si.getX(i), bw = sw.getX(i); for (const [ii, ww] of [[si.getY(i), sw.getY(i)], [si.getZ(i), sw.getZ(i)], [si.getW(i), sw.getW(i)]]) if (ww > bw) { bw = ww; bi = ii; } const bn = body.skeleton.bones[bi]; region[i] = bn ? regOf(bn.name) : 0; }
+    for (let vi = 0; vi < 6; vi++) {
+      const rr = rngf(9001 + vi * 31 + ZPA.tpl.length * 7), hues = [0.172, 0.3, 0.47], nu = new Float32Array(uv.array);
+      const top = hues[(rr() * 3) | 0], legs = rr() < 0.5 ? null : hues[(rr() * 3) | 0], legDark = 0.45 + rr() * 0.25;
+      for (let i = 0; i < uv.count; i++) {
+        const u = uv.getX(i), v = uv.getY(i);
+        if (isSkin(u, v)) { if (vi >= 3) nu[i * 2] = u * (vi === 5 ? 0.42 : 0.6); continue; }
+        if (vi === 0 || !lum || !region[i]) continue;
+        const hue = region[i] === 1 ? top : legs; if (hue == null) continue;
+        const L = clamp(lum(u, v) * (region[i] === 2 ? legDark : 1), 0, 1);
+        nu[i * 2] = hue; nu[i * 2 + 1] = 0.04 + L * 0.19;
+      }
+      const g = new THREE.BufferGeometry(); for (const k in body.geometry.attributes) g.setAttribute(k, k === 'uv' ? new THREE.BufferAttribute(nu, 2) : body.geometry.attributes[k]); g.setIndex(body.geometry.index); g.name = body.geometry.name; variants.push(g);
+    }
+    ZPA.tpl.push({ G, B, rest, restDir, variants, hairNames: hair.map(m => m.name), bodyName: body.name });
+  }
+}
+// a fresh copy of template t for one zombie, with its own skeleton
+function zSkinClone(t, r) {
+  const G = t.G.clone(true), map = {}; G.traverse(o => { if (o.isBone) map[o.name] = o; });
+  G.traverse(o => { if (o.isSkinnedMesh) { const sk = o.skeleton; o.bind(new THREE.Skeleton(sk.bones.map(b => map[b.name]), sk.boneInverses), new THREE.Matrix4()); o.frustumCulled = false; } });
+  const B = {}; for (const k in t.B) B[k] = map[t.B[k].name];
+  return { G, B, t };
+}
+function zSkinAttach(v, r) {
+  const dbg = window.ZDBG || {}; // test switch: force a model / colour variant / look
+  const t = ZPA.tpl[dbg.tpl != null ? dbg.tpl : (r() * ZPA.tpl.length) | 0], s = zSkinClone(t, r), h = v.h;
+  // clothes colours, and dreads (with or without a tam) on about half of them; the rest keep their own hair or go bald
+  let body = null, hairs = []; s.G.traverse(o => { if (!o.isSkinnedMesh) return; if (o.name === t.bodyName && !body) body = o; else hairs.push(o); });
+  if (body) body.geometry = t.variants[dbg.variant != null ? dbg.variant : (r() * t.variants.length) | 0];
+  const look = dbg.look != null ? dbg.look : r(), hat = s.G.getObjectByName('zHat'), D = deadlockMats();
+  if (look < 0.55 && ZPA.dread && hat) {
+    hairs.forEach(o => { o.visible = false; });
+    const DC = ZPA.dreadM || (ZPA.dreadM = [0x17100a, 0x21170e, 0x2b1d11, 0x120d09].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true })));
+    const lm = new THREE.Mesh(ZPA.dread, DC[(r() * DC.length) | 0]); lm.position.y = 0.04; lm.scale.setScalar(1.06); lm.castShadow = ZSHADOW; hat.add(lm);
+    if (r() < 0.5) { const tam = new THREE.Mesh(ZPA.tam || (ZPA.tam = new THREE.SphereGeometry(0.5, 20, 12)), D.tam); tam.position.set(0, -0.03, -0.14); tam.scale.set(1.02, 0.6, 1.2); tam.rotation.x = -0.32; tam.castShadow = ZSHADOW; hat.add(tam); }
+  } else if (look < 0.7 && hat) { hairs.forEach(o => { o.visible = false; }); const k = new THREE.Mesh(ZPA.tam || (ZPA.tam = new THREE.SphereGeometry(0.5, 20, 12)), r() < 0.5 ? D.tam : ZM.knit); k.position.set(0, -0.12, -0.04); k.scale.set(1.0, 0.75, 1.08); k.castShadow = ZSHADOW; hat.add(k); }
+  else if (look < 0.82) hairs.forEach(o => { o.visible = false; });
+  // the driver becomes invisible (raycasts still hit it); stumps and special props stay drawn
+  const stumps = new Set(Object.values(h.stumps || {})); h.root.traverse(o => { if (o.isMesh && !stumps.has(o)) o.layers.set(1); });
+  h.root.add(s.G); v.sk = s;
+}
+const _zq = new THREE.Quaternion(), _zq2 = new THREE.Quaternion(), _zv = new THREE.Vector3(), _zv2 = new THREE.Vector3(), _zQr = new THREE.Quaternion();
+function zSkinPose(v) {
+  const s = v.sk, h = v.h, B = s.B, t = s.t; if (!s) return;
+  s.G.position.set(h.hips.position.x, h.hips.position.y - 0.98, h.hips.position.z);
+  h.root.updateMatrixWorld(true); h.root.getWorldQuaternion(_zQr);
+  const setW = (bn, wq) => { if (!bn) return; bn.quaternion.copy(bn.parent.getWorldQuaternion(_zq2).invert().multiply(wq)); bn.updateMatrixWorld(true); };
+  const orient = (k, d) => { if (!B[k] || !d) return; setW(B[k], d.getWorldQuaternion(_zq).multiply(t.rest[k])); };
+  const aim = (k, a, b) => { const bn = B[k]; if (!bn || !t.restDir[k]) return; _zv.copy(b).sub(a).normalize(); _zv2.copy(t.restDir[k]).applyQuaternion(_zQr); const q = new THREE.Quaternion().setFromUnitVectors(_zv2, _zv); setW(bn, q.multiply(_zQr.clone().multiply(t.rest[k]))); };
+  const P = (o, y) => o.localToWorld(new THREE.Vector3(0, y, 0));
+  orient('pelvis', h.hips); orient('spine1', h.torso); orient('head', h.head);
+  aim('lUA', P(h.aL, 0), P(h.eL, 0)); aim('lFA', P(h.eL, 0), P(h.eL, -0.29)); aim('rUA', P(h.aR, 0), P(h.eR, 0)); aim('rFA', P(h.eR, 0), P(h.eR, -0.29));
+  aim('lTh', P(h.lL, 0), P(h.kL, 0)); aim('lCalf', P(h.kL, 0), P(h.kL, -0.43)); aim('rTh', P(h.lR, 0), P(h.kR, 0)); aim('rCalf', P(h.kR, 0), P(h.kR, -0.43));
+  // severed limbs and lost heads fold the matching bone away (the gib that flies off is the driver's own limb)
+  const cut = v.cut || {}, gone = (bn, off) => { if (bn) { const sc = off ? 0.001 : 1; if (bn.scale.x !== sc) { bn.scale.setScalar(sc); bn.updateMatrixWorld(true); } } };
+  gone(B.lUA, cut.armL); gone(B.rUA, cut.armR); gone(B.lCalf, cut.legL); gone(B.rCalf, cut.legR); gone(B.head, cut.head || !h.head.visible || v.kind === 1);
 }
 function animHuman(h, ph, spd, mode, k, sw) {
   const s = Math.sin(ph), c = Math.cos(ph), a = clamp(spd / 2.6, 0.12, 1) * 0.75;
@@ -4347,6 +4481,7 @@ function zCreate(id, x, z, type, y = 0, rise = 0, kind = 0) {
   h.root.position.set(x, y - (rise > 0 ? 1.8 : 0), z); scene.add(h.root);
   const v = { kind, id, h, x, z, y, ty: y, rise, tx: x, tz: z, yaw: 0, tyaw: 0, st: 0, type, win: -1, phase: r() * 10, k: (r() - 0.5) * 0.7, dying: false, dT: 0, groan: 1 + r() * 6, spd: 0, sw: 0, lx: x, lz: z, hp: 1 };
   h.meshes.forEach(m => { m.userData.z = v; zHit.push(m); });
+  if (ZPA.ready && !boss) zSkinAttach(v, r);
   if (kind) zDress(v);
   zv.set(id, v); return v;
 }
@@ -4360,7 +4495,7 @@ function zSever(v, part, dir) {
   const saved = []; grp.traverse(c => { saved.push([c, c.userData]); c.userData = {}; });
   const flying = grp.clone(true);
   for (const [c, u] of saved) c.userData = u; flying.matrix.copy(grp.matrixWorld); flying.matrix.decompose(flying.position, flying.quaternion, flying.scale); flying.matrixAutoUpdate = true;
-  flying.traverse(c => { if (c.isMesh) { c.castShadow = ZSHADOW; delete c.userData.z; } });
+  flying.traverse(c => { if (c.isMesh) { c.castShadow = ZSHADOW; delete c.userData.z; c.layers.set(0); } });
   scene.add(flying); grp.visible = false;
   const stump = part === 'armL' ? h.stumps.aL : part === 'armR' ? h.stumps.aR : part === 'legL' ? h.stumps.kL : part === 'legR' ? h.stumps.kR : h.stumps.head; stump.visible = true;
   const d = dir || new THREE.Vector3((Math.random() - 0.5), 0, (Math.random() - 0.5));
@@ -4504,6 +4639,7 @@ function zVisUpdate(dt) {
     if (v.groan <= 0) { v.groan = 3 + Math.random() * 7; const d = Math.hypot(v.x - P.x, v.z - P.z); if (d < 32) SND.groan({ x: v.x, y: v.y + 1.6, z: v.z }, v.type === 2); }
     if (v.sw > 0 && !v.swOn && v.st === 3) SND.snarl({ x: v.x, y: v.y + 1.6, z: v.z }); v.swOn = v.sw > 0;
   }
+  for (const v of zv.values()) if (v.sk) zSkinPose(v);
 }
 
 // =====================================================================
@@ -6382,7 +6518,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && APP
 // =====================================================================
 const ldSet = (pct, txt) => { const f = $('ldFill'); if (f) f.style.width = pct + '%'; if (txt) $('ldStep').textContent = txt; };
 { let ti = (Math.random() * TIPS.length) | 0; const t = () => { const el = $('ldTip'); if (el) el.textContent = TIPS[ti++ % TIPS.length]; }; t(); var ldTipT = setInterval(t, 3200); }
-ldSet(8, 'Tuning the sound system…'); const gunLoad = Promise.all([loadGunModels(), loadProps(), loadArms()]);
+ldSet(8, 'Tuning the sound system…'); const gunLoad = Promise.all([loadGunModels(), loadProps(), loadArms(), loadZombiePack()]);
 try { await Promise.race([document.fonts.load('40px "Special Elite"'), new Promise(r => setTimeout(r, 2500))]); } catch (e) {}
 await nextFrame();
 ldSet(18, 'Painting the walls…'); await nextFrame();
