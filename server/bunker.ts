@@ -293,18 +293,21 @@ function broadcast(room: Room, text: string, except: Peer | null): void {
 }
 
 // ------------------------------------------------------------------ leaderboard
-//   GET  /api/b47/scores   top 20: best round, then most kills
-//   POST /api/b47/scores   {name, round, kills, heads, points, squad} — one row per player per finished game
+//   GET  /api/b47/scores   top 20: best round, then most kills (each with its map), plus `life`: top 20 lifetime kill totals
+//   POST /api/b47/scores   {name, round, kills, heads, points, squad, map} — one row per player per finished game
+// Lifetime totals come from the view b47_lifetime (migration 20261025_bunker47_scores_map_lifetime.sql).
 // Stored in the Supabase table b47_scores (supabase/migrations/20261024_bunker47_scores.sql) when the
 // server has SUPABASE_URL + SUPABASE_SERVICE_KEY and the table exists; otherwise kept in memory
 // (gone after a restart). Scores come from the players' browsers, so they are sanity-checked, not trusted.
 
-interface Score { name: string; round: number; kills: number; heads: number; points: number; squad: number; at: string }
+interface Score { name: string; round: number; kills: number; heads: number; points: number; squad: number; map: string; at: string }
+interface Life { name: string; kills: number; heads: number; games: number; best: number }
 const SB_URL = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY ?? '';
 let tableOk: boolean | null = SB_URL && SB_KEY ? null : false;
 const memory: Score[] = [];
-let cache: { at: number; rows: Score[] } | null = null;
+let cache: { at: number; rows: Score[]; life: Life[] } | null = null;
+let mapCol = true; // false until the 'map' column migration has been applied
 const posts = new Map<string, { count: number; since: number }>();
 
 function sbHeaders(): Record<string, string> {
@@ -321,21 +324,33 @@ async function sb(method: string, path: string, body?: unknown): Promise<unknown
 function sortRows(rows: Score[]): Score[] {
   return rows.sort((a, b) => b.round - a.round || b.kills - a.kills || a.at.localeCompare(b.at)).slice(0, 20);
 }
-async function topScores(): Promise<Score[]> {
-  if (cache && Date.now() - cache.at < 15_000) return cache.rows;
-  let rows: Score[] = sortRows([...memory]);
+function memoryLife(): Life[] {
+  const by = new Map<string, Life>();
+  for (const r of memory) { const k = r.name.toLowerCase(), l = by.get(k) ?? { name: r.name, kills: 0, heads: 0, games: 0, best: 0 }; l.kills += r.kills; l.heads += r.heads; l.games++; l.best = Math.max(l.best, r.round); by.set(k, l); }
+  return [...by.values()].sort((a, b) => b.kills - a.kills || b.best - a.best).slice(0, 20);
+}
+async function topScores(): Promise<Score[]> { return (await boards()).rows; }
+async function boards(): Promise<{ rows: Score[]; life: Life[] }> {
+  if (cache && Date.now() - cache.at < 15_000) return cache;
+  let rows: Score[] = sortRows([...memory]), life = memoryLife();
   if (tableOk !== false) {
     try {
-      const got = await sb('GET', 'b47_scores?select=name,round,kills,heads,points,squad,created_at&order=round.desc,kills.desc,created_at.asc&limit=20') as Array<Record<string, unknown>>;
+      let got: Array<Record<string, unknown>>;
+      try { got = await sb('GET', `b47_scores?select=name,round,kills,heads,points,squad,${mapCol ? 'map,' : ''}created_at&order=round.desc,kills.desc,created_at.asc&limit=20`) as Array<Record<string, unknown>>; }
+      catch (err) { if (!mapCol) throw err; mapCol = false; got = await sb('GET', 'b47_scores?select=name,round,kills,heads,points,squad,created_at&order=round.desc,kills.desc,created_at.asc&limit=20') as Array<Record<string, unknown>>; }
       tableOk = true;
-      rows = (got ?? []).map((r) => ({ name: String(r.name), round: Number(r.round), kills: Number(r.kills), heads: Number(r.heads), points: Number(r.points), squad: Number(r.squad), at: String(r.created_at) }));
+      rows = (got ?? []).map((r) => ({ name: String(r.name), round: Number(r.round), kills: Number(r.kills), heads: Number(r.heads), points: Number(r.points), squad: Number(r.squad), map: String(r.map ?? 'bunker'), at: String(r.created_at) }));
+      try {
+        const lg = await sb('GET', 'b47_lifetime?select=name,kills,heads,games,best_round&order=kills.desc,best_round.desc&limit=20') as Array<Record<string, unknown>>;
+        life = (lg ?? []).map((r) => ({ name: String(r.name), kills: Number(r.kills), heads: Number(r.heads), games: Number(r.games), best: Number(r.best_round) }));
+      } catch { life = []; }
     } catch (err) {
       if (tableOk === null) console.warn('Bunker 47 leaderboard: table b47_scores not reachable, keeping scores in memory.', (err as Error).message);
       tableOk = false;
     }
   }
-  cache = { at: Date.now(), rows };
-  return rows;
+  cache = { at: Date.now(), rows, life };
+  return cache;
 }
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -354,7 +369,7 @@ const int = (v: unknown, lo: number, hi: number): number | null => { const n = N
 /** Handles /api/b47/*. Returns false when the path is not ours. */
 export async function handleBunkerApi(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
   if (pathname !== '/api/b47/scores') return false;
-  if (req.method === 'GET') { sendJson(res, 200, { rows: await topScores(), stored: tableOk ? 'database' : 'memory' }); return true; }
+  if (req.method === 'GET') { const b = await boards(); sendJson(res, 200, { rows: b.rows, life: b.life, stored: tableOk ? 'database' : 'memory' }); return true; }
   if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return true; }
   const fwd = req.headers['x-forwarded-for'];
   const addr = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0].trim() || req.socket.remoteAddress || '?';
@@ -364,17 +379,18 @@ export async function handleBunkerApi(req: IncomingMessage, res: ServerResponse,
   let b: Record<string, unknown> = {};
   try { b = JSON.parse((await readSmall(req, 1024)) ?? '{}'); } catch { /* empty */ }
   const name = typeof b.name === 'string' ? b.name.replace(/[^\p{L}\p{N} ._'-]/gu, '').trim().slice(0, 16) : '';
+  const map = typeof b.map === 'string' && /^[a-z]{2,12}$/.test(b.map) ? b.map : 'bunker';
   const round = int(b.round, 1, 999), kills = int(b.kills, 0, 100_000), heads = int(b.heads, 0, 100_000), points = int(b.points, 0, 50_000_000), squad = int(b.squad, 1, 8);
   if (!name || round === null || kills === null || heads === null || points === null || squad === null || heads > kills || kills > round * 60 + 60) { sendJson(res, 400, { error: 'Score rejected.' }); return true; }
-  const row: Score = { name, round, kills, heads, points, squad, at: new Date().toISOString() };
+  const row: Score = { name, round, kills, heads, points, squad, map, at: new Date().toISOString() };
   await topScores();
   if (tableOk) {
-    try { await sb('POST', 'b47_scores', { name, round, kills, heads, points, squad }); }
+    try { await sb('POST', 'b47_scores', mapCol ? { name, round, kills, heads, points, squad, map } : { name, round, kills, heads, points, squad }); }
     catch (err) { console.error('Saving a Bunker 47 score failed:', (err as Error).message); memory.push(row); }
   } else { memory.push(row); if (memory.length > 500) { sortRows(memory); memory.length = 200; } }
   cache = null;
-  const rows = await topScores();
+  const { rows, life } = await boards();
   const rank = rows.findIndex((r) => r.name === name && r.round === round && r.kills === kills) + 1;
-  sendJson(res, 200, { ok: true, rank: rank || null, rows });
+  sendJson(res, 200, { ok: true, rank: rank || null, rows, life });
   return true;
 }
