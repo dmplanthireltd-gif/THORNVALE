@@ -32,6 +32,13 @@ export const BUNKER_FILE = resolve(join(HERE, '..', 'games', 'bunker47.html'));
 export const BUNKER_WS = '/b47ws';
 /** The owner's songs and voice lines, served next to the page: <BUNKER_PATH>song.mp3 (radio easter egg), deadlock.mp3 (boss theme), vo-*.mp3 (voice lines). */
 export const BUNKER_SONGS: Record<string, string> = {
+  // gun models (Styloo Guns Asset Pack, CC0; textures recompressed to JPEG)
+  'gun-ak47.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-ak47.glb')),
+  'gun-awp.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-awp.glb')),
+  'gun-mac10.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-mac10.glb')),
+  'gun-pew.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-pew.glb')),
+  'gun-rocketlaucher.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-rocketlaucher.glb')),
+  'gun-shotgun.glb': resolve(join(HERE, '..', 'games', 'bunker47-gun-shotgun.glb')),
   // photo textures (CC0 Poly Haven sets, baked to 1K JPG)
   'tex-asphalt_02_diff.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-asphalt_02_diff.jpg')),
   'tex-asphalt_02_nor.jpg': resolve(join(HERE, '..', 'games', 'bunker47-tex-asphalt_02_nor.jpg')),
