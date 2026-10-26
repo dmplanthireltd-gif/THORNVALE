@@ -270,6 +270,8 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
 .tally i.x { position: absolute; width: 112px; height: 9px; margin: 0 0 40px -4px; transform: rotate(-24deg); }
 .dmgdirs { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 .dmgdirs i { position: absolute; left: -90px; top: -210px; width: 180px; height: 30px; border-radius: 50% 50% 0 0 / 100% 100% 0 0; border-top: 9px solid rgba(230,30,20,.95); transform-origin: 90px 210px; filter: drop-shadow(0 0 10px rgba(255,0,0,.8)); }
+.gpf { outline: 2px solid #e8b420 !important; outline-offset: 3px; }
+.xbtn { display: inline-block; min-width: 1.35em; height: 1.35em; line-height: 1.35em; border-radius: 50%; background: #2a63c9; color: #fff; text-align: center; font-weight: 700; font-size: .9em; }
 .dmgdirs i.near { border-top: 6px solid rgba(232,180,32,.9); filter: drop-shadow(0 0 8px rgba(232,180,32,.7)); }
 .objective { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); top: calc(env(safe-area-inset-top, 0px) + 34px); font-size: 14px; color: #c9f2c0; text-shadow: 0 1px 3px #000; letter-spacing: .04em; max-width: 46ch; }
 .objective b { color: #9dff8f; font-weight: 400; letter-spacing: .14em; text-transform: uppercase; font-size: 12px; display: block; }
@@ -538,7 +540,9 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
     <div class="opane" data-p="ctl" hidden>
       <div class="orow"><label for="oSens">Mouse sensitivity</label><input type="range" id="oSens" min="0.2" max="3" step="0.05"><output></output></div>
       <div class="orow"><label for="oAds">Aiming sensitivity</label><input type="range" id="oAds" min="0.2" max="1.2" step="0.05"><output></output></div>
-      <div class="orow"><label for="oInv">Invert mouse Y</label><input type="checkbox" id="oInv"><output></output></div>
+      <div class="orow"><label for="oInv">Invert look Y</label><input type="checkbox" id="oInv"><output></output></div>
+      <div class="orow"><label for="oPadSens">Controller look speed</label><input type="range" id="oPadSens" min="0.3" max="2.5" step="0.05"><output></output></div>
+      <div class="orow"><label for="oAssist">Controller aim assist</label><input type="checkbox" id="oAssist"><output></output></div>
       <div class="keys">
         <kbd>W A S D</kbd><span>Move · <b>Shift</b> sprint · <b>Space</b> jump</span>
         <kbd>C</kbd><span>Hold to crouch · press while sprinting to <b>slide</b></span>
@@ -548,6 +552,16 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
         <kbd>V · G · X · T</kbd><span>Knife · grenade · Chill Grenade · flashlight</span>
         <kbd>Tab</kbd><span>Scoreboard and leaderboard</span>
         <kbd>Esc</kbd><span>Pause (pauses the whole squad in co-op)</span>
+      </div>
+      <div class="keys" style="margin-top:12px">
+        <kbd>Left stick</kbd><span>Move · click to sprint</span>
+        <kbd>Right stick</kbd><span>Look · click to knife</span>
+        <kbd>RT · LT</kbd><span>Fire · aim down sights</span>
+        <kbd>A · B</kbd><span>Jump · crouch (slide while sprinting)</span>
+        <kbd>X · Y</kbd><span>Use, buy, hold to rebuild or revive (reloads when there is nothing to use) · swap weapon</span>
+        <kbd>RB · LB</kbd><span>Grenade · Chill Grenade</span>
+        <kbd>D-pad</kbd><span>Up flashlight · down scoreboard · left / right weapons</span>
+        <kbd>Menu</kbd><span>Pause · in menus: A select, B back</span>
       </div>
       <p class="note" style="margin-top:14px;font-size:12px;opacity:.75;line-height:1.5">Credits: zombie models "Polyart Zombies" by Denys Almaral (Sketchfab) · dreadlocks "Short Dreadlocks (Toon/Low Poly Style)" by Tiko, CC BY 4.0 · guns from the Styloo Guns pack and Guns &amp; Explosives pack (CC0) · nature by Quaternius (CC0) · first-person arms from PSX First Person Arms.</p>
     </div>
@@ -645,7 +659,7 @@ const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
 let quality = store.get('b47q', isTouch ? 'low' : 'high'); if (!/^(high|medium|low)$/.test(quality)) quality = 'high';
 let sens = parseFloat(store.get('b47s', '1')) || 1;
 // player options (sound, controls, graphics, display); saved in this browser
-const OPT = Object.assign({ master: 0.9, sfx: 1, music: 0.6, ads: 0.55, fov: 72, invY: false, shadows: quality !== 'low', bloom: true, grain: true, scale: 1, bright: 1, fps: false, cross: 'cross', hit: true }, (() => { try { return JSON.parse(store.get('b47opt', '{}')) || {}; } catch (e) { return {}; } })());
+const OPT = Object.assign({ master: 0.9, sfx: 1, music: 0.6, ads: 0.55, fov: 72, invY: false, shadows: quality !== 'low', bloom: true, grain: true, scale: 1, bright: 1, fps: false, cross: 'cross', hit: true, padSens: 1, aimAssist: true }, (() => { try { return JSON.parse(store.get('b47opt', '{}')) || {}; } catch (e) { return {}; } })());
 const saveOpt = () => store.set('b47opt', JSON.stringify(OPT));
 
 // =====================================================================
@@ -5147,6 +5161,7 @@ const dmgDirs = [];
 function hurt(a, sx, sz) {
   if (P.down || P.dead || APP.screen !== 'play' || APP.paused || holdName()) return; // nothing can hurt you while the game is paused
   const now = performance.now() / 1000; if (now - (P.lastHit || 0) < 0.7) a *= 0.35; else P.lastHit = now;
+  padRumble(0.45, 0.8, 200);
   P.hp -= a; P.regenT = P.perks.vibes ? 2 : 4; P.dmgFx = 1; P.shake = Math.max(P.shake, 0.18); SND.hurt(); if (BANK.b.zbite && sx != null) playB('zbite', { x: sx, y: P.y + 1.4, z: sz }, 0.8, 0.2);
   if (sx != null && isFinite(sx)) { dmgDirs.push({ x: sx, z: sz, t: 1.2 }); if (dmgDirs.length > 4) dmgDirs.shift(); }
   if (P.hp <= 0) goDown();
@@ -5231,7 +5246,7 @@ function shatterGlass(m, pt) {
 // how many zombies one round can pass through (pistols/SMGs/shotgun pellets 2, rifles/LMGs 3, snipers 4); wonder weapons don't
 function penOf(w) { return w.pen || ({ pistol: 2, smg: 2, shotgun: 2, rifle: 3, lmg: 3, bolt: 4 })[w.snd] || 1; }
 function fire() {
-  const s = curSlot(), w = WS(s);
+  const s = curSlot(), w = WS(s); padRumble(0.18, 0.04, 50);
   if (!(P.perks.nuff && Math.random() < 0.25)) s.mag--; P.fireT = w.rate * (P.perks.rapid ? 0.75 : 1); P.shotN++;
   SND.shot(s.k + (s.pap ? '*' : ''));
   if (s.k === 'garand' && s.mag === 0) SND.ping();
@@ -6158,7 +6173,7 @@ function hudUpdate(dt) {
   storyHud();
   setText('gren', '<i></i>'.repeat(P.gren) + '<i class="ch"></i>'.repeat(P.chill || 0));
   setText('perks', Object.keys(P.perks).map(k => '<i style="--c:' + PERKS[k].css + '" title="' + PERKS[k].name + '">' + perkSvg(k, '#f4ead2', PERKS[k].css) + '</i>').join(''));
-  setText('prompt', promptText);
+  setText('prompt', GP.last === 'pad' && promptText ? promptText.replace(/<b>F<\/b>/g, '<b class="xbtn">X</b>') : promptText);
   const chips = []; if (V.insta > 0) chips.push('<span>Insta-Kill ' + Math.ceil(V.insta) + 's</span>'); if (V.dbl > 0) chips.push('<span>Double Points ' + Math.ceil(V.dbl) + 's</span>'); if (V.phase === 'inter' && V.interT > 0) chips.push('<span style="background:rgba(60,50,30,.6);border-color:#d6a64a;color:#f2e2b8;text-shadow:none">Next round in ' + Math.ceil(V.interT) + 's</span>');
   setText('fxchips', chips.join(''));
   const spread = spreadNow(curW()) * 900 + 6;
@@ -6383,9 +6398,9 @@ async function openLb(from) {
 }
 // ---------- options screen ----------
 let optFrom = 'menu';
-const OPT_DEF = { master: 0.9, sfx: 1, music: 0.6, ads: 0.55, fov: 72, invY: false, shadows: true, bloom: true, grain: true, scale: 1, bright: 1, fps: false, cross: 'cross', hit: true };
-const OPT_UI = [['oMaster', 'master', v => Math.round(v * 100) + '%'], ['oSfx', 'sfx', v => Math.round(v * 100) + '%'], ['oMusic', 'music', v => Math.round(v * 100) + '%'], ['oAds', 'ads', v => v.toFixed(2)], ['oFov', 'fov', v => v + '°'], ['oBright', 'bright', v => Math.round(v * 100) + '%'], ['oScale', 'scale', v => Math.round(v * 100) + '%']];
-const OPT_CHK = [['oHit', 'hit'], ['oInv', 'invY'], ['oShadows', 'shadows'], ['oBloom', 'bloom'], ['oGrain', 'grain'], ['oFps', 'fps']];
+const OPT_DEF = { padSens: 1, aimAssist: true, master: 0.9, sfx: 1, music: 0.6, ads: 0.55, fov: 72, invY: false, shadows: true, bloom: true, grain: true, scale: 1, bright: 1, fps: false, cross: 'cross', hit: true };
+const OPT_UI = [['oMaster', 'master', v => Math.round(v * 100) + '%'], ['oSfx', 'sfx', v => Math.round(v * 100) + '%'], ['oMusic', 'music', v => Math.round(v * 100) + '%'], ['oAds', 'ads', v => v.toFixed(2)], ['oFov', 'fov', v => v + '°'], ['oBright', 'bright', v => Math.round(v * 100) + '%'], ['oScale', 'scale', v => Math.round(v * 100) + '%'], ['oPadSens', 'padSens', v => (+v).toFixed(2)]];
+const OPT_CHK = [['oAssist', 'aimAssist'], ['oHit', 'hit'], ['oInv', 'invY'], ['oShadows', 'shadows'], ['oBloom', 'bloom'], ['oGrain', 'grain'], ['oFps', 'fps']];
 function optSync() {
   { const g = $('oGpu'); if (g) g.textContent = GPU + (/intel|uhd|iris|integrated|radeon\(tm\) graphics|vega [0-9]* graphics/i.test(GPU) ? ' (integrated graphics: see How to play for using your graphics card)' : ''); }
   for (const [id, k, f] of OPT_UI) { const el = $(id); el.value = OPT[k]; el.nextElementSibling.textContent = f(+OPT[k]); }
@@ -6477,6 +6492,96 @@ tb('tNade', () => throwGrenade());
 tb('tKnife', () => knife());
 tb('tPause', () => pause());
 
+// ---------- game controller (Xbox and any standard-layout pad, through the browser's Gamepad API) ----------
+// In play it feeds the same inputs as keyboard / mouse / touch; in menus it moves a gold focus ring (A select, B back).
+const GP = { idx: -1, prev: [], last: 'kb', mv: false, sprint: false, xUse: false, held: {}, navT: 0, navDir: '' };
+const PAD = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, LS: 10, RS: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 }, DZ = 0.16;
+addEventListener('gamepadconnected', e => { GP.idx = e.gamepad.index; banner('Controller connected', 'Press any button to play', 2400, true); });
+addEventListener('gamepaddisconnected', e => { if (e.gamepad.index === GP.idx) { GP.idx = -1; padReleasePlay(); GP.last = 'kb'; padFocus(null); } });
+for (const ev of ['keydown', 'mousedown', 'touchstart']) addEventListener(ev, () => { if (GP.last === 'pad') { GP.last = 'kb'; padFocus(null); } }, { passive: true });
+function padGet() { const L = navigator.getGamepads ? navigator.getGamepads() : []; if (GP.idx >= 0 && L[GP.idx]) return L[GP.idx]; for (const g of L) if (g && g.connected) { GP.idx = g.index; return g; } return null; }
+function padRumble(weak, strong, ms) { if (GP.last !== 'pad') return; const g = padGet(), a = g && g.vibrationActuator; if (a && a.playEffect) a.playEffect('dual-rumble', { duration: ms, weakMagnitude: weak, strongMagnitude: strong }).catch(() => {}); }
+function padPoll(dt) {
+  const g = padGet(); if (!g) return;
+  const b = i => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.45)), pr = i => b(i) && !GP.prev[i], rl = i => !b(i) && !!GP.prev[i];
+  const ax = i => { const v = g.axes[i] || 0, a = Math.abs(v); return a < DZ ? 0 : Math.sign(v) * (a - DZ) / (1 - DZ); };
+  if (GP.last !== 'pad' && (g.buttons.some((_, i) => b(i)) || [0, 1, 2, 3].some(i => Math.abs(g.axes[i] || 0) > 0.4))) { GP.last = 'pad'; aInit(); }
+  const play = APP.screen === 'play' && $('pause').hidden && $('opts').hidden && $('lbScreen').hidden && !APP.bench;
+  if (play) { padFocus(null); padPlay(b, pr, rl, ax, dt); } else { padReleasePlay(); if (GP.last === 'pad') padMenu(b, pr, ax, dt); }
+  GP.prev = g.buttons.map((_, i) => b(i));
+}
+function padHold(key, on) { if (on) { K[key] = true; GP.held[key] = 1; } else if (GP.held[key]) { K[key] = false; delete GP.held[key]; } }
+function padReleasePlay() {
+  for (const k in GP.held) { if (k === 'trigger') P.trigger = false; else if (k === 'ads') P.adsHeld = false; else if (k === 'use') P.useHeld = false; else K[k] = false; }
+  GP.held = {}; if (GP.mv) { TM.x = TM.y = 0; TM.sprint = false; GP.mv = false; } GP.sprint = false;
+}
+function padPlay(b, pr, rl, ax, dt) {
+  // move (left stick; click it to sprint until you stop pushing forward)
+  const mx = ax(0), my = ax(1);
+  if (pr(PAD.LS)) GP.sprint = !GP.sprint; if (my > -0.35) GP.sprint = false;
+  if (mx || my || GP.mv) { TM.x = mx; TM.y = my; TM.sprint = GP.sprint; GP.mv = !!(mx || my); }
+  // look (right stick): response curve, slower while aiming, slowed over a zombie with aim assist
+  const lx = ax(2), ly = ax(3);
+  if (lx || ly) {
+    const cv = v => Math.sign(v) * Math.pow(Math.abs(v), 1.7); let k = 3.2 * (OPT.padSens || 1) * dt * lerp(1, 0.5, P.ads);
+    if (OPT.aimAssist && padTarget(0.08)) k *= 0.55;
+    P.yaw -= cv(lx) * k; P.pitch = clamp(P.pitch - cv(ly) * k * 0.72 * (OPT.invY ? -1 : 1), -1.5, 1.5);
+    P.swayX = clamp(P.swayX + cv(lx) * 0.35, -1.5, 1.5); P.swayY = clamp(P.swayY + cv(ly) * 0.35, -1.5, 1.5);
+  }
+  if (P.dead) { if (pr(PAD.A) || pr(PAD.RT)) specIdx++; return; }
+  // triggers
+  if (pr(PAD.RT)) { P.trigger = true; GP.held.trigger = 1; } if (rl(PAD.RT)) { P.trigger = false; delete GP.held.trigger; }
+  if (pr(PAD.LT)) { P.adsHeld = true; GP.held.ads = 1; if (OPT.aimAssist) padSnap(); } if (rl(PAD.LT)) { P.adsHeld = false; delete GP.held.ads; }
+  // face buttons
+  if (pr(PAD.A)) padHold('Space', true); if (rl(PAD.A)) padHold('Space', false);
+  if (pr(PAD.B)) { padHold('KeyC', true); if (P.sprint && P.ground && !(P.slideCd > 0)) startSlide(); } if (rl(PAD.B)) padHold('KeyC', false);
+  if (pr(PAD.X)) { if (promptAct) { P.use = true; P.useHeld = true; GP.held.use = 1; } else startReload(); }
+  if (b(PAD.X) && GP.held.use) P.useHeld = true; if (rl(PAD.X) && GP.held.use) { P.useHeld = false; delete GP.held.use; }
+  if (pr(PAD.Y) && P.slots.length > 1) swapTo((P.cur + 1) % P.slots.length);
+  if (pr(PAD.RB)) throwGrenade(); if (pr(PAD.LB)) throwChill(); if (pr(PAD.RS)) knife();
+  if (pr(PAD.UP)) P.light = !P.light;
+  if (pr(PAD.LEFT) && P.slots.length > 1) swapTo((P.cur + P.slots.length - 1) % P.slots.length); if (pr(PAD.RIGHT) && P.slots.length > 1) swapTo((P.cur + 1) % P.slots.length);
+  padHold('Tab', b(PAD.DOWN) || b(PAD.BACK));
+  if (pr(PAD.START)) pause();
+}
+// aim assist: is a zombie's body close to the crosshair (screen units)? and a small pull toward it when you start aiming
+const _pv = new THREE.Vector3();
+function padTarget(r) {
+  let best = null, bd = r;
+  for (const v of zv.values()) { if (v.dying || v.st === 0) continue; const d = Math.hypot(v.x - P.x, v.z - P.z); if (d > 28 || d < 0.6) continue;
+    _pv.set(v.x, v.y + 1.35, v.z).project(camera); if (_pv.z > 1) continue; const e = Math.hypot(_pv.x, _pv.y * 0.6); if (e < bd) { bd = e; best = v; } }
+  return best;
+}
+function padSnap() { const v = padTarget(0.22); if (!v) return; const dx = v.x - P.x, dz = v.z - P.z, yaw = Math.atan2(-dx, -dz), d = Math.hypot(dx, dz), pitch = Math.atan2(v.y + 1.4 - (P.y + (P.eyeH || 1.62)), d);
+  let dy = yaw - P.yaw; while (dy > Math.PI) dy -= TAU; while (dy < -Math.PI) dy += TAU; P.yaw += dy * 0.6; P.pitch += (pitch - P.pitch) * 0.5; }
+// menus: the top visible screen's buttons, sliders and boxes; D-pad / left stick moves, A presses, B goes back, Menu resumes
+function padLayer() {
+  if (APP.bench && !$('bench').hidden) return $('bench');
+  for (const id of ['howPanel', 'opts', 'lbScreen', 'custom', 'pause', 'over', 'waiting', 'menu']) { const el = $(id); if (el && !el.hidden && el.getClientRects().length) return el; }
+  return null;
+}
+function padItems(layer) { return Array.from(layer.querySelectorAll('button, input, select, a[href]')).filter(el => !el.disabled && el.getClientRects().length && !el.closest('[hidden]')); }
+function padFocus(el) { const old = document.querySelector('.gpf'); if (old && old !== el) old.classList.remove('gpf'); if (el) { el.classList.add('gpf'); if (document.activeElement !== el) el.focus({ preventScroll: false }); el.scrollIntoView && el.scrollIntoView({ block: 'nearest' }); } }
+function padMenu(b, pr, ax, dt) {
+  const layer = padLayer(); if (!layer) return; const items = padItems(layer); if (!items.length) return;
+  let cur = document.querySelector('.gpf'); if (!cur || !items.includes(cur)) { cur = items.includes(document.activeElement) ? document.activeElement : items[0]; padFocus(cur); }
+  const sx = ax(0), sy = ax(1), dir = b(PAD.UP) || sy < -0.6 ? 'u' : b(PAD.DOWN) || sy > 0.6 ? 'd' : b(PAD.LEFT) || sx < -0.6 ? 'l' : b(PAD.RIGHT) || sx > 0.6 ? 'r' : '';
+  GP.navT -= dt; if (dir !== GP.navDir) GP.navT = 0; GP.navDir = dir;
+  if (dir && GP.navT <= 0) {
+    GP.navT = GP.navT === 0 && dir ? 0.32 : 0.12;
+    if (cur.type === 'range' && (dir === 'l' || dir === 'r')) { const st = parseFloat(cur.step) || 0.05; cur.value = clamp(parseFloat(cur.value) + (dir === 'r' ? st : -st), parseFloat(cur.min), parseFloat(cur.max)); cur.dispatchEvent(new Event('input', { bubbles: true })); }
+    else { const r0 = cur.getBoundingClientRect(), c0 = [r0.left + r0.width / 2, r0.top + r0.height / 2], dv = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] }[dir]; let best = null, bs = 1e9;
+      for (const el of items) { if (el === cur) continue; const r = el.getBoundingClientRect(), dx = r.left + r.width / 2 - c0[0], dy = r.top + r.height / 2 - c0[1], along = dx * dv[0] + dy * dv[1]; if (along <= 4) continue; const side = Math.abs(dx * dv[1] - dy * dv[0]), sc = along + side * 2.2; if (sc < bs) { bs = sc; best = el; } }
+      if (best) padFocus(best); }
+  }
+  if (pr(PAD.A)) { if (cur.type === 'checkbox') { cur.checked = !cur.checked; cur.dispatchEvent(new Event('change', { bubbles: true })); } else if (cur.type !== 'range') cur.click(); }
+  if (pr(PAD.B) || (pr(PAD.START) && !$('pause').hidden && layer === $('pause'))) {
+    if (layer === $('bench')) benchClose(); else if (layer === $('howPanel')) $('howPanel').hidden = true; else if (layer === $('opts')) closeOpts(); else if (layer === $('lbScreen')) $('lbBack').click();
+    else if (layer === $('custom')) $('custDone').click(); else if (layer === $('pause')) resume();
+    padFocus(null);
+  }
+}
+
 // menu wiring
 $('nameIn').value = myName;
 $('nameIn').addEventListener('input', () => { myName = $('nameIn').value.trim().slice(0, 16) || 'Selector'; store.set('b47n', myName); setLobbyPresence(); });
@@ -6548,7 +6653,7 @@ const clock = new THREE.Clock();
 let groanT = 0;
 function frame() {
   const dt = Math.min(0.05, clock.getDelta()); T.now += dt;
-  mergeWatch(dt); poolUpdate(dt);
+  mergeWatch(dt); poolUpdate(dt); padPoll(dt);
   groanT -= dt; if (groanT <= 0) { groanT = 1; groanBudget = 0; }
   const held = APP.screen === 'play' && !!holdName();
   if (APP.screen === 'play' && !APP.paused && !held) {

@@ -88,6 +88,7 @@ Key ideas:
 
 Controls: mouse aim / fire / ADS · R reload · F buy, open, rebuild, revive · Q or 1-3 swap · V knife · G grenade ·
 X Chill Grenade · T flashlight · C crouch / slide · Tab scoreboard · Esc pause.
+Controller (Xbox / standard pad, Gamepad API, code in the `game controller` block: `padPoll`, `padPlay`, `padMenu`): left stick move (click = sprint) · right stick look (click = knife) · RT fire · LT aim · A jump · B crouch/slide · X use (reload if nothing to use) · Y swap · RB/LB grenades · D-pad flashlight / scoreboard / weapons · Menu pause. Menus: gold focus ring, A select, B back.
 
 ## 5. Running and testing
 
