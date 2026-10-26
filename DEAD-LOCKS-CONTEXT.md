@@ -1,4 +1,6 @@
-# Dead Locks — context for any AI (or developer) opening this repo
+# Dead Riddim (formerly Dead Locks) — context for any AI (or developer) opening this repo
+
+> **Name:** the game was renamed **Dead Riddim** on 2026-10-26 ("Deadlock" is taken). Use Dead Riddim in anything players see. The boss is still called Deadlock. File names (`games/bunker47*`), this file's name and code identifiers keep the old names.
 
 Read this first if you are working on **Dead Locks**. For anything else in this repo (the Thornvale RPG),
 read `CLAUDE.md`, `BIBLE.md` and `BRAND.md` instead.

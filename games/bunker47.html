@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Dead Locks</title>
+<title>Dead Riddim</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik+Wet+Paint&family=Special+Elite&family=Oswald:wght@400;500;600&display=swap">
 <style>
@@ -405,11 +405,11 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
 .banner .big, .spec b { color: var(--paper); text-shadow: 3px 3px 0 var(--r-red), 6px 6px 0 rgba(0,0,0,.6); }
 </style>
 
-<canvas id="c" aria-label="Dead Locks game view"></canvas>
+<canvas id="c" aria-label="Dead Riddim game view"></canvas>
 <div id="loading" role="status" aria-live="polite">
   <div class="ld-wrap">
-    <div class="ld-deck" aria-hidden="true"><div class="ld-vinyl"><div class="ld-label"><b>DEAD</b><b>LOCKS</b></div></div><div class="ld-arm"></div></div>
-    <div class="ld-title">Dead Locks</div>
+    <div class="ld-deck" aria-hidden="true"><div class="ld-vinyl"><div class="ld-label"><b>DEAD</b><b>RIDDIM</b></div></div><div class="ld-arm"></div></div>
+    <div class="ld-title">Dead Riddim</div>
     <div class="ld-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
     <div class="ld-bar"><i id="ldFill"></i></div>
     <div class="ld-step" id="ldStep">Warming up the valves…</div>
@@ -455,7 +455,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
   <div class="fp">
     <header class="fp-head">
       <div class="fp-kicker">Sound system · zombie survival</div>
-      <h1 class="fp-title">Dead Locks</h1>
+      <h1 class="fp-title">Dead Riddim</h1>
       <div class="tri" aria-hidden="true"><i></i><i></i><i></i></div>
       <div class="fp-now"><span class="fp-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="fpNow">Now playing · Bunker Echoes</span></div>
     </header>
@@ -476,7 +476,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
       <div class="fp-maps" id="mapPick">
         <button data-v="bunker"><b>The Bunker</b><small>Concrete halls, a rum bar and a dancehall underground</small></button>
         <button data-v="yard"><b>Yard Night</b><small>Open-air street block: zinc fences, rooftop, the big sound system</small></button>
-        <button data-v="studio"><b>Dead Lock Records</b><small>Abandoned Kingston recording studio: live room, control room, loft, tape archive, loading dock</small></button>
+        <button data-v="studio"><b>Dead Riddim Records</b><small>Abandoned Kingston recording studio: live room, control room, loft, tape archive, loading dock</small></button>
         <button class="soon" disabled aria-disabled="true"><b>Carnival Day</b><small>Float parade, food stalls and a steel band</small></button>
       </div>
       <div class="lb" id="lb" hidden><div class="lbl">Top survivors</div><table class="stats lbt" id="lbTable"></table></div>
@@ -971,7 +971,7 @@ function textSprite(lines, opt = {}) {
     x.font = (i === 0 ? (opt.size || 64) : (opt.size2 || 40)) + 'px ' + (opt.font || '"Special Elite", "Courier New", monospace');
     x.fillStyle = i === 0 ? (opt.color || '#e9dcc0') : (opt.color2 || '#d6a64a');
     x.shadowColor = 'rgba(0,0,0,.8)'; x.shadowBlur = 8;
-    x.fillText(l, W / 2, H * (i + 0.5) / n);
+    x.fillText(l, W / 2, H * (i + 0.5) / n, W * 0.94);
   });
   const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
   t.anisotropy = 4; const sc = opt.scale || 1;
@@ -1028,9 +1028,9 @@ const DOORS = LOT ? [
   { x: -8, z: -2.6, w: 2.2, h: 2.55, cost: 750, name: 'the Rum Bar', lab: 'Clear the door', sides: [-1, 1], open: false, anim: 0, mesh: null }
 ];
 if (LOT) {
-  // Dead Lock Records: an abandoned reggae studio in Kingston. Rooms: 0 Lobby, 1 Live Room, 2 Control Room, 3 Tape Archive + back hallway,
+  // Dead Riddim Records: an abandoned reggae studio in Kingston. Rooms: 0 Lobby, 1 Live Room, 2 Control Room, 3 Tape Archive + back hallway,
   // 4 Loading Dock courtyard, 5 the Loft (lounge over the lobby and control room, plus the catwalk round the live room; either staircase opens it)
-  Object.assign(MD, { name: 'Dead Lock Records', bounds: [0.3, 61.7, -17.7, 9.7], roofs: [[0, 42, -18, 6]],
+  Object.assign(MD, { name: 'Dead Riddim Records', bounds: [0.3, 61.7, -17.7, 9.7], roofs: [[0, 42, -18, 6]],
     nav: { x0: -12, z0: -30, nx: 172, nz: 102 }, spawn: [9.6, 0.4], cust: { x: 9.4, z: -0.6 }, menuCam: [1.2, 2.1, 3.6, -0.95], puddles: [],
     roomReq: [0, 1, 2, 8, 16, 36],
     story: { gen: [55, -1], genR: 7.5, vault: [41.75, -12.5, -Math.PI / 2], vaultRoom: 'the Tape Archive', genRoom: 'the Loading Dock' },
@@ -1529,7 +1529,7 @@ function buildYard() {
   wallBuy('aks', 2200, 48.5, -14, 0, 1); wallBuy('stg', 2000, 51.5, 14, 0, -1); wallBuy('ppsh', 1800, 62, -11, -1, 0);
   yTree(41, -9, 7); streetLamp(42, -6, true); streetLamp(52.5, 10.5, false); streetLamp(52.5, -10.5, false);
   bulbString([36.2, 3.4, -13.8], [61.8, 3.4, 13.8], 1.2); bulbString([36.2, 3.4, 13.8], [61.8, 3.4, -13.8], 1.2); bulbString([36.2, 3.2, 0], [61.8, 3.2, 0], 0.8);
-  { const sg = textSprite(['DEAD LOCKS SOUND', 'live every night till the last'], { scale: 0.6, size: 72, size2: 34, w: 1024, h: 200, color: '#e8b420', color2: '#c8261c' }); sg.position.set(58.4, 4.2, 0); scene.add(sg); }
+  { const sg = textSprite(['DEAD RIDDIM SOUND', 'live every night till the last'], { scale: 0.6, size: 72, size2: 34, w: 1024, h: 200, color: '#e8b420', color2: '#c8261c' }); sg.position.set(58.4, 4.2, 0); scene.add(sg); }
   // ----- radios for the song easter egg
   for (let i = 0; i < 3; i++) { const [x, z, y, ry] = MD.radios[i]; buildRadio(i, x, z, y, ry); }
   // ----- the neighbourhood around: zinc fences, trees, dark houses
@@ -1738,12 +1738,12 @@ function sandbags(x, z, ry, n = 3) { const g = place(x, z, ry), m = new THREE.Me
 function golfCart(x, z, ry) { const g = place(x, z, ry), w = new THREE.MeshStandardMaterial({ color: 0xe9e4d8, roughness: 0.4 }); gb(g, 2.3, 0.45, 1.2, 0, 0.5, 0, w); gb(g, 0.7, 0.5, 1.1, 0.3, 0.95, 0, M.canvasR); gb(g, 2.0, 0.06, 1.25, 0.1, 2.0, 0, w); for (const sx of [-0.85, 0.95]) for (const sz of [-0.5, 0.5]) gc(g, 0.04, 0.04, 1.3, sx, 1.35, sz * 1.05, M.chrome, { ray: false, seg: 6 }); for (const sx of [-0.8, 0.8]) for (const sz of [-0.62, 0.62]) gc(g, 0.22, 0.22, 0.16, sx, 0.22, sz, M.tyre, { rx: Math.PI / 2, seg: 12 }); colRect(x, z, 2.4, 1.3, ry); }
 function flightCase(x, z, ry, w = 1.0, h = 0.7, y = 0) { const g = place(x, z, ry, y); gb(g, w, h, 0.6, 0, h / 2, 0, M.black); for (const sx of [-1, 1]) gb(g, 0.04, h + 0.01, 0.62, sx * w / 2, h / 2, 0, M.chrome, { ray: false }); gb(g, w + 0.01, 0.04, 0.62, 0, h * 0.7, 0, M.chrome, { ray: false }); colRect(x, z, w, 0.6, ry); }
 function billboard(x, z, ry, y, lines) { const g = place(x, z, ry, y); for (const sx of [-1.8, 1.8]) gc(g, 0.08, 0.08, 1.6, sx, 0.8, 0, M.darkSteel, { seg: 8, ray: false }); gb(g, 6.4, 3.0, 0.15, 0, 3.1, 0, M.black); const s = textSprite(lines, { scale: 1.45, size: 96, size2: 40, w: 1024, h: 480, color: '#e8b420', color2: '#f3e6c4', bg: '#1b1410' }); s.position.set(0, 3.1, 0.1); g.add(s); for (let i = 0; i < 4; i++) { const l = gb(g, 0.1, 0.1, 0.5, -2.4 + i * 1.6, 4.75, 0.3, M.darkSteel, { ray: false }); l.rotation.x = 0.5; } return g; }
-function stepRepeat(x, z, ry, w, h) { const g = place(x, z, ry), c = document.createElement('canvas'); c.width = 512; c.height = 256; const t = c.getContext('2d'); t.fillStyle = '#efe8d8'; t.fillRect(0, 0, 512, 256); t.font = 'bold 30px Verdana'; t.textAlign = 'center'; for (let yy = 0; yy < 6; yy++) for (let xx = 0; xx < 5; xx++) { const alt = (xx + yy) % 2; t.fillStyle = alt ? '#b3261e' : '#1b1410'; t.fillText(alt ? 'DEAD LOCKS' : '◆ PREMIERE', 50 + xx * 105 + (yy % 2) * 52, 30 + yy * 42); } const tx = new THREE.CanvasTexture(c); tx.encoding = THREE.sRGBEncoding; gb(g, w, h, 0.08, 0, h / 2 + 0.1, 0, new THREE.MeshStandardMaterial({ map: tx, roughness: 0.8 })); for (const sx of [-1, 1]) gb(g, 0.1, 0.1, 0.8, sx * (w / 2 - 0.1), 0.05, 0, M.darkSteel, { ray: false }); colRect(x, z, w, 0.3, ry); }
+function stepRepeat(x, z, ry, w, h) { const g = place(x, z, ry), c = document.createElement('canvas'); c.width = 512; c.height = 256; const t = c.getContext('2d'); t.fillStyle = '#efe8d8'; t.fillRect(0, 0, 512, 256); t.font = 'bold 30px Verdana'; t.textAlign = 'center'; for (let yy = 0; yy < 6; yy++) for (let xx = 0; xx < 5; xx++) { const alt = (xx + yy) % 2; t.fillStyle = alt ? '#b3261e' : '#1b1410'; t.fillText(alt ? 'DEAD RIDDIM' : '◆ PREMIERE', 50 + xx * 105 + (yy % 2) * 52, 30 + yy * 42); } const tx = new THREE.CanvasTexture(c); tx.encoding = THREE.sRGBEncoding; gb(g, w, h, 0.08, 0, h / 2 + 0.1, 0, new THREE.MeshStandardMaterial({ map: tx, roughness: 0.8 })); for (const sx of [-1, 1]) gb(g, 0.1, 0.1, 0.8, sx * (w / 2 - 0.1), 0.05, 0, M.darkSteel, { ray: false }); colRect(x, z, w, 0.3, ry); }
 function hillLetters(text, cx, cz, r, y) { const m = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.8 }); const ch = [...text]; ch.forEach((c, i) => { if (c === ' ') return; const s = textSprite([c], { scale: 7, size: 220, w: 240, h: 260, color: '#f6f2e8', font: 'Verdana' }); const a = (i - (ch.length - 1) / 2) * 0.05; s.position.set(cx + Math.sin(a) * r, y, cz - Math.cos(a) * r); scene.add(s); }); }
 function lightTower(x, z) { const g = place(x, z, 0); gb(g, 1.6, 0.9, 1.0, 0, 0.6, 0, new THREE.MeshStandardMaterial({ color: 0xe8b420, roughness: 0.5 })); gc(g, 0.08, 0.1, 7, 0, 4.0, 0, M.darkSteel, { seg: 8 }); const lm = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 2.8, 2.3), toneMapped: false }); for (let i = 0; i < 4; i++) { gb(g, 0.5, 0.4, 0.2, -0.75 + i * 0.5, 7.4, 0, M.black, { ray: false }); gb(g, 0.42, 0.32, 0.02, -0.75 + i * 0.5, 7.4, 0.11, lm, { ray: false }); } for (const sx of [-1, 1]) { const o = gb(g, 1.8, 0.08, 0.12, sx * 1.1, 0.12, 0, M.darkSteel, { ray: false }); o.rotation.y = 0; } colRect(x, z, 1.7, 1.1); }
 
 // =====================================================================
-// Dead Lock Records: an abandoned reggae studio in Kingston, overrun the night the dead rose.
+// Dead Riddim Records: an abandoned reggae studio in Kingston, overrun the night the dead rose.
 // Lobby (start) -> Live Room / Control Room -> Loft (lounge + catwalk) -> Tape Archive -> Loading Dock courtyard
 // =====================================================================
 // --- small models (palms, plants, props) loaded like the guns; each is fitted to a height when placed
@@ -1862,7 +1862,7 @@ function lotMats() {
 }
 // ---------- canvas art: posters (invented artists), the lion mural, blood drawn as musical notes
 function canvasMat(draw, w = 256, h = 256, o = {}) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return new THREE.MeshStandardMaterial(Object.assign({ map: t, roughness: 0.85, transparent: !!o.alpha, depthWrite: !o.alpha, polygonOffset: !!o.alpha, polygonOffsetFactor: -2 }, o.extra || {})); }
-const GIGS = [['KING SELAH', 'live at Dead Lock Records', '#b3261e'], ['IRATION DUB', 'sound clash · bring your crew', '#2e8b3e'], ['SISTER NYAH', 'new 45 out now', '#e8b420'], ['ROOTS ARMY HI-FI', 'every Friday · Waterhouse', '#1b1410'], ['LION HEART', 'the album · on Dead Lock', '#7a2a9a'], ['BASS MOUNTAIN', 'dub session · midnight', '#235a7a']];
+const GIGS = [['KING SELAH', 'live at Dead Riddim Records', '#b3261e'], ['IRATION DUB', 'sound clash · bring your crew', '#2e8b3e'], ['SISTER NYAH', 'new 45 out now', '#e8b420'], ['ROOTS ARMY HI-FI', 'every Friday · Waterhouse', '#1b1410'], ['LION HEART', 'the album · on Dead Riddim', '#7a2a9a'], ['BASS MOUNTAIN', 'dub session · midnight', '#235a7a']];
 function posterMat(i, torn) {
   const [a, b, col] = GIGS[i % GIGS.length];
   return canvasMat((x, w, h) => { x.fillStyle = '#e9dfc4'; x.fillRect(0, 0, w, h); x.fillStyle = col; x.fillRect(0, 0, w, h * 0.62);
@@ -1989,7 +1989,7 @@ function buildStudio() {
 
   // ===== LOBBY: boarded glass shopfront, reception desk, the neon sign, waiting area, gold records, plants pushing in
   frontDesk(6.0, 2.6, Math.PI); ashtray(4.6, 2.5, 1.11); cassettes(7.2, 2.4, 1.11, 6);
-  neonSign(11.75, 4.6, -3.0, -Math.PI / 2, ['DEAD LOCK RECORDS', 'est. Kingston 1974'], '#ff3a2a', 0.95);
+  neonSign(11.75, 4.6, -3.0, -Math.PI / 2, ['DEAD RIDDIM RECORDS', 'est. Kingston 1974'], '#ff3a2a', 0.95);
   sofa(1.0, -4.6, Math.PI / 2, 0x6a2a1a); sofa(9.6, -7.3, 0, 0x2a4a2a); table(2.4, -4.6, 0.6, 1.2); ashtray(2.4, -4.6, 0.81); vinylPile(5.2, -4.6, 0, 6);
   vending(11.4, -6.6, -Math.PI / 2 + 0.1);
   for (let i = 0; i < 6; i++) { const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.01, 24), new THREE.MeshStandardMaterial({ color: 0xd8b04a, roughness: 0.2, metalness: 1 })); disc.rotation.x = Math.PI / 2; disc.position.set(1.4 + i * 1.6, 2.4, 5.78); scene.add(disc); const fr = gb(scene, 0.6, 0.6, 0.03, 1.4 + i * 1.6, 2.4, 5.8, M.black, { ray: false }); }
@@ -2075,7 +2075,7 @@ function buildStudio() {
   perkMachine('blast', 43.4, -17.3, 0); perkMachine('dropbass', 61.3, 6.4, -Math.PI / 2);
   wallBuy('stg', 2000, 62, -13.0, -1, 0); wallBuy('ppsh', 1800, 56, 10, 0, -1);
   PY = 2.6; sandbags(53.2, -15.4, 0, 3); PY = 0;
-  { const s = textSprite(['DEAD LOCK SOUND', 'yard session · tonight'], { scale: 0.62, size: 76, size2: 34, w: 1024, h: 220, color: '#e8b420', color2: '#ff3a2a', bg: '#1b1410' }); s.position.set(55.4, 4.2, -1); scene.add(s); }
+  { const s = textSprite(['DEAD RIDDIM SOUND', 'yard session · tonight'], { scale: 0.62, size: 76, size2: 34, w: 1024, h: 220, color: '#e8b420', color2: '#ff3a2a', bg: '#1b1410' }); s.position.set(55.4, 4.2, -1); scene.add(s); }
   // ----- radios, the street outside and the city around
   for (let i = 0; i < 3; i++) { const [x, z, y, ry] = MD.radios[i]; buildRadio(i, x, z, y, ry); }
   gb(scene, 30, 0.12, 60, -15, -0.06, -6, M.asphalt, { cast: false, ray: false });
@@ -2488,7 +2488,7 @@ function buildAnnex() {
   const booth = place(41.2, -4.3, 0, 0.35); gb(booth, 2.0, 1.0, 0.7, 0, 0.5, 0, M.darkSteel); gb(booth, 2.1, 0.05, 0.8, 0, 1.02, 0, M.metal, { ray: false });
   for (const dx of [-0.55, 0.55]) { gc(booth, 0.17, 0.17, 0.02, dx, 1.06, 0, new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.3 }), { ray: false, seg: 28 }); gc(booth, 0.05, 0.05, 0.022, dx, 1.065, 0, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 0.3, 0.2), toneMapped: false }), { ray: false, seg: 16 }); }
   gb(booth, 0.36, 0.04, 0.3, 0, 1.06, 0.05, M.darkSteel, { ray: false });
-  const flag = textSprite(['DEAD LOCKS SOUND'], { scale: 0.36, size: 64, w: 1024, h: 128, color: '#e8b420', dim: 0.95 }); flag.position.set(41.2, 2.85, -5.6); scene.add(flag);
+  const flag = textSprite(['DEAD RIDDIM SOUND'], { scale: 0.36, size: 64, w: 1024, h: 128, color: '#e8b420', dim: 0.95 }); flag.position.set(41.2, 2.85, -5.6); scene.add(flag);
   speakerStack(38.0, -4.9, 0, 0.75); speakerStack(44.4, -4.9, 0, 0.75); speakerStack(49.2, 4.8, -Math.PI / 2 - 0.4, 0.65);
   // mirror ball and coloured spots
   const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 2), new THREE.MeshStandardMaterial({ color: 0xcfd6dc, roughness: 0.05, metalness: 1, flatShading: true })); ball.position.set(43.5, WALL_H - 0.7, 0.5); scene.add(ball); DISCO.ball = ball;
@@ -2530,7 +2530,7 @@ function buildSoundSystem(x, z, ry = 0) {
   gb(g, 0.9, 0.12, 0.6, 0, 1.66, -0.15, M.darkSteel);
   for (const rx of [-0.22, 0.22]) { const rl = new THREE.Group(); rl.position.set(rx, 1.95, 0.0); g.add(rl); const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.02, 28), M.metal); disc.rotation.x = Math.PI / 2; rl.add(disc); for (let k = 0; k < 3; k++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.26, 0.025), M.darkSteel); sp.rotation.z = k * Math.PI / 3; sp.position.z = 0.015; rl.add(sp); } const tp = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.025, 24), new THREE.MeshStandardMaterial({ color: 0x3a2412, roughness: 0.6 })); tp.rotation.x = Math.PI / 2; tp.position.z = 0.012; tp.visible = false; rl.add(tp); rl.userData.tape = tp; SOUND.reels.push(rl); gb(g, 0.04, 0.3, 0.04, rx, 1.8, -0.02, M.darkSteel, { ray: false }); }
   // painted name on the stack
-  const nm = textSprite(['DEAD LOCKS SOUND'], { scale: 0.42, size: 64, w: 1024, h: 128, color: '#e8b420', dim: 0.95 }); nm.position.set(0, 2.55, 0.2); g.add(nm);
+  const nm = textSprite(['DEAD RIDDIM SOUND'], { scale: 0.42, size: 64, w: 1024, h: 128, color: '#e8b420', dim: 0.95 }); nm.position.set(0, 2.55, 0.2); g.add(nm);
 }
 function soundSystemUpdate(dt) {
   if (!SOUND.cones.length) return;
@@ -2563,7 +2563,7 @@ function partyUpdate(dt) {
 }
 // ---- gig posters (all invented)
 const POSTERS = [
-  { t: 'DEAD LOCKS', s: ['SOUND SYSTEM', 'LIVE IN BUNKER 47', 'EVERY NIGHT TILL THE LAST'], bg: '#1b1410', fg: '#e8b420', ac: '#c8261c' },
+  { t: 'DEAD RIDDIM', s: ['SOUND SYSTEM', 'LIVE IN BUNKER 47', 'EVERY NIGHT TILL THE LAST'], bg: '#1b1410', fg: '#e8b420', ac: '#c8261c' },
   { t: 'SOUND CLASH', s: ['THE LIVING', 'vs', 'THE DEAD', 'NO REWIND · NO SURRENDER'], bg: '#c8261c', fg: '#f3e6c4', ac: '#1b1410' },
   { t: 'DUB NIGHT', s: ['BASS SO HEAVY', 'IT WAKES THE DEAD', 'BRING YOUR OWN TORCH'], bg: '#163a1f', fg: '#e8b420', ac: '#c8261c' },
   { t: 'CLASH', s: ['FOUR SIRENS', 'CALL IT ON', 'THE VAN DROPS', 'THE BIG ONE'], bg: '#2e8b3e', fg: '#f3e6c4', ac: '#e8b420' },
@@ -6281,7 +6281,7 @@ function setLobbyPresence() {
 }
 function renderGames(list) {
   const rows = []; const seen = new Set();
-  for (const p of list) { const s = p.presence; if (!s || p.sameTab || !s.g || !s.h || seen.has(s.g)) continue; seen.add(s.g); rows.push('<div class="game-row"><span>' + esc(String(s.n || 'Selector').slice(0, 16)) + '’s squad · ' + ({ yard: 'Yard Night', studio: 'Dead Lock Records' }[s.mp] || 'The Bunker') + ' · ' + (s.pc | 0) + ' in · ' + (s.r ? 'round ' + (s.r | 0) : 'not started') + '</span><button class="btn" data-code="' + esc(String(s.g).slice(0, 4)) + '" data-map="' + (MAP_IDS.includes(s.mp) ? s.mp : 'bunker') + '">Join</button></div>'); }
+  for (const p of list) { const s = p.presence; if (!s || p.sameTab || !s.g || !s.h || seen.has(s.g)) continue; seen.add(s.g); rows.push('<div class="game-row"><span>' + esc(String(s.n || 'Selector').slice(0, 16)) + '’s squad · ' + ({ yard: 'Yard Night', studio: 'Dead Riddim Records' }[s.mp] || 'The Bunker') + ' · ' + (s.pc | 0) + ' in · ' + (s.r ? 'round ' + (s.r | 0) : 'not started') + '</span><button class="btn" data-code="' + esc(String(s.g).slice(0, 4)) + '" data-map="' + (MAP_IDS.includes(s.mp) ? s.mp : 'bunker') + '">Join</button></div>'); }
   $('gamesList').innerHTML = rows.join('');
 }
 
@@ -6295,7 +6295,7 @@ function lbRender(id, rows, mark) {
   const body = rows.length ? rows.map((r, i) => '<tr' + (mark && i + 1 === mark ? ' class="mine"' : '') + '><td>' + (i + 1) + '</td><td>' + esc(r.name) + '</td><td>' + esc(MAP_NAME[r.map] || MAP_NAME.bunker) + '</td><td>' + (r.round | 0) + '</td><td>' + (r.kills | 0) + '</td><td>' + (r.heads | 0) + '</td><td>' + ((r.squad | 0) > 1 ? r.squad : 'solo') + '</td></tr>').join('') : '<tr class="empty"><td colspan="7">No scores yet. Be the first to make the board.</td></tr>';
   $(id).innerHTML = head + body;
 }
-const MAP_NAME = { bunker: 'The Bunker', yard: 'Yard Night', studio: 'Dead Lock Records' };
+const MAP_NAME = { bunker: 'The Bunker', yard: 'Yard Night', studio: 'Dead Riddim Records' };
 function lifeRender(id, rows, me) {
   const head = '<tr><th>#</th><th>Selector</th><th>Kills</th><th>Heads</th><th>Nights</th><th>Best round</th></tr>';
   const body = rows.length ? rows.map((r, i) => '<tr' + (me && String(r.name).toLowerCase() === me.toLowerCase() ? ' class="mine"' : '') + '><td>' + (i + 1) + '</td><td>' + esc(r.name) + '</td><td>' + (r.kills | 0) + '</td><td>' + (r.heads | 0) + '</td><td>' + (r.games | 0) + '</td><td>' + (r.best | 0) + '</td></tr>').join('') : '<tr class="empty"><td colspan="6">No kills counted yet.</td></tr>';
