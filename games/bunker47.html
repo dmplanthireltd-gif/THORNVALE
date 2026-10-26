@@ -543,6 +543,7 @@ details.howto summary { cursor: pointer; letter-spacing: .1em; text-transform: u
       <div class="orow"><label for="oInv">Invert look Y</label><input type="checkbox" id="oInv"><output></output></div>
       <div class="orow"><label for="oPadSens">Controller look speed</label><input type="range" id="oPadSens" min="0.3" max="2.5" step="0.05"><output></output></div>
       <div class="orow"><label for="oAssist">Controller aim assist</label><input type="checkbox" id="oAssist"><output></output></div>
+      <div class="orow"><label for="oRumble">Controller vibration</label><input type="range" id="oRumble" min="0" max="1.5" step="0.1"><output></output></div>
       <div class="keys">
         <kbd>W A S D</kbd><span>Move · <b>Shift</b> sprint · <b>Space</b> jump</span>
         <kbd>C</kbd><span>Hold to crouch · press while sprinting to <b>slide</b></span>
@@ -659,7 +660,7 @@ const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
 let quality = store.get('b47q', isTouch ? 'low' : 'high'); if (!/^(high|medium|low)$/.test(quality)) quality = 'high';
 let sens = parseFloat(store.get('b47s', '1')) || 1;
 // player options (sound, controls, graphics, display); saved in this browser
-const OPT = Object.assign({ master: 0.9, sfx: 1, music: 0.6, ads: 0.55, fov: 72, invY: false, shadows: quality !== 'low', bloom: true, grain: true, scale: 1, bright: 1, fps: false, cross: 'cross', hit: true, padSens: 1, aimAssist: true }, (() => { try { return JSON.parse(store.get('b47opt', '{}')) || {}; } catch (e) { return {}; } })());
+const OPT = Object.assign({ master: 0.9, sfx: 1, music: 0.6, ads: 0.55, fov: 72, invY: false, shadows: quality !== 'low', bloom: true, grain: true, scale: 1, bright: 1, fps: false, cross: 'cross', hit: true, padSens: 1, aimAssist: true, rumble: 1 }, (() => { try { return JSON.parse(store.get('b47opt', '{}')) || {}; } catch (e) { return {}; } })());
 const saveOpt = () => store.set('b47opt', JSON.stringify(OPT));
 
 // =====================================================================
@@ -4337,6 +4338,7 @@ function fxUpdate(dt) {
     if (q >= 1) { scene.remove(f.ring); scene.remove(f.ball); f.ring.material.dispose(); f.ball.material.dispose(); FX.list.splice(i, 1); } }
 }
 function explosion(p, style = 0) {
+  { const d = Math.hypot(p.x - P.x, p.z - P.z); if (d < 16) { const f = 1 - d / 16; padRumble(0.6 * f + 0.2, f, 250 + 250 * f); } }
   const sc = BOOM_SC[style] || 1, ion = style === 1;
   boomLight.color.set(ion ? 0x60ff80 : 0xff9040);
   boomLight.position.copy(p).add(new THREE.Vector3(0, 0.5, 0)); boomLight.intensity = 9 * sc; boomT = 0.35;
@@ -5246,7 +5248,7 @@ function shatterGlass(m, pt) {
 // how many zombies one round can pass through (pistols/SMGs/shotgun pellets 2, rifles/LMGs 3, snipers 4); wonder weapons don't
 function penOf(w) { return w.pen || ({ pistol: 2, smg: 2, shotgun: 2, rifle: 3, lmg: 3, bolt: 4 })[w.snd] || 1; }
 function fire() {
-  const s = curSlot(), w = WS(s); padRumble(0.18, 0.04, 50);
+  const s = curSlot(), w = WS(s); padFire(w);
   if (!(P.perks.nuff && Math.random() < 0.25)) s.mag--; P.fireT = w.rate * (P.perks.rapid ? 0.75 : 1); P.shotN++;
   SND.shot(s.k + (s.pap ? '*' : ''));
   if (s.k === 'garand' && s.mag === 0) SND.ping();
@@ -6398,8 +6400,8 @@ async function openLb(from) {
 }
 // ---------- options screen ----------
 let optFrom = 'menu';
-const OPT_DEF = { padSens: 1, aimAssist: true, master: 0.9, sfx: 1, music: 0.6, ads: 0.55, fov: 72, invY: false, shadows: true, bloom: true, grain: true, scale: 1, bright: 1, fps: false, cross: 'cross', hit: true };
-const OPT_UI = [['oMaster', 'master', v => Math.round(v * 100) + '%'], ['oSfx', 'sfx', v => Math.round(v * 100) + '%'], ['oMusic', 'music', v => Math.round(v * 100) + '%'], ['oAds', 'ads', v => v.toFixed(2)], ['oFov', 'fov', v => v + '°'], ['oBright', 'bright', v => Math.round(v * 100) + '%'], ['oScale', 'scale', v => Math.round(v * 100) + '%'], ['oPadSens', 'padSens', v => (+v).toFixed(2)]];
+const OPT_DEF = { rumble: 1, padSens: 1, aimAssist: true, master: 0.9, sfx: 1, music: 0.6, ads: 0.55, fov: 72, invY: false, shadows: true, bloom: true, grain: true, scale: 1, bright: 1, fps: false, cross: 'cross', hit: true };
+const OPT_UI = [['oMaster', 'master', v => Math.round(v * 100) + '%'], ['oSfx', 'sfx', v => Math.round(v * 100) + '%'], ['oMusic', 'music', v => Math.round(v * 100) + '%'], ['oAds', 'ads', v => v.toFixed(2)], ['oFov', 'fov', v => v + '°'], ['oBright', 'bright', v => Math.round(v * 100) + '%'], ['oScale', 'scale', v => Math.round(v * 100) + '%'], ['oPadSens', 'padSens', v => (+v).toFixed(2)], ['oRumble', 'rumble', v => v > 0 ? Math.round(v * 100) + '%' : 'Off']];
 const OPT_CHK = [['oAssist', 'aimAssist'], ['oHit', 'hit'], ['oInv', 'invY'], ['oShadows', 'shadows'], ['oBloom', 'bloom'], ['oGrain', 'grain'], ['oFps', 'fps']];
 function optSync() {
   { const g = $('oGpu'); if (g) g.textContent = GPU + (/intel|uhd|iris|integrated|radeon\(tm\) graphics|vega [0-9]* graphics/i.test(GPU) ? ' (integrated graphics: see How to play for using your graphics card)' : ''); }
@@ -6500,7 +6502,17 @@ addEventListener('gamepadconnected', e => { GP.idx = e.gamepad.index; banner('Co
 addEventListener('gamepaddisconnected', e => { if (e.gamepad.index === GP.idx) { GP.idx = -1; padReleasePlay(); GP.last = 'kb'; padFocus(null); } });
 for (const ev of ['keydown', 'mousedown', 'touchstart']) addEventListener(ev, () => { if (GP.last === 'pad') { GP.last = 'kb'; padFocus(null); } }, { passive: true });
 function padGet() { const L = navigator.getGamepads ? navigator.getGamepads() : []; if (GP.idx >= 0 && L[GP.idx]) return L[GP.idx]; for (const g of L) if (g && g.connected) { GP.idx = g.index; return g; } return null; }
-function padRumble(weak, strong, ms) { if (GP.last !== 'pad') return; const g = padGet(), a = g && g.vibrationActuator; if (a && a.playEffect) a.playEffect('dual-rumble', { duration: ms, weakMagnitude: weak, strongMagnitude: strong }).catch(() => {}); }
+function padRumble(weak, strong, ms, trig) {
+  if (GP.last !== 'pad') return; const k = OPT.rumble == null ? 1 : OPT.rumble; if (k <= 0) return;
+  const g = padGet(), act = g && g.vibrationActuator; if (!act || !act.playEffect) return;
+  act.playEffect('dual-rumble', { duration: ms, weakMagnitude: Math.min(1, weak * k), strongMagnitude: Math.min(1, strong * k) }).catch(() => {});
+  // Xbox impulse triggers (Chrome / Edge on Windows): a kick in the right trigger itself
+  if (trig && act.effects && act.effects.includes && act.effects.includes('trigger-rumble')) act.playEffect('trigger-rumble', { duration: Math.min(ms, 120), rightTrigger: Math.min(1, trig * k), leftTrigger: 0, weakMagnitude: 0, strongMagnitude: 0 }).catch(() => {});
+}
+// how each kind of gun feels: weak motor (buzz), strong motor (thump), length in ms, trigger kick
+const PAD_KICK = { pistol: [0.3, 0.15, 70, 0.5], smg: [0.35, 0.2, 45, 0.35], rifle: [0.4, 0.45, 75, 0.6], lmg: [0.45, 0.55, 80, 0.6], shotgun: [0.6, 1, 150, 1], bolt: [0.5, 1, 170, 1],
+  rocket: [0.8, 1, 320, 1], sub: [1, 1, 360, 1], volt: [0.7, 0.6, 180, 0.8], ion: [0.45, 0.3, 90, 0.6] };
+function padFire(w) { const kk = PAD_KICK[w && w.snd] || PAD_KICK.rifle, up = w && w.pap ? 1.15 : 1; padRumble(kk[0] * up, kk[1] * up, kk[2], kk[3]); }
 function padPoll(dt) {
   const g = padGet(); if (!g) return;
   const b = i => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.45)), pr = i => b(i) && !GP.prev[i], rl = i => !b(i) && !!GP.prev[i];
